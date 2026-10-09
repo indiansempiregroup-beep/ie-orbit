@@ -78,6 +78,11 @@ class PlatformPlanPackage(BaseModel):
     features = models.JSONField(default=list, blank=True)
     amount_paise = models.PositiveIntegerField(default=0)
     yearly_amount_paise = models.PositiveIntegerField(null=True, blank=True)
+    prices_minor = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='SaaS prices by currency, e.g. {"INR":{"monthly":39900,"yearly":399000},"USD":{"monthly":499,"yearly":4990}}.',
+    )
     yearly_months_charged = models.PositiveSmallIntegerField(
         default=10,
         help_text="Months charged for yearly billing (e.g. 10 = pay 10 months, get 12).",
@@ -146,6 +151,11 @@ class PlatformAddonPricing(BaseModel):
     staff_price_paise = models.PositiveIntegerField(default=19900)
     office_price_paise = models.PositiveIntegerField(default=29900)
     pets_price_paise = models.PositiveIntegerField(default=50000)
+    prices_minor = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Add-on prices by currency, e.g. {"INR":{"staff":19900,"office":29900,"pets":50000},"USD":{...}}.',
+    )
 
     class Meta:
         db_table = "platform_addon_pricing"
@@ -174,6 +184,15 @@ class PlatformAssistantSettings(BaseModel):
         default=list,
         blank=True,
         help_text="Suggested wallet top-up amounts in paise shown to business owners.",
+    )
+    prices_minor = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            'Unit prices by SaaS currency, e.g. '
+            '{"INR":{"message":50,"confirm":100,"top_ups":[5000]},'
+            '"USD":{"message":1,"confirm":2,"top_ups":[500]}}.'
+        ),
     )
 
     class Meta:
@@ -238,6 +257,15 @@ class PlatformSmartLookupSettings(BaseModel):
         default=list,
         blank=True,
         help_text="Suggested wallet top-up amounts in paise shown to business owners.",
+    )
+    prices_minor = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            'Wallet pricing by SaaS currency, e.g. '
+            '{"INR":{"min_charge":1,"top_ups":[5000]},'
+            '"USD":{"min_charge":1,"top_ups":[500]}}.'
+        ),
     )
 
     class Meta:

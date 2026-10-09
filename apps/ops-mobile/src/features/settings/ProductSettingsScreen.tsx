@@ -998,9 +998,9 @@ export function ProductSettingsScreen() {
       await mutations.requestOrderRefund(refundOrder.id, { reason, amount_paise: available });
       setRefundOrder(null);
       setRefundReason('');
-      await afterMutation('Refund requested. IE will review and email you.');
+      await afterMutation('Refund requested — IE will email you after review.');
     } catch (err) {
-      showError(err, 'Unable to request refund.');
+      showError(err, "Couldn't request a refund. Try again.");
     } finally {
       setBusy(null);
     }
@@ -1018,7 +1018,7 @@ export function ProductSettingsScreen() {
             await mutations.withdrawOrderRefund(order.id);
             await afterMutation('Refund request withdrawn.');
           } catch (err) {
-            showError(err, 'Unable to withdraw refund request.');
+            showError(err, "Couldn't withdraw the refund request. Try again.");
           } finally {
             setBusy(null);
           }
@@ -1068,7 +1068,7 @@ export function ProductSettingsScreen() {
           onClose={() => setUpiPayRequest(null)}
           onClaimed={async () => {
             await Promise.all([refreshWorkspace(), reloadSnapshot(), reloadOrders()]);
-            toast.push('Payment received — waiting for IE to confirm (usually same day).', 'success');
+            toast.push('Payment received — IE usually confirms the same day.', 'success');
             setHubTab('orders');
           }}
           onError={(message) => toast.push(message, 'error')}
@@ -1334,9 +1334,9 @@ export function ProductSettingsScreen() {
                           setBusy(`cancel-${product.id}`);
                           try {
                             await mutations.cancelPendingPlan(product.id);
-                            await afterMutation(`Kept the current ${product.name} plan.`);
+                            await afterMutation(`Kept your current ${product.name} plan.`);
                           } catch (err) {
-                            showError(err, 'Unable to cancel the scheduled plan change.');
+                            showError(err, "Couldn't cancel the scheduled plan change. Try again.");
                           } finally {
                             setBusy(null);
                           }
@@ -1347,7 +1347,7 @@ export function ProductSettingsScreen() {
                   {paymentPending ? (
                     <View style={styles.notice}>
                       <Text style={styles.noticeTitle}>
-                        Payment received — waiting for IE to confirm (usually same day).
+                        Payment received — IE usually confirms the same day.
                       </Text>
                     </View>
                   ) : null}
@@ -1449,7 +1449,7 @@ export function ProductSettingsScreen() {
                                 );
                                 setPlanOpen((current) => ({ ...current, [product.id]: false }));
                               } catch (err) {
-                                showError(err, 'Unable to change plan. Check staff and office limits.');
+                                showError(err, "Couldn't change the plan. Check staff and office limits.");
                               } finally {
                                 setBusy(null);
                               }
@@ -1495,7 +1495,7 @@ export function ProductSettingsScreen() {
                                           `Cancellation scheduled for ${product.name}. Access through ${paidThrough}.`,
                                         );
                                       } catch (err) {
-                                        showError(err, 'Unable to schedule cancellation.');
+                                        showError(err, "Couldn't schedule cancellation. Try again.");
                                       } finally {
                                         setBusy(null);
                                       }
@@ -1516,7 +1516,7 @@ export function ProductSettingsScreen() {
                                     await mutations.unsubscribe(product.id);
                                     await afterMutation(`Unsubscribed from ${product.name}.`);
                                   } catch (err) {
-                                    showError(err, 'Unable to unsubscribe.');
+                                    showError(err, "Couldn't unsubscribe. Try again.");
                                   } finally {
                                     setBusy(null);
                                   }
@@ -1688,7 +1688,7 @@ export function ProductSettingsScreen() {
                           );
                           await afterMutation(`Subscribed to ${product.name}.`);
                         } catch (err) {
-                          showError(err, 'Unable to subscribe to product.');
+                          showError(err, "Couldn't subscribe to this product. Try again.");
                         } finally {
                           setBusy(null);
                         }
@@ -1755,7 +1755,7 @@ export function ProductSettingsScreen() {
                   </Text>
                   <Text style={styles.meta}>
                     {snapshot.pending_upi_claim
-                      ? 'Payment received — waiting for IE to confirm (usually same day).'
+                      ? 'Payment received — IE usually confirms the same day.'
                       : snapshot.soft_locked
                         ? 'Locked until you pay this product. We do not charge automatically.'
                         : snapshot.status === 'trialing'
@@ -1848,9 +1848,9 @@ export function ProductSettingsScreen() {
                         extra_offices: extraOffices,
                         ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                       });
-                      await afterMutation('Extras saved. Your next total is updated.');
+                      await afterMutation('Extras saved — next bill total updated.');
                     } catch (err) {
-                      showError(err, 'Unable to save extras. Reduce staff or offices first if you are over the limit.');
+                      showError(err, "Couldn't save extras. Reduce staff or offices if you're over the limit.");
                     } finally {
                       setBusy(null);
                     }
@@ -1959,7 +1959,7 @@ export function ProductSettingsScreen() {
                       await refreshWorkspace();
                       toast.push('Reward points settings saved.', 'success');
                     } catch (err) {
-                      showError(err, 'Unable to save reward points settings.');
+                      showError(err, "Couldn't save reward points settings. Try again.");
                     } finally {
                       setLoyaltyBusy(false);
                     }
@@ -2013,9 +2013,9 @@ export function ProductSettingsScreen() {
                         .updateSmartLookup({ business_id: businessId, enabled: next })
                         .then((response) => {
                           setSmartDashboard(response.data);
-                          toast.push(next ? 'Smart lookup enabled.' : 'Smart lookup disabled.', 'success');
+                          toast.push(next ? 'Smart lookup on.' : 'Smart lookup off.', 'success');
                         })
-                        .catch((err) => showError(err, 'Unable to update Smart lookup.'))
+                        .catch((err) => showError(err, "Couldn't update Smart lookup. Try again."))
                         .finally(() => setSmartBusy(false));
                     }}
                     trackColor={{ false: colors.border, true: colors.primary }}
@@ -2226,7 +2226,7 @@ export function ProductSettingsScreen() {
           amountPaise={smartTopUpPaise}
           onClose={() => setSmartTopUpPaise(null)}
           onClaimed={async () => {
-            toast.push('Top-up submitted. Wallet credits after IE confirms payment.', 'success');
+            toast.push('Top-up submitted — wallet credits after IE confirms.', 'success');
             setSmartHistoryPage(1);
             const client = createScopedClient(token, tenantId, businessId);
             try {

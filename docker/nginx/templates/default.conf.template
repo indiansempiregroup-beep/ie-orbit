@@ -140,13 +140,15 @@ server {
         add_header Cache-Control "public, max-age=3600";
     }
 
+    # Serve SEO directory HTML (e.g. features/index.html) without a trailing-slash 301.
+    # Sitemap and canonicals use no trailing slash; $uri/ would redirect /features → /features/.
     location ~ ^/(auth|onboarding|dashboard|admin|settings|shop|customers|calendar|bookings|bi|profile|notifications|staff|services|reports|business)(/|$) {
         add_header X-Robots-Tag "noindex, nofollow" always;
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/index.html /index.html;
     }
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/index.html /index.html;
     }
 }
 

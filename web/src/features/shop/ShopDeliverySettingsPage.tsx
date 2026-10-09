@@ -16,6 +16,7 @@ export function ShopDeliverySettingsPage() {
   const { businessId } = useWorkspace();
   const snackbar = useSnackbar();
   const [enabled, setEnabled] = useState(false);
+  const [codAllowedForInstant, setCodAllowedForInstant] = useState(true);
   const [provider, setProvider] = useState('mock');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -42,6 +43,7 @@ export function ShopDeliverySettingsPage() {
     const config = settings.data.delivery_integration ?? {};
     const credentials = config.credentials ?? {};
     setEnabled(settings.data.instant_delivery_enabled);
+    setCodAllowedForInstant(settings.data.cod_allowed_for_instant_delivery ?? true);
     setProvider(String(config.provider || 'mock'));
     setBaseUrl(String(config.base_url || ''));
     setApiKey(String(credentials.api_key || ''));
@@ -60,6 +62,7 @@ export function ShopDeliverySettingsPage() {
       const response = await client.shop.patchDeliverySettings({
         business_id: businessId ?? '',
         instant_delivery_enabled: enabled,
+        cod_allowed_for_instant_delivery: codAllowedForInstant,
         delivery_integration: {
           provider,
           base_url:
@@ -83,7 +86,7 @@ export function ShopDeliverySettingsPage() {
       void settings.refetch();
       snackbar.push('Instant delivery settings saved.', 'success');
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to save delivery settings.'), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save delivery settings. Try again."), 'error'),
   });
 
   return (
@@ -109,6 +112,21 @@ export function ShopDeliverySettingsPage() {
               <strong>Enable instant delivery</strong>
               <div style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>
                 Your store address must have a map pin before this can be enabled.
+              </div>
+            </span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="checkbox"
+              checked={codAllowedForInstant}
+              onChange={(event) => setCodAllowedForInstant(event.target.checked)}
+            />
+            <span>
+              <strong>Allow cash on delivery for instant orders</strong>
+              <div style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>
+                When off, customers who choose Porter or Shiprocket Quick must pay online
+                (UPI / Razorpay / Cashfree). Standard delivery and pickup still follow your
+                Payment settings COD toggle.
               </div>
             </span>
           </label>

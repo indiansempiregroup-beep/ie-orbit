@@ -130,14 +130,14 @@ export function BranchFormScreen() {
     try {
       if (branchId) {
         await update(branchId, payload);
-        toast.push('Office updated.', 'success');
+        toast.push('Office details saved.', 'success');
       } else {
         await create({ ...payload, is_primary: branches.length === 0 });
-        toast.push('Office created.', 'success');
+        toast.push('Office added.', 'success');
       }
       setTimeout(() => navigation.goBack(), 250);
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to save office.');
+      const message = getApiErrorMessage(err, "Couldn't save this office. Check the details and try again.");
       setError(message);
       toast.push(message, 'error');
     } finally {
@@ -154,7 +154,7 @@ export function BranchFormScreen() {
       await reload();
       toast.push('Primary office updated.', 'success');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to update office.');
+      const message = getApiErrorMessage(err, "Couldn't update this office. Try again.");
       setError(message);
       toast.push(message, 'error');
     } finally {
@@ -173,9 +173,9 @@ export function BranchFormScreen() {
     try {
       await setStatus(branchId, active ? 'inactive' : 'active');
       await reload();
-      toast.push(active ? 'Office deactivated.' : 'Office reactivated.', 'success');
+      toast.push(active ? 'Office deactivated.' : 'Office is active again.', 'success');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to update office.');
+      const message = getApiErrorMessage(err, "Couldn't update this office. Try again.");
       setError(message);
       toast.push(message, 'error');
     } finally {

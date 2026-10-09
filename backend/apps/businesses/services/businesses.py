@@ -102,12 +102,21 @@ class BusinessService:
             plan_code = None
         if not isinstance(plan_codes, dict):
             plan_codes = {}
+        from apps.billing.services.region import (
+            assert_country_allowed_for_signup,
+            saas_currency_for_country,
+        )
+
+        country = str(data.get("country") or getattr(tenant, "country", "") or "")
+        assert_country_allowed_for_signup(country)
+        data.pop("saas_currency", None)
         business = Business(
             tenant=tenant,
             organization=data.pop("organization", None) or organization,
             timezone=data.pop("timezone", tenant.timezone),
             currency=data.pop("currency", tenant.currency),
             language=data.pop("language", tenant.language),
+            saas_currency=saas_currency_for_country(country),
             **data,
         )
         if getattr(actor, "is_authenticated", False):
@@ -158,8 +167,25 @@ class BusinessService:
             raise ValidationError(
                 {"selected_product": "Subscribe to this product before setting it as active."}
             )
+        from apps.billing.services.region import (
+            assert_country_allowed_for_signup,
+            assert_saas_currency_allowed,
+            saas_currency_for_country,
+        )
+
+        if "saas_currency" in data:
+            country_for_check = str(data.get("country", business.country) or "")
+            assert_saas_currency_allowed(
+                country=country_for_check,
+                saas_currency=data.get("saas_currency"),
+            )
+            data.pop("saas_currency", None)
         for field, value in data.items():
             setattr(business, field, value)
+        country = str(business.country or "")
+        if "country" in data:
+            assert_country_allowed_for_signup(country)
+        business.saas_currency = saas_currency_for_country(country)
         if getattr(actor, "is_authenticated", False):
             business.mark_updated(actor_id=actor.id)
         business.full_clean()

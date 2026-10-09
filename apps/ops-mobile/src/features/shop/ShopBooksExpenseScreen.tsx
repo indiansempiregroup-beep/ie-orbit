@@ -209,7 +209,7 @@ export function ShopBooksExpenseScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to record entry', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't record this entry. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -229,7 +229,7 @@ export function ShopBooksExpenseScreen() {
             toast.push('Entry voided', 'success');
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : 'Unable to void entry', 'error');
+            toast.push(err instanceof Error ? err.message : "Couldn't void this entry. Try again.", 'error');
           }
         },
       },

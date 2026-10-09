@@ -184,7 +184,7 @@ function ComplianceModal({
       setEinvoice(response.data);
       toast.push(`E-invoice generated${response.data.irn ? ` · IRN ${response.data.irn}` : ''}`, 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to generate e-invoice'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't generate e-invoice. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -200,7 +200,7 @@ function ComplianceModal({
       setEinvoiceCancelReason('');
       toast.push('E-invoice cancelled', 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to cancel e-invoice'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't cancel e-invoice. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -220,7 +220,7 @@ function ComplianceModal({
       setShowEwayForm(false);
       toast.push(`E-way bill generated${response.data.ewb_no ? ` · EWB ${response.data.ewb_no}` : ''}`, 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to generate e-way bill'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't generate e-way bill. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -236,7 +236,7 @@ function ComplianceModal({
       setEwayCancelReason('');
       toast.push('E-way bill cancelled', 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to cancel e-way bill'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't cancel e-way bill. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -574,7 +574,7 @@ function SaleInvoiceDetailModal({
       await loadExtra();
       await onReturned?.();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to process return'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't process this return. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -1331,7 +1331,7 @@ export function ShopBooksSaleScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to record sale'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't record this sale. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -1351,7 +1351,7 @@ export function ShopBooksSaleScreen() {
             setDetailVoucher((current) => (current?.id === voucher.id ? null : current));
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : 'Unable to void sale', 'error');
+            toast.push(err instanceof Error ? err.message : "Couldn't void this sale. Try again.", 'error');
           }
         },
       },

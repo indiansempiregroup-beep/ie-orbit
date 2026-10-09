@@ -198,11 +198,19 @@ export function BookingDetailPage() {
     value?: string,
   ) {
     setActiveAction(label);
+    const successByLabel: Record<string, string> = {
+      Confirm: 'Booking confirmed.',
+      'Check in': 'Customer checked in.',
+      Cancel: 'Booking cancelled.',
+    };
     try {
       await mutation.mutateAsync(value);
-      snackbar.push(`${label} successful.`, 'success');
+      snackbar.push(successByLabel[label] ?? `${label} successful.`, 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : `Unable to ${label.toLowerCase()}.`, 'error');
+      snackbar.push(
+        error instanceof Error ? error.message : `Couldn't ${label.toLowerCase()} this booking. Try again.`,
+        'error',
+      );
     } finally {
       setActiveAction(null);
     }
@@ -236,9 +244,9 @@ export function BookingDetailPage() {
       }
       await actions.complete.mutateAsync(body);
       setShowCollect(false);
-      snackbar.push('Complete successful.', 'success');
+      snackbar.push('Booking completed.', 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to complete.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't complete this booking. Try again.", 'error');
     } finally {
       setActiveAction(null);
     }
@@ -642,7 +650,7 @@ export function BookingDetailPage() {
                           });
                           snackbar.push('Booking rescheduled.', 'success');
                         } catch (error) {
-                          snackbar.push(error instanceof Error ? error.message : 'Unable to reschedule.', 'error');
+                          snackbar.push(error instanceof Error ? error.message : "Couldn't reschedule this booking. Try again.", 'error');
                         } finally {
                           setActiveAction(null);
                         }
@@ -738,10 +746,10 @@ export function BookingDetailPage() {
                           } else {
                             await actions.updateStaff.mutateAsync(staffId || null);
                           }
-                          snackbar.push('Staff assignment updated.', 'success');
+                          snackbar.push("Staff updated — they've been notified.", 'success');
                         } catch (error) {
                           snackbar.push(
-                            error instanceof Error ? error.message : 'Unable to reassign staff.',
+                            error instanceof Error ? error.message : "Couldn't change the staff. Try again.",
                             'error',
                           );
                         } finally {

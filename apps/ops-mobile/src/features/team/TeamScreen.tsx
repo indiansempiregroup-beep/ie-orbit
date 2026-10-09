@@ -117,7 +117,7 @@ export function TeamScreen() {
               setEmail('');
               await Promise.all([reloadInvites(), reloadStaff()]);
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to send invitation.'));
+              setError(getApiErrorMessage(err, "Couldn't send the invite. Try again."));
             } finally {
               setSubmitting(false);
             }
@@ -184,7 +184,7 @@ export function TeamScreen() {
                             await iam.removeRole(member.id, memberRole.code);
                             await reloadMembers();
                           } catch (err) {
-                            setError(getApiErrorMessage(err, 'Unable to remove role.'));
+                            setError(getApiErrorMessage(err, "Couldn't remove this role. Try again."));
                           } finally {
                             setRoleBusy(null);
                           }
@@ -211,7 +211,7 @@ export function TeamScreen() {
                           await iam.assignRole(member.id, assignable.code);
                           await reloadMembers();
                         } catch (err) {
-                          setError(getApiErrorMessage(err, 'Unable to assign role.'));
+                          setError(getApiErrorMessage(err, "Couldn't assign this role. Try again."));
                         } finally {
                           setRoleBusy(null);
                         }

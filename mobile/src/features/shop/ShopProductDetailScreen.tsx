@@ -163,9 +163,9 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
       if (update) await mobileClient.mobile.updateShopProductReview(product.id, body);
       else await mobileClient.mobile.createShopProductReview(product.id, body);
       await load();
-      toast.push(update ? 'Review updated.' : 'Review submitted.', 'success');
+      toast.push(update ? 'Review updated.' : 'Thanks — your review is in.', 'success');
     } catch (err) {
-      Alert.alert('Unable to submit review', getApiErrorMessage(err, 'Please try again.'));
+      Alert.alert("Couldn't submit review", getApiErrorMessage(err, 'Please try again.'));
     } finally {
       setSubmittingReview(false);
     }

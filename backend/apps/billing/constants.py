@@ -8,6 +8,18 @@ PLAN_PRICE_PAISE: dict[str, int] = {
     "shopie-pro": 79900,
 }
 
+# Parallel USD catalog in cents (USD × 100). Used for non-India SaaS checkout.
+PLAN_PRICE_USD_CENTS: dict[str, int] = {
+    "appointie-starter": 499,
+    "appointie-pro": 999,
+    "shopie-starter": 499,
+    "shopie-pro": 999,
+}
+
+ADDON_STAFF_PRICE_USD_CENTS = 299
+ADDON_OFFICE_PRICE_USD_CENTS = 399
+ADDON_PETS_PRICE_USD_CENTS = 699
+
 # Yearly = N × monthly (default: 10 = 2 months free). Per-package yearly_months_charged overrides this.
 YEARLY_PRICE_MULTIPLIER = 10
 
@@ -36,6 +48,7 @@ ADDON_OFFICE_PRICE_PAISE = 29900
 ADDON_PETS_PRICE_PAISE = 50000  # Orbit Mart Pets pack · ₹500/month
 
 DEFAULT_CHECKOUT_CURRENCY = "INR"
+INTL_CHECKOUT_CURRENCY = "USD"
 CHECKOUT_SESSION_TTL_HOURS = 24
 
 # Retry schedule in seconds: 1m, 5m, 30m.

@@ -347,15 +347,15 @@ export function ShopGodownsScreen() {
       };
       if (editingId) {
         await client.shop.patchGodown(editingId, payload);
-        toast.push('Godown updated', 'success');
+        toast.push('Godown details saved.', 'success');
       } else {
         await client.shop.createGodown(payload);
-        toast.push('Godown created', 'success');
+        toast.push('Godown added.', 'success');
       }
       closeForm();
       await load();
     } catch (err) {
-      const fallback = editingId ? 'Unable to update godown' : 'Unable to create godown';
+      const fallback = "Couldn't save this godown. Try again.";
       toast.push(err instanceof Error ? err.message : fallback, 'error');
     } finally {
       setBusy(false);
@@ -389,7 +389,7 @@ export function ShopGodownsScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to create transfer', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't create this transfer. Try again.", 'error');
     } finally {
       setBusy(false);
     }

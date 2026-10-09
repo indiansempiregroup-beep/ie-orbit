@@ -79,7 +79,7 @@ export function ShopReturnsPage() {
       setReason('');
       dialog.hide();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Return failed.');
+      setMessage(error instanceof Error ? error.message : "Couldn't process this return. Try again.");
     }
   }
 

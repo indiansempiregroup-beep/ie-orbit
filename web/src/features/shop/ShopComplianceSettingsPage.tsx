@@ -84,7 +84,7 @@ export function ShopComplianceSettingsPage() {
       });
       snackbar.push('GST compliance settings saved.', 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to save compliance settings.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't save compliance settings. Try again."), 'error');
     }
   }
 

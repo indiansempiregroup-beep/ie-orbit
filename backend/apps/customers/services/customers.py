@@ -23,6 +23,7 @@ from apps.customers.models import (
     CustomerStatus,
 )
 from apps.common.utils.business_context import resolve_business_id
+from apps.common.utils.business_identity import assert_no_staff_customer_conflict
 from apps.customers.emails.registration_invite import build_customer_registration_invite
 from apps.customers.repositories import CustomerRepository
 from apps.customers.services.contact import format_contact_phone, require_address_phone
@@ -108,6 +109,7 @@ class CustomerService:
         if getattr(actor, "is_authenticated", False):
             customer.mark_updated(actor_id=actor.id)
         self._validate_business_tenant(customer)
+        self._validate_duplicate(customer)
         customer.full_clean()
         customer.save()
         if isinstance(profile_data, dict):
@@ -376,6 +378,8 @@ class CustomerService:
         duplicate = Customer.objects.require_tenant(customer.tenant).filter(
             business=customer.business,
         )
+        if customer.pk:
+            duplicate = duplicate.exclude(pk=customer.pk)
         query = duplicate.none()
         if customer.email:
             query = duplicate.filter(email__iexact=customer.email)
@@ -383,6 +387,14 @@ class CustomerService:
             query = query | duplicate.filter(phone_number=customer.phone_number)
         if query.exists():
             raise ValidationError("A customer with this email or phone already exists.")
+        assert_no_staff_customer_conflict(
+            tenant=customer.tenant,
+            business=customer.business,
+            email=customer.email or "",
+            phone=customer.phone_number or "",
+            exclude_customer_id=customer.pk,
+            creating="customer",
+        )
 
 
 class CustomerSearchService:

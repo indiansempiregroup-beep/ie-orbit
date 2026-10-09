@@ -81,7 +81,7 @@ export function ShopPetDetailScreen() {
       setShowNotify(false);
       setBody('');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to notify owner');
+      setMessage(err instanceof Error ? err.message : "Couldn't notify the owner. Try again.");
     } finally {
       setSending(false);
     }

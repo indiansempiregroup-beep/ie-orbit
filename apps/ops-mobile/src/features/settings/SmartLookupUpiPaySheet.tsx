@@ -82,7 +82,7 @@ export function SmartLookupUpiPaySheet({
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to start UPI top-up.');
+      const message = getApiErrorMessage(err, "Couldn't start UPI top-up. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -156,7 +156,7 @@ export function SmartLookupUpiPaySheet({
       setStatus('awaiting');
       await onClaimed();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to submit payment claim.');
+      const message = getApiErrorMessage(err, "Couldn't submit the payment claim. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -171,7 +171,17 @@ export function SmartLookupUpiPaySheet({
           <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
             <Text style={styles.kicker}>Smart lookup wallet</Text>
             <Text style={styles.title}>Top up {paiseToInr(amountPaise)}</Text>
-            <Text style={styles.meta}>Pay exact amount → submit UTR/screenshot → IE confirms → wallet credits.</Text>
+            <View style={styles.steps}>
+              <Text style={styles.stepsTitle}>How to pay</Text>
+              <Text style={styles.stepItem}>1. Scan the QR or open your UPI app and pay the exact amount shown</Text>
+              <Text style={styles.stepItem}>
+                2. After payment succeeds, take a screenshot of the confirmation in your UPI app
+              </Text>
+              <Text style={styles.stepItem}>
+                3. Upload that screenshot below (UTR optional), then tap submit for confirmation
+              </Text>
+              <Text style={styles.stepItem}>4. IE confirms — wallet credits at actual AI cost</Text>
+            </View>
 
             {session && (status === 'ready' || status === 'awaiting') ? (
               <View style={styles.stack}>
@@ -192,6 +202,9 @@ export function SmartLookupUpiPaySheet({
                 ) : null}
                 {status === 'ready' ? (
                   <>
+                    <Text style={styles.meta}>
+                      After you pay, upload the UPI confirmation screenshot below so we can verify it.
+                    </Text>
                     <FieldLabel>UTR / UPI reference</FieldLabel>
                     <Input value={utr} onChangeText={setUtr} autoCapitalize="characters" placeholder="From your UPI app" />
                     <Button
@@ -202,7 +215,7 @@ export function SmartLookupUpiPaySheet({
                     />
                   </>
                 ) : (
-                  <FormAlert tone="info" message="Payment received — waiting for IE to confirm. Wallet credits after confirmation." />
+                  <FormAlert tone="info" message="Payment received — IE usually confirms the same day. Wallet credits after confirmation." />
                 )}
               </View>
             ) : null}
@@ -257,6 +270,23 @@ const styles = StyleSheet.create({
   meta: {
     ...typography.body,
     color: colors.muted,
+  },
+  steps: {
+    gap: 6,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
+  },
+  stepsTitle: {
+    ...typography.caption,
+    color: colors.foreground,
+    fontFamily: fonts.semibold,
+    marginBottom: 2,
+  },
+  stepItem: {
+    ...typography.caption,
+    color: colors.foreground,
+    lineHeight: 18,
   },
   stack: {
     gap: spacing.md,

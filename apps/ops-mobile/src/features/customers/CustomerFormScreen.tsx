@@ -186,7 +186,7 @@ export function CustomerFormScreen() {
 
               if (isEdit && route.params?.customerId) {
                 await mutations.update(route.params.customerId, payload);
-                toast.push('Customer updated.', 'success');
+                toast.push('Customer details saved.', 'success');
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, route.params.customerId);
                 } else if (route.params?.returnTo === 'pets') {
@@ -202,7 +202,7 @@ export function CustomerFormScreen() {
                   ...payload,
                   display_name: payload.display_name || code,
                 });
-                toast.push('Customer created.', 'success');
+                toast.push('Customer added.', 'success');
                 if (route.params?.returnTo === 'pos') {
                   returnToPos(navigation, created.id);
                 } else if (route.params?.returnTo === 'pets') {
@@ -212,7 +212,7 @@ export function CustomerFormScreen() {
                 }
               }
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to save customer.'));
+              setError(getApiErrorMessage(err, "Couldn't save this customer. Check the details and try again."));
             } finally {
               setSubmitting(false);
             }

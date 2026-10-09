@@ -19,12 +19,14 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "IE-Orbit-ShopIE/1.0 (product enrichment)"
-HTTP_TIMEOUT_SECONDS = 12
+# Fail fast on cold misses; providers still run — just shorter dead-wait.
+HTTP_TIMEOUT_SECONDS = int(os.environ.get("BARCODE_PROVIDER_TIMEOUT_SECONDS") or "5")
 
 SUPPORTED_PROVIDERS = frozenset({"barcodelookup", "upcitemdb", "go_upc"})
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -55,6 +57,39 @@ def barcode_api_configured() -> bool:
     return bool(provider in SUPPORTED_PROVIDERS and key)
 
 
+def _first_variant_hit(
+    code: str,
+    fetch: Callable[[str], dict[str, Any] | None],
+    *,
+    label: str,
+) -> dict[str, Any] | None:
+    """Race GTIN variants; first non-empty hit wins."""
+    variants = gtin_variants(code)
+    if not variants:
+        return None
+    if len(variants) == 1:
+        try:
+            return fetch(variants[0])
+        except Exception as exc:  # noqa: BLE001
+            logger.info("%s lookup failed for %s: %s", label, variants[0], exc)
+            return None
+
+    with ThreadPoolExecutor(max_workers=min(4, len(variants))) as pool:
+        futures = {pool.submit(fetch, digits): digits for digits in variants}
+        for future in as_completed(futures):
+            digits = futures[future]
+            try:
+                hit = future.result()
+            except Exception as exc:  # noqa: BLE001 — never break enrich on provider failure
+                logger.info("%s lookup failed for %s: %s", label, digits, exc)
+                continue
+            if hit:
+                for pending in futures:
+                    pending.cancel()
+                return hit
+    return None
+
+
 def lookup_commercial_barcode(code: str) -> dict[str, Any] | None:
     """Return a normalized enrich-style dict or None when disabled/miss/error."""
     provider = (os.environ.get("BARCODE_API_PROVIDER") or "").strip().lower()
@@ -62,20 +97,15 @@ def lookup_commercial_barcode(code: str) -> dict[str, Any] | None:
     if provider not in SUPPORTED_PROVIDERS or not key:
         return None
 
-    for digits in gtin_variants(code):
-        try:
-            if provider == "barcodelookup":
-                raw = _fetch_barcodelookup(digits, key)
-            elif provider == "upcitemdb":
-                raw = _fetch_upcitemdb(digits, key)
-            else:
-                raw = _fetch_go_upc(digits, key)
-        except Exception as exc:  # noqa: BLE001 — never break enrich on provider failure
-            logger.info("Commercial barcode API (%s) failed for %s: %s", provider, digits, exc)
-            continue
-
+    def _fetch_one(digits: str) -> dict[str, Any] | None:
+        if provider == "barcodelookup":
+            raw = _fetch_barcodelookup(digits, key)
+        elif provider == "upcitemdb":
+            raw = _fetch_upcitemdb(digits, key)
+        else:
+            raw = _fetch_go_upc(digits, key)
         if not raw or not str(raw.get("name") or "").strip():
-            continue
+            return None
         return {
             "found": True,
             "code": digits if len(digits) >= 12 else code,
@@ -106,7 +136,8 @@ def lookup_commercial_barcode(code: str) -> dict[str, Any] | None:
             "message": "Filled from a barcode data provider. Review price and stock, then save.",
             "metadata": {"enrichment_source": f"commercial_{provider}", "provider": provider},
         }
-    return None
+
+    return _first_variant_hit(code, _fetch_one, label=f"Commercial barcode API ({provider})")
 
 
 def lookup_datakick_barcode(code: str) -> dict[str, Any] | None:
@@ -114,20 +145,17 @@ def lookup_datakick_barcode(code: str) -> dict[str, Any] | None:
 
     Datakick stores GTIN-14 (zero-padded). Returns enrich-style dict or None.
     """
-    tried: set[str] = set()
-    for digits in gtin_variants(code):
+
+    def _fetch_one(digits: str) -> dict[str, Any] | None:
         candidates = [digits]
         if len(digits) < 14:
             candidates.append(digits.zfill(14))
+        tried: set[str] = set()
         for candidate in candidates:
             if candidate in tried or len(candidate) not in {8, 12, 13, 14}:
                 continue
             tried.add(candidate)
-            try:
-                raw = _fetch_datakick(candidate)
-            except Exception as exc:  # noqa: BLE001 — never break enrich on provider failure
-                logger.info("Datakick lookup failed for %s: %s", candidate, exc)
-                continue
+            raw = _fetch_datakick(candidate)
             if not raw or not str(raw.get("name") or "").strip():
                 continue
             gtin14 = str(raw.get("gtin14") or candidate)
@@ -176,7 +204,9 @@ def lookup_datakick_barcode(code: str) -> dict[str, Any] | None:
                     "gtin14": gtin14,
                 },
             }
-    return None
+        return None
+
+    return _first_variant_hit(code, _fetch_one, label="Datakick")
 
 
 def _fetch_datakick(code: str) -> dict[str, Any] | None:
@@ -200,14 +230,11 @@ def _fetch_datakick(code: str) -> dict[str, Any] | None:
 
 def lookup_public_barcode(code: str) -> dict[str, Any] | None:
     """Free public-page fallback (Go-UPC) when Open*Facts / commercial APIs miss."""
-    for digits in gtin_variants(code):
-        try:
-            raw = _fetch_go_upc_public(digits)
-        except Exception as exc:  # noqa: BLE001 — never break enrich on scrape failure
-            logger.info("Public Go-UPC lookup failed for %s: %s", digits, exc)
-            continue
+
+    def _fetch_one(digits: str) -> dict[str, Any] | None:
+        raw = _fetch_go_upc_public(digits)
         if not raw or not str(raw.get("name") or "").strip():
-            continue
+            return None
         image_url = str(raw.get("image_url") or "").strip()
         return {
             "found": True,
@@ -239,7 +266,8 @@ def lookup_public_barcode(code: str) -> dict[str, Any] | None:
             "message": "Filled from an online product database. Review price and stock, then save.",
             "metadata": {"enrichment_source": "public_go_upc", "provider": "go_upc_public"},
         }
-    return None
+
+    return _first_variant_hit(code, _fetch_one, label="Public Go-UPC")
 
 
 def _strip_html(value: str) -> str:

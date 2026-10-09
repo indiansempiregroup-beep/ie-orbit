@@ -74,7 +74,7 @@ export function ShopOrderDetailPage() {
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, 'Unable to update delivery status.'));
+      setMessage(getApiErrorMessage(error, "Couldn't update delivery status. Try again."));
     },
   });
   const simulateDelivery = useMutation({
@@ -100,12 +100,12 @@ export function ShopOrderDetailPage() {
     onSuccess: () => {
       setShipOpen(false);
       setShipAwb('');
-      setMessage('Shipment saved. Customer can track the package now.');
+      setMessage('Shipment saved — customer can track it now.');
       void order.refetch();
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, 'Unable to save shipment.'));
+      setMessage(getApiErrorMessage(error, "Couldn't save shipment details. Try again."));
     },
   });
   const deliverySettings = useQuery({
@@ -133,7 +133,7 @@ export function ShopOrderDetailPage() {
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, 'Unable to book with Shiprocket.'));
+      setMessage(getApiErrorMessage(error, "Couldn't book with Shiprocket. Try again."));
     },
   });
 
@@ -242,7 +242,7 @@ export function ShopOrderDetailPage() {
       setQtyByLine({});
       void order.refetch();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Return failed.');
+      setMessage(error instanceof Error ? error.message : "Couldn't process this return. Try again.");
     }
   }
 
@@ -300,9 +300,9 @@ export function ShopOrderDetailPage() {
                 onClick={() => {
                   void dispatch
                     .mutateAsync()
-                    .then(() => setMessage('Rider requested. Live tracking is now active.'))
+                    .then(() => setMessage('Rider requested — live tracking is on.'))
                     .catch((error: unknown) =>
-                      setMessage(error instanceof Error ? error.message : 'Dispatch failed.'),
+                      setMessage(error instanceof Error ? error.message : "Couldn't request a rider. Try again."),
                     );
                 }}
               >
@@ -373,7 +373,7 @@ export function ShopOrderDetailPage() {
                     .mutateAsync()
                     .then((invoice) => setMessage(`Invoice ${invoice.invoice_number} created.`))
                     .catch((error: unknown) =>
-                      setMessage(error instanceof Error ? error.message : 'Invoice failed.'),
+                      setMessage(error instanceof Error ? error.message : "Couldn't create this invoice. Try again."),
                     );
                 }}
               >

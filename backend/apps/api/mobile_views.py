@@ -23,6 +23,7 @@ from apps.api.mobile_helpers import (
     resolve_tenant_business,
     serialize_mobile_customer_profile,
 )
+from apps.common.utils.business_identity import assert_no_staff_customer_conflict
 from apps.api.mobile_permissions import IsEmailVerified, MatchesCustomerAppTenant
 from apps.api.mobile_serializers import (
     MobileAvailabilityQuerySerializer,
@@ -710,6 +711,15 @@ class MobileBookingRequestView(APIView):
             ).first()
         if existing:
             return existing
+        auth_user = user if user is not None and getattr(user, "is_authenticated", False) else None
+        assert_no_staff_customer_conflict(
+            tenant=tenant,
+            business=business,
+            email=email or "",
+            phone=phone_number or "",
+            user=auth_user,
+            creating="customer",
+        )
         first_name, _, last_name = customer_name.strip().partition(" ")
         return Customer.objects.create(
             tenant=tenant,
@@ -741,6 +751,14 @@ class MobileCustomerRegisterView(APIView):
             )
         except ValueError as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        phone_number = serializer.validated_data.get("phone_number", "")
+        assert_no_staff_customer_conflict(
+            tenant=tenant,
+            business=business,
+            email=serializer.validated_data["email"],
+            phone=phone_number or "",
+            creating="customer",
+        )
         with transaction.atomic():
             user = AuthenticationService().register_passwordless(
                 email=serializer.validated_data["email"],
@@ -750,7 +768,6 @@ class MobileCustomerRegisterView(APIView):
                 ip_address=client_ip(request),
                 user_agent=user_agent(request),
             )
-            phone_number = serializer.validated_data.get("phone_number", "")
             if phone_number:
                 user.phone_number = phone_number
                 user.save(update_fields=["phone_number", "updated_at"])

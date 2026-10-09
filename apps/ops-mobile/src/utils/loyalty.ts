@@ -55,17 +55,12 @@ export function loyaltyBillHighlight(options: {
   const hasBalance =
     options.pointsBalance != null && Number.isFinite(Number(options.pointsBalance));
   const balance = hasBalance ? Math.max(0, Math.floor(Number(options.pointsBalance) || 0)) : null;
-  const tag = 'Enjoy rewards on next visit!';
   if (earned > 0) {
-    const head =
-      balance != null && balance > 0
-        ? `+${earned} points earned · ${balance} pts total`
-        : `+${earned} points earned`;
-    return `${head} · ${tag}`;
+    return balance != null && balance > 0
+      ? `+${earned} points earned · ${balance} pts total`
+      : `+${earned} points earned`;
   }
-  const head =
-    balance != null && balance > 0
-      ? `+${pending} points to earn · ${balance} pts total`
-      : `+${pending} points to earn`;
-  return `${head} · ${tag}`;
+  return balance != null && balance > 0
+    ? `+${pending} points to earn · ${balance} pts total`
+    : `+${pending} points to earn`;
 }

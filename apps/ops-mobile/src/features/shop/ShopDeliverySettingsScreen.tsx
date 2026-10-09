@@ -47,6 +47,7 @@ export function ShopDeliverySettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
+  const [codAllowedForInstant, setCodAllowedForInstant] = useState(true);
   const [provider, setProvider] = useState('mock');
   const [baseUrl, setBaseUrl] = useState('');
   const [chargeBearer, setChargeBearer] = useState('customer');
@@ -69,6 +70,7 @@ export function ShopDeliverySettingsScreen() {
       const config = response.data.delivery_integration ?? {};
       const credentials = config.credentials ?? {};
       setEnabled(response.data.instant_delivery_enabled);
+      setCodAllowedForInstant(response.data.cod_allowed_for_instant_delivery ?? true);
       setProvider(String(config.provider || 'mock'));
       setBaseUrl(String(config.base_url || ''));
       setChargeBearer(String(config.charge_bearer || 'customer'));
@@ -138,12 +140,13 @@ export function ShopDeliverySettingsScreen() {
       await client.shop.patchDeliverySettings({
         business_id: businessId,
         instant_delivery_enabled: enabled,
+        cod_allowed_for_instant_delivery: codAllowedForInstant,
         delivery_integration: integration,
       });
       toast.push('Instant delivery settings saved.', 'success');
       await load();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to save delivery settings.');
+      const message = getApiErrorMessage(err, "Couldn't save delivery settings. Try again.");
       setError(message);
       toast.push(message, 'error');
     } finally {
@@ -187,6 +190,19 @@ export function ShopDeliverySettingsScreen() {
           <Switch
             value={enabled}
             onValueChange={setEnabled}
+            trackColor={{ false: colors.border, true: colors.primary }}
+          />
+        </View>
+        <View style={[styles.switchRow, { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md }]}>
+          <View style={styles.switchCopy}>
+            <Text style={styles.switchLabel}>Allow COD for instant orders</Text>
+            <Text style={styles.switchHint}>
+              Off = customers choosing Porter or Shiprocket Quick must pay online. Standard delivery still uses Payment settings.
+            </Text>
+          </View>
+          <Switch
+            value={codAllowedForInstant}
+            onValueChange={setCodAllowedForInstant}
             trackColor={{ false: colors.border, true: colors.primary }}
           />
         </View>

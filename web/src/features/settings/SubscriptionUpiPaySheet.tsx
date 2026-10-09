@@ -106,7 +106,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to start UPI checkout. Set PLATFORM_UPI_VPA on the server.');
+      const message = getApiErrorMessage(err, "Couldn't start UPI checkout. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -192,7 +192,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       setStatus('awaiting');
       await onClaimed();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to submit payment claim.');
+      const message = getApiErrorMessage(err, "Couldn't submit the payment claim. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -214,8 +214,9 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
           {title}
         </h2>
         <ol className="product-settings-lead" style={{ paddingLeft: 18 }}>
-          <li>Pay the exact amount with UPI</li>
-          <li>Submit your UTR or screenshot</li>
+          <li>Scan the QR or open your UPI app and pay the exact amount shown</li>
+          <li>After payment succeeds, take a screenshot of the confirmation in your UPI app</li>
+          <li>Upload that screenshot below (UTR optional), then submit for confirmation</li>
           <li>IE confirms — access restores until the next due date</li>
         </ol>
 
@@ -255,6 +256,9 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
 
             {status === 'ready' ? (
               <>
+                <p className="product-settings-lead" style={{ margin: 0 }}>
+                  After you pay, upload the UPI confirmation screenshot below so we can verify it.
+                </p>
                 <label className="product-settings-lead" style={{ display: 'grid', gap: 6 }}>
                   UTR / UPI reference (optional if you upload a screenshot)
                   <input
@@ -308,7 +312,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
               </>
             ) : (
               <div className="product-settings-pending">
-                <strong>Payment received — waiting for IE to confirm (usually same day).</strong>
+                <strong>Payment received — IE usually confirms the same day.</strong>
                 <p>
                   Your claim was submitted{utr ? ` · UTR ${utr}` : ''}. The product stays as-is until we confirm.
                 </p>

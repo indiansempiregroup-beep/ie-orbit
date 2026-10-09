@@ -167,14 +167,14 @@ export function ShopPartiesPage() {
     try {
       if (editingId) {
         await update.mutateAsync({ supplierId: editingId, body: payload });
-        snackbar.push('Supplier updated.', 'success');
+        snackbar.push('Supplier details saved.', 'success');
       } else {
         await create.mutateAsync(payload);
         snackbar.push('Supplier added.', 'success');
       }
       dialog.hide();
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to save supplier.'));
+      setMessage(getApiErrorMessage(error, "Couldn't save this supplier. Try again."));
     }
   }
 
@@ -184,7 +184,7 @@ export function ShopPartiesPage() {
       await remove.mutateAsync(supplier.id);
       snackbar.push('Supplier removed.', 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to remove supplier.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't remove this supplier. Try again."), 'error');
     }
   }
 

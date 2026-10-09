@@ -128,7 +128,7 @@ export function AutomationsPage() {
       setPhase('preview');
       setRefineText('');
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Could not understand that yet'), 'error');
+      snackbar.push(getApiErrorMessage(err, "We couldn't understand that yet. Try rephrasing."), 'error');
     } finally {
       setBusy(false);
     }
@@ -143,13 +143,13 @@ export function AutomationsPage() {
         ...draft,
         source_prompt: conversation.map((t) => t.content).join('\n'),
       });
-      snackbar.push('Automation is live', 'success');
+      snackbar.push('Automation is on.', 'success');
       setPhase('list');
       setDraft(null);
       setExplanation(null);
       await load();
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Could not create automation'), 'error');
+      snackbar.push(getApiErrorMessage(err, "Couldn't create that automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -166,7 +166,7 @@ export function AutomationsPage() {
       }
       await load();
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Update failed'), 'error');
+      snackbar.push(getApiErrorMessage(err, "Couldn't update this automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -178,10 +178,10 @@ export function AutomationsPage() {
     setBusy(true);
     try {
       await client.workflow.deleteDefinition(row.id, { business_id: workspace.businessId });
-      snackbar.push('Automation deleted', 'success');
+      snackbar.push('Automation removed.', 'success');
       await load();
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Could not delete'), 'error');
+      snackbar.push(getApiErrorMessage(err, "Couldn't remove this automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }

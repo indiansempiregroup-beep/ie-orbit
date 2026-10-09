@@ -436,7 +436,7 @@ export function ShopBooksNotesScreen() {
             setSelected(null);
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : 'Unable to void note', 'error');
+            toast.push(err instanceof Error ? err.message : "Couldn't void this note. Try again.", 'error');
           }
         },
       },

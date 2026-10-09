@@ -12,14 +12,22 @@ from rest_framework.exceptions import ValidationError
 from apps.billing.constants import (
     CHECKOUT_SESSION_TTL_HOURS,
     DEFAULT_CHECKOUT_CURRENCY,
+    INTL_CHECKOUT_CURRENCY,
     PLAN_PRICE_PAISE,
+    PLAN_PRICE_USD_CENTS,
     YEARLY_PRICE_MULTIPLIER,
     yearly_months_from_definition,
 )
 from apps.billing.models import BillingCheckoutSession, CheckoutSessionStatus
-from apps.billing.services.addon_pricing import get_addon_prices
+from apps.billing.services.addon_pricing import get_addon_prices, get_addon_prices_minor
 from apps.billing.services.cashfree_client import CashfreeClient, get_cashfree_config
 from apps.billing.services.razorpay_client import RazorpayClient, get_razorpay_config
+from apps.billing.services.region import (
+    billing_region_for_business,
+    price_minor_for_currency,
+    saas_currency_for_business,
+)
+from apps.billing.services.stripe_client import StripeClient, get_stripe_config
 from apps.businesses.constants import DEFAULT_TRIAL_DAYS, VALID_PRODUCT_CODES, get_plan_definition
 from apps.businesses.models import Business
 from apps.tenancy.models import Tenant
@@ -32,24 +40,33 @@ class CheckoutService:
         self,
         razorpay_client: RazorpayClient | None = None,
         cashfree_client: CashfreeClient | None = None,
+        stripe_client: StripeClient | None = None,
     ) -> None:
         self.razorpay = razorpay_client or RazorpayClient()
         self.cashfree = cashfree_client or CashfreeClient()
+        self.stripe = stripe_client or StripeClient()
 
-    def get_status(self) -> dict[str, Any]:
+    def get_status(self, *, business: Business | None = None) -> dict[str, Any]:
         razorpay = get_razorpay_config()
         cashfree = get_cashfree_config()
+        stripe = get_stripe_config()
         razorpay_configured = razorpay.is_configured
         cashfree_configured = cashfree.is_configured
-        configured = razorpay_configured or cashfree_configured
+        stripe_configured = stripe.is_configured
+        region = billing_region_for_business(business) if business is not None else "IN"
+        saas_currency = saas_currency_for_business(business) if business is not None else DEFAULT_CHECKOUT_CURRENCY
+        india_configured = razorpay_configured or cashfree_configured
+        configured = stripe_configured if region == "INTL" else india_configured
         razorpay_webhook = bool(razorpay.webhook_secret)
-        # Cashfree signs webhooks with the PG Secret Key, so a configured
-        # Cashfree account is also ready for signature verification.
         cashfree_webhook = cashfree_configured
-        webhook_configured = (razorpay_configured and razorpay_webhook) or (
-            cashfree_configured and cashfree_webhook
+        webhook_configured = (
+            bool(stripe.webhook_secret)
+            if region == "INTL"
+            else (razorpay_configured and razorpay_webhook) or (cashfree_configured and cashfree_webhook)
         )
-        if razorpay_configured and cashfree_configured:
+        if region == "INTL":
+            provider = "stripe"
+        elif razorpay_configured and cashfree_configured:
             provider = "both"
         elif cashfree_configured and not razorpay_configured:
             provider = "cashfree"
@@ -57,10 +74,11 @@ class CheckoutService:
             provider = "razorpay"
         return {
             "provider": provider,
+            "billing_region": region,
             "configured": configured,
             "key_id": razorpay.key_id if razorpay_configured else None,
             "webhook_configured": webhook_configured,
-            "currency": DEFAULT_CHECKOUT_CURRENCY,
+            "currency": saas_currency,
             "mock_mode": not configured,
             "razorpay": {
                 "configured": razorpay_configured,
@@ -72,6 +90,11 @@ class CheckoutService:
                 "app_id": cashfree.app_id if cashfree_configured else None,
                 "webhook_configured": cashfree_webhook,
                 "env": cashfree.env,
+            },
+            "stripe": {
+                "configured": stripe_configured,
+                "publishable_key": stripe.publishable_key if stripe_configured else None,
+                "webhook_configured": bool(stripe.webhook_secret),
             },
         }
 
@@ -105,15 +128,42 @@ class CheckoutService:
         if get_plan_definition(normalized_product, normalized_plan) is None:
             raise ValidationError({"plan_code": "Unknown plan for this product."})
 
+        region = billing_region_for_business(business)
+        saas_currency = saas_currency_for_business(business)
+        # Keep stored field in sync with country-derived lock.
+        if str(getattr(business, "saas_currency", "") or "") != saas_currency:
+            business.saas_currency = saas_currency
+            business.save(update_fields=["saas_currency", "updated_at"])
+
         interval = "monthly"
         subscription = (
             business.product_subscriptions.filter(product_code=normalized_product).only("billing_interval").first()
         )
         if subscription is not None and subscription.billing_interval:
             interval = subscription.billing_interval
-        amount_paise = self._resolve_plan_price_paise(normalized_plan, interval)
-        if amount_paise is None:
+        amount_minor = self._resolve_plan_price_minor(normalized_plan, interval, currency=saas_currency)
+        if amount_minor is None:
             raise ValidationError({"plan_code": "Plan price is not configured for checkout."})
+
+        if region == "INTL":
+            requested = str(provider or "").strip().lower()
+            if requested in {"razorpay", "cashfree", "upi"}:
+                raise ValidationError(
+                    {
+                        "provider": "International businesses must pay with Stripe in USD.",
+                        "code": "intl_stripe_required",
+                    }
+                )
+            return self._create_stripe_session(
+                tenant=tenant,
+                business=business,
+                normalized_product=normalized_product,
+                normalized_plan=normalized_plan,
+                amount_cents=amount_minor,
+                actor_id=actor_id,
+            )
+
+        amount_paise = amount_minor
         checkout_provider = self._resolve_checkout_provider(provider)
         selected_provider_ready = (
             self.cashfree.is_configured
@@ -251,26 +301,154 @@ class CheckoutService:
             "expires_at": expires_at.isoformat(),
         }
 
-    def list_plan_catalog(self) -> list[dict[str, Any]]:
+    def _create_stripe_session(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        normalized_product: str,
+        normalized_plan: str,
+        amount_cents: int,
+        actor_id: str | None,
+    ) -> dict[str, Any]:
+        if settings.BILLING_ENFORCE_LIVE_CHECKOUT and not self.stripe.is_configured:
+            raise ValidationError(
+                {
+                    "billing": "Live checkout is enforced. Configure Stripe credentials for international billing.",
+                    "code": "stripe_not_configured",
+                }
+            )
+        web_base = str(getattr(settings, "WEB_APP_BASE_URL", "") or "https://app.ie-orbit.com").rstrip("/")
+        success_url = f"{web_base}/settings/billing?stripe=success&session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{web_base}/settings/billing?stripe=cancel"
+        remote = self.stripe.create_checkout_session(
+            amount_cents=amount_cents,
+            currency=INTL_CHECKOUT_CURRENCY,
+            product_name=f"IE Orbit {normalized_plan}",
+            success_url=success_url,
+            cancel_url=cancel_url,
+            customer_email=str(business.email or "") or None,
+            metadata={
+                "tenant_id": str(tenant.id),
+                "business_id": str(business.id),
+                "product_code": normalized_product,
+                "plan_code": normalized_plan,
+            },
+        )
+        stripe_session_id = str(remote.get("id") or "")
+        expires_at = timezone.now() + timedelta(hours=CHECKOUT_SESSION_TTL_HOURS)
+        session = BillingCheckoutSession.objects.create(
+            tenant=tenant,
+            business=business,
+            product_code=normalized_product,
+            plan_code=normalized_plan,
+            razorpay_order_id=f"st_{stripe_session_id}"[:120],
+            amount_paise=amount_cents,
+            currency=INTL_CHECKOUT_CURRENCY,
+            status=CheckoutSessionStatus.CREATED,
+            expires_at=expires_at,
+            metadata={
+                "created_by": actor_id,
+                "mock": bool(remote.get("mock")),
+                "provider": "stripe",
+                "stripe_checkout_session_id": stripe_session_id,
+                "checkout_url": str(remote.get("url") or ""),
+            },
+        )
+        config = get_stripe_config()
+        return {
+            "session_id": str(session.id),
+            "provider": "stripe",
+            "order_id": stripe_session_id,
+            "checkout_url": str(remote.get("url") or ""),
+            "amount": session.amount_paise,
+            "currency": session.currency,
+            "product_code": session.product_code,
+            "plan_code": session.plan_code,
+            "configured": config.is_configured,
+            "publishable_key": config.publishable_key if config.is_configured else None,
+            "mock_mode": not config.is_configured,
+            "expires_at": expires_at.isoformat(),
+        }
+
+    def list_plan_catalog(
+        self,
+        *,
+        currency: str | None = None,
+        business: Business | None = None,
+    ) -> list[dict[str, Any]]:
         from apps.businesses.services.plan_catalog import list_plan_definitions
 
+        if business is not None:
+            saas_currency = saas_currency_for_business(business)
+        else:
+            saas_currency = str(currency or DEFAULT_CHECKOUT_CURRENCY).strip().upper()
+            if saas_currency not in {"INR", "USD"}:
+                saas_currency = DEFAULT_CHECKOUT_CURRENCY
+
         plans: list[dict[str, Any]] = []
-        addon_prices = get_addon_prices()
+        addon_prices = get_addon_prices(currency=saas_currency)
+        addon_minor = get_addon_prices_minor()
         for definition in list_plan_definitions():
             plan_code = str(definition["code"])
             product_code = str(definition.get("product_code", ""))
-
-            definition_amount = definition.get("amount_paise")
-            amount_paise = (
-                int(definition_amount) if definition_amount is not None else self._resolve_plan_price_paise(plan_code)
-            )
-
-            definition_yearly = definition.get("yearly_amount_paise")
             months_charged = yearly_months_from_definition(definition)
-            if definition_yearly is not None:
-                yearly_amount = int(definition_yearly)
-            else:
-                yearly_amount = None if amount_paise is None else amount_paise * months_charged
+            prices_minor = definition.get("prices_minor") or {}
+            amount_minor = price_minor_for_currency(
+                prices_minor,
+                currency=saas_currency,
+                interval="monthly",
+                inr_monthly=(
+                    int(definition["amount_paise"])
+                    if definition.get("amount_paise") is not None
+                    else self._resolve_plan_price_paise(plan_code)
+                ),
+                inr_yearly=(
+                    int(definition["yearly_amount_paise"])
+                    if definition.get("yearly_amount_paise") is not None
+                    else None
+                ),
+            )
+            if amount_minor is None:
+                amount_minor = self._resolve_plan_price_minor(plan_code, "monthly", currency=saas_currency)
+            yearly_amount = price_minor_for_currency(
+                prices_minor,
+                currency=saas_currency,
+                interval="yearly",
+                inr_monthly=amount_minor if saas_currency == "INR" else None,
+                inr_yearly=(
+                    int(definition["yearly_amount_paise"])
+                    if definition.get("yearly_amount_paise") is not None
+                    else None
+                ),
+            )
+            if yearly_amount is None and amount_minor is not None:
+                yearly_amount = amount_minor * months_charged
+
+            # Legacy INR fields always reflect INR catalog for admin/back-compat.
+            inr_monthly = price_minor_for_currency(
+                prices_minor,
+                currency="INR",
+                interval="monthly",
+                inr_monthly=(
+                    int(definition["amount_paise"]) if definition.get("amount_paise") is not None else None
+                ),
+            )
+            if inr_monthly is None:
+                inr_monthly = self._resolve_plan_price_paise(plan_code)
+            inr_yearly = price_minor_for_currency(
+                prices_minor,
+                currency="INR",
+                interval="yearly",
+                inr_monthly=inr_monthly,
+                inr_yearly=(
+                    int(definition["yearly_amount_paise"])
+                    if definition.get("yearly_amount_paise") is not None
+                    else None
+                ),
+            )
+            if inr_yearly is None and inr_monthly is not None:
+                inr_yearly = inr_monthly * months_charged
 
             plans.append(
                 {
@@ -287,33 +465,89 @@ class CheckoutService:
                     "max_extra_offices": definition.get("max_extra_offices"),
                     "bi_features": list(definition.get("bi_features") or []),
                     "features": list(definition.get("features") or []),
-                    "amount_paise": amount_paise,
-                    "yearly_amount_paise": yearly_amount,
+                    "amount_paise": inr_monthly if saas_currency == "INR" else amount_minor,
+                    "yearly_amount_paise": inr_yearly if saas_currency == "INR" else yearly_amount,
+                    "amount_minor": amount_minor,
+                    "yearly_amount_minor": yearly_amount,
                     "yearly_months_charged": months_charged,
                     "addon_staff_price_paise": addon_prices["staff_price_paise"],
                     "addon_office_price_paise": addon_prices["office_price_paise"],
                     "addon_pets_price_paise": addon_prices["pets_price_paise"],
+                    "prices_minor": prices_minor
+                    or {
+                        "INR": {"monthly": inr_monthly, "yearly": inr_yearly},
+                        "USD": {
+                            "monthly": PLAN_PRICE_USD_CENTS.get(plan_code),
+                            "yearly": (
+                                PLAN_PRICE_USD_CENTS[plan_code] * months_charged
+                                if plan_code in PLAN_PRICE_USD_CENTS
+                                else None
+                            ),
+                        },
+                    },
+                    "addon_prices_minor": addon_minor,
                     "is_public": bool(definition.get("is_public", True)),
-                    "currency": DEFAULT_CHECKOUT_CURRENCY,
+                    "currency": saas_currency,
                 }
             )
         return plans
 
-    def list_public_plan_catalog(self, *, product_code: str | None = None) -> dict[str, Any]:
-        plans = self.list_plan_catalog()
+    def list_public_plan_catalog(
+        self,
+        *,
+        product_code: str | None = None,
+        currency: str | None = None,
+    ) -> dict[str, Any]:
+        saas_currency = str(currency or DEFAULT_CHECKOUT_CURRENCY).strip().upper()
+        if saas_currency not in {"INR", "USD"}:
+            saas_currency = DEFAULT_CHECKOUT_CURRENCY
+        plans = self.list_plan_catalog(currency=saas_currency)
         normalized = (product_code or "").strip().lower()
         if normalized:
             plans = [plan for plan in plans if plan.get("product_code") == normalized]
         plans = [plan for plan in plans if plan.get("is_public", True)]
-        addon_prices = get_addon_prices()
+        addon_prices = get_addon_prices(currency=saas_currency)
         trial_days = max((int(plan.get("trial_days") or 0) for plan in plans), default=DEFAULT_TRIAL_DAYS)
         return {
             "trial_days": trial_days or DEFAULT_TRIAL_DAYS,
+            "currency": saas_currency,
             "addon_staff_price_paise": addon_prices["staff_price_paise"],
             "addon_office_price_paise": addon_prices["office_price_paise"],
             "addon_pets_price_paise": addon_prices["pets_price_paise"],
+            "addon_prices_minor": get_addon_prices_minor(),
             "plans": plans,
         }
+
+    def _resolve_plan_price_minor(
+        self,
+        plan_code: str,
+        billing_interval: str = "monthly",
+        *,
+        currency: str = "INR",
+    ) -> int | None:
+        code = str(currency or "INR").strip().upper()
+        if code == "USD":
+            monthly = PLAN_PRICE_USD_CENTS.get(plan_code)
+            from apps.businesses.services.plan_catalog import list_plan_definitions
+
+            months_charged = YEARLY_PRICE_MULTIPLIER
+            yearly_override: int | None = None
+            for definition in list_plan_definitions():
+                if str(definition.get("code", "")) != plan_code:
+                    continue
+                months_charged = yearly_months_from_definition(definition)
+                usd = (definition.get("prices_minor") or {}).get("USD") or {}
+                if usd.get("monthly") is not None:
+                    monthly = int(usd["monthly"])
+                if usd.get("yearly") is not None:
+                    yearly_override = int(usd["yearly"])
+                break
+            if monthly is None and yearly_override is None:
+                return None
+            if billing_interval == "yearly":
+                return yearly_override if yearly_override is not None else (monthly or 0) * months_charged
+            return monthly
+        return self._resolve_plan_price_paise(plan_code, billing_interval)
 
     def _resolve_plan_price_paise(self, plan_code: str, billing_interval: str = "monthly") -> int | None:
         overrides = getattr(settings, "BILLING_PLAN_PRICE_OVERRIDES", {}) or {}
@@ -366,6 +600,17 @@ class CheckoutService:
             session = BillingCheckoutSession.objects.get(razorpay_order_id=order_id)
         except BillingCheckoutSession.DoesNotExist:
             session = BillingCheckoutSession.objects.filter(cashfree_order_id=order_id).first()
+            if session is None and order_id.startswith("cs_"):
+                # Stripe Checkout session id may be stored as st_{cs_…} on razorpay_order_id.
+                session = BillingCheckoutSession.objects.filter(
+                    razorpay_order_id=f"st_{order_id}"[:120]
+                ).first()
+            if session is None:
+                session = (
+                    BillingCheckoutSession.objects.filter(
+                        metadata__stripe_checkout_session_id=order_id
+                    ).first()
+                )
             if session is None:
                 logger.warning("billing.checkout_session_not_found", extra={"order_id": order_id})
                 return None
@@ -474,6 +719,14 @@ class CheckoutService:
         actor_id: str | None = None,
     ) -> dict[str, Any]:
         from apps.common.upi import build_upi_pay_url
+
+        if billing_region_for_business(business) != "IN":
+            raise ValidationError(
+                {
+                    "upi": "UPI billing is only available for India. International businesses pay in USD via Stripe.",
+                    "code": "intl_stripe_required",
+                }
+            )
 
         raw_items = list(items or [])
         if not raw_items:

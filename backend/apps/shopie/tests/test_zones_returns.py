@@ -445,7 +445,7 @@ def test_online_order_notifies_and_pos_does_not(
     orders.transition(tenant=tenant, business=business, order=online, status=OrderStatus.CONFIRMED)
     confirmed = next(call for call in calls if call.get("event_type") == "ShopOrderConfirmed")
     assert online.order_number in (confirmed.get("extra_html") or "")
-    assert "We've received your order" in calls[0].get("subject", "") or any(
+    assert "Order received" in calls[0].get("subject", "") or any(
         "confirmed" in str(call.get("subject") or "").lower() for call in calls
     )
 

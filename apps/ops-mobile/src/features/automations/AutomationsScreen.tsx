@@ -139,7 +139,7 @@ export function AutomationsScreen() {
       setPhase('preview');
       setRefineText('');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Could not understand that yet'), 'error');
+      toast.push(getApiErrorMessage(err, "We couldn't understand that yet. Try rephrasing."), 'error');
     } finally {
       setBusy(false);
     }
@@ -154,13 +154,13 @@ export function AutomationsScreen() {
         ...draft,
         source_prompt: conversation.map((t) => t.content).join('\n'),
       });
-      toast.push('Automation is live', 'success');
+      toast.push('Automation is on.', 'success');
       setPhase('list');
       setDraft(null);
       setExplanation(null);
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Could not create automation'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't create that automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -177,7 +177,7 @@ export function AutomationsScreen() {
       }
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Update failed'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't update this automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -201,10 +201,10 @@ export function AutomationsScreen() {
     setBusy(true);
     try {
       await client.workflow.deleteDefinition(row.id, { business_id: businessId });
-      toast.push('Automation deleted', 'success');
+      toast.push('Automation removed.', 'success');
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Could not delete'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't remove this automation. Try again."), 'error');
     } finally {
       setBusy(false);
     }

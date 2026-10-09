@@ -159,16 +159,16 @@ export function ShopCouponsPage() {
       if (editingId) {
         await patchCoupon.mutateAsync({ couponId: editingId, body });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Coupon updated.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Coupon details saved.', 'success'), 0);
       } else {
         await createCoupon.mutateAsync(body);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Coupon saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Coupon added.', 'success'), 0);
       }
       setForm(EMPTY_FORM);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to save coupon.';
+      const text = error instanceof Error ? error.message : "Couldn't save this coupon. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -181,11 +181,11 @@ export function ShopCouponsPage() {
     try {
       await deleteCoupon.mutateAsync(editingId);
       dialog.hide();
-      window.setTimeout(() => snackbar.push('Coupon deleted.', 'success'), 0);
+      window.setTimeout(() => snackbar.push('Coupon removed.', 'success'), 0);
       setForm(EMPTY_FORM);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to delete coupon.';
+      const text = error instanceof Error ? error.message : "Couldn't remove this coupon. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }

@@ -74,7 +74,7 @@ export function AddressBookScreen() {
       await load();
       toast.push('Default address updated.', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to update this address.');
+      setError(err instanceof Error ? err.message : "Couldn't update this address. Try again.");
     } finally {
       setBusyId(null);
     }
@@ -90,7 +90,7 @@ export function AddressBookScreen() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to delete this address.');
+      setError(err instanceof Error ? err.message : "Couldn't remove this address. Try again.");
     } finally {
       setBusyId(null);
     }

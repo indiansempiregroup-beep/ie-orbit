@@ -27,13 +27,38 @@ const PRODUCT_LABELS: Record<string, string> = {
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
 
-function formatInr(paise?: number | null) {
-  if (paise == null) return '—';
-  return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+type PricingRegion = 'IN' | 'INTL';
+
+function guessPricingRegion(): PricingRegion {
+  try {
+    const stored = localStorage.getItem('ieorbit.pricingRegion');
+    if (stored === 'IN' || stored === 'INTL') return stored;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale || '';
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (locale.toLowerCase().includes('-in') || tz === 'Asia/Kolkata') return 'IN';
+  } catch {
+    /* ignore */
+  }
+  return 'INTL';
 }
 
-function formatInrAmount(amount: number) {
-  return `₹${amount.toLocaleString('en-IN')}`;
+function formatSaaSMoney(minor?: number | null, currency: 'INR' | 'USD' = 'INR') {
+  if (minor == null) return '—';
+  const amount = Math.round(minor) / 100;
+  try {
+    return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return currency === 'INR' ? `₹${amount}` : `$${amount}`;
+  }
 }
 
 function yearlyMonthsFromPlans(plans: BillingPlanCatalogItem[]) {
@@ -69,12 +94,20 @@ function planKicker(plan: BillingPlanCatalogItem) {
 }
 
 export function PricingPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const leadProduct = searchParams.get('product') === 'shopie' ? 'shopie' : 'appointie';
+  const regionParam = (searchParams.get('region') || '').toLowerCase();
+  const region: PricingRegion =
+    regionParam === 'intl' || regionParam === 'in'
+      ? regionParam === 'intl'
+        ? 'INTL'
+        : 'IN'
+      : guessPricingRegion();
+  const saasCurrency: 'INR' | 'USD' = region === 'IN' ? 'INR' : 'USD';
 
   const catalogQuery = useQuery({
-    queryKey: ['public', 'plans'],
-    queryFn: async () => (await publicClient.billing.publicPlans()).data,
+    queryKey: ['public', 'plans', saasCurrency],
+    queryFn: async () => (await publicClient.billing.publicPlans({ currency: saasCurrency })).data,
     retry: false,
   });
 
@@ -83,9 +116,20 @@ export function PricingPage() {
   const appointie = (catalog?.plans ?? []).filter((plan) => plan.product_code === 'appointie');
   const shopie = (catalog?.plans ?? []).filter((plan) => plan.product_code === 'shopie');
   const hasLivePlans = appointie.length > 0 || shopie.length > 0;
-  const staffAddon = catalog?.addon_staff_price_paise ?? STAFF_ADDON_INR * 100;
-  const officeAddon = catalog?.addon_office_price_paise ?? OFFICE_ADDON_INR * 100;
-  const petsAddon = catalog?.addon_pets_price_paise ?? PETS_ADDON_INR * 100;
+  const staffAddon = catalog?.addon_staff_price_paise ?? (saasCurrency === 'INR' ? STAFF_ADDON_INR * 100 : 299);
+  const officeAddon = catalog?.addon_office_price_paise ?? (saasCurrency === 'INR' ? OFFICE_ADDON_INR * 100 : 399);
+  const petsAddon = catalog?.addon_pets_price_paise ?? (saasCurrency === 'INR' ? PETS_ADDON_INR * 100 : 699);
+
+  function setRegion(next: PricingRegion) {
+    try {
+      localStorage.setItem('ieorbit.pricingRegion', next);
+    } catch {
+      /* ignore */
+    }
+    const params = new URLSearchParams(searchParams);
+    params.set('region', next === 'IN' ? 'in' : 'intl');
+    setSearchParams(params, { replace: true });
+  }
   const yearlyMonths = yearlyMonthsFromPlans([...(appointie ?? []), ...(shopie ?? [])]);
   const yearlyCopy = yearlyBillingCopy(yearlyMonths);
   const productSections = [
@@ -127,16 +171,34 @@ export function PricingPage() {
             <div className="public-chip-row">
               <span className="public-chip">White-label customer app</span>
               <span className="public-chip">No credit card to start</span>
-              <span className="public-chip">UPI billing</span>
+              <span className="public-chip">{region === 'IN' ? 'UPI billing' : 'Card billing (USD)'}</span>
               <span className="public-chip">{yearlyCopy.chip}</span>
             </div>
+            <div className="public-chip-row" style={{ marginTop: 16 }}>
+              <Button
+                variant={region === 'IN' ? 'primary' : 'neutral'}
+                onClick={() => setRegion('IN')}
+              >
+                India (₹)
+              </Button>
+              <Button
+                variant={region === 'INTL' ? 'primary' : 'neutral'}
+                onClick={() => setRegion('INTL')}
+              >
+                International ($)
+              </Button>
+            </div>
+            <p className="public-lead" style={{ marginTop: 12, fontSize: 14 }}>
+              Subscription is billed in {saasCurrency === 'INR' ? 'INR for India' : 'USD outside India'}. Your shop
+              currency (for customers) is chosen separately after signup.
+            </p>
           </div>
         </div>
       </section>
       <div className="public-page">
         <PublicBackLink />
         {catalogQuery.isLoading && !hasLivePlans ? (
-          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} />
+          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} currency={saasCurrency} />
         ) : hasLivePlans ? (
           <>
             {orderedSections
@@ -157,6 +219,7 @@ export function PricingPage() {
                     trialDays={trialDays}
                     plans={section.plans}
                     productLabel={PRODUCT_LABELS[section.id]}
+                    currency={saasCurrency}
                   />
                   <p className="public-plan-features-note">
                     Function lists follow the live plan catalog. If a platform admin turns a function on or off, this
@@ -165,9 +228,9 @@ export function PricingPage() {
                 </section>
               ))}
             <p className="public-lead" style={{ marginTop: 28 }}>
-              Extra staff {formatInr(staffAddon)}/month on Starter (max 1) and Pro. Extra offices{' '}
-              {formatInr(officeAddon)}/month on Pro only
-              {petsAddon ? ` · Pets pack ${formatInr(petsAddon)}/month` : ''}. {yearlyCopy.note}
+              Extra staff {formatSaaSMoney(staffAddon, saasCurrency)}/month on Starter (max 1) and Pro. Extra offices{' '}
+              {formatSaaSMoney(officeAddon, saasCurrency)}/month on Pro only
+              {petsAddon ? ` · Pets pack ${formatSaaSMoney(petsAddon, saasCurrency)}/month` : ''}. {yearlyCopy.note}
             </p>
             {petsAddon ? (
               <p className="public-lead" style={{ marginTop: 8 }}>
@@ -185,16 +248,29 @@ export function PricingPage() {
   );
 }
 
-function PricingFallback({ trialDays, yearlyMonths = 10 }: { trialDays: number; yearlyMonths?: number }) {
+function PricingFallback({
+  trialDays,
+  yearlyMonths = 10,
+  currency = 'INR',
+}: {
+  trialDays: number;
+  yearlyMonths?: number;
+  currency?: 'INR' | 'USD';
+}) {
   const yearlyCopy = yearlyBillingCopy(yearlyMonths);
+  const starter = currency === 'INR' ? STARTER_MONTHLY_INR * 100 : 499;
+  const pro = currency === 'INR' ? PRO_MONTHLY_INR * 100 : 999;
+  const staff = currency === 'INR' ? STAFF_ADDON_INR * 100 : 299;
+  const office = currency === 'INR' ? OFFICE_ADDON_INR * 100 : 399;
+  const pets = currency === 'INR' ? PETS_ADDON_INR * 100 : 699;
   return (
     <section className="public-section" style={{ marginTop: 0 }}>
       <div className="public-section__head">
         <p className="public-kicker">Catalog defaults</p>
         <h2>Starter and Pro for each product</h2>
         <p className="public-lead">
-          Live plan details load from the billing catalog when available. Default list prices below match the published
-          INR catalog.
+          Live plan details load from the billing catalog when available. Default list prices below match the published{' '}
+          {currency} catalog.
         </p>
       </div>
       <div className="public-pricing-grid">
@@ -215,7 +291,7 @@ function PricingFallback({ trialDays, yearlyMonths = 10 }: { trialDays: number; 
           <p className="public-kicker">Solo & micro</p>
           <h2>Starter</h2>
           <p className="public-price-amount">
-            {formatInrAmount(STARTER_MONTHLY_INR)}
+            {formatSaaSMoney(starter, currency)}
             <span>/month</span>
           </p>
           <p>Core operations, BI Overview, one location, and a white-label customer app. Available for Orbit Appoint and Orbit Mart.</p>
@@ -225,15 +301,15 @@ function PricingFallback({ trialDays, yearlyMonths = 10 }: { trialDays: number; 
           <p className="public-kicker">Growing teams</p>
           <h2>Pro</h2>
           <p className="public-price-amount">
-            {formatInrAmount(PRO_MONTHLY_INR)}
+            {formatSaaSMoney(pro, currency)}
             <span>/month</span>
           </p>
           <p>Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. {yearlyCopy.note}</p>
         </article>
       </div>
       <p className="public-lead" style={{ marginTop: 28 }}>
-        Extra staff {formatInrAmount(STAFF_ADDON_INR)}/month on Starter (max 1) and Pro. Extra offices{' '}
-        {formatInrAmount(OFFICE_ADDON_INR)}/month on Pro only · Pets pack {formatInrAmount(PETS_ADDON_INR)}/month.
+        Extra staff {formatSaaSMoney(staff, currency)}/month on Starter (max 1) and Pro. Extra offices{' '}
+        {formatSaaSMoney(office, currency)}/month on Pro only · Pets pack {formatSaaSMoney(pets, currency)}/month.
       </p>
     </section>
   );
@@ -244,11 +320,13 @@ function PlanGrid({
   plans,
   productLabel,
   showTrial = true,
+  currency = 'INR',
 }: {
   trialDays: number;
   plans: BillingPlanCatalogItem[];
   productLabel: string;
   showTrial?: boolean;
+  currency?: 'INR' | 'USD';
 }) {
   return (
     <div className="public-pricing-grid">
@@ -280,12 +358,12 @@ function PlanGrid({
             <p className="public-kicker">{planKicker(plan)}</p>
             <h2>{planTitle(plan)}</h2>
             <p className="public-price-amount">
-              {formatInr(plan.amount_paise)}
+              {formatSaaSMoney(plan.amount_paise, currency)}
               <span>/month</span>
             </p>
             {plan.yearly_amount_paise ? (
               <p style={{ margin: '4px 0 0', fontSize: 13 }}>
-                or {formatInr(plan.yearly_amount_paise)}/year (
+                or {formatSaaSMoney(plan.yearly_amount_paise, currency)}/year (
                 {yearlyBillingCopy(Math.max(1, Math.min(12, Number(plan.yearly_months_charged ?? 10) || 10))).planSuffix})
               </p>
             ) : null}

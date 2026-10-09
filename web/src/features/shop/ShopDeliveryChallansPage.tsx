@@ -53,7 +53,7 @@ export function ShopDeliveryChallansPage() {
       await convert.mutateAsync({ documentId, action: 'dispatch' });
       snackbar.push(`${documentNumber} marked as dispatched.`, 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to dispatch challan.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't dispatch this challan. Try again."), 'error');
     }
   }
 
@@ -71,7 +71,7 @@ export function ShopDeliveryChallansPage() {
         'success',
       );
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to create invoice from challan.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't create an invoice from this challan. Try again."), 'error');
     }
   }
 

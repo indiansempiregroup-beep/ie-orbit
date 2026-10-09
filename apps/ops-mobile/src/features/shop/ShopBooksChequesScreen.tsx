@@ -205,7 +205,7 @@ export function ShopBooksChequesScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to create cheque', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't record this cheque. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -235,7 +235,7 @@ export function ShopBooksChequesScreen() {
       toast.push('Cheque marked bounced', 'success');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to bounce cheque', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't mark this cheque as bounced. Try again.", 'error');
     } finally {
       setActionId(null);
     }

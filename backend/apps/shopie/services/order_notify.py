@@ -200,7 +200,7 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
     standard = _is_standard_delivery(order)
     if status == OrderStatus.PENDING:
         return (
-            f"We've received your order · #{number}",
+            f"Order received · #{number}",
             f"Hi {name},\n\nThanks for shopping with {shop}. Order #{number} is in — we'll confirm it shortly and keep you posted here and by email.",
             "Order received",
         )
@@ -234,10 +234,15 @@ def _copy_for_status(order: ShopOrder, *, status: str) -> tuple[str, str, str]:
             "rider_assigned": "Rider assigned",
             "at_pickup": "Rider at the shop",
         }
+        bodies = {
+            "finding_rider": f"We're finding a rider for order #{number}. Open the order for live updates.",
+            "rider_assigned": f"A rider is assigned for order #{number}. Open the order for ETA and tracking.",
+            "at_pickup": f"Your rider is at the shop for order #{number}. Open the order for live updates.",
+        }
         label = labels[status]
         return (
             f"{label} · #{number}",
-            f"Hi {name},\n\n{label} for order #{number}. Open the order to see the latest ETA and rider details.",
+            f"Hi {name},\n\n{bodies[status]}",
             label,
         )
     if status in {OrderStatus.OUT_FOR_DELIVERY, "picked_up", "nearby"}:

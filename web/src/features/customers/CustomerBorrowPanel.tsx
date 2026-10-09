@@ -41,7 +41,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
       return;
     }
     if (value > balanceDue) {
-      snackbar.push(`Amount cannot exceed outstanding ${money(balanceDue)}.`, 'error');
+      snackbar.push(`Amount can't be more than ${money(balanceDue)} outstanding.`, 'error');
       return;
     }
     setBusy(true);
@@ -51,12 +51,12 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
         payment_method: method,
         notes: notes.trim(),
       });
-      snackbar.push(`Payment of ${money(value)} recorded.`, 'success');
+      snackbar.push(`Recorded payment of ${money(value)}.`, 'success');
       setAmount('');
       setNotes('');
       onChanged();
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to record payment.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't record that payment. Try again.", 'error');
     } finally {
       setBusy(false);
     }

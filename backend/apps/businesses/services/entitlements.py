@@ -127,9 +127,8 @@ class PlanEntitlements:
             return monthly * yearly_months_from_definition(self._plan_definition())
         return monthly
 
-    @property
-    def addon_amount_paise(self) -> int:
-        prices = get_addon_prices()
+    def addon_amount_for_currency(self, currency: str = "INR") -> int:
+        prices = get_addon_prices(currency=currency)
         staff_unit = prices["staff_price_paise"]
         office_unit = prices["office_price_paise"]
         pets_unit = prices["pets_price_paise"]
@@ -144,8 +143,29 @@ class PlanEntitlements:
         return total
 
     @property
+    def addon_amount_paise(self) -> int:
+        return self.addon_amount_for_currency("INR")
+
+    @property
     def total_amount_paise(self) -> int:
         return self.base_amount_paise + self.addon_amount_paise
+
+    def base_amount_for_currency(self, currency: str = "INR") -> int:
+        from apps.billing.services.checkout import CheckoutService
+
+        code = str(currency or "INR").strip().upper()
+        if code not in {"INR", "USD"}:
+            code = "INR"
+        resolved = CheckoutService()._resolve_plan_price_minor(
+            self.plan_code,
+            self.billing_interval or "monthly",
+            currency=code,
+        )
+        if resolved is not None:
+            return int(resolved)
+        if code == "USD":
+            return 0
+        return self.base_amount_paise
 
     def to_dict(
         self,
@@ -153,8 +173,12 @@ class PlanEntitlements:
         used_staff: int = 0,
         used_branches: int = 0,
         pending: dict[str, Any] | None = None,
+        currency: str = "INR",
     ) -> dict[str, Any]:
-        prices = get_addon_prices()
+        saas_currency = str(currency or "INR").strip().upper()
+        if saas_currency not in {"INR", "USD"}:
+            saas_currency = "INR"
+        prices = get_addon_prices(currency=saas_currency)
         staff_unit = prices["staff_price_paise"]
         office_unit = prices["office_price_paise"]
         pets_unit = prices["pets_price_paise"]
@@ -163,6 +187,8 @@ class PlanEntitlements:
             staff_unit *= multiplier
             office_unit *= multiplier
             pets_unit *= multiplier
+        base_amount = self.base_amount_for_currency(saas_currency)
+        addon_amount = self.addon_amount_for_currency(saas_currency)
         pending_payload = pending or {}
         return {
             "plan_code": self.plan_code,
@@ -215,13 +241,13 @@ class PlanEntitlements:
             "bi_features": list(self.bi_features),
             "features": list(self.features),
             "pricing": {
-                "currency": "INR",
-                "base_amount_paise": self.base_amount_paise,
+                "currency": saas_currency,
+                "base_amount_paise": base_amount,
                 "addon_staff_unit_paise": staff_unit,
                 "addon_office_unit_paise": office_unit,
                 "addon_pets_unit_paise": pets_unit,
-                "addon_amount_paise": self.addon_amount_paise,
-                "total_amount_paise": self.total_amount_paise,
+                "addon_amount_paise": addon_amount,
+                "total_amount_paise": base_amount + addon_amount,
             },
         }
 
@@ -488,6 +514,10 @@ class EntitlementService:
         feature: str,
         product_code: str | None = None,
     ) -> bool:
+        from apps.billing.services.region import business_allows_india_feature
+
+        if not business_allows_india_feature(business, feature):
+            return False
         code = product_code or product_code_for_feature(feature)
         subscription = self.get_subscription(business=business, product_code=code)
         if subscription is None and business.product_subscriptions.exists():
@@ -502,6 +532,12 @@ class EntitlementService:
         feature: str,
         product_code: str | None = None,
     ) -> None:
+        from apps.billing.services.region import business_allows_india_feature
+
+        if not business_allows_india_feature(business, feature):
+            raise PermissionDenied(
+                "This function is only available for businesses in India."
+            )
         if not self.has_feature(business=business, feature=feature, product_code=product_code):
             raise PermissionDenied(
                 "This function is not included in the current plan. "
@@ -527,11 +563,14 @@ class EntitlementService:
         )
 
     def entitled_features(self, *, business: Business) -> list[str]:
+        from apps.billing.services.region import business_allows_india_feature
+
         collected: list[str] = []
         seen: set[str] = set()
         subscriptions = list(business.product_subscriptions.all())
         if not subscriptions:
-            return list(self.resolve(business=business).features)
+            features = list(self.resolve(business=business).features)
+            return [f for f in features if business_allows_india_feature(business, f)]
         skip_statuses = {
             BusinessProductSubscriptionStatus.CANCELED,
         }
@@ -540,6 +579,8 @@ class EntitlementService:
                 continue
             entitlements = self.resolve(business=business, product_code=subscription.product_code)
             for feature in entitlements.features:
+                if not business_allows_india_feature(business, feature):
+                    continue
                 if feature not in seen:
                     seen.add(feature)
                     collected.append(feature)
@@ -715,13 +756,21 @@ class EntitlementService:
                     else None
                 ),
             }
+        from apps.billing.services.region import (
+            billing_region_for_business,
+            saas_currency_for_business,
+        )
+
         payload = entitlements.to_dict(
             used_staff=self.count_bookable_staff(business=business),
             used_branches=self.count_active_branches(business=business),
             pending=pending,
+            currency=saas_currency_for_business(business),
         )
         payload["product_code"] = product_code.strip().lower() or DEFAULT_PRODUCT_CODE
         payload["billing_state"] = subscription_billing_state(subscription)
+        payload["billing_region"] = billing_region_for_business(business)
+        payload["saas_currency"] = saas_currency_for_business(business)
         payload["entitled_features"] = self.entitled_features(business=business)
         from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
 

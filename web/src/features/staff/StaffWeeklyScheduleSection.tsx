@@ -329,7 +329,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
                 })),
               },
               {
-                onError: (error) => setSaveError(error.message ?? 'Failed to save schedule'),
+                onError: (error) => setSaveError(error.message ?? "Couldn't save the schedule. Try again."),
               },
             );
           }}
@@ -338,7 +338,7 @@ export function StaffWeeklyScheduleSection({ staffId }: StaffWeeklyScheduleSecti
         </Button>
       </div>
       {saveError ? <div style={{ color: '#dc2626' }}>{saveError}</div> : null}
-      {bulkUpsert.isSuccess ? <div style={{ color: '#10b981' }}>Availability saved.</div> : null}
+      {bulkUpsert.isSuccess ? <div style={{ color: '#10b981' }}>Weekly schedule saved.</div> : null}
     </Card>
   );
 }

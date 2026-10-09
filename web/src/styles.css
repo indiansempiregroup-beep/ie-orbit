@@ -5631,8 +5631,45 @@ h6 {
   gap: 6px;
 }
 
+.admin-usage-currency {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.admin-usage-currency .admin-editor-tabs {
+  margin: 0;
+}
+
+.admin-usage-currency__hint {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.admin-usage-price-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.admin-usage-footnote {
+  margin: 10px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .admin-usage-price-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .admin-smart-lookup {
-  margin-top: 18px;
+  margin-top: 0;
   padding: 18px;
   border-radius: 18px;
   border: 1px solid var(--border);

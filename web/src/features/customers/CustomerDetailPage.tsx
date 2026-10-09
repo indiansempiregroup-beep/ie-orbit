@@ -242,11 +242,11 @@ export function CustomerDetailPage() {
               },
               {
                 onSuccess: () => {
-                  snackbar.push('Customer profile updated.', 'success');
+                  snackbar.push('Customer details saved.', 'success');
                   editDialog.hide();
                   customerQuery.refetch();
                 },
-                onError: (err) => setEditError(err.message ?? 'Failed to update customer'),
+                onError: (err) => setEditError(err.message ?? "Couldn't save this customer. Check the details and try again."),
               },
             );
           }}

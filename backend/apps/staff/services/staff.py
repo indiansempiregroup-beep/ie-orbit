@@ -7,6 +7,7 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from apps.businesses.services.entitlements import EntitlementService
+from apps.common.utils.business_identity import assert_no_staff_customer_conflict
 from apps.staff.models import (
     BusinessRole,
     BusinessRoleType,
@@ -160,6 +161,17 @@ class StaffManagementService:
 
         if staff.user_id and qs.filter(user_id=staff.user_id).exists():
             raise ValidationError({"user": "This user is already linked to another staff member in this business."})
+
+        linked_user = staff.user if staff.user_id else None
+        assert_no_staff_customer_conflict(
+            tenant=staff.tenant,
+            business=staff.business,
+            email=email,
+            phone=phone,
+            user=linked_user,
+            exclude_staff_id=staff.pk,
+            creating="staff",
+        )
 
     def _validate_staff_service(self, staff: Staff, service: Any) -> None:
         if staff.tenant_id != service.tenant_id or staff.business_id != service.business_id:

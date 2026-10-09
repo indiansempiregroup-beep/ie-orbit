@@ -177,7 +177,7 @@ export function StaffFormScreen() {
                   });
                 }
 
-                toast.push('Staff updated.', 'success');
+                toast.push('Team member details saved.', 'success');
                 navigation.replace('StaffDetail', { staffId: route.params.staffId });
               } else {
                 const code = `staff-${Date.now().toString(36)}`;
@@ -197,20 +197,20 @@ export function StaffFormScreen() {
                     setError(
                       getApiErrorMessage(
                         inviteErr,
-                        'Staff saved, but the login invitation could not be sent.',
+                        "Team member saved, but the invite email didn't send. Try inviting again.",
                       ),
                     );
-                    toast.push('Staff created.', 'success');
+                    toast.push('Team member added.', 'success');
                     navigation.replace('StaffDetail', { staffId: created.id });
                     return;
                   }
                 }
 
-                toast.push('Staff created.', 'success');
+                toast.push('Team member added.', 'success');
                 navigation.replace('StaffDetail', { staffId: created.id });
               }
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to save staff.'));
+              setError(getApiErrorMessage(err, "Couldn't save this team member. Check the details and try again."));
             } finally {
               setSubmitting(false);
             }

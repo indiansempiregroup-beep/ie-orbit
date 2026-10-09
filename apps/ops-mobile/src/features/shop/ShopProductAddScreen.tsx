@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { uploadProductImage } from '../../api/media';
 import { enrichSuccessMessage } from './enrichMessages';
+import { takeEnrichPrefetch } from './enrichPrefetchSession';
 import { ProductImageCropModal } from './ProductImageCropModal';
 import { FormScreen } from '../../components/FormScreen';
 import { FormHero } from '../../components/FormHero';
@@ -357,11 +358,16 @@ export function ShopProductAddScreen() {
       setMessage(null);
       setNeedsPackPhoto(false);
       try {
-        const response = await client.shop.enrichBarcode({
-          business_id: businessId,
-          code,
-          use_smart_lookup: true,
-        });
+        const prefetched = takeEnrichPrefetch(code, businessId);
+        const data = prefetched
+          ? await prefetched
+          : (
+              await client.shop.enrichBarcode({
+                business_id: businessId,
+                code,
+                use_smart_lookup: true,
+              })
+            ).data;
         setForm((current) => {
           const codeChanged = Boolean(current.barcode.trim() && current.barcode.trim() !== code);
           if (codeChanged) {
@@ -371,20 +377,20 @@ export function ShopProductAddScreen() {
           const base = codeChanged
             ? wipeIdentity(current, code, { keepPriceStock: isEditing })
             : { ...current, barcode: code };
-          return applyEnrichment(base, response.data, touchedRef.current, {
+          return applyEnrichment(base, data, touchedRef.current, {
             replaceIdentity: codeChanged,
           });
         });
         touchedRef.current.add('barcode');
-        if (response.data.found) {
+        if (data.found) {
           setNeedsPackPhoto(false);
-          setMessage(enrichSuccessMessage(response.data, { editing: isEditing }));
+          setMessage(enrichSuccessMessage(data, { editing: isEditing }));
         } else {
-          setNeedsPackPhoto(Boolean(response.data.needs_pack_photo));
+          setNeedsPackPhoto(Boolean(data.needs_pack_photo));
           setMessage(
             enrichMissMessage(
-              response.data,
-              response.data.needs_pack_photo
+              data,
+              data.needs_pack_photo
                 ? 'No match yet. Capture a clear primary pack photo for Smart lookup.'
                 : 'Barcode updated — no online match for extra details.',
             ),
@@ -677,15 +683,9 @@ export function ShopProductAddScreen() {
       }
       setNeedsPackPhoto(false);
       setForm((current) => applyEnrichment(current, response.data, touchedRef.current));
-      const charged = response.data.charged_paise;
-      setMessage(
-        response.data.message ||
-          (charged
-            ? `Filled from pack photo (₹${(charged / 100).toFixed(2)}). Review and save.`
-            : 'Filled from pack photo. Review and save.'),
-      );
+      setMessage(enrichSuccessMessage(response.data, { editing: isEditing }));
     } catch (err) {
-      setMessage(authErrorMessage(err, 'Unable to run Smart lookup'));
+      setMessage(authErrorMessage(err, "Couldn't run Smart lookup. Try again."));
     } finally {
       setBusy(false);
     }
@@ -723,7 +723,7 @@ export function ShopProductAddScreen() {
         await pollAnalysis(job.job_id, payload);
       }
     } catch (err) {
-      setMessage(authErrorMessage(err, 'Unable to start packaging analysis'));
+      setMessage(authErrorMessage(err, "Couldn't start packaging analysis. Try again."));
     } finally {
       setBusy(false);
     }
@@ -810,7 +810,7 @@ export function ShopProductAddScreen() {
         });
       } catch (err) {
         setBusy(false);
-        setMessage(authErrorMessage(err, 'Unable to save category'));
+        setMessage(authErrorMessage(err, "Couldn't save this category. Try again."));
         return;
       }
     }
@@ -844,11 +844,11 @@ export function ShopProductAddScreen() {
     try {
       if (productId) {
         await client.shop.patchProduct(productId, payload);
-        toast.push('Product updated.', 'success');
+        toast.push('Product details saved.', 'success');
         setTimeout(() => navigation.goBack(), 250);
       } else {
         const response = await client.shop.createProduct(payload);
-        toast.push('Product saved.', 'success');
+        toast.push('Product added.', 'success');
         // Let the toast mount on the root host before this screen unmounts.
         setTimeout(() => {
           if (route.params?.returnTo === 'pos') {
@@ -870,8 +870,8 @@ export function ShopProductAddScreen() {
         }, 250);
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to save product');
-      toast.push(err instanceof Error ? err.message : 'Unable to save product', 'error');
+      setMessage(err instanceof Error ? err.message : "Couldn't save this product. Check the details and try again.");
+      toast.push(err instanceof Error ? err.message : "Couldn't save this product. Check the details and try again.", 'error');
     } finally {
       setBusy(false);
     }

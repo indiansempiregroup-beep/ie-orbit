@@ -115,7 +115,7 @@ export function ShopExpensePage() {
       dialog.hide();
       snackbar.push(`Expense ${voucher.voucher_number} recorded.`, 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to record expense.'));
+      setMessage(getApiErrorMessage(error, "Couldn't record this expense. Try again."));
     }
   }
 
@@ -125,7 +125,7 @@ export function ShopExpensePage() {
       await voidVoucher.mutateAsync(voucherId);
       snackbar.push(`${voucherNumber} voided.`, 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to void expense.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't void this expense. Try again."), 'error');
     }
   }
 

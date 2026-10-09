@@ -245,7 +245,7 @@ export function SyncShareScreen() {
       await recordExport();
       toast.push('Export shared', 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to export', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't export. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -262,7 +262,7 @@ export function SyncShareScreen() {
       await recordExport();
       toast.push(mode === 'copied' ? 'Copied to clipboard' : 'Opened share sheet', 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to copy', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't copy. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -294,7 +294,7 @@ export function SyncShareScreen() {
       await recordExport();
       toast.push('CSV shared', 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to export CSV', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't export. Try again.", 'error');
     } finally {
       setBusy(false);
     }

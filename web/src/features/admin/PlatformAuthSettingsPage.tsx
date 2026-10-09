@@ -41,7 +41,7 @@ export function PlatformAuthSettingsPage() {
       });
       setMessage('Auth settings saved.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to save auth settings.');
+      setMessage(err instanceof Error ? err.message : "Couldn't save auth settings. Try again.");
     }
   }
 

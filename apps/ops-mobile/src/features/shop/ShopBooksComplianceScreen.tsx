@@ -92,7 +92,7 @@ export function ShopBooksComplianceScreen() {
       applySettings(response.data);
       toast.push('Compliance settings saved', 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to save compliance settings'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't save compliance settings. Try again."), 'error');
     } finally {
       setSaving(false);
     }

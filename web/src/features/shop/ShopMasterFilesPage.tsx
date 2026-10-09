@@ -170,13 +170,13 @@ export function ShopMasterKindPage() {
       setValue('');
       setFilter('all');
       setSearch('');
-      snackbar.push('Added.', 'success');
+      snackbar.push('Entry added.', 'success');
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
       if (kind === 'category') {
         await queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       }
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to save master file.'), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
   });
 
   const patchMutation = useMutation({
@@ -185,9 +185,9 @@ export function ShopMasterKindPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
-      snackbar.push('Updated.', 'success');
+      snackbar.push('Entry updated.', 'success');
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to update master file.'), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -196,9 +196,9 @@ export function ShopMasterKindPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
-      snackbar.push('Deleted.', 'success');
+      snackbar.push('Entry removed.', 'success');
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, 'Unable to delete master file.'), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
   });
 
   const rows = useMemo(() => listQuery.data ?? [], [listQuery.data]);

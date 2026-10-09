@@ -15,6 +15,7 @@ import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { canWriteServices } from '../../utils/roles';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { ProductImageCropModal, type ProductImageCropResult } from '../shop/ProductImageCropModal';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
@@ -22,6 +23,7 @@ export function ServicesPage() {
   const canManageServices = canWriteServices(auth.user);
   const workspace = useWorkspace();
   const navigate = useNavigate();
+  const snackbar = useSnackbar();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const entitledFeatures = useMemo(() => {
     const snapshot = billingQuery.data;
@@ -351,8 +353,11 @@ export function ServicesPage() {
 
                 dialog.hide();
                 resetForm();
+                snackbar.push('Service added.', 'success');
               } catch (err) {
-                setCreationError(err instanceof Error ? err.message : 'Failed to create service');
+                setCreationError(
+                  err instanceof Error ? err.message : "Couldn't save this service. Check the details and try again.",
+                );
               } finally {
                 setSubmitting(false);
               }

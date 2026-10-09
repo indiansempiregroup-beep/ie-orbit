@@ -8,6 +8,7 @@ import { ColorInput } from '../../components/ColorInput';
 import { LogoUploadField } from '../../components/LogoUploadField';
 import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
+import { placesCountryCodeFromName } from '../../lib/placesCountryCode';
 import { PRODUCT_CATALOG } from '../../config/products';
 import {
   APPOINTMENT_INTERVALS,
@@ -166,10 +167,10 @@ export function BusinessProfileEditPage() {
       }
 
       await workspace.refreshWorkspace();
-      snackbar.push('Business profile updated successfully.', 'success');
+      snackbar.push('Business profile saved.', 'success');
       navigate('/settings/business');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save business profile.';
+      const message = error instanceof Error ? error.message : "Couldn't save business details. Try again.";
       setErrorMessage(message);
       snackbar.push(message, 'error');
     } finally {
@@ -222,6 +223,7 @@ export function BusinessProfileEditPage() {
               value={formState.address_line1}
               latitude={formState.latitude}
               longitude={formState.longitude}
+              countryCode={placesCountryCodeFromName(formState.country)}
               onChangeText={(value) => updateField('address_line1', value)}
               onPlaceSelected={(place) => {
                 const cleared =

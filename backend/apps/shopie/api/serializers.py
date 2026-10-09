@@ -790,6 +790,7 @@ class MerchantPaymentSettingsSerializer(serializers.Serializer):
     cod_enabled = serializers.BooleanField(required=False)
     test_connection = serializers.BooleanField(required=False, default=True)
     cashfree = serializers.DictField(required=False)
+    stripe = serializers.DictField(required=False)
 
 
 class RazorpayPaymentVerifySerializer(serializers.Serializer):
@@ -919,6 +920,7 @@ class ShopDeliveryQuoteSerializer(serializers.Serializer):
 class ShopDeliverySettingsPatchSerializer(serializers.Serializer):
     business_id = serializers.UUIDField()
     instant_delivery_enabled = serializers.BooleanField(required=False)
+    cod_allowed_for_instant_delivery = serializers.BooleanField(required=False)
     delivery_integration = serializers.DictField(required=False)
     courier_integration = serializers.DictField(required=False)
 

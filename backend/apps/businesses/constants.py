@@ -96,6 +96,7 @@ FEATURE_REWARD_POINTS = "reward_points"
 FEATURE_AD_FREE = "ad_free"
 FEATURE_RAZORPAY_PAYMENTS = "razorpay_payments"
 FEATURE_CASHFREE_PAYMENTS = "cashfree_payments"
+FEATURE_STRIPE_PAYMENTS = "stripe_payments"
 FEATURE_NOTIFICATIONS_WHATSAPP = "notifications_whatsapp"
 FEATURE_AUTOMATIONS = "automations"
 
@@ -305,6 +306,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
                 FEATURE_AD_FREE,
                 FEATURE_RAZORPAY_PAYMENTS,
                 FEATURE_CASHFREE_PAYMENTS,
+                FEATURE_STRIPE_PAYMENTS,
             ],
         },
     ],
@@ -347,6 +349,7 @@ PRODUCT_PLAN_CATALOG: dict[str, list[dict[str, object]]] = {
                 FEATURE_AD_FREE,
                 FEATURE_RAZORPAY_PAYMENTS,
                 FEATURE_CASHFREE_PAYMENTS,
+                FEATURE_STRIPE_PAYMENTS,
             ],
         },
     ],

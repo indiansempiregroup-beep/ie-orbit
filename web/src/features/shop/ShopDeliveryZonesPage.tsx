@@ -128,16 +128,16 @@ export function ShopDeliveryZonesPage() {
       if (editingId) {
         await patchZone.mutateAsync({ zoneId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Zone updated.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Delivery zone saved.', 'success'), 0);
       } else {
         await createZone.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Zone saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Delivery zone added.', 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to save zone.';
+      const text = error instanceof Error ? error.message : "Couldn't save this delivery zone. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }

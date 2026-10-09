@@ -217,12 +217,12 @@ export function PaymentSettingsScreen() {
       }
       await refreshWorkspace();
       const successMessage = runTest
-        ? 'Saved and verified with the payment providers.'
+        ? 'Payments verified and saved.'
         : 'Payment settings saved.';
       setMessage(successMessage);
       toast.push(successMessage, 'success');
     } catch (err) {
-      const msg = getApiErrorMessage(err, 'Unable to save payment settings.');
+      const msg = getApiErrorMessage(err, "Couldn't save payment settings. Try again.");
       setError(msg);
       toast.push(msg, 'error');
       if (client && businessId) {

@@ -94,6 +94,12 @@ class Business(TenantModel):
     )
     timezone = models.CharField(max_length=64, default="UTC")
     currency = models.CharField(max_length=3, default="USD")
+    saas_currency = models.CharField(
+        max_length=3,
+        default="INR",
+        db_index=True,
+        help_text="Orbit subscription currency: INR for India, USD for all other countries.",
+    )
     language = models.CharField(max_length=16, default="en")
     gst_tax_number = models.CharField(max_length=80, blank=True)
     billing_legal_name = models.CharField(max_length=255, blank=True)

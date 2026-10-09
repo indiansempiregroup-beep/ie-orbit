@@ -159,9 +159,9 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
       const response = await fn();
       if (response.data.ok === false && response.data.error) {
         const detail = response.data.error;
-        setNotice({ tone: 'error', title: `${label} failed`, detail });
+        setNotice({ tone: 'error', title: `Couldn't complete "${label}"`, detail });
         toast.push(detail, 'error');
-        Alert.alert(`${label} failed`, detail);
+        Alert.alert(`Couldn't complete "${label}"`, detail);
       } else {
         const trackKey = label.includes('store') ? 'production' : 'preview';
         const refreshNote =
@@ -170,17 +170,17 @@ export function CustomerAppSection({ businesses }: { businesses: PlatformTenantB
                 (response.data.recipe?.[trackKey] as { refresh_note?: string } | undefined)?.refresh_note || '',
               )
             : '';
-        const okText = refreshNote || successCopy[label] || `${label} succeeded`;
-        setNotice({ tone: 'ok', title: successCopy[label] ?? `${label} succeeded`, detail: refreshNote || undefined });
+        const okText = refreshNote || successCopy[label] || `${label} completed.`;
+        setNotice({ tone: 'ok', title: successCopy[label] ?? `${label} completed.`, detail: refreshNote || undefined });
         toast.push(okText, 'success');
       }
       setState(response.data);
       await load();
     } catch (err) {
-      const detail = getApiErrorMessage(err, `${label} failed`);
-      setNotice({ tone: 'error', title: `${label} failed`, detail });
+      const detail = getApiErrorMessage(err, `Couldn't complete "${label}". Try again.`);
+      setNotice({ tone: 'error', title: `Couldn't complete "${label}"`, detail });
       toast.push(detail, 'error');
-      Alert.alert(`${label} failed`, detail);
+      Alert.alert(`Couldn't complete "${label}"`, detail);
     } finally {
       setBusy(null);
     }

@@ -214,6 +214,12 @@ def paginate_usage_ledger(
     }
 
 
+DEFAULT_SMART_LOOKUP_PRICES_MINOR = {
+    "INR": {"min_charge": 1, "top_ups": list(DEFAULT_SUGGESTED_TOP_UPS)},
+    "USD": {"min_charge": 1, "top_ups": [500, 1000, 2500, 5000]},
+}
+
+
 def get_platform_smart_lookup_row() -> PlatformSmartLookupSettings:
     row, _ = PlatformSmartLookupSettings.objects.get_or_create(
         key="default",
@@ -226,17 +232,55 @@ def get_platform_smart_lookup_row() -> PlatformSmartLookupSettings:
             "input_usd_per_million": Decimal("0.10"),
             "output_usd_per_million": Decimal("0.40"),
             "suggested_top_up_paise": list(DEFAULT_SUGGESTED_TOP_UPS),
+            "prices_minor": dict(DEFAULT_SMART_LOOKUP_PRICES_MINOR),
         },
     )
     return row
+
+
+def _smart_lookup_prices_minor(settings: PlatformSmartLookupSettings) -> dict[str, dict[str, Any]]:
+    raw = getattr(settings, "prices_minor", None) or {}
+    inr_raw = raw.get("INR") if isinstance(raw, dict) else None
+    usd_raw = raw.get("USD") if isinstance(raw, dict) else None
+    tops = settings.suggested_top_up_paise if isinstance(settings.suggested_top_up_paise, list) else []
+    cleaned_inr = [int(v) for v in tops if int(v) > 0] or list(DEFAULT_SUGGESTED_TOP_UPS)
+    inr = {
+        "min_charge": int(
+            (inr_raw or {}).get("min_charge")
+            if isinstance(inr_raw, dict) and (inr_raw or {}).get("min_charge") is not None
+            else settings.min_charge_paise
+            or 1
+        ),
+        "top_ups": (
+            [int(v) for v in (inr_raw or {}).get("top_ups", []) if int(v) > 0]
+            if isinstance(inr_raw, dict) and isinstance((inr_raw or {}).get("top_ups"), list)
+            else cleaned_inr
+        )
+        or cleaned_inr,
+    }
+    usd_defaults = DEFAULT_SMART_LOOKUP_PRICES_MINOR["USD"]
+    usd = {
+        "min_charge": int(
+            (usd_raw or {}).get("min_charge")
+            if isinstance(usd_raw, dict) and (usd_raw or {}).get("min_charge") is not None
+            else usd_defaults["min_charge"]
+        ),
+        "top_ups": (
+            [int(v) for v in (usd_raw or {}).get("top_ups", []) if int(v) > 0]
+            if isinstance(usd_raw, dict) and isinstance((usd_raw or {}).get("top_ups"), list)
+            else list(usd_defaults["top_ups"])
+        )
+        or list(usd_defaults["top_ups"]),
+    }
+    return {"INR": inr, "USD": usd}
 
 
 def serialize_platform_smart_lookup_settings(
     row: PlatformSmartLookupSettings | None = None,
 ) -> dict[str, Any]:
     settings = row or get_platform_smart_lookup_row()
-    tops = settings.suggested_top_up_paise if isinstance(settings.suggested_top_up_paise, list) else []
-    cleaned = [int(v) for v in tops if int(v) > 0] or list(DEFAULT_SUGGESTED_TOP_UPS)
+    prices = _smart_lookup_prices_minor(settings)
+    cleaned = prices["INR"]["top_ups"]
     gst = Decimal(str(getattr(settings, "gst_percent", None) or "18"))
     return {
         "enabled": bool(settings.enabled),
@@ -250,13 +294,26 @@ def serialize_platform_smart_lookup_settings(
         "gst_percent": float(gst),
         "markup_bps": int(settings.markup_bps),
         "markup_percent": float(Decimal(settings.markup_bps) / Decimal(100)),
-        "min_charge_paise": int(settings.min_charge_paise),
+        "min_charge_paise": int(prices["INR"]["min_charge"]),
         "input_usd_per_million": float(settings.input_usd_per_million),
         "output_usd_per_million": float(settings.output_usd_per_million),
         "suggested_top_up_paise": cleaned,
         "suggested_top_up_inr": [round(v / 100, 2) for v in cleaned],
+        "prices_minor": prices,
         "model": GEMINI_MODEL,
     }
+
+
+def smart_lookup_prices_for_currency(
+    currency: str = "INR",
+    *,
+    row: PlatformSmartLookupSettings | None = None,
+) -> dict[str, Any]:
+    code = str(currency or "INR").strip().upper()
+    if code not in {"INR", "USD"}:
+        code = "INR"
+    prices = _smart_lookup_prices_minor(row or get_platform_smart_lookup_row())
+    return {"currency": code, **prices[code]}
 
 
 class SmartLookupService:
@@ -385,9 +442,22 @@ class SmartLookupService:
         return wallet, clawed
 
     def dashboard(self, *, tenant: Tenant, business: Business) -> dict[str, Any]:
+        from apps.billing.services.region import saas_currency_for_business
+
         settings = self.ensure_settings(tenant=tenant, business=business)
         wallet = self.ensure_wallet(tenant=tenant, business=business)
         platform = serialize_platform_smart_lookup_settings()
+        currency = saas_currency_for_business(business)
+        currency_prices = smart_lookup_prices_for_currency(currency)
+        tops = list(currency_prices["top_ups"])
+        platform_for_business = {
+            **platform,
+            "currency": currency,
+            "min_charge_paise": int(currency_prices["min_charge"]),
+            "suggested_top_up_paise": tops,
+            "suggested_top_up_inr": [round(v / 100, 2) for v in tops],
+            "suggested_top_up_major": [round(v / 100, 2) for v in tops],
+        }
         platform_ok = self.platform_allows(tenant=tenant)
         plan_ok = self.plan_allows(business=business)
         month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -409,14 +479,17 @@ class SmartLookupService:
             "business_enabled": bool(settings.smart_lookup_enabled),
             "platform_enabled": platform_ok,
             "plan_enabled": plan_ok,
-            "platform": platform,
+            "currency": currency,
+            "platform": platform_for_business,
             "balance_paise": wallet.balance_paise,
             "balance_inr": wallet.balance_paise / 100,
+            "balance_major": wallet.balance_paise / 100,
             "month": {
                 "free_lookups": free_count,
                 "paid_lookups": paid_count,
                 "spent_paise": spent_paise,
                 "spent_inr": spent_paise / 100,
+                "spent_major": spent_paise / 100,
             },
             "recent": [serialize_usage_row(row) for row in money_preview],
         }
@@ -629,8 +702,12 @@ class SmartLookupService:
                 "confidence": "none",
             }
 
+        from apps.billing.services.region import saas_currency_for_business
+
         platform = get_platform_smart_lookup_row()
-        min_debit = max(1, int(platform.min_charge_paise or 1))
+        saas_currency = saas_currency_for_business(business)
+        currency_prices = smart_lookup_prices_for_currency(saas_currency, row=platform)
+        min_debit = max(1, int(currency_prices["min_charge"] or 1))
         wallet = self.ensure_wallet(tenant=tenant, business=business)
         if wallet.balance_paise < min_debit:
             return {
@@ -715,7 +792,12 @@ class SmartLookupService:
                 "confidence": "none",
             }
 
-        charged_paise, usd_micros = self._cost_paise(input_tokens, output_tokens, platform=platform)
+        charged_paise, usd_micros = self._cost_paise(
+            input_tokens,
+            output_tokens,
+            platform=platform,
+            currency=saas_currency,
+        )
 
         wallet = SmartLookupWallet.objects.select_for_update().get(pk=wallet.pk)
         if wallet.balance_paise < charged_paise:
@@ -755,30 +837,38 @@ class SmartLookupService:
             "confidence": "medium" if mode == "vision" else "low",
             "needs_pack_photo": False,
             "charged_paise": charged_paise,
-            "message": (
-                "Filled from pack photo. Review price/stock, then save."
-                if mode == "vision"
-                else "Filled by Smart lookup. Review carefully — pack photo improves accuracy."
-            ),
+            "message": "",
         }
+        charge_note = (
+            f" ₹{charged_paise / 100:.2f} deducted from Smart Fill wallet."
+            if charged_paise > 0
+            else " No wallet charge."
+        )
         if result["found"]:
             # Vision reads the pack — safe to cache in platform GTIN.
             # Text-only Gemini guesses must NOT poison the shared catalog.
             if mode == "vision":
                 result = self.enrichment.upsert_from_vision(result)
+                result["message"] = (
+                    f"Filled from pack photo.{charge_note} Review carefully, then save."
+                )
             else:
                 result = self.enrichment._attach_category(result)
                 result["needs_pack_photo"] = True
                 result["message"] = (
-                    "Possible match from Smart lookup (not verified). "
+                    f"Possible match from Smart lookup (not verified).{charge_note} "
                     "Review carefully, or capture a pack photo to confirm and save to catalog."
                 )
         else:
             result["needs_pack_photo"] = True
+            # Charge already applied above — still tell the owner.
             result["message"] = (
-                "Pack photo saved, but we could not read the label clearly."
+                f"Pack photo saved, but we could not read the label clearly.{charge_note}"
                 if mode == "vision"
-                else "Smart lookup could not identify this barcode. Take a pack photo or enter details manually."
+                else (
+                    f"Smart lookup could not identify this barcode.{charge_note} "
+                    "Take a pack photo or enter details manually."
+                )
             )
 
         SmartLookupUsage.objects.create(
@@ -798,6 +888,7 @@ class SmartLookupService:
                 "markup_bps": int(platform.markup_bps),
                 "mode": mode,
                 "hint": hint[:200],
+                "currency": saas_currency,
             },
         )
         return ProductEnrichmentService.with_user_message(result)
@@ -808,12 +899,17 @@ class SmartLookupService:
         output_tokens: int,
         *,
         platform: PlatformSmartLookupSettings | None = None,
+        currency: str = "INR",
     ) -> tuple[int, int]:
         settings = platform or get_platform_smart_lookup_row()
+        code = str(currency or "INR").strip().upper()
+        if code not in {"INR", "USD"}:
+            code = "INR"
         input_rate = Decimal(str(settings.input_usd_per_million or "0.10"))
         output_rate = Decimal(str(settings.output_usd_per_million or "0.40"))
         fx = Decimal(str(settings.usd_to_inr or "85"))
-        min_debit = max(0, int(settings.min_charge_paise or 0))
+        currency_prices = smart_lookup_prices_for_currency(code, row=settings)
+        min_debit = max(0, int(currency_prices["min_charge"] or 0))
         markup_bps = max(0, int(settings.markup_bps or 0))
         gst_percent = Decimal(str(getattr(settings, "gst_percent", None) or "0"))
         if gst_percent < 0:
@@ -825,13 +921,17 @@ class SmartLookupService:
         if markup_bps:
             usd = usd * (Decimal(1) + Decimal(markup_bps) / Decimal(10_000))
         usd_micros = int((usd * Decimal(1_000_000)).to_integral_value(rounding=ROUND_HALF_UP))
-        inr = usd * fx
-        if gst_percent:
-            inr = inr * (Decimal(1) + gst_percent / Decimal(100))
-        paise = int((inr * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
-        if (input_tokens or output_tokens) and paise < max(1, min_debit):
-            paise = max(1, min_debit)
-        return paise, usd_micros
+        if code == "USD":
+            # International SaaS wallets settle in USD cents (no India GST/FX).
+            minor = int((usd * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
+        else:
+            inr = usd * fx
+            if gst_percent:
+                inr = inr * (Decimal(1) + gst_percent / Decimal(100))
+            minor = int((inr * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
+        if (input_tokens or output_tokens) and minor < max(1, min_debit):
+            minor = max(1, min_debit)
+        return minor, usd_micros
 
     def _call_gemini(
         self,

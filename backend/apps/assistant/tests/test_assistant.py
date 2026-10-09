@@ -64,7 +64,7 @@ def test_consume_message_quota_blocks_without_wallet(monkeypatch):
         def platform_overage_enabled(self):
             return True
 
-        def message_price_paise(self):
+        def message_price_paise(self, *, currency="INR"):
             return 50
 
         def ensure_wallet(self, *, tenant, business):
@@ -76,6 +76,10 @@ def test_consume_message_quota_blocks_without_wallet(monkeypatch):
     monkeypatch.setattr(
         "apps.assistant.services.access.AssistantWalletService",
         FakeWallet,
+    )
+    monkeypatch.setattr(
+        "apps.billing.services.region.saas_currency_for_business",
+        lambda business: "INR",
     )
     with pytest.raises(ValidationError) as exc:
         consume_message_quota(tenant=tenant, business=business, used=50)
@@ -91,7 +95,7 @@ def test_consume_message_quota_debits_wallet(monkeypatch):
         def platform_overage_enabled(self):
             return True
 
-        def message_price_paise(self):
+        def message_price_paise(self, *, currency="INR"):
             return 50
 
         def ensure_wallet(self, *, tenant, business):
@@ -104,6 +108,10 @@ def test_consume_message_quota_debits_wallet(monkeypatch):
     monkeypatch.setattr(
         "apps.assistant.services.access.AssistantWalletService",
         FakeWallet,
+    )
+    monkeypatch.setattr(
+        "apps.billing.services.region.saas_currency_for_business",
+        lambda business: "INR",
     )
     path = consume_message_quota(tenant=tenant, business=business, used=50)
     assert path == "wallet"

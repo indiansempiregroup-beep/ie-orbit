@@ -13,12 +13,29 @@ function normalizeWebsiteInput(value: string): string {
   return `https://${trimmed}`;
 }
 
+function normalizePhoneInput(value: string) {
+  return value.replace(/[\s-]/g, '');
+}
+
+function isIndiaMobilePhone(value: string) {
+  return /^(\+91)?[6-9]\d{9}$/.test(normalizePhoneInput(value));
+}
+
+function isInternationalE164Phone(value: string) {
+  return /^\+[1-9]\d{7,14}$/.test(normalizePhoneInput(value));
+}
+
+function isIndiaCountry(country: string) {
+  const normalized = country.trim().toLowerCase();
+  return normalized === 'india' || normalized === 'in';
+}
+
 const phoneSchema = z
   .string()
   .trim()
   .min(1, 'Phone number is required')
-  .refine((value) => /^(\+91)?[6-9]\d{9}$/.test(value.replace(/[\s-]/g, '')), {
-    message: 'Enter a valid 10-digit Indian mobile number',
+  .refine((value) => isIndiaMobilePhone(value) || isInternationalE164Phone(value), {
+    message: 'Enter a valid phone number (Indian mobile or international +country code)',
   });
 
 const optionalWebsiteSchema = z
@@ -128,6 +145,26 @@ export const registerWizardSchema = z
           code: z.ZodIssueCode.custom,
           path: ['planCodes'],
           message: `Select a package for ${product === 'shopie' ? 'Orbit Mart' : 'Orbit Appoint'}.`,
+        });
+      }
+    }
+    for (const [path, phone] of [
+      ['businessPhone', data.businessPhone],
+      ['mobile', data.mobile],
+    ] as const) {
+      if (isIndiaCountry(data.country)) {
+        if (!isIndiaMobilePhone(phone)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [path],
+            message: 'Enter a valid 10-digit Indian mobile number',
+          });
+        }
+      } else if (!normalizePhoneInput(phone).startsWith('+') || !isInternationalE164Phone(phone)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [path],
+          message: 'Use international format starting with + and country code',
         });
       }
     }

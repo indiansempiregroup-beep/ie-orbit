@@ -45,13 +45,13 @@ export function NotificationPreferencesScreen() {
       });
       await refreshProfile();
       toast.push(
-        t('profile.notificationPreferencesUpdated', { defaultValue: 'Notification preferences updated.' }),
+        t('profile.notificationPreferencesUpdated', { defaultValue: 'Notification preferences saved.' }),
         'success',
       );
       navigation.goBack();
     } catch (err) {
       Alert.alert(
-        t('common.unableToSave', { defaultValue: 'Unable to save' }),
+        t('common.unableToSave', { defaultValue: "Couldn't save" }),
         getApiErrorMessage(err, t('common.tryAgain', { defaultValue: 'Please try again.' })),
       );
     } finally {

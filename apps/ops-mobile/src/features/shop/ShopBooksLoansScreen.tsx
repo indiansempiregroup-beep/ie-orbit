@@ -163,7 +163,7 @@ export function ShopBooksLoansScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to create loan', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't create this loan. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -187,7 +187,7 @@ export function ShopBooksLoansScreen() {
       setExpandedId(null);
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to repay loan', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't record this repayment. Try again.", 'error');
     } finally {
       setRepayingId(null);
     }

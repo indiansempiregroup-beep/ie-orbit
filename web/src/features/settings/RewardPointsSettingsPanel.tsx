@@ -216,7 +216,7 @@ export function RewardPointsSettingsPanel() {
                     snackbar.push('Reward points settings saved.', 'success');
                   } catch (error) {
                     snackbar.push(
-                      getApiErrorMessage(error, 'Unable to save reward points settings.'),
+                      getApiErrorMessage(error, "Couldn't save reward points settings. Try again."),
                       'error',
                     );
                   }

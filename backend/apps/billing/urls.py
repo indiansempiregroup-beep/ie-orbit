@@ -34,6 +34,7 @@ from apps.billing.api.views import (
     BillingWebhookSummaryView,
     CashfreeWebhookView,
     RazorpayWebhookView,
+    StripeWebhookView,
 )
 
 urlpatterns = [
@@ -129,5 +130,10 @@ urlpatterns = [
         "billing/webhooks/cashfree",
         CashfreeWebhookView.as_view(),
         name="billing-cashfree-webhook",
+    ),
+    path(
+        "billing/webhooks/stripe",
+        StripeWebhookView.as_view(),
+        name="billing-stripe-webhook",
     ),
 ]

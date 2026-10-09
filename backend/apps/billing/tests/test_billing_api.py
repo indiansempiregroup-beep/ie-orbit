@@ -1345,7 +1345,7 @@ def test_upi_claim_screenshot_without_utr_notifies_admin(
     assert payload["payment_proof_url"] == "https://cdn.example.com/proof.png"
     admin_subjects = [str(item.get("subject") or "") for item in sent]
     assert any("UPI claim waiting" in subject for subject in admin_subjects)
-    assert any("We received your" in subject for subject in admin_subjects)
+    assert any("Payment received" in subject for subject in admin_subjects)
 
 
 @pytest.mark.django_db

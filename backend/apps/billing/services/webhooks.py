@@ -15,6 +15,7 @@ from apps.billing.services.alerts import BillingAlertService
 from apps.billing.services.cashfree_client import CashfreeClient
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.razorpay_client import RazorpayClient
+from apps.billing.services.stripe_client import StripeClient
 from apps.businesses.models import BusinessProductSubscription
 from apps.businesses.services.product_billing import ProductBillingHooks, ProductBillingService
 
@@ -69,15 +70,18 @@ class WebhookService:
         self,
         razorpay_client: RazorpayClient | None = None,
         cashfree_client: CashfreeClient | None = None,
+        stripe_client: StripeClient | None = None,
         checkout_service: CheckoutService | None = None,
         billing_service: ProductBillingService | None = None,
         alert_service: BillingAlertService | None = None,
     ) -> None:
         self.razorpay = razorpay_client or RazorpayClient()
         self.cashfree = cashfree_client or CashfreeClient()
+        self.stripe = stripe_client or StripeClient()
         self.checkout = checkout_service or CheckoutService(
             razorpay_client=self.razorpay,
             cashfree_client=self.cashfree,
+            stripe_client=self.stripe,
         )
         self.billing_service = billing_service or default_product_billing_service()
         self.alert_service = alert_service or BillingAlertService()
@@ -201,11 +205,79 @@ class WebhookService:
             logger.exception("billing.cashfree_webhook_processing_failed", extra={"event_type": event_type})
             raise
 
+    def process_stripe_webhook(
+        self,
+        *,
+        body: bytes,
+        signature_header: str,
+        external_event_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.stripe.verify_webhook_signature(body=body, signature_header=signature_header):
+            return {"accepted": False, "reason": "invalid_signature"}
+
+        try:
+            payload = json.loads(body.decode())
+        except json.JSONDecodeError:
+            return {"accepted": False, "reason": "invalid_payload"}
+
+        event_type = str(payload.get("type") or "unknown")
+        event_id = str(
+            external_event_id
+            or payload.get("id")
+            or uuid.uuid4()
+        )
+        data_object = (
+            payload.get("data", {}).get("object", {})
+            if isinstance(payload.get("data"), dict)
+            else {}
+        )
+        metadata = data_object.get("metadata") if isinstance(data_object.get("metadata"), dict) else {}
+        tenant_id = metadata.get("tenant_id")
+        defaults: dict[str, object] = {
+            "event_type": event_type,
+            "payload": payload,
+            "status": WebhookEventStatus.RECEIVED,
+            "provider": "stripe",
+        }
+        if tenant_id:
+            defaults["tenant_id"] = tenant_id
+        webhook_event, created = BillingWebhookEvent.objects.get_or_create(
+            external_event_id=event_id[:120],
+            defaults=defaults,
+        )
+        if not created:
+            return {"accepted": True, "duplicate": True, "event_id": webhook_event.external_event_id}
+
+        try:
+            self._handle_stripe_event(payload)
+            webhook_event.status = WebhookEventStatus.PROCESSED
+            webhook_event.processed_at = timezone.now()
+            webhook_event.next_retry_at = None
+            webhook_event.error_message = ""
+            webhook_event.save(
+                update_fields=["status", "processed_at", "next_retry_at", "error_message", "updated_at"]
+            )
+            return {"accepted": True, "event_id": webhook_event.external_event_id}
+        except Exception as exc:
+            webhook_event.status = WebhookEventStatus.FAILED
+            webhook_event.error_message = str(exc)
+            webhook_event.processed_at = timezone.now()
+            webhook_event.save(
+                update_fields=["status", "error_message", "processed_at", "updated_at"]
+            )
+            self._emit_failure_alert(webhook_event=webhook_event)
+            self._schedule_retry(webhook_event=webhook_event)
+            logger.exception("billing.stripe_webhook_processing_failed", extra={"event_type": event_type})
+            raise
+
     def reprocess_webhook_event(self, *, webhook_event: BillingWebhookEvent) -> dict[str, Any]:
         payload = webhook_event.payload or {}
         try:
-            if str(webhook_event.provider or "") == "cashfree":
+            provider = str(webhook_event.provider or "")
+            if provider == "cashfree":
                 self._handle_cashfree_event(payload)
+            elif provider == "stripe":
+                self._handle_stripe_event(payload)
             else:
                 self._handle_event(payload)
             webhook_event.status = WebhookEventStatus.PROCESSED
@@ -342,6 +414,28 @@ class WebhookService:
             payment_id = str(payment.get("cf_payment_id") or "")
             if order_id:
                 self._activate_paid_session(order_id=order_id, payment_id=payment_id)
+
+    def _handle_stripe_event(self, payload: dict[str, Any]) -> None:
+        event_type = str(payload.get("type") or "")
+        if event_type not in {"checkout.session.completed", "checkout.session.async_payment_succeeded"}:
+            logger.info("billing.stripe_webhook_ignored", extra={"event_type": event_type})
+            return
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        session_obj = data.get("object") if isinstance(data.get("object"), dict) else {}
+        payment_status = str(session_obj.get("payment_status") or "").lower()
+        if payment_status and payment_status not in {"paid", "no_payment_required"}:
+            logger.info(
+                "billing.stripe_checkout_not_paid",
+                extra={"payment_status": payment_status, "session_id": session_obj.get("id")},
+            )
+            return
+        stripe_session_id = str(session_obj.get("id") or "")
+        payment_intent = str(session_obj.get("payment_intent") or "")
+        if stripe_session_id:
+            self._activate_paid_session(
+                order_id=stripe_session_id,
+                payment_id=payment_intent or stripe_session_id,
+            )
 
     def _emit_failure_alert(self, *, webhook_event: BillingWebhookEvent) -> None:
         self.alert_service.notify_webhook_failure(webhook_event=webhook_event)

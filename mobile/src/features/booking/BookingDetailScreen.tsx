@@ -152,9 +152,9 @@ export function BookingDetailScreen() {
             }
           : current,
       );
-      toast.push('Review submitted.', 'success');
+      toast.push('Thanks — your review is in.', 'success');
     } catch (err) {
-      Alert.alert('Unable to submit review', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert("Couldn't submit review", err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -211,7 +211,7 @@ export function BookingDetailScreen() {
       setRescheduleMode(false);
       toast.push('Appointment updated.', 'success');
     } catch (err) {
-      Alert.alert('Unable to reschedule', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert("Couldn't reschedule", err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -234,7 +234,7 @@ export function BookingDetailScreen() {
             });
             setBooking(response.data);
           } catch (err) {
-            Alert.alert('Unable to cancel', err instanceof Error ? err.message : 'Please try again.');
+            Alert.alert("Couldn't cancel", err instanceof Error ? err.message : 'Please try again.');
           } finally {
             setActionLoading(false);
           }

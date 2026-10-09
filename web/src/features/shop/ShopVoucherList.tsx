@@ -294,7 +294,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
       const result = await generateEInvoice.mutateAsync({ voucherId: voucher.id });
       snackbar.push(`E-invoice generated${result.irn ? ` · IRN ${result.irn}` : ''}.`, 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to generate e-invoice.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't generate e-invoice. Try again."), 'error');
     }
   }
 
@@ -305,7 +305,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
       await cancelEInvoice.mutateAsync({ voucherId: voucher.id, reason });
       snackbar.push('E-invoice cancelled.', 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to cancel e-invoice.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't cancel e-invoice. Try again."), 'error');
     }
   }
 
@@ -327,7 +327,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
       setDistanceKm('');
       setTransporterName('');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to generate e-way bill.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't generate e-way bill. Try again."), 'error');
     }
   }
 
@@ -339,7 +339,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
       await cancelEWay.mutateAsync({ ewayId: activeEway.id, reason });
       snackbar.push('E-way bill cancelled.', 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to cancel e-way bill.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't cancel e-way bill. Try again."), 'error');
     }
   }
 
@@ -563,7 +563,7 @@ export function ShopVoucherList({
       snackbar.push(`${voucher.voucher_number} voided.`, 'success');
       detailDialog.hide();
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to void voucher.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't void this voucher. Try again."), 'error');
     }
   }
 
@@ -583,7 +583,7 @@ export function ShopVoucherList({
 
       {createdNumber ? (
         <p className="invoice-banner" role="status">
-          {decodeURIComponent(createdNumber)} saved successfully.
+          {decodeURIComponent(createdNumber)} saved.
         </p>
       ) : null}
 

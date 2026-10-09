@@ -78,7 +78,7 @@ export function PlatformAdminAffiliatesScreen() {
       await client.platform.voidAffiliateLedgerEntry(entryId, { reason: 'Void affiliate ledger entry' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to void entry');
+      setError(err instanceof Error ? err.message : "Couldn't void this entry. Try again.");
     } finally {
       setBusyId(null);
     }

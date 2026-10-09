@@ -78,7 +78,7 @@ export function CustomerDetailScreen() {
       return;
     }
     if (amount > balanceDue) {
-      toast.push(`Amount cannot exceed outstanding ${money(balanceDue)}.`, 'error');
+      toast.push(`Amount can't be more than ${money(balanceDue)} outstanding.`, 'error');
       return;
     }
     setPaying(true);
@@ -88,13 +88,13 @@ export function CustomerDetailScreen() {
         payment_method: payMethod,
         notes: payNotes.trim(),
       });
-      toast.push(`Payment of ${money(amount)} recorded.`, 'success');
+      toast.push(`Recorded payment of ${money(amount)}.`, 'success');
       setPayAmount('');
       setPayNotes('');
       await reload();
       await loadBorrow();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to record payment.'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't record that payment. Try again."), 'error');
     } finally {
       setPaying(false);
     }

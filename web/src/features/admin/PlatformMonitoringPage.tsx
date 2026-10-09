@@ -128,13 +128,13 @@ export function PlatformMonitoringPage() {
       });
       setMessage(
         result.data.reprocessed
-          ? `${event.external_event_id} was reprocessed successfully.`
+          ? `Reprocessed ${event.external_event_id}.`
           : result.data.error || 'Reprocess did not succeed.',
       );
       setSelected(null);
       await refresh();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to reprocess event.'));
+      setError(getApiErrorMessage(err, "Couldn't reprocess this event. Try again."));
     } finally {
       setBusy(null);
     }

@@ -334,14 +334,14 @@ export function ShopProductsAddManyPage() {
         });
       }
       if (createdCount && !errorTotal) {
-        snackbar.push(`Saved ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
+        snackbar.push(`Added ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
       } else if (createdCount) {
-        snackbar.push(`Saved ${createdCount}, ${errorTotal} need a fix.`, 'info');
+        snackbar.push(`Added ${createdCount}; ${errorTotal} still need a fix.`, 'info');
       } else {
         snackbar.push('Nothing was saved. Fix the row errors and try again.', 'error');
       }
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to save products.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't save these products. Try again.", 'error');
     } finally {
       setSaving(false);
     }

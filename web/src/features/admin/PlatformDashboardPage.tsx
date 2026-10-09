@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   TicketPercent,
   TriangleAlert,
+  Wallet,
 } from 'lucide-react';
 import { formatTimestamp } from '../../lib/datetime';
 import {
@@ -201,6 +202,13 @@ export function PlatformDashboardPage() {
           </span>
           <strong>Packages</strong>
           <span>Plans, pricing, and entitlements</span>
+        </Link>
+        <Link className="admin-shortcut" to="/admin/usage-pricing">
+          <span className="admin-shortcut__icon">
+            <Wallet size={16} />
+          </span>
+          <strong>Usage pricing</strong>
+          <span>Add-ons, Assistant, and Smart lookup</span>
         </Link>
         <Link className="admin-shortcut" to="/admin/coupons">
           <span className="admin-shortcut__icon">

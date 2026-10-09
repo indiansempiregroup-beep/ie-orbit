@@ -213,7 +213,7 @@ export function DocumentActionsSheet({
       toast.push(parts.join(' · ') || 'Sent', 'success');
       if (result.data.public_url) setPublicUrl(result.data.public_url);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Send failed'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't send. Try again."), 'error');
     } finally {
       setSending(false);
     }

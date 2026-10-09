@@ -14,6 +14,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator
@@ -62,22 +63,38 @@ def lookup_openmrp_barcode(code: str) -> dict[str, Any] | None:
     if not barcode:
         return None
 
-    # Try a few common path shapes; OpenMRP docs use /v1/product/{barcode}.
-    for path in (
+    # Race common path shapes; OpenMRP docs use /v1/product/{barcode}.
+    paths = (
         f"/v1/product/{barcode}",
         f"/v1/products/{barcode}",
         f"/v1/resolve/{barcode}",
-    ):
+    )
+
+    def _try_path(path: str) -> dict[str, Any] | None:
         raw = _http_get(f"{OPENMRP_API_BASE}{path}")
         if not raw:
-            continue
+            return None
         try:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            continue
+            return None
         mapped = _map_live_payload(barcode, payload)
         if mapped and mapped.get("found") and mapped.get("name"):
             return mapped
+        return None
+
+    with ThreadPoolExecutor(max_workers=len(paths)) as pool:
+        futures = [pool.submit(_try_path, path) for path in paths]
+        for future in as_completed(futures):
+            try:
+                mapped = future.result()
+            except Exception as exc:  # noqa: BLE001 — never break enrich on provider failure
+                logger.info("OpenMRP path race failed for %s: %s", barcode, exc)
+                continue
+            if mapped:
+                for pending in futures:
+                    pending.cancel()
+                return mapped
     return None
 
 

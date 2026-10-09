@@ -132,6 +132,9 @@ class DeliveryService:
 
         return {
             "instant_delivery_enabled": settings.instant_delivery_enabled,
+            "cod_allowed_for_instant_delivery": bool(
+                getattr(settings, "cod_allowed_for_instant_delivery", True)
+            ),
             "delivery_integration": {**config, "credentials": masked},
             "delivery_sla": dict((settings.metadata or {}).get("delivery_sla") or {}),
             "courier_integration": ShiprocketStandardService().public_settings(
@@ -146,6 +149,7 @@ class DeliveryService:
         business: Business,
         enabled: bool | None,
         incoming: dict[str, Any],
+        cod_allowed_for_instant_delivery: bool | None = None,
     ) -> ShopBusinessSettings:
         settings = self.ensure_settings(tenant=tenant, business=business)
         current = dict(settings.delivery_integration or {})
@@ -185,15 +189,20 @@ class DeliveryService:
                     }
                 )
             settings.instant_delivery_enabled = enabled
+        if cod_allowed_for_instant_delivery is not None:
+            settings.cod_allowed_for_instant_delivery = bool(
+                cod_allowed_for_instant_delivery
+            )
         settings.delivery_integration = merged
-        settings.save(
-            update_fields=[
-                "instant_delivery_enabled",
-                "delivery_integration",
-                "updated_at",
-                "version",
-            ]
-        )
+        update_fields = [
+            "instant_delivery_enabled",
+            "delivery_integration",
+            "updated_at",
+            "version",
+        ]
+        if cod_allowed_for_instant_delivery is not None:
+            update_fields.append("cod_allowed_for_instant_delivery")
+        settings.save(update_fields=update_fields)
         return settings
 
     def update_courier_settings(

@@ -280,7 +280,7 @@ export function ShopOrderDetailScreen() {
       };
       toast.push(messages[status] || 'Order updated', 'success');
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to update order';
+      const text = err instanceof Error ? err.message : "Couldn't update this order. Try again.";
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -326,9 +326,9 @@ export function ShopOrderDetailScreen() {
     try {
       await client.shop.dispatchOrder(order.id);
       await refreshOrder();
-      toast.push('Rider requested. Live tracking is active.', 'success');
+      toast.push('Rider requested — live tracking is on.', 'success');
     } catch (err) {
-      const text = getApiErrorMessage(err, 'Unable to dispatch order');
+      const text = getApiErrorMessage(err, "Couldn't request a rider. Try again.");
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -374,9 +374,9 @@ export function ShopOrderDetailScreen() {
       setShipOpen(false);
       setShipAwb('');
       setShipEta('');
-      toast.push('Shipment saved. Customer can track the package now.', 'success');
+      toast.push('Shipment saved — customer can track it now.', 'success');
     } catch (err) {
-      const text = getApiErrorMessage(err, 'Unable to save shipment.');
+      const text = getApiErrorMessage(err, "Couldn't save shipment details. Try again.");
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -405,7 +405,7 @@ export function ShopOrderDetailScreen() {
         'success',
       );
     } catch (err) {
-      const text = getApiErrorMessage(err, 'Unable to book with Shiprocket.');
+      const text = getApiErrorMessage(err, "Couldn't book with Shiprocket. Try again.");
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -460,7 +460,7 @@ export function ShopOrderDetailScreen() {
       closeReturnMode();
       await refreshOrder();
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Return failed';
+      const text = err instanceof Error ? err.message : "Couldn't process this return. Try again.";
       setError(text);
       toast.push(text, 'error');
     } finally {

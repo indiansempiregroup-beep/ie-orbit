@@ -118,7 +118,7 @@ export function PetFormScreen({ navigation, route }: Props) {
           tenant_slug: tenantSlug,
           business_code: businessCode,
         });
-        toast.push('Pet updated.', 'success');
+        toast.push('Pet details saved.', 'success');
       } else {
         await mobileClient.mobile.createMyPet({
           tenant_slug: tenantSlug,
@@ -129,7 +129,7 @@ export function PetFormScreen({ navigation, route }: Props) {
       }
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Unable to save', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert("Couldn't save", err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setSaving(false);
     }

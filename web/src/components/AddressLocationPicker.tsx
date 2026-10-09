@@ -20,6 +20,8 @@ type Props = {
   onChangeText: (value: string) => void;
   onPlaceSelected: (place: PlaceSelection) => void;
   height?: number;
+  /** ISO 3166-1 alpha-2; omitted when unknown so the backend can default. */
+  countryCode?: string;
 };
 
 function placesErrorMessage(err: unknown, fallback: string): string {
@@ -71,6 +73,7 @@ export function AddressLocationPicker({
   onChangeText,
   onPlaceSelected,
   height = 220,
+  countryCode,
 }: Props) {
   const auth = useAuth();
   const client = useMemo(() => createAuthenticatedClient(auth.token), [auth.token]);
@@ -112,7 +115,7 @@ export function AddressLocationPicker({
             session_token: sessionTokenRef.current,
             latitude: biasRef.current.latitude ?? undefined,
             longitude: biasRef.current.longitude ?? undefined,
-            country_code: 'IN',
+            ...(countryCode ? { country_code: countryCode } : {}),
           });
           setPredictions(response.data.predictions);
         } catch (err) {
@@ -126,7 +129,7 @@ export function AddressLocationPicker({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [client, typedTerm]);
+  }, [client, typedTerm, countryCode]);
 
   function handleTyping(next: string) {
     typedValueRef.current = next;

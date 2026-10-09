@@ -620,7 +620,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       setMessage('Payment submitted for confirmation.');
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to claim payment');
+      setMessage(err instanceof Error ? err.message : "Couldn't claim this payment. Try again.");
     } finally {
       setBusy(false);
     }
@@ -648,7 +648,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
         setGatewayModal({ provider: 'cashfree', checkout });
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to start payment.');
+      setMessage(err instanceof Error ? err.message : "Couldn't start payment. Try again.");
     } finally {
       setBusy(false);
     }
@@ -674,7 +674,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       });
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to cancel');
+      setMessage(err instanceof Error ? err.message : "Couldn't cancel. Try again.");
     } finally {
       setBusy(false);
     }
@@ -775,7 +775,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       toast.push(`Return ${response.data.return_number} submitted.`, 'success');
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to submit return');
+      setMessage(err instanceof Error ? err.message : "Couldn't submit this return. Try again.");
     } finally {
       setBusy(false);
     }
@@ -1227,17 +1227,27 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {showQr ? (
           <View style={styles.card}>
             <Text style={styles.section}>Pay with UPI</Text>
+            <View style={styles.upiSteps}>
+              <Text style={styles.upiStepsTitle}>How to pay</Text>
+              <Text style={styles.upiStepItem}>1. Scan the QR and pay the exact amount in your UPI app</Text>
+              <Text style={styles.upiStepItem}>
+                2. After payment succeeds, take a screenshot of the confirmation
+              </Text>
+              <Text style={styles.upiStepItem}>
+                3. Upload that screenshot below (UTR optional), then submit for confirmation
+              </Text>
+            </View>
             <View style={styles.qrWrap}>
               <QRCode value={order.upi_pay_url || ''} size={180} />
-              <Text style={styles.meta}>
-                Scan the QR, pay the exact amount, then upload the payment screenshot below.
-              </Text>
+              <Text style={styles.meta}>Scan with any UPI app — amount is locked.</Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
             </View>
             <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
-            <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
+            <Text style={styles.meta}>
+              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+            </Text>
             <Input
               label="UTR / UPI reference"
               value={utr}
@@ -1281,17 +1291,27 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {staticQrUrl ? (
           <View style={styles.card}>
             <Text style={styles.section}>Pay with UPI</Text>
+            <View style={styles.upiSteps}>
+              <Text style={styles.upiStepsTitle}>How to pay</Text>
+              <Text style={styles.upiStepItem}>1. Scan the shop QR and pay the exact amount in your UPI app</Text>
+              <Text style={styles.upiStepItem}>
+                2. After payment succeeds, take a screenshot of the confirmation
+              </Text>
+              <Text style={styles.upiStepItem}>
+                3. Upload that screenshot below (UTR optional), then submit for confirmation
+              </Text>
+            </View>
             <View style={styles.qrWrap}>
               <Image source={{ uri: staticQrUrl }} style={styles.staticQr} />
-              <Text style={styles.meta}>
-                Scan the shop QR, pay the exact amount, then upload the payment screenshot below.
-              </Text>
+              <Text style={styles.meta}>Scan the shop QR — pay the exact amount.</Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
             </View>
             <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
-            <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
+            <Text style={styles.meta}>
+              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+            </Text>
             <Input
               label="UTR / UPI reference"
               value={utr}
@@ -1335,7 +1355,19 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {needsAppPayment && !showQr && !staticQrUrl ? (
           <View style={styles.card}>
             <Text style={styles.section}>I’ve paid</Text>
-            <Text style={styles.meta}>Enter your UTR / UPI reference and/or upload a payment screenshot.</Text>
+            <View style={styles.upiSteps}>
+              <Text style={styles.upiStepsTitle}>How to finish payment</Text>
+              <Text style={styles.upiStepItem}>1. Pay the shop with UPI for the exact order amount</Text>
+              <Text style={styles.upiStepItem}>
+                2. After payment succeeds, take a screenshot of the confirmation
+              </Text>
+              <Text style={styles.upiStepItem}>
+                3. Upload that screenshot below (UTR optional), then submit for confirmation
+              </Text>
+            </View>
+            <Text style={styles.meta}>
+              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+            </Text>
             <Input
               label="UTR / UPI reference"
               value={utr}
@@ -1553,11 +1585,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
               result: payload,
             })
               .then(() => {
-                toast.push('Payment successful.', 'success');
+                toast.push('Payment received.', 'success');
                 return load();
               })
               .catch((err) =>
-                setMessage(err instanceof Error ? err.message : 'Payment verification failed.'),
+                setMessage(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details."),
               );
           }}
           onCancel={(msg) => {
@@ -1580,11 +1612,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
               result: payload,
             })
               .then(() => {
-                toast.push('Payment successful.', 'success');
+                toast.push('Payment received.', 'success');
                 return load();
               })
               .catch((err) =>
-                setMessage(err instanceof Error ? err.message : 'Payment verification failed.'),
+                setMessage(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details."),
               );
           }}
           onCancel={(msg) => {
@@ -1831,6 +1863,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: '#fff',
   },
+  upiSteps: {
+    gap: 6,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+  },
+  upiStepsTitle: { ...typography.label, fontWeight: '700', color: colors.foreground, marginBottom: 2 },
+  upiStepItem: { ...typography.caption, color: colors.foreground, lineHeight: 18 },
   qrWrap: { alignItems: 'center', gap: 8 },
   staticQr: { width: 220, height: 220, borderRadius: radius.md, backgroundColor: colors.muted },
   vpa: { ...typography.label, color: colors.foreground, fontWeight: '700' },

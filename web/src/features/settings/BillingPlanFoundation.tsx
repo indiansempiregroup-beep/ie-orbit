@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { allowedExtraCount, formatInrFromPaise, formatPlanDisplayName, starterAddonCapHint } from '../../config/products';
+import { allowedExtraCount, formatPlanDisplayName, formatSaasFromMinor, starterAddonCapHint } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatTimestamp } from '../../lib/datetime';
@@ -61,6 +61,9 @@ export function BillingPlanFoundation() {
   const snackbar = useSnackbar();
 
   const status = statusQuery.data;
+  const billingRegion = status?.billing_region ?? 'IN';
+  const saasCurrency = status?.currency ?? 'INR';
+  const isIntlBilling = billingRegion === 'INTL';
   const plans = plansQuery.data ?? [];
   const goLive = goLiveQuery.data;
   const observability = observabilityQuery.data;
@@ -131,9 +134,9 @@ export function BillingPlanFoundation() {
                           {
                             onSuccess: () => {
                               void billingSnapshotQuery.refetch();
-                              snackbar.push('Pending plan change canceled.', 'success');
+                              snackbar.push('Pending plan change cancelled.', 'success');
                             },
-                            onError: () => snackbar.push('Unable to cancel pending plan change.', 'error'),
+                            onError: () => snackbar.push("Couldn't cancel the pending plan change. Try again.", 'error'),
                           },
                         );
                       }}
@@ -217,10 +220,10 @@ export function BillingPlanFoundation() {
                       ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                     },
                     {
-                      onSuccess: () => snackbar.push('Add-ons updated. Billing total refreshed.', 'success'),
+                      onSuccess: () => snackbar.push('Add-ons updated — next bill total refreshed.', 'success'),
                       onError: (error) =>
                         snackbar.push(
-                          getApiErrorMessage(error, 'Unable to update add-ons. Check usage limits.'),
+                          getApiErrorMessage(error, "Couldn't update add-ons. Check usage limits."),
                           'error',
                         ),
                     },
@@ -236,16 +239,21 @@ export function BillingPlanFoundation() {
         )}
         <h2 style={{ margin: '20px 0 0' }}>Online checkout</h2>
         <p className="billing-section-meta">
-          {isConfigured
-            ? 'At least one payment gateway is configured. Start checkout with Razorpay and/or Cashfree for the selected plan.'
-            : 'No live gateway is configured yet. Checkout runs in mock mode until you add Razorpay or Cashfree keys.'}
+          {isIntlBilling
+            ? isConfigured
+              ? 'International SaaS bills in USD via Stripe Checkout (Stripe Tax where applicable).'
+              : 'No live Stripe gateway is configured yet. Checkout runs in mock mode until Stripe keys are set.'
+            : isConfigured
+              ? 'At least one payment gateway is configured. Start checkout with Razorpay and/or Cashfree for the selected plan.'
+              : 'No live gateway is configured yet. Checkout runs in mock mode until you add Razorpay or Cashfree keys.'}
         </p>
         <div className="billing-foundation-chips">
           <span className={`billing-chip ${launchReady ? 'billing-chip--ok' : 'billing-chip--warn'}`}>
             Launch Ready: {launchReady ? 'Yes' : 'No'}
           </span>
-          <span className="billing-chip billing-chip--muted">Provider: {status?.provider ?? 'razorpay'}</span>
-          <span className="billing-chip billing-chip--muted">Currency: {status?.currency ?? 'INR'}</span>
+          <span className="billing-chip billing-chip--muted">Region: {billingRegion}</span>
+          <span className="billing-chip billing-chip--muted">Provider: {status?.provider ?? (isIntlBilling ? 'stripe' : 'razorpay')}</span>
+          <span className="billing-chip billing-chip--muted">SaaS currency: {saasCurrency}</span>
           <span className={`billing-chip ${mockMode ? 'billing-chip--muted' : 'billing-chip--ok'}`}>
             Mode: {mockMode ? 'Mock (no live charges)' : 'Live'}
           </span>
@@ -269,7 +277,8 @@ export function BillingPlanFoundation() {
             >
               {plans.map((plan) => (
                 <option key={plan.plan_code} value={plan.plan_code}>
-                  {formatPlanDisplayName(plan.name, plan.plan_code)} ({formatInrFromPaise(plan.amount_paise) ?? '—'})
+                  {formatPlanDisplayName(plan.name, plan.plan_code)} (
+                  {formatSaasFromMinor(plan.amount_paise, saasCurrency) ?? '—'})
                 </option>
               ))}
             </select>
@@ -513,78 +522,112 @@ export function BillingPlanFoundation() {
       </div>
 
       <div className="billing-actions">
-        <Button
-          variant="primary"
-          disabled={checkout.isPending || plansQuery.isLoading || plans.length === 0}
-          onClick={() =>
-            checkout.mutate(
-              { product_code: checkoutProductCode, plan_code: checkoutPlanCode, provider: 'razorpay' },
-              {
-                onSuccess: (session) => {
-                  if (session.mock_mode) {
-                    snackbar.push(
-                      `Mock order ${session.order_id} created. Add Razorpay or Cashfree keys to enable live checkout.`,
-                      'success',
-                    );
-                  } else {
-                    snackbar.push(`Razorpay checkout order ${session.order_id} created.`, 'success');
-                  }
-                },
-                onError: (error) => snackbar.push(error.message, 'error'),
-              },
-            )
-          }
-        >
-          {checkout.isPending ? 'Creating checkout…' : mockMode ? 'Create mock checkout' : 'Upgrade with Razorpay'}
-        </Button>
-        {status?.cashfree?.configured ? (
+        {isIntlBilling ? (
           <Button
-            variant="neutral"
+            variant="primary"
             disabled={checkout.isPending || plansQuery.isLoading || plans.length === 0}
             onClick={() =>
               checkout.mutate(
-                { product_code: checkoutProductCode, plan_code: checkoutPlanCode, provider: 'cashfree' },
+                { product_code: checkoutProductCode, plan_code: checkoutPlanCode, provider: 'stripe' },
                 {
-                  onSuccess: async (session) => {
+                  onSuccess: (session) => {
                     if (session.mock_mode) {
-                      snackbar.push(`Mock Cashfree order ${session.order_id} created.`, 'success');
+                      snackbar.push(
+                        `Mock Stripe session ${session.order_id} created. Add Stripe keys to enable live checkout.`,
+                        'success',
+                      );
                       return;
                     }
-                    snackbar.push(`Cashfree checkout order ${session.order_id} created.`, 'success');
-                    if (!session.payment_session_id) return;
-                    await new Promise<void>((resolve, reject) => {
-                      if (window.Cashfree) {
-                        resolve();
-                        return;
-                      }
-                      const script = document.createElement('script');
-                      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
-                      script.onload = () => resolve();
-                      script.onerror = () => reject(new Error('Unable to load Cashfree Checkout.'));
-                      document.body.appendChild(script);
-                    });
-                    const cashfree = (
-                      window as unknown as {
-                        Cashfree?: (options: { mode: string }) => {
-                          checkout: (options: Record<string, unknown>) => Promise<unknown>;
-                        };
-                      }
-                    ).Cashfree?.({
-                      mode: session.env === 'production' ? 'production' : 'sandbox',
-                    });
-                    await cashfree?.checkout({
-                      paymentSessionId: session.payment_session_id,
-                      redirectTarget: '_modal',
-                    });
+                    if (session.checkout_url) {
+                      const opened = window.open(session.checkout_url, '_blank', 'noopener,noreferrer');
+                      if (!opened) window.location.assign(session.checkout_url);
+                      return;
+                    }
+                    snackbar.push(`Stripe checkout session ${session.order_id} created.`, 'success');
                   },
                   onError: (error) => snackbar.push(error.message, 'error'),
                 },
               )
             }
           >
-            Upgrade with Cashfree
+            {checkout.isPending ? 'Creating checkout…' : mockMode ? 'Create mock Stripe checkout' : 'Checkout with Stripe'}
           </Button>
-        ) : null}
+        ) : (
+          <>
+            <Button
+              variant="primary"
+              disabled={checkout.isPending || plansQuery.isLoading || plans.length === 0}
+              onClick={() =>
+                checkout.mutate(
+                  { product_code: checkoutProductCode, plan_code: checkoutPlanCode, provider: 'razorpay' },
+                  {
+                    onSuccess: (session) => {
+                      if (session.mock_mode) {
+                        snackbar.push(
+                          `Mock order ${session.order_id} created. Add Razorpay or Cashfree keys to enable live checkout.`,
+                          'success',
+                        );
+                      } else {
+                        snackbar.push(`Razorpay checkout order ${session.order_id} created.`, 'success');
+                      }
+                    },
+                    onError: (error) => snackbar.push(error.message, 'error'),
+                  },
+                )
+              }
+            >
+              {checkout.isPending ? 'Creating checkout…' : mockMode ? 'Create mock checkout' : 'Upgrade with Razorpay'}
+            </Button>
+            {status?.cashfree?.configured ? (
+              <Button
+                variant="neutral"
+                disabled={checkout.isPending || plansQuery.isLoading || plans.length === 0}
+                onClick={() =>
+                  checkout.mutate(
+                    { product_code: checkoutProductCode, plan_code: checkoutPlanCode, provider: 'cashfree' },
+                    {
+                      onSuccess: async (session) => {
+                        if (session.mock_mode) {
+                          snackbar.push(`Mock Cashfree order ${session.order_id} created.`, 'success');
+                          return;
+                        }
+                        snackbar.push(`Cashfree checkout order ${session.order_id} created.`, 'success');
+                        if (!session.payment_session_id) return;
+                        await new Promise<void>((resolve, reject) => {
+                          if (window.Cashfree) {
+                            resolve();
+                            return;
+                          }
+                          const script = document.createElement('script');
+                          script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+                          script.onload = () => resolve();
+                          script.onerror = () => reject(new Error('Unable to load Cashfree Checkout.'));
+                          document.body.appendChild(script);
+                        });
+                        const cashfree = (
+                          window as unknown as {
+                            Cashfree?: (options: { mode: string }) => {
+                              checkout: (options: Record<string, unknown>) => Promise<unknown>;
+                            };
+                          }
+                        ).Cashfree?.({
+                          mode: session.env === 'production' ? 'production' : 'sandbox',
+                        });
+                        await cashfree?.checkout({
+                          paymentSessionId: session.payment_session_id,
+                          redirectTarget: '_modal',
+                        });
+                      },
+                      onError: (error) => snackbar.push(error.message, 'error'),
+                    },
+                  )
+                }
+              >
+                Upgrade with Cashfree
+              </Button>
+            ) : null}
+          </>
+        )}
         <Link to="/pricing">
           <Button variant="ghost">View pricing</Button>
         </Link>
@@ -694,7 +737,7 @@ export function BillingPlanFoundation() {
                         reprocessWebhook.mutate(event.id, {
                           onSuccess: (result) => {
                             if (result.reprocessed) {
-                              snackbar.push('Webhook event reprocessed successfully.', 'success');
+                              snackbar.push('Webhook reprocessed.', 'success');
                             } else {
                               snackbar.push(result.error ?? 'Webhook reprocess failed.', 'error');
                             }

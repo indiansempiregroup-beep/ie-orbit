@@ -106,8 +106,10 @@ export function TermsPage() {
       <p>
         After the trial, paid use requires a Starter or Pro subscription for each product you want to keep active,
         plus any add-ons (extra staff, extra offices, Pets pack). Amounts, staff and office limits, and yearly billing
-        (when offered at a discounted yearly multiple of monthly) are as shown on Pricing and at checkout in INR. Taxes may apply as required by
-        law.
+        (when offered at a discounted yearly multiple of monthly) are as shown on Pricing and at checkout. For businesses
+        in India, SaaS subscription is billed in INR (UPI, Razorpay, and/or Cashfree as available) with GST as required
+        by law. For international businesses, SaaS subscription is billed in USD via Stripe Checkout, with tax handled
+        through Stripe Tax where applicable.
       </p>
       <p>
         You can change packages from workspace billing settings where the product allows it. Pending plan changes can
@@ -122,9 +124,11 @@ export function TermsPage() {
 
       <h2 id="upi">UPI payment claims</h2>
       <p>
-        Platform subscription is paid by UPI from the workspace billing area. After you pay, you must submit a payment
-        claim with the UTR and/or a screenshot so we can confirm the transfer. Access to paid features may wait until
-        the claim is verified. Incomplete, illegible, or mismatched claims can delay or prevent activation.
+        For India (INR) workspaces, platform subscription can be paid by UPI from the workspace billing area. After you
+        pay, you must submit a payment claim with the UTR and/or a screenshot so we can confirm the transfer. UPI claims
+        apply to Indian SaaS billing only; international (USD) subscriptions use Stripe Checkout instead. Access to paid
+        features may wait until payment or the claim is verified. Incomplete, illegible, or mismatched claims can delay
+        or prevent activation.
       </p>
       <p>
         You must not submit claims for payments you did not make. False claims are a material breach and may lead to
@@ -133,10 +137,11 @@ export function TermsPage() {
 
       <h2 id="customer-payments">Customer payments</h2>
       <p>
-        On eligible Orbit Mart Pro plans you may connect your own Razorpay and/or Cashfree account so your customers
-        pay you for shop orders. Settlement is between you and that provider. We are not a bank, escrow, or payment
-        aggregator for those funds. You must comply with the provider’s terms, KYC, and chargeback rules. Platform
-        subscription billing stays on UPI claims and is separate from customer checkout.
+        On eligible Orbit Mart Pro plans you may connect payment providers so your customers pay you for shop orders. In
+        India, Razorpay and/or Cashfree are typical; internationally, Stripe Connect may be offered when available.
+        Settlement is between you and that provider. We are not a bank, escrow, or payment aggregator for those funds.
+        You must comply with the provider’s terms, KYC, and chargeback rules. Platform subscription billing (INR/UPI or
+        USD/Stripe) is separate from customer checkout.
       </p>
 
       <h2 id="white-label">White-label customer app</h2>

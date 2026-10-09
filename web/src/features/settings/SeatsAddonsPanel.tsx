@@ -170,7 +170,7 @@ export function SeatsAddonsPanel({
             </p>
             <p className="product-settings-lead">
               {snapshot.pending_upi_claim
-                ? 'Payment received — waiting for IE to confirm (usually same day).'
+                ? 'Payment received — IE usually confirms the same day.'
                 : snapshot.soft_locked
                   ? 'Locked until you pay this product. We do not charge automatically.'
                   : snapshot.status === 'trialing'
@@ -252,10 +252,10 @@ export function SeatsAddonsPanel({
                   ...(productCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                 },
                 {
-                  onSuccess: () => snackbar.push('Extras saved. Your next total is updated.', 'success'),
+                  onSuccess: () => snackbar.push('Extras saved — next bill total updated.', 'success'),
                   onError: (error) =>
                     snackbar.push(
-                      getApiErrorMessage(error, 'Unable to save extras. Reduce staff or offices first if you are over the limit.'),
+                      getApiErrorMessage(error, "Couldn't save extras. Reduce staff or offices if you're over the limit."),
                       'error',
                     ),
                 },

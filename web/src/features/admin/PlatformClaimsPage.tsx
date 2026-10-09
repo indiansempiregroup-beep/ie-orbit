@@ -789,7 +789,13 @@ export function PlatformClaimsPage() {
     try {
       await client.platform.confirmTenantUpiClaim(tenantId, paymentId, { action, reason });
       setMessageOk(true);
-      setMessage(`${label} succeeded — the owner was emailed.`);
+      setMessage(
+        label === 'Confirm UPI payment'
+          ? 'UPI payment confirmed — owner emailed.'
+          : label === 'Reject UPI claim'
+            ? 'UPI claim rejected — owner emailed.'
+            : `${label} — owner emailed.`,
+      );
       setPendingAction(null);
       setInspectedId(null);
       invalidate();
@@ -819,7 +825,13 @@ export function PlatformClaimsPage() {
         });
       }
       setMessageOk(true);
-      setMessage(`${label} succeeded — the owner was emailed.`);
+      setMessage(
+        label === 'Resolve refund request'
+          ? 'Refund resolved — owner emailed.'
+          : label === 'Reject refund request'
+            ? 'Refund rejected — owner emailed.'
+            : `${label} — owner emailed.`,
+      );
       setRefundPendingAction(null);
       invalidate();
       await refresh();

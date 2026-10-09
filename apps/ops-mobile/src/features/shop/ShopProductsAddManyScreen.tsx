@@ -261,7 +261,7 @@ export function ShopProductsAddManyScreen() {
       const added = appendPartials(tableToPartialRows(parseDelimitedTable(text)));
       toast.push(added ? `Loaded ${added} row${added === 1 ? '' : 's'} from CSV.` : 'No product rows found.', added ? 'success' : 'error');
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : 'Unable to import CSV.', 'error');
+      toast.push(error instanceof Error ? error.message : "Couldn't import that CSV. Try again.", 'error');
     }
   }
 
@@ -391,14 +391,14 @@ export function ShopProductsAddManyScreen() {
         });
       }
       if (createdCount && !errorTotal) {
-        toast.push(`Saved ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
+        toast.push(`Added ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
       } else if (createdCount) {
-        toast.push(`Saved ${createdCount}, ${errorTotal} need a fix.`, 'info');
+        toast.push(`Added ${createdCount}; ${errorTotal} still need a fix.`, 'info');
       } else {
         toast.push('Nothing was saved. Fix the row errors and try again.', 'error');
       }
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : 'Unable to save products.', 'error');
+      toast.push(error instanceof Error ? error.message : "Couldn't save these products. Try again.", 'error');
     } finally {
       setSaving(false);
     }

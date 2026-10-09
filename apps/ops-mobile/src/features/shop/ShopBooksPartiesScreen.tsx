@@ -168,7 +168,7 @@ export function ShopBooksPartiesScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to add supplier', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't add this supplier. Try again.", 'error');
     } finally {
       setBusy(false);
     }

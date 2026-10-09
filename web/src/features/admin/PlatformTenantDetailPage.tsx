@@ -263,6 +263,7 @@ export function PlatformTenantDetailPage() {
   const [reason, setReason] = useState('Platform admin action');
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageOk, setMessageOk] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<LifecycleAction | null>(null);
   const [confirmSlug, setConfirmSlug] = useState('');
   const [planSelection, setPlanSelection] = useState<Record<string, string>>({});
@@ -306,11 +307,24 @@ export function PlatformTenantDetailPage() {
     if (!tenantId) return;
     setBusy(label);
     setMessage(null);
+    setMessageOk(false);
+    const successByLabel: Record<string, string> = {
+      Suspend: 'Tenant suspended.',
+      Reactivate: 'Tenant reactivated.',
+      Archive: 'Tenant archived.',
+      Purge: 'Tenant purged.',
+      'Confirm UPI payment': 'UPI payment confirmed — owner emailed.',
+      'Reject UPI claim': 'UPI claim rejected — owner emailed.',
+      'Resolve refund': 'Refund resolved — owner emailed.',
+      'Reject refund': 'Refund rejected — owner emailed.',
+    };
     try {
       const result = await fn();
-      setMessage(typeof result === 'string' ? result : `${label} succeeded`);
+      setMessageOk(true);
+      setMessage(typeof result === 'string' ? result : successByLabel[label] ?? `${label}.`);
       invalidate();
     } catch (err) {
+      setMessageOk(false);
       setMessage(err instanceof Error ? err.message : `${label} failed`);
     } finally {
       setBusy(null);
@@ -464,7 +478,7 @@ export function PlatformTenantDetailPage() {
       {message || busy ? (
         <div className="tenant-feedback" role="status">
           {message ? (
-            <p className={`admin-message ${message.includes('succeeded') ? 'admin-message--ok' : ''}`} style={{ margin: 0 }}>
+            <p className={`admin-message ${messageOk ? 'admin-message--ok' : ''}`} style={{ margin: 0 }}>
               {message}
             </p>
           ) : null}
@@ -598,6 +612,7 @@ export function PlatformTenantDetailPage() {
                       onClick={() => {
                         setConfirmSlug('');
                         setMessage(null);
+                        setMessageOk(false);
                         setLifecycleAction(action);
                       }}
                     >
@@ -948,7 +963,7 @@ export function PlatformTenantDetailPage() {
                             };
                             const issued = Boolean(actionData.sign_in_code_sent ?? actionData.reset_issued);
                             return issued
-                              ? `Sign-in code email sent to ${user.email}`
+                              ? `Sign-in code emailed to ${user.email}`
                               : `Sign-in code was requested for ${user.email}`;
                           })
                         }

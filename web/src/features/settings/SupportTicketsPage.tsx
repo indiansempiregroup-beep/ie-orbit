@@ -82,7 +82,7 @@ export function SupportTicketsPage() {
       await queryClient.invalidateQueries({ queryKey: ['support', 'tickets'] });
       await ticketQuery.refetch();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not save reply');
+      setMessage(err instanceof Error ? err.message : "Couldn't send that reply. Try again.");
     } finally {
       setBusy(false);
     }

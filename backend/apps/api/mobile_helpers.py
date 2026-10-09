@@ -7,6 +7,7 @@ from django.db.models import Q, QuerySet
 from apps.authentication.models import User
 from apps.bookings.models import Booking
 from apps.businesses.models import Business
+from apps.common.utils.business_identity import assert_no_staff_customer_conflict
 from apps.common.utils.urls import normalize_stored_asset_url
 from apps.customers.models import Customer
 from apps.customers.services import CustomerService
@@ -77,6 +78,14 @@ def ensure_customer_for_user(*, tenant: Tenant, business: Business, user: User) 
     existing = find_customer_for_user(tenant=tenant, business=business, user=user)
     if existing is not None:
         return existing
+    assert_no_staff_customer_conflict(
+        tenant=tenant,
+        business=business,
+        email=user.email or "",
+        phone=user.phone_number or "",
+        user=user,
+        creating="customer",
+    )
     display_name = user.full_name or f"{user.first_name} {user.last_name}".strip() or user.email
     first_name, _, last_name = display_name.partition(" ")
     customer = Customer.objects.create(

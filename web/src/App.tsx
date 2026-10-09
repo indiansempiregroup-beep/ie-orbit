@@ -138,6 +138,9 @@ const PlatformClaimsPage = lazy(() =>
 const PlatformPackagesPage = lazy(() =>
   import('./features/admin/PlatformPackagesPage').then((m) => ({ default: m.PlatformPackagesPage })),
 );
+const PlatformUsagePricingPage = lazy(() =>
+  import('./features/admin/PlatformUsagePricingPage').then((m) => ({ default: m.PlatformUsagePricingPage })),
+);
 const PlatformAuthSettingsPage = lazy(() =>
   import('./features/admin/PlatformAuthSettingsPage').then((m) => ({ default: m.PlatformAuthSettingsPage })),
 );
@@ -247,6 +250,7 @@ function App() {
                 <Route path="analytics" element={<PlatformAnalyticsPage />} />
                 <Route path="claims" element={<PlatformClaimsPage />} />
                 <Route path="packages" element={<PlatformPackagesPage />} />
+                <Route path="usage-pricing" element={<PlatformUsagePricingPage />} />
                 <Route path="affiliates" element={<PlatformAffiliatesPage />} />
                 <Route path="coupons" element={<PlatformCouponsPage />} />
                 <Route path="tickets" element={<PlatformTicketsPage />} />

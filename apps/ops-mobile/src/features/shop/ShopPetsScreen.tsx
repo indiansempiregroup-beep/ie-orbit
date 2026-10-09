@@ -91,7 +91,7 @@ export function ShopPetsScreen() {
       await refreshWorkspace();
       setMessage(`Pets pack subscribed · ₹${petsPriceInr}/month`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to subscribe to Pets pack');
+      setMessage(err instanceof Error ? err.message : "Couldn't subscribe to Pets pack. Try again.");
     } finally {
       setSubscribing(false);
     }

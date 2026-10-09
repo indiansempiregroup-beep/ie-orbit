@@ -155,15 +155,15 @@ export function GrowAdsScreen() {
       };
       if (editingId) {
         await client.shop.updateAd(editingId, payload);
-        toast.push('Ad updated', 'success');
+        toast.push('Ad details saved.', 'success');
       } else {
         await client.shop.createAd(payload);
-        toast.push('Ad created', 'success');
+        toast.push('Ad added.', 'success');
       }
       resetForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to save ad', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't save this ad. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -180,10 +180,10 @@ export function GrowAdsScreen() {
             if (!client) return;
             try {
               await client.shop.deleteAd(ad.id);
-              toast.push('Ad deleted', 'success');
+              toast.push('Ad removed.', 'success');
               await load();
             } catch (err) {
-              toast.push(err instanceof Error ? err.message : 'Unable to delete', 'error');
+              toast.push(err instanceof Error ? err.message : "Couldn't remove this ad. Try again.", 'error');
             }
           })();
         },

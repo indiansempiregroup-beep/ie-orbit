@@ -231,7 +231,7 @@ export function ShopMasterKindScreen() {
       setValue('');
       setFilter('all');
       setSearch('');
-      toast.push('Added.', 'success');
+      toast.push('Entry added.', 'success');
       setItems((current) => {
         if (current.some((row) => row.id === created.data.id)) {
           return current.map((row) => (row.id === created.data.id ? created.data : row));
@@ -243,7 +243,7 @@ export function ShopMasterKindScreen() {
       });
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to save'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
     } finally {
       setBusy(false);
     }
@@ -257,7 +257,7 @@ export function ShopMasterKindScreen() {
       setItems((current) => current.map((item) => (item.id === row.id ? updated.data : item)));
       toast.push(row.is_active ? 'Hidden from pickers.' : 'Shown in pickers.', 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to update'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
     } finally {
       setRowBusyId(null);
     }
@@ -276,9 +276,9 @@ export function ShopMasterKindScreen() {
     try {
       await client.shop.deleteMasterRecord(kind, row.id);
       setItems((current) => current.filter((item) => item.id !== row.id));
-      toast.push('Deleted.', 'success');
+      toast.push('Entry removed.', 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to delete'), 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
     } finally {
       setRowBusyId(null);
     }

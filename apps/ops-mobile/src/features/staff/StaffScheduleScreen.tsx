@@ -127,10 +127,10 @@ export function StaffScheduleScreen() {
             setMessage(null);
             try {
               await bulkUpsert(route.params.staffId, rows);
-              setMessage('Schedule saved.');
-              toast.push('Schedule saved.', 'success');
+              setMessage('Weekly schedule saved.');
+              toast.push('Weekly schedule saved.', 'success');
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to save schedule.'));
+              setError(getApiErrorMessage(err, "Couldn't save the schedule. Try again."));
             } finally {
               setSaving(false);
             }

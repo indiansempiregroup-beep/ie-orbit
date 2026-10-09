@@ -15,6 +15,7 @@ import { resolveMediaAssetUrl } from '../../lib/mediaUrl';
 import { canWriteServices } from '../../utils/roles';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { ProductImageCropModal, type ProductImageCropResult } from '../shop/ProductImageCropModal';
+import { useSnackbar } from '../../hooks/useSnackbar';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServiceDetailPage() {
@@ -27,6 +28,7 @@ export function ServiceDetailPage() {
   const serviceQuery = useServiceDetail(serviceId);
   const updateService = useServiceUpdate();
   const editDialog = useDialog();
+  const snackbar = useSnackbar();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const entitledFeatures = useMemo(() => {
     const snapshot = billingQuery.data;
@@ -289,8 +291,11 @@ export function ServiceDetailPage() {
                 });
                 editDialog.hide();
                 await serviceQuery.refetch();
+                snackbar.push('Service details saved.', 'success');
               } catch (err) {
-                setEditError(err instanceof Error ? err.message : 'Failed to update service');
+                setEditError(
+                  err instanceof Error ? err.message : "Couldn't save this service. Check the details and try again.",
+                );
               } finally {
                 setSaving(false);
               }

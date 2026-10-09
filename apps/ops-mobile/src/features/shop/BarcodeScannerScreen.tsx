@@ -11,6 +11,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
 import { addProductToPosSession, readPosSession } from './posSession';
 import { addBulkScanItem, hasBulkScanCode } from './bulkScanSession';
+import { startEnrichPrefetch } from './enrichPrefetchSession';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BarcodeScanner'>;
 type ScanHandler = (event: { data: string }) => void;
@@ -163,6 +164,18 @@ export function BarcodeScannerScreen() {
           return;
         }
         if (forAddProduct) {
+          // Start enrich while navigating back so the form does not wait on a cold start.
+          startEnrichPrefetch(
+            code,
+            businessId,
+            client.shop
+              .enrichBarcode({
+                business_id: businessId,
+                code,
+                use_smart_lookup: true,
+              })
+              .then((response) => response.data),
+          );
           navigation.dispatch((state) => {
             const formIndex = state.routes.findIndex((entry) => entry.name === 'ShopProductAdd');
             if (formIndex >= 0) {

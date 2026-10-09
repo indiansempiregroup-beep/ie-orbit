@@ -54,7 +54,7 @@ export function WhatsAppNotificationTemplateDetailScreen({ route }: Props) {
       setMessage('Submitted to Meta. Refresh if status is still pending.');
       toast.push('Template submitted to Meta.', 'success');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to sync this template.'));
+      setError(getApiErrorMessage(err, "Couldn't sync this template. Try again."));
     } finally {
       setBusy(false);
     }
@@ -71,7 +71,7 @@ export function WhatsAppNotificationTemplateDetailScreen({ route }: Props) {
       setTemplate(response.data);
       toast.push(enabled ? 'Template enabled.' : 'Template disabled.', 'success');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to update template.'));
+      setError(getApiErrorMessage(err, "Couldn't update this template. Try again."));
     } finally {
       setBusy(false);
     }
@@ -91,7 +91,7 @@ export function WhatsAppNotificationTemplateDetailScreen({ route }: Props) {
       setMessage('Test message submitted.');
       toast.push('Test message submitted.', 'success');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to send test.'));
+      setError(getApiErrorMessage(err, "Couldn't send the test. Try again."));
     } finally {
       setBusy(false);
     }

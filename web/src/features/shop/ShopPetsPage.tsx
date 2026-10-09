@@ -13,7 +13,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
-import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../config/products';
+import { formatSaasFromMinor, hasPetsPack, PETS_PACK_PRICE_INR } from '../../config/products';
+import { formatMoney } from '../../lib/currency';
 import { useBusinessBillingSnapshotQuery, useUpdateBusinessAddonsMutation } from '../settings/billingHooks';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { resolveMediaAssetUrl, toStoredMediaAssetUrl } from '../../lib/mediaUrl';
@@ -68,9 +69,11 @@ export function ShopPetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const updateAddons = useUpdateBusinessAddonsMutation(workspace.businessId ?? undefined);
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
-  const petsPriceInr = Math.round(
-    (billingQuery.data?.pricing?.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100) / 100,
-  );
+  const petsPriceMinor =
+    billingQuery.data?.pricing?.addon_pets_unit_paise ?? PETS_PACK_PRICE_INR * 100;
+  const petsPriceLabel =
+    formatSaasFromMinor(petsPriceMinor, 'INR') ??
+    formatMoney(petsPriceMinor / 100, 'INR');
   const petsSubscribed = hasPetsPack(workspace.activeBusiness?.product_subscriptions);
   const customers = useQuery({
     queryKey: ['customers', workspace.businessId],
@@ -180,9 +183,9 @@ export function ShopPetsPage() {
       });
       await workspace.refreshWorkspace();
       await queryClient.invalidateQueries({ queryKey: ['shop'] });
-      snackbar.push(`Pets pack subscribed · ₹${petsPriceInr}/month`, 'success');
+      snackbar.push(`Pets pack subscribed · ${petsPriceLabel}/month`, 'success');
     } catch (error) {
-      const text = getApiErrorMessage(error, 'Unable to subscribe to Pets pack.');
+      const text = getApiErrorMessage(error, "Couldn't subscribe to Pets pack. Try again.");
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -269,16 +272,16 @@ export function ShopPetsPage() {
       if (editingId) {
         await patchPet.mutateAsync({ petId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Pet updated.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Pet details saved.', 'success'), 0);
       } else {
         await createPet.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Pet saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Pet added.', 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to save pet.';
+      const text = error instanceof Error ? error.message : "Couldn't save this pet. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -291,11 +294,11 @@ export function ShopPetsPage() {
     try {
       await deletePet.mutateAsync(editingId);
       dialog.hide();
-      window.setTimeout(() => snackbar.push('Pet deleted.', 'success'), 0);
+      window.setTimeout(() => snackbar.push('Pet removed.', 'success'), 0);
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to delete pet.';
+      const text = error instanceof Error ? error.message : "Couldn't remove this pet. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -319,7 +322,7 @@ export function ShopPetsPage() {
       closeNotify();
       snackbar.push(`Notification sent to owner of ${selectedPet.name} (${channels}).`, 'success');
     } catch (error) {
-      setNotifyMessage(getApiErrorMessage(error, 'Unable to notify owner.'));
+      setNotifyMessage(getApiErrorMessage(error, "Couldn't notify the owner. Try again."));
     }
   }
 
@@ -330,7 +333,7 @@ export function ShopPetsPage() {
       {!petsSubscribed ? (
         <Card>
           <p>
-            Pets pack manages pet profiles, birthdays, and owner alerts for ₹{petsPriceInr}/month.
+            Pets pack manages pet profiles, birthdays, and owner alerts for {petsPriceLabel}/month.
           </p>
           <Button
             type="button"
@@ -338,7 +341,7 @@ export function ShopPetsPage() {
             onClick={() => void subscribePets()}
             disabled={updateAddons.isPending}
           >
-            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ₹${petsPriceInr}/mo`}
+            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ${petsPriceLabel}/mo`}
           </Button>
           {message ? <p role="status">{message}</p> : null}
         </Card>

@@ -227,15 +227,15 @@ export function ShopCouponsScreen() {
       };
       if (editingId) {
         await client.shop.updateCoupon(editingId, payload);
-        toast.push('Coupon updated.', 'success');
+        toast.push('Coupon details saved.', 'success');
       } else {
         await client.shop.createCoupon(payload);
-        toast.push('Coupon saved.', 'success');
+        toast.push('Coupon added.', 'success');
       }
       closeForm();
       await load();
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to save coupon';
+      const text = err instanceof Error ? err.message : "Couldn't save this coupon. Try again.";
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -254,11 +254,11 @@ export function ShopCouponsScreen() {
     if (!ok) return;
     try {
       await client.shop.deleteCoupon(editingId);
-      toast.push('Coupon deleted.', 'success');
+      toast.push('Coupon removed.', 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to delete', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't remove this coupon. Try again.", 'error');
     }
   }
 

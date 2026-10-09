@@ -182,7 +182,10 @@ export function CartScreen() {
   const currency = lines[0]?.product.currency || business?.currency || 'INR';
   const upiVpa = business?.upi_vpa || '';
   const codEnabled = Boolean(business?.cod_enabled ?? true);
-  const canPayCash = codEnabled;
+  const codAllowedForInstant = Boolean(business?.cod_allowed_for_instant_delivery ?? true);
+  const canPayCash =
+    codEnabled &&
+    !(fulfillment === 'delivery' && deliveryMethod === 'instant' && !codAllowedForInstant);
   const canPayQr = Boolean(upiVpa || business?.payment_qr_url);
   const canPayRazorpay = Boolean(business?.razorpay?.can_accept_payments);
   const canPayCashfree = Boolean(business?.cashfree?.can_accept_payments);
@@ -938,10 +941,10 @@ export function CartScreen() {
           result: result.payload,
         });
       }
-      toast.push('Payment successful.', 'success');
+      toast.push('Payment received.', 'success');
       navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Payment verification failed.', 'error');
+      toast.push(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details.", 'error');
       navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } finally {
       setPendingGatewayOrderId(null);
@@ -1430,8 +1433,8 @@ export function CartScreen() {
             ) : null}
             {paymentMethod === 'upi' && (previewUpiUrl || business?.payment_qr_url) ? (
               <Text style={styles.meta}>
-                After you tap Place order, pay {formatShopMoney(grandTotal, currency)}, then add a
-                payment screenshot or UPI reference to confirm.
+                After you tap Place order, pay {formatShopMoney(grandTotal, currency)} in UPI, then
+                upload the payment confirmation screenshot to place the order.
               </Text>
             ) : null}
             {paymentMethod === 'upi' && !previewUpiUrl && !business?.payment_qr_url ? (
@@ -1653,7 +1656,7 @@ export function CartScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sheetTitle}>Pay with UPI</Text>
                   <Text style={styles.sheetSubtitle}>
-                    Scan, pay, then add a screenshot or UPI reference
+                    Pay first, then upload the confirmation screenshot below
                   </Text>
                 </View>
                 <Pressable
@@ -1672,6 +1675,19 @@ export function CartScreen() {
                 bounces={false}
                 contentContainerStyle={styles.upiPayBody}
               >
+                <View style={styles.upiSteps}>
+                  <Text style={styles.upiStepsTitle}>How to pay</Text>
+                  <Text style={styles.upiStepItem}>
+                    1. Scan the QR or open Google Pay / PhonePe and pay the exact amount
+                  </Text>
+                  <Text style={styles.upiStepItem}>
+                    2. After payment succeeds, take a screenshot of the confirmation in your UPI app
+                  </Text>
+                  <Text style={styles.upiStepItem}>
+                    3. Upload that screenshot below (UTR optional), then confirm & place order
+                  </Text>
+                </View>
+
                 <View style={styles.upiAmountCard}>
                   <Text style={styles.upiAmountLabel}>Amount to pay</Text>
                   <Text style={[styles.upiAmountValue, { color: primary }]}>
@@ -1711,6 +1727,10 @@ export function CartScreen() {
                   ) : null}
                 </View>
 
+                <Text style={styles.upiAfterPayHint}>
+                  After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+                </Text>
+
                 <Pressable
                   style={[
                     styles.upiUploadZone,
@@ -1748,9 +1768,8 @@ export function CartScreen() {
                         {upiProofUploading ? 'Uploading…' : 'Upload payment screenshot'}
                       </Text>
                       <Text style={styles.upiUploadHint}>
-                        {upiUtr.trim()
-                          ? 'Optional if you entered a reference below'
-                          : 'Or enter a UPI / UTR reference below'}
+                        Screenshot the UPI success screen after you pay
+                        {upiUtr.trim() ? ' · UTR optional if screenshot is attached' : ''}
                       </Text>
                     </View>
                   )}
@@ -2203,6 +2222,30 @@ const styles = StyleSheet.create({
   upiPayBody: {
     gap: spacing.md,
     paddingBottom: spacing.sm,
+  },
+  upiSteps: {
+    gap: 6,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  upiStepsTitle: {
+    ...typography.label,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginBottom: 2,
+  },
+  upiStepItem: {
+    ...typography.caption,
+    color: colors.foreground,
+    lineHeight: 18,
+  },
+  upiAfterPayHint: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+    lineHeight: 18,
   },
   upiAmountCard: {
     alignItems: 'center',

@@ -914,6 +914,19 @@ class MerchantPaymentSettingsView(APIView):
                     test_connection=bool(cashfree.get("test_connection", data.get("test_connection", True))),
                     upi_vpa=data.get("upi_vpa"),
                 )
+            stripe = data.get("stripe") if isinstance(data.get("stripe"), dict) else None
+            if stripe is not None:
+                action = str(stripe.get("action") or "").strip().lower()
+                web_base = request.build_absolute_uri("/settings/payments")
+                if action in {"", "start_connect", "connect"}:
+                    payload = self.payments.start_stripe_connect(
+                        business=business,
+                        refresh_url=str(stripe.get("refresh_url") or f"{web_base}?stripe=refresh"),
+                        return_url=str(stripe.get("return_url") or f"{web_base}?stripe=return"),
+                        email=str(getattr(business, "email", "") or "") or None,
+                    )
+                elif action in {"complete", "mark_complete"}:
+                    payload = self.payments.mark_stripe_connect_complete(business=business)
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         payload["webhook_url"] = self._webhook_url(request, business)

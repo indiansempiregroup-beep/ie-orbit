@@ -101,7 +101,13 @@ def _resolve_mobile_shop_payment_method(
         str(getattr(business, "upi_vpa", "") or "").strip()
         or str(getattr(business, "payment_qr_url", "") or "").strip()
     )
-    if shop_settings.cod_enabled:
+    delivery_method = str(request.data.get("delivery_method") or "").strip().lower()
+    instant_blocks_cod = (
+        mode == FulfillmentMode.DELIVERY
+        and delivery_method == "instant"
+        and not shop_settings.cod_allowed_for_instant_delivery
+    )
+    if shop_settings.cod_enabled and not instant_blocks_cod:
         return "cash"
     if upi_available:
         return "upi"

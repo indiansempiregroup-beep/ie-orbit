@@ -54,7 +54,7 @@ export function ShopBillingPage() {
       const invoice = await createInvoice.mutateAsync(orderId);
       setMessage(`Invoice ${invoice.invoice_number} created.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to create invoice.');
+      setMessage(error instanceof Error ? error.message : "Couldn't create this invoice. Try again.");
     }
   }
 

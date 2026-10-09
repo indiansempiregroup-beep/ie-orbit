@@ -80,7 +80,7 @@ export function PlatformCouponsPage() {
       setCreateOpen(false);
       resetCreateForm();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to save coupon.');
+      setMessage(err instanceof Error ? err.message : "Couldn't save this coupon. Try again.");
     }
   }
 
@@ -93,7 +93,7 @@ export function PlatformCouponsPage() {
         reason: nextActive ? 'Reactivate coupon' : 'Deactivate coupon',
       });
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to update coupon.');
+      setMessage(err instanceof Error ? err.message : "Couldn't save this coupon. Try again.");
     }
   }
 

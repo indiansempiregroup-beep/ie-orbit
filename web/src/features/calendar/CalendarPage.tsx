@@ -428,12 +428,12 @@ export function CalendarPage() {
               onSuccess: () => {
                 dialog.hide();
                 setSelectedSlot(null);
-                snackbar.push('Booking created successfully', 'success');
+                snackbar.push('Booking created.', 'success');
                 void availabilityQuery.refetch();
                 void bookingsQuery.refetch();
               },
               onError: (error) => {
-                const message = error.message ?? 'Failed to create booking';
+                const message = error.message ?? "Couldn't create this booking. Check the details and try again.";
                 setCreationError(message);
                 snackbar.push(message, 'error');
               },

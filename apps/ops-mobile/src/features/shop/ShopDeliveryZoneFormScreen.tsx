@@ -115,14 +115,14 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
     try {
       if (zoneId) {
         await client.shop.patchDeliveryZone(zoneId, payload);
-        toast.push('Zone updated.', 'success');
+        toast.push('Delivery zone saved.', 'success');
       } else {
         await client.shop.createDeliveryZone(payload);
-        toast.push('Zone saved.', 'success');
+        toast.push('Delivery zone added.', 'success');
       }
       navigation.goBack();
     } catch (err) {
-      const text = err instanceof Error ? err.message : 'Unable to save zone';
+      const text = err instanceof Error ? err.message : "Couldn't save this delivery zone. Try again.";
       setError(text);
       toast.push(text, 'error');
     } finally {

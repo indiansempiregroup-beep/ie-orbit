@@ -169,10 +169,10 @@ export function BusinessEditScreen() {
                 ...(logo ? { logo } : {}),
               });
               await refreshWorkspace();
-              setMessage('Business profile updated.');
-              toast.push('Business profile updated.', 'success');
+              setMessage('Business profile saved.');
+              toast.push('Business profile saved.', 'success');
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to update business.'));
+              setError(getApiErrorMessage(err, "Couldn't save business details. Try again."));
             } finally {
               setLoading(false);
             }

@@ -24,8 +24,17 @@ import type {
   PlatformAffiliateReferral,
 } from '@ie-orbit/sdk';
 
-function paiseToInr(paise?: number | null) {
-  return `₹${((paise || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+function formatCommissionMinor(minor?: number | null, currency = 'INR') {
+  const amount = (minor || 0) / 100;
+  const code = currency.toUpperCase();
+  if (code === 'USD') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  }
+  return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 function inrToPaise(value: string) {
@@ -341,14 +350,14 @@ export function PlatformAffiliatesPage() {
       if (selectedId === item.id) setSelectedId(null);
       setMessage(`Deleted ${item.name}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to delete affiliate');
+      setMessage(error instanceof Error ? error.message : "Couldn't remove this affiliate. Try again.");
     } finally {
       setBusyId(null);
     }
   }
 
   async function voidEntry(item: PlatformAffiliateLedgerEntry) {
-    if (!window.confirm(`Void this ${kindLabel(item.kind).toLowerCase()} of ${paiseToInr(item.amount_paise)}?`)) {
+    if (!window.confirm(`Void this ${kindLabel(item.kind).toLowerCase()} of ${formatCommissionMinor(item.amount_paise)}?`)) {
       return;
     }
     setBusyId(item.id);
@@ -357,7 +366,7 @@ export function PlatformAffiliatesPage() {
       invalidate();
       setMessage(`Voided ${kindLabel(item.kind).toLowerCase()}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to void entry');
+      setMessage(error instanceof Error ? error.message : "Couldn't void this entry. Try again.");
     } finally {
       setBusyId(null);
     }
@@ -411,7 +420,7 @@ export function PlatformAffiliatesPage() {
             <div style={{ textAlign: 'right' }}>
               <div className={`admin-ledger__amount${item.status === 'void' ? ' admin-ledger__amount--void' : ''}`}>
                 {item.kind === 'earning' ? '+' : '−'}
-                {paiseToInr(item.amount_paise)}
+                {formatCommissionMinor(item.amount_paise)}
               </div>
               {item.status !== 'void' ? (
                 <button
@@ -464,11 +473,11 @@ export function PlatformAffiliatesPage() {
       <div className="admin-kpi-grid">
         <AdminKpi label="Affiliates" value={insights?.affiliate_count ?? affiliates.length} icon={<Handshake size={16} />} />
         <AdminKpi label="Referred businesses" value={insights?.referral_count ?? referrals.length} />
-        <AdminKpi label="Total earned" value={paiseToInr(insights?.earned_paise)} tone="good" />
+        <AdminKpi label="Total earned" value={formatCommissionMinor(insights?.earned_paise)} tone="good" />
         <AdminKpi
           label="Outstanding"
-          value={paiseToInr(insights?.outstanding_paise)}
-          hint={`${paiseToInr(insights?.paid_paise)} paid · ${paiseToInr(insights?.credited_paise)} credited`}
+          value={formatCommissionMinor(insights?.outstanding_paise)}
+          hint={`${formatCommissionMinor(insights?.paid_paise)} paid · ${formatCommissionMinor(insights?.credited_paise)} credited`}
           tone={(insights?.outstanding_paise || 0) > 0 ? 'warn' : 'default'}
         />
       </div>
@@ -529,10 +538,10 @@ export function PlatformAffiliatesPage() {
                       )}
                     </td>
                     <td>{item.referral_count ?? 0}</td>
-                    <td>{paiseToInr(item.earned_paise)}</td>
+                    <td>{formatCommissionMinor(item.earned_paise)}</td>
                     <td>
-                      <strong>{paiseToInr(item.outstanding_paise)}</strong>
-                      <div className="admin-table__muted">{paiseToInr(item.settled_paise)} settled</div>
+                      <strong>{formatCommissionMinor(item.outstanding_paise)}</strong>
+                      <div className="admin-table__muted">{formatCommissionMinor(item.settled_paise)} settled</div>
                     </td>
                     <td>{payoutLabel(item)}</td>
                     <td className="admin-table__actions">
@@ -574,8 +583,8 @@ export function PlatformAffiliatesPage() {
                     <div className="admin-table__muted">{item.referred_tenant_slug}</div>
                   </td>
                   <td>{formatWhen(item.starts_at || item.created_at)}</td>
-                  <td>{paiseToInr(item.earned_paise)}</td>
-                  <td>{paiseToInr(item.outstanding_paise)}</td>
+                  <td>{formatCommissionMinor(item.earned_paise)}</td>
+                  <td>{formatCommissionMinor(item.outstanding_paise)}</td>
                   <td className="admin-table__actions">
                     <button
                       type="button"
@@ -646,12 +655,12 @@ export function PlatformAffiliatesPage() {
         {detailAffiliate ? (
           <>
             <div className="admin-kpi-grid">
-              <AdminKpi label="Earned" value={paiseToInr(detailAffiliate.earned_paise)} />
-              <AdminKpi label="Paid" value={paiseToInr(detailAffiliate.paid_paise)} />
-              <AdminKpi label="Credited" value={paiseToInr(detailAffiliate.credited_paise)} />
+              <AdminKpi label="Earned" value={formatCommissionMinor(detailAffiliate.earned_paise)} />
+              <AdminKpi label="Paid" value={formatCommissionMinor(detailAffiliate.paid_paise)} />
+              <AdminKpi label="Credited" value={formatCommissionMinor(detailAffiliate.credited_paise)} />
               <AdminKpi
                 label="Outstanding"
-                value={paiseToInr(detailAffiliate.outstanding_paise)}
+                value={formatCommissionMinor(detailAffiliate.outstanding_paise)}
                 tone={(detailAffiliate.outstanding_paise || 0) > 0 ? 'warn' : 'good'}
               />
             </div>
@@ -708,8 +717,8 @@ export function PlatformAffiliatesPage() {
                         {item.affiliate_code || '—'} · {formatWhen(item.starts_at)}
                       </div>
                     </td>
-                    <td>{paiseToInr(item.earned_paise)}</td>
-                    <td>{paiseToInr(item.outstanding_paise)}</td>
+                    <td>{formatCommissionMinor(item.earned_paise)}</td>
+                    <td>{formatCommissionMinor(item.outstanding_paise)}</td>
                     <td>
                       <button
                         type="button"
@@ -762,7 +771,7 @@ export function PlatformAffiliatesPage() {
                   setCreateOpen(false);
                   resetCreateForm();
                 } catch (error) {
-                  setMessage(error instanceof Error ? error.message : 'Unable to save affiliate');
+                  setMessage(error instanceof Error ? error.message : "Couldn't save this affiliate. Try again.");
                 }
               })();
             }}
@@ -857,7 +866,7 @@ export function PlatformAffiliatesPage() {
                 />
               </AdminField>
             ) : (
-              <AdminField label="Commission amount (INR)" hint="Added to this affiliate’s payment book automatically.">
+              <AdminField label="Commission amount (SaaS currency)" hint="Added to this affiliate’s payment book automatically.">
                 <input
                   value={defaultCommissionInr}
                   onChange={(event) => setDefaultCommissionInr(event.target.value)}
@@ -936,7 +945,7 @@ export function PlatformAffiliatesPage() {
                   await saveLedger.mutateAsync();
                   setLedgerOpen(null);
                 } catch (error) {
-                  setMessage(error instanceof Error ? error.message : 'Unable to save ledger entry');
+                  setMessage(error instanceof Error ? error.message : "Couldn't save this ledger entry. Try again.");
                 }
               })();
             }}
@@ -972,7 +981,7 @@ export function PlatformAffiliatesPage() {
             <input value={period} onChange={(event) => setPeriod(event.target.value)} />
           </AdminField>
         ) : null}
-        <AdminField label="Amount (INR)">
+        <AdminField label="Amount (SaaS currency)">
           <input value={amountInr} onChange={(event) => setAmountInr(event.target.value)} />
         </AdminField>
         {ledgerOpen === 'payment' ? (

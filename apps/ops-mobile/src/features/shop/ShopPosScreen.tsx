@@ -1208,17 +1208,17 @@ export function ShopPosScreen() {
       const fallback =
         isOrder || isChallan
           ? isPurchaseOrder
-            ? 'Unable to create purchase order'
+            ? "Couldn't create this purchase order. Try again."
             : isChallan
-              ? 'Unable to create delivery challan'
-              : 'Unable to create sale order'
+              ? "Couldn't create this delivery challan. Try again."
+              : "Couldn't create this sale order. Try again."
           : isQuotation
-            ? 'Unable to create quotation'
+            ? "Couldn't create this quotation. Try again."
             : isNote
-              ? 'Unable to record note'
+              ? "Couldn't record this note. Try again."
               : isPurchase
-                ? 'Unable to record purchase'
-                : 'Unable to create bill';
+                ? "Couldn't record this purchase. Try again."
+                : "Couldn't create this bill. Try again.";
       const text = getApiErrorMessage(err, fallback);
       setMessage(text);
       toast.push(text, 'error');

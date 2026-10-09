@@ -163,6 +163,63 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
 
 
 @pytest.mark.django_db
+def test_borrow_sale_document_omits_upi_qr(shop_business, customer):
+    product = _product(shop_business, name="Credit Soap", price="100.00", gst_rate="18")
+    shop_business.upi_vpa = "shop@upi"
+    shop_business.payment_qr_url = "https://example.com/static-qr.png"
+    shop_business.save(update_fields=["upi_vpa", "payment_qr_url", "updated_at"])
+
+    voucher = BooksService().create_sale_voucher(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "customer": customer,
+            "lines": [{"product_id": product.id, "qty": "1", "rate": "100", "gst_rate": "18"}],
+            "amount_paid": "0",
+            "metadata": {
+                "payment": {
+                    "method": "borrow",
+                    "status": "due",
+                    "amount_paid": "0.00",
+                    "amount_due": "118.00",
+                }
+            },
+        },
+    )
+    docs = ShopDocumentService()
+    payload = docs.build_payload(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        kind="sale",
+        document_id=voucher.id,
+    )
+    assert payload["payment_method"] == "borrow"
+    assert Decimal(payload["amount_due"]) > 0
+    assert payload["upi_pay_url"] == ""
+    assert payload["payment_qr_url"] == ""
+
+    html = docs.render_html(payload)
+    assert "Amount due" in html
+    assert "Scan to pay" not in html
+    assert "qr-img" not in html
+    assert "upi://pay" not in html
+
+    thermal_html = docs.render_html(payload, layout=LAYOUT_THERMAL)
+    assert "Scan to pay" not in thermal_html
+    assert "qr-img" not in thermal_html
+    assert "upi://pay" not in thermal_html
+
+    a4_pdf = docs.build_pdf(payload, layout="a4")
+    thermal_pdf = docs.build_pdf(payload, layout=LAYOUT_THERMAL)
+    assert a4_pdf.startswith(b"%PDF")
+    assert thermal_pdf.startswith(b"%PDF")
+    assert b"Pay via UPI" not in a4_pdf
+    assert b"shop@upi" not in a4_pdf
+    assert b"UPI shop@upi" not in thermal_pdf
+    assert b"shop@upi" not in thermal_pdf
+
+
+@pytest.mark.django_db
 def test_quotation_and_challan_document_kinds(shop_business, customer):
     product = _product(shop_business, name="Shampoo", price="200.00", gst_rate="18")
     quote = OrderService().create_quotation(

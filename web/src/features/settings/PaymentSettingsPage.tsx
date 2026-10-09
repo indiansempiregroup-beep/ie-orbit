@@ -67,14 +67,14 @@ export function PaymentSettingsPage() {
       snackbar.push(
         response.data.connected
           ? nextEnabled
-            ? 'Razorpay connected, tested, and enabled.'
-            : 'Razorpay connected and tested.'
+            ? 'Razorpay is connected and ready.'
+            : 'Razorpay tested.'
           : 'Razorpay settings saved.',
         'success',
       );
     } catch (error) {
       setEnabled(Boolean(settings?.enabled && settings?.connected));
-      snackbar.push(getApiErrorMessage(error, 'Unable to connect Razorpay.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't connect Razorpay. Check the keys and try again."), 'error');
     } finally {
       setSaving(false);
     }
@@ -101,14 +101,14 @@ export function PaymentSettingsPage() {
       snackbar.push(
         response.data.cashfree?.connected
           ? nextEnabled
-            ? 'Cashfree connected, tested, and enabled.'
-            : 'Cashfree connected and tested.'
+            ? 'Cashfree is connected and ready.'
+            : 'Cashfree tested.'
           : 'Cashfree settings saved.',
         'success',
       );
     } catch (error) {
       setCashfreeEnabled(Boolean(settings?.cashfree?.enabled && settings?.cashfree?.connected));
-      snackbar.push(getApiErrorMessage(error, 'Unable to connect Cashfree.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't connect Cashfree. Check the keys and try again."), 'error');
     } finally {
       setSavingCashfree(false);
     }
@@ -128,16 +128,75 @@ export function PaymentSettingsPage() {
 
   if (loading) return <p role="status">Loading payment settings…</p>;
 
+  const billingRegion = settings?.billing_region ?? 'IN';
+  const isIntl = billingRegion === 'INTL';
+
+  async function startStripeConnect() {
+    if (!workspace.businessId) return;
+    setSaving(true);
+    try {
+      const response = await client.shop.updateMerchantPaymentSettings({
+        business_id: workspace.businessId,
+        stripe: { action: 'start_connect' },
+      });
+      setSettings(response.data);
+      const url = response.data.stripe?.onboarding_url;
+      if (url) {
+        window.location.assign(url);
+        return;
+      }
+      snackbar.push('Stripe Connect started. Complete onboarding when the link is ready.', 'success');
+    } catch (error) {
+      snackbar.push(getApiErrorMessage(error, 'Unable to start Stripe Connect.'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="page-stack" style={{ display: 'grid', gap: 16 }}>
       <div>
         <h1 style={{ marginBottom: 6 }}>Payments</h1>
         <p style={{ margin: 0, color: '#6b7280' }}>
-          Connect your own Razorpay and/or Cashfree accounts. Customer payments settle directly to
-          the merchant account. We never hold your money.
+          {isIntl
+            ? 'Connect Stripe so customers pay you for shop orders. Settlement is to your Stripe account. Platform subscription (USD) is billed separately.'
+            : 'Connect your own Razorpay and/or Cashfree accounts. Customer payments settle directly to the merchant account. We never hold your money.'}
         </p>
       </div>
 
+      {isIntl ? (
+        <Card>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+            <div>
+              <strong>Stripe Connect</strong>
+              <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
+                {!settings?.stripe?.platform_enabled
+                  ? 'Disabled for this tenant by the platform administrator.'
+                  : !settings?.stripe?.plan_entitled
+                    ? 'Upgrade to a package that includes Stripe customer payments.'
+                    : settings?.stripe?.connected
+                      ? `Connected${settings.stripe.account_id_masked ? ` as ${settings.stripe.account_id_masked}` : ''}.`
+                      : 'Create a Stripe Express account and finish onboarding to accept cards.'}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={saving || !settings?.stripe?.available}
+              onClick={() => void startStripeConnect()}
+            >
+              {saving
+                ? 'Opening Stripe…'
+                : settings?.stripe?.configured
+                  ? 'Continue Stripe onboarding'
+                  : 'Connect with Stripe'}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {!isIntl ? (
+        <>
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div>
@@ -413,6 +472,32 @@ export function PaymentSettingsPage() {
               : 'Connect Cashfree and test'}
         </Button>
       </div>
+        </>
+      ) : (
+        <>
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+          <div>
+            <strong>Allow cash on delivery / pay at pickup</strong>
+            <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
+              Customers pay in cash when they collect or receive the order. Turn off to require UPI only.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={codEnabled}
+            onChange={(event) => setCodEnabled(event.target.checked)}
+            aria-label="Allow cash on delivery"
+          />
+        </div>
+      </Card>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button variant="primary" onClick={() => void save()} disabled={saving}>
+              {saving ? 'Saving…' : 'Save payment preferences'}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

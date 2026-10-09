@@ -174,7 +174,7 @@ export function StaffPage() {
                               },
                               {
                                 onSuccess: () =>
-                                  snackbar.push(isActive ? 'Staff deactivated.' : 'Staff activated.', 'success'),
+                                  snackbar.push(isActive ? 'Team member deactivated.' : 'Team member is active again.', 'success'),
                                 onError: (error) => snackbar.push(error.message, 'error'),
                               },
                             )
@@ -218,12 +218,12 @@ export function StaffPage() {
               },
               {
                 onSuccess: () => {
-                  snackbar.push('Staff member added.', 'success');
+                  snackbar.push('Team member added.', 'success');
                   dialog.hide();
                   resetForm();
                 },
                 onError: (err) => {
-                  setCreationError(err.message ?? 'Failed to create staff');
+                  setCreationError(err.message ?? "Couldn't save this team member. Check the details and try again.");
                 },
               },
             );

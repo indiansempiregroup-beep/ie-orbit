@@ -46,9 +46,9 @@ export function BusinessManagementPage() {
       setSearchParams({});
       setNewBusinessName('');
       setNewDisplayName('');
-      snackbar.push('Business created successfully.', 'success');
+      snackbar.push('Business created.', 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to create business.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't save business details. Try again.", 'error');
     }
   }
 

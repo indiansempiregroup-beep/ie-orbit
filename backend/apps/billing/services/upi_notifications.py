@@ -130,7 +130,7 @@ def notify_upi_claim_submitted(session: BillingCheckoutSession) -> None:
         f"Submitted: {claimed}\n"
         "Confirm the claim to activate the subscription."
     )
-    owner_subject = f"We received your {products} payment"
+    owner_subject = f"Payment received · {products}"
     owner_body = (
         f"Thanks — your UPI payment of {amount} for {products} is with our team.\n"
         "Access stays as-is until we confirm (usually the same day). "
@@ -194,7 +194,7 @@ def notify_upi_claim_resolved(
     business_name = session.business.display_name if session.business_id else "a business"
     confirmed = str(action or "").strip().lower() == "confirm"
     if confirmed:
-        owner_subject = f"{products} is active"
+        owner_subject = f"{products} is active — you're all set"
         owner_body = (
             f"Your UPI payment of {amount} for {products} is confirmed. "
             "The product is unlocked for this billing period. We do not charge automatically — "
@@ -211,7 +211,7 @@ def notify_upi_claim_resolved(
         reason = str(note or "").strip() or "The payment could not be matched."
         owner_subject = f"{products} payment was not confirmed"
         owner_body = (
-            f"We could not confirm your UPI payment of {amount} for {products}. {reason} "
+            f"We couldn't confirm your UPI payment of {amount} for {products}. {reason} "
             "Open Products & billing to pay again or upload a clearer screenshot."
         )
         owner_headline = "Payment not confirmed"
@@ -282,7 +282,7 @@ def notify_refund_request_submitted(session: BillingCheckoutSession) -> None:
         f"{business_name} at {tenant_name} requested a refund of {requested} "
         f"(order {amount}) for {products}.\nReason: {reason}"
     )
-    owner_subject = f"Refund request received for {products}"
+    owner_subject = f"Refund request received · {products}"
     owner_body = (
         f"We received your refund request of {requested} for {products}. "
         "Our team will review it and update the order in Products & Billing."
@@ -343,7 +343,7 @@ def notify_refund_request_resolved(
     amount = _amount_label(session)
     resolved = str(action or "").strip().lower() == "resolve"
     if resolved:
-        owner_subject = f"Refund processed for {products}"
+        owner_subject = f"Refund processed · {products}"
         owner_body = (
             f"Your refund for {products} ({amount} order) has been processed. "
             f"{str(note or '').strip() or 'Check Products & Billing for the updated status.'}"
@@ -353,7 +353,7 @@ def notify_refund_request_resolved(
         reason = str(note or "").strip() or "The request could not be approved."
         owner_subject = f"Refund request for {products} was not approved"
         owner_body = (
-            f"We could not approve your refund request for {products}. {reason} "
+            f"We couldn't approve your refund request for {products}. {reason} "
             "You can keep using the product for the paid period, or contact support."
         )
         owner_headline = "Refund not approved"

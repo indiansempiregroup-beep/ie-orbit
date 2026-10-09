@@ -181,7 +181,7 @@ export function DocumentActionsSheet({
       snackbar.push(parts.join(' · ') || 'Sent', 'success');
       if (result.data.public_url) setPublicUrl(result.data.public_url);
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Send failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't send. Try again.", 'error');
     } finally {
       setSending(false);
     }

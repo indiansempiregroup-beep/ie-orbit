@@ -185,7 +185,7 @@ export function ShopVoucherForm({
       }
       navigate(`${backTo}?created=${encodeURIComponent(voucher.voucher_number)}`);
     } catch (error) {
-      setMessage(getApiErrorMessage(error, `Unable to save ${voucherType}.`));
+      setMessage(getApiErrorMessage(error, `Couldn't save this ${voucherType}. Try again.`));
     }
   }
 

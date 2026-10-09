@@ -621,6 +621,13 @@ class ShopBusinessSettings(TenantModel):
         default=True,
         help_text="Allow online customers to pay with cash on delivery or at pickup.",
     )
+    cod_allowed_for_instant_delivery = models.BooleanField(
+        default=True,
+        help_text=(
+            "Allow cash on delivery when the customer chooses instant delivery "
+            "(Porter / Shiprocket Quick). Turn off to require prepaid payment."
+        ),
+    )
     delivery_integration = models.JSONField(
         default=_default_delivery_integration,
         blank=True,

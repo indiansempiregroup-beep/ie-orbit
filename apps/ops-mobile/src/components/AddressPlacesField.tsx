@@ -27,6 +27,8 @@ type Props = {
   required?: boolean;
   optional?: boolean;
   fieldError?: string;
+  /** ISO 3166-1 alpha-2; omitted when unknown so the backend can default. */
+  countryCode?: string;
 };
 
 type Prediction = {
@@ -50,6 +52,7 @@ export function AddressPlacesField({
   required,
   optional,
   fieldError,
+  countryCode,
 }: Props) {
   const [query, setQuery] = useState(value);
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,7 +95,7 @@ export function AddressPlacesField({
             session_token: sessionTokenRef.current,
             latitude: biasRef.current.latitude ?? undefined,
             longitude: biasRef.current.longitude ?? undefined,
-            country_code: 'IN',
+            ...(countryCode ? { country_code: countryCode } : {}),
           });
           setPredictions(response.data.predictions ?? []);
         } catch (err) {
@@ -107,7 +110,7 @@ export function AddressPlacesField({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [searchTerm]);
+  }, [searchTerm, countryCode]);
 
   function handleTyping(text: string) {
     typedValueRef.current = text;

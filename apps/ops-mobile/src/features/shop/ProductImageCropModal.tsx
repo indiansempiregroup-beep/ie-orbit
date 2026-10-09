@@ -251,7 +251,7 @@ export function ProductImageCropModal({
         { removeBackground: canRemoveBackground && removeBackground },
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to crop photo.');
+      setError(err instanceof Error ? err.message : "Couldn't crop the photo. Try again.");
     } finally {
       setBusy(false);
     }

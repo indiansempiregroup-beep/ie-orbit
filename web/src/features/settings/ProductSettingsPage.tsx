@@ -32,7 +32,13 @@ import {
   useProductPlansQuery,
   useScheduleCancelBusinessProduct,
 } from './businessSettingsHooks';
-import { useBillingOrdersQuery, useBusinessBillingSnapshotQuery, usePublicBillingPlansQuery } from './billingHooks';
+import {
+  useBillingCheckout,
+  useBillingOrdersQuery,
+  useBillingStatusQuery,
+  useBusinessBillingSnapshotQuery,
+  usePublicBillingPlansQuery,
+} from './billingHooks';
 import { RewardPointsSettingsPanel } from './RewardPointsSettingsPanel';
 import { SeatsAddonsPanel } from './SeatsAddonsPanel';
 import { SmartLookupSettingsPanel } from './SmartLookupSettingsPanel';
@@ -304,6 +310,9 @@ export function ProductSettingsPage() {
   const publicCatalog = usePublicBillingPlansQuery();
   const billingSnapshot = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const billingOrders = useBillingOrdersQuery(workspace.businessId ?? undefined);
+  const billingStatus = useBillingStatusQuery();
+  const billingCheckout = useBillingCheckout();
+  const isIntlBilling = billingStatus.data?.billing_region === 'INTL';
   const snackbar = useSnackbar();
   const [upiRequest, setUpiRequest] = useState<SubscriptionUpiPayRequest | null>(null);
   const [selectedPay, setSelectedPay] = useState<string[]>([]);
@@ -330,10 +339,10 @@ export function ProductSettingsPage() {
     onSuccess: async () => {
       setRefundDraft(null);
       await billingOrders.refetch();
-      snackbar.push('Refund request submitted.', 'success');
+      snackbar.push('Refund requested — IE will email you after review.', 'success');
     },
     onError: (error) => {
-      snackbar.push(getApiErrorMessage(error, 'Unable to request refund.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't request a refund. Try again."), 'error');
     },
   });
 
@@ -349,7 +358,7 @@ export function ProductSettingsPage() {
       snackbar.push('Refund request withdrawn.', 'success');
     },
     onError: (error) => {
-      snackbar.push(getApiErrorMessage(error, 'Unable to withdraw refund request.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't withdraw the refund request. Try again."), 'error');
     },
   });
 
@@ -470,6 +479,31 @@ export function ProductSettingsPage() {
       snackbar.push('Choose a plan first.', 'error');
       return;
     }
+    if (isIntlBilling) {
+      if (items.length > 1) {
+        snackbar.push('Pay one subscription at a time with Stripe.', 'warning');
+      }
+      const item = items[0];
+      billingCheckout.mutate(
+        { product_code: item.productCode, plan_code: item.planCode, provider: 'stripe' },
+        {
+          onSuccess: (session) => {
+            if (session.mock_mode) {
+              snackbar.push(`Mock Stripe session ${session.order_id} created.`, 'success');
+              return;
+            }
+            if (session.checkout_url) {
+              const opened = window.open(session.checkout_url, '_blank', 'noopener,noreferrer');
+              if (!opened) window.location.assign(session.checkout_url);
+              return;
+            }
+            snackbar.push('Stripe checkout could not be opened. Try again.', 'error');
+          },
+          onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't start Stripe checkout."), 'error'),
+        },
+      );
+      return;
+    }
     setUpiRequest({ items, title, autoStart: true });
   }
 
@@ -485,7 +519,7 @@ export function ProductSettingsPage() {
       });
       snackbar.push(`Started ${formatPlanDisplayName(undefined, planCode)} trial for ${getProductName(productId)}.`, 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to subscribe to product.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't subscribe to this product. Try again."), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -519,7 +553,7 @@ export function ProductSettingsPage() {
         snackbar.push(`Unsubscribed from ${getProductName(productId)}.`, 'success');
       }
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to cancel this product.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't cancel this product. Try again."), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -552,7 +586,7 @@ export function ProductSettingsPage() {
         'success',
       );
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to change plan.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't change the plan. Try again."), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -566,9 +600,9 @@ export function ProductSettingsPage() {
       if (subscription?.plan_code) {
         setSelectedPlanByProduct((current) => ({ ...current, [productId]: subscription.plan_code ?? current[productId] }));
       }
-      snackbar.push(`Kept the current ${getProductName(productId)} plan.`, 'success');
+      snackbar.push(`Kept your current ${getProductName(productId)} plan.`, 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to cancel the scheduled plan change.'), 'error');
+      snackbar.push(getApiErrorMessage(error, "Couldn't cancel the scheduled plan change. Try again."), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -586,13 +620,13 @@ export function ProductSettingsPage() {
 
   return (
     <div className="product-settings">
-      {upiRequest ? (
+      {upiRequest && !isIntlBilling ? (
         <SubscriptionUpiPaySheet
           request={upiRequest}
           onClose={() => setUpiRequest(null)}
           onClaimed={async () => {
             await Promise.all([billingSnapshot.refetch(), billingOrders.refetch()]);
-            snackbar.push('Payment received — waiting for IE to confirm (usually same day).', 'success');
+            snackbar.push('Payment received — IE usually confirms the same day.', 'success');
             setHubTab('orders');
           }}
           onError={(message) => snackbar.push(message, 'error')}
@@ -608,6 +642,12 @@ export function ProductSettingsPage() {
           Manage products like Your orders. Each item has its own due date and price. We never auto-charge, and a late
           Orbit Mart payment does not lock Orbit Appoint.
         </p>
+        {isIntlBilling ? (
+          <p className="product-settings-lead">
+            International workspaces bill SaaS subscriptions in USD via Stripe Checkout. UPI payment claims apply to
+            India (INR) only.
+          </p>
+        ) : null}
 
         <div className="product-settings-hub">
           <button type="button" className={hubTab === 'subscriptions' ? 'is-on' : ''} onClick={() => setHubTab('subscriptions')}>
@@ -854,7 +894,7 @@ export function ProductSettingsPage() {
                       </div>
                     ) : null}
                     {isPayment && order.payment_status === 'awaiting_confirmation' ? (
-                      <p className="sub-order__note">Payment received — waiting for IE to confirm (usually same day).</p>
+                      <p className="sub-order__note">Payment received — IE usually confirms the same day.</p>
                     ) : null}
                     {isPayment && order.payment_status === 'rejected' ? (
                       <div className="product-settings-product-actions">
@@ -1093,7 +1133,7 @@ export function ProductSettingsPage() {
 
                       {paymentPending ? (
                         <div className="product-settings-pending">
-                          <strong>Payment received — waiting for IE to confirm (usually same day).</strong>
+                          <strong>Payment received — IE usually confirms the same day.</strong>
                           <p>IE emails you when this product is active until the next due date.</p>
                         </div>
                       ) : null}

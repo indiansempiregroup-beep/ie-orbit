@@ -72,7 +72,7 @@ export function ShopCashBankPage() {
       accountDialog.hide();
       snackbar.push('Account added.', 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to add account.'));
+      setMessage(getApiErrorMessage(error, "Couldn't add this account. Try again."));
     }
   }
 
@@ -103,7 +103,7 @@ export function ShopCashBankPage() {
       inDialog.hide();
       snackbar.push(`Payment ${voucher.voucher_number} recorded.`, 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to record payment.'));
+      setMessage(getApiErrorMessage(error, "Couldn't record that payment. Try again."));
     }
   }
 
@@ -134,7 +134,7 @@ export function ShopCashBankPage() {
       outDialog.hide();
       snackbar.push(`Payment ${voucher.voucher_number} recorded.`, 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to record payment.'));
+      setMessage(getApiErrorMessage(error, "Couldn't record that payment. Try again."));
     }
   }
 
@@ -165,7 +165,7 @@ export function ShopCashBankPage() {
       transferDialog.hide();
       snackbar.push(`Transfer ${voucher.voucher_number} recorded.`, 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, 'Unable to record transfer.'));
+      setMessage(getApiErrorMessage(error, "Couldn't record this transfer. Try again."));
     }
   }
 

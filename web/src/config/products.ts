@@ -118,9 +118,22 @@ function strippedOrCode(name?: string | null, code?: string | null): string {
   return (code ?? '').replace(/^(appointie|shopie)[-_]/i, '') || 'Plan';
 }
 
+export function formatSaasFromMinor(minor?: number | null, currency?: string | null): string | null {
+  if (minor == null) return null;
+  const code = (currency ?? 'INR').toUpperCase();
+  const amount = minor / 100;
+  if (code === 'USD') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  }
+  return `₹${Math.round(amount).toLocaleString('en-IN')}`;
+}
+
 export function formatInrFromPaise(paise?: number | null): string | null {
-  if (paise == null) return null;
-  return `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+  return formatSaasFromMinor(paise, 'INR');
 }
 
 /** Null cap means unlimited. Grandfather current extras above the published cap. */

@@ -232,15 +232,15 @@ export function ShopPetFormScreen() {
       };
       if (isEdit && petId) {
         const response = await client.shop.patchPet(petId, payload);
-        toast.push('Pet updated.', 'success');
+        toast.push('Pet details saved.', 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       } else {
         const response = await client.shop.createPet(payload);
-        toast.push('Pet created.', 'success');
+        toast.push('Pet added.', 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Unable to save pet');
+      setMessage(err instanceof Error ? err.message : "Couldn't save this pet. Try again.");
     } finally {
       setSaving(false);
     }
@@ -280,7 +280,7 @@ export function ShopPetFormScreen() {
                           await client.shop.deletePet(petId);
                           navigation.navigate('ShopPets');
                         } catch (err) {
-                          setMessage(err instanceof Error ? err.message : 'Unable to delete');
+                          setMessage(err instanceof Error ? err.message : "Couldn't remove this pet. Try again.");
                         }
                       })();
                     },

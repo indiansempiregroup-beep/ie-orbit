@@ -169,11 +169,11 @@ export function StaffDetailPage() {
               },
               {
                 onSuccess: () => {
-                  snackbar.push('Staff profile updated.', 'success');
+                  snackbar.push('Team member details saved.', 'success');
                   editDialog.hide();
                   staffQuery.refetch();
                 },
-                onError: (err) => setEditError(err.message ?? 'Failed to update staff'),
+                onError: (err) => setEditError(err.message ?? "Couldn't save this team member. Check the details and try again."),
               },
             );
           }}

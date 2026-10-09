@@ -184,7 +184,7 @@ export function ShopOrdersScreen() {
       setItems((current) => current.map((item) => (item.id === order.id ? response.data : item)));
       toast.push(`${order.order_number} · ${next.label}`, 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to update order', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't update this order. Try again.", 'error');
     } finally {
       setBusyId(null);
     }

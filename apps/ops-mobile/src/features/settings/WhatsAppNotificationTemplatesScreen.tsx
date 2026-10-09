@@ -57,7 +57,7 @@ export function WhatsAppNotificationTemplatesScreen() {
       setTemplates(response.data);
       setError(null);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to sync templates.'));
+      setError(getApiErrorMessage(err, "Couldn't sync templates. Try again."));
     } finally {
       setBusy(false);
     }

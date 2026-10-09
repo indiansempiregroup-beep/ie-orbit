@@ -107,8 +107,9 @@ server {
         add_header Cache-Control "public, max-age=3600";
     }
 
+    # Serve SEO directory HTML without a trailing-slash 301 (matches prod SITE_HOST).
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/index.html /index.html;
     }
 }
 

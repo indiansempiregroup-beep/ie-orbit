@@ -622,6 +622,11 @@ class PlatformPlanPackagesView(APIView):
                 if data.get("yearly_amount_paise") not in (None, "")
                 else (existing.yearly_amount_paise if existing else None)
             ),
+            prices_minor=(
+                data.get("prices_minor")
+                if "prices_minor" in data
+                else (getattr(existing, "prices_minor", None) if existing else None)
+            ),
             yearly_months_charged=int(
                 _field(
                     "yearly_months_charged",
@@ -661,6 +666,7 @@ class PlatformAddonPricingView(APIView):
             staff_price_paise=int(data.get("staff_price_paise") or 0),
             office_price_paise=int(data.get("office_price_paise") or 0),
             pets_price_paise=int(data.get("pets_price_paise") or 0),
+            prices_minor=data.get("prices_minor") if isinstance(data.get("prices_minor"), dict) else None,
             reason=data.get("reason", "addon pricing update"),
             ip_address=client_ip(request),
             user_agent=user_agent(request),
@@ -693,6 +699,7 @@ class PlatformSmartLookupSettingsView(APIView):
             input_usd_per_million=data.get("input_usd_per_million") or "0.10",
             output_usd_per_million=data.get("output_usd_per_million") or "0.40",
             suggested_top_up_paise=tops,
+            prices_minor=data.get("prices_minor") if isinstance(data.get("prices_minor"), dict) else None,
             reason=data.get("reason", "smart lookup settings update"),
             ip_address=client_ip(request),
             user_agent=user_agent(request),
@@ -721,6 +728,7 @@ class PlatformAssistantSettingsView(APIView):
             message_price_paise=int(data.get("message_price_paise") or 50),
             confirm_price_paise=int(data.get("confirm_price_paise") or 100),
             suggested_top_up_paise=tops,
+            prices_minor=data.get("prices_minor") if isinstance(data.get("prices_minor"), dict) else None,
             reason=data.get("reason", "assistant settings update"),
             ip_address=client_ip(request),
             user_agent=user_agent(request),

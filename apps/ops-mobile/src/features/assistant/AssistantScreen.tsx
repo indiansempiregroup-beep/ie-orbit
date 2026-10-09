@@ -455,7 +455,7 @@ export function AssistantScreen() {
       );
       setUsage(result.usage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Confirm failed.');
+      setError(err instanceof Error ? err.message : "Couldn't confirm that action. Try again.");
     } finally {
       setActingId(null);
     }
@@ -476,7 +476,7 @@ export function AssistantScreen() {
           .concat(result.assistant_message),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancel failed.');
+      setError(err instanceof Error ? err.message : "Couldn't cancel that action. Try again.");
     } finally {
       setActingId(null);
     }

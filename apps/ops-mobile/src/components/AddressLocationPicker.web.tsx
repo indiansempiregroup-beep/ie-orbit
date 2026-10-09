@@ -79,6 +79,7 @@ type Props = {
   required?: boolean;
   optional?: boolean;
   fieldError?: string;
+  countryCode?: string;
 };
 
 function asPlace(data: {
@@ -112,6 +113,7 @@ export function AddressLocationPicker({
   required,
   optional,
   fieldError,
+  countryCode,
 }: Props) {
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -235,6 +237,7 @@ export function AddressLocationPicker({
         onPlaceSelected={onPlaceSelected}
         latitude={latitude}
         longitude={longitude}
+        countryCode={countryCode}
       />
       <View style={styles.mapHeader}>
         <Text style={styles.label}>Confirm map location</Text>

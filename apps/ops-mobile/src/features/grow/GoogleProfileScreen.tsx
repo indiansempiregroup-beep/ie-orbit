@@ -62,7 +62,7 @@ export function GoogleProfileScreen() {
       setRawMetadata((response.data.metadata ?? {}) as Record<string, unknown>);
       toast.push('Google profile saved', 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to save', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't save Google profile. Try again.", 'error');
     } finally {
       setBusy(false);
     }

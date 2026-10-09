@@ -997,6 +997,13 @@ class PlatformAdminService:
                 "features": row.features,
                 "amount_paise": row.amount_paise,
                 "yearly_amount_paise": row.yearly_amount_paise,
+                "prices_minor": getattr(row, "prices_minor", None) or {
+                    "INR": {
+                        "monthly": row.amount_paise,
+                        "yearly": row.yearly_amount_paise,
+                    },
+                    "USD": {"monthly": None, "yearly": None},
+                },
                 "yearly_months_charged": int(getattr(row, "yearly_months_charged", None) or 10),
                 "is_active": row.is_active,
                 "is_public": row.is_public,
@@ -1026,6 +1033,7 @@ class PlatformAdminService:
         features: list[str] | None = None,
         amount_paise: int = 0,
         yearly_amount_paise: int | None = None,
+        prices_minor: dict[str, Any] | None = None,
         yearly_months_charged: int = 10,
         is_active: bool = True,
         is_public: bool = True,
@@ -1035,6 +1043,8 @@ class PlatformAdminService:
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> PlatformPlanPackage:
+        from apps.billing.services.region import normalize_prices_minor
+
         reason = self.require_reason(reason or "plan package upsert")
         normalized_code = slugify(code)[:60]
         if not normalized_code:
@@ -1064,6 +1074,23 @@ class PlatformAdminService:
                 code=normalized_code
             ).update(is_default=False)
 
+        resolved_prices = normalize_prices_minor(prices_minor)
+        inr_monthly = resolved_prices["INR"]["monthly"]
+        inr_yearly = resolved_prices["INR"]["yearly"]
+        if inr_monthly is None:
+            inr_monthly = max(0, int(amount_paise))
+            resolved_prices["INR"]["monthly"] = inr_monthly or None
+        if inr_yearly is None and yearly_amount_paise is not None:
+            inr_yearly = int(yearly_amount_paise)
+            resolved_prices["INR"]["yearly"] = inr_yearly
+        if is_public and (not resolved_prices["INR"]["monthly"] or not resolved_prices["USD"]["monthly"]):
+            raise ValidationError(
+                {
+                    "prices_minor": "Public packages require both INR and USD monthly prices.",
+                    "code": "saas_prices_required",
+                }
+            )
+
         package, created = PlatformPlanPackage.objects.update_or_create(
             code=normalized_code,
             defaults={
@@ -1083,10 +1110,9 @@ class PlatformAdminService:
                 ),
                 "bi_features": list(bi_features or []),
                 "features": list(features or []),
-                "amount_paise": max(0, int(amount_paise)),
-                "yearly_amount_paise": (
-                    int(yearly_amount_paise) if yearly_amount_paise is not None else None
-                ),
+                "amount_paise": max(0, int(inr_monthly or 0)),
+                "yearly_amount_paise": int(inr_yearly) if inr_yearly is not None else None,
+                "prices_minor": resolved_prices,
                 "yearly_months_charged": max(1, min(12, int(yearly_months_charged or 10))),
                 "is_active": bool(is_active),
                 "is_public": bool(is_public),
@@ -1169,19 +1195,61 @@ class PlatformAdminService:
         office_price_paise: int,
         pets_price_paise: int,
         reason: str,
+        prices_minor: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> dict[str, Any]:
         from apps.billing.constants import (
             ADDON_OFFICE_PRICE_PAISE,
+            ADDON_OFFICE_PRICE_USD_CENTS,
             ADDON_PETS_PRICE_PAISE,
+            ADDON_PETS_PRICE_USD_CENTS,
             ADDON_STAFF_PRICE_PAISE,
+            ADDON_STAFF_PRICE_USD_CENTS,
         )
-        from apps.billing.services.addon_pricing import serialize_addon_prices
+        from apps.billing.services.addon_pricing import (
+            DEFAULT_ADDON_PRICES_MINOR,
+            serialize_addon_prices,
+        )
 
         reason = self.require_reason(reason)
         if staff_price_paise < 0 or office_price_paise < 0 or pets_price_paise < 0:
             raise ValidationError({"amount": "Prices cannot be negative."})
+
+        def _bucket(raw: object | None, *, fallback: dict[str, int]) -> dict[str, int]:
+            data = raw if isinstance(raw, dict) else {}
+            out: dict[str, int] = {}
+            for key, default in fallback.items():
+                try:
+                    value = int(data.get(key) if data.get(key) is not None else default)
+                except (TypeError, ValueError):
+                    value = default
+                if value < 0:
+                    raise ValidationError({key: "Prices cannot be negative."})
+                out[key] = value
+            return out
+
+        defaults_inr = {
+            "staff": ADDON_STAFF_PRICE_PAISE,
+            "office": ADDON_OFFICE_PRICE_PAISE,
+            "pets": ADDON_PETS_PRICE_PAISE,
+        }
+        defaults_usd = {
+            "staff": ADDON_STAFF_PRICE_USD_CENTS,
+            "office": ADDON_OFFICE_PRICE_USD_CENTS,
+            "pets": ADDON_PETS_PRICE_USD_CENTS,
+        }
+        incoming = prices_minor if isinstance(prices_minor, dict) else {}
+        if isinstance(incoming.get("INR"), dict):
+            inr_bucket = _bucket(incoming.get("INR"), fallback=defaults_inr)
+        else:
+            inr_bucket = {
+                "staff": int(staff_price_paise),
+                "office": int(office_price_paise),
+                "pets": int(pets_price_paise),
+            }
+        usd_bucket = _bucket(incoming.get("USD"), fallback=defaults_usd)
+        resolved_minor = {"INR": inr_bucket, "USD": usd_bucket}
 
         row, _created = PlatformAddonPricing.objects.get_or_create(
             key="default",
@@ -1189,21 +1257,25 @@ class PlatformAdminService:
                 "staff_price_paise": ADDON_STAFF_PRICE_PAISE,
                 "office_price_paise": ADDON_OFFICE_PRICE_PAISE,
                 "pets_price_paise": ADDON_PETS_PRICE_PAISE,
+                "prices_minor": dict(DEFAULT_ADDON_PRICES_MINOR),
             },
         )
         before = {
             "staff_price_paise": row.staff_price_paise,
             "office_price_paise": row.office_price_paise,
             "pets_price_paise": row.pets_price_paise,
+            "prices_minor": getattr(row, "prices_minor", None) or {},
         }
-        row.staff_price_paise = int(staff_price_paise)
-        row.office_price_paise = int(office_price_paise)
-        row.pets_price_paise = int(pets_price_paise)
+        row.staff_price_paise = int(inr_bucket["staff"])
+        row.office_price_paise = int(inr_bucket["office"])
+        row.pets_price_paise = int(inr_bucket["pets"])
+        row.prices_minor = resolved_minor
         row.save(
             update_fields=[
                 "staff_price_paise",
                 "office_price_paise",
                 "pets_price_paise",
+                "prices_minor",
                 "updated_at",
             ]
         )
@@ -1240,10 +1312,12 @@ class PlatformAdminService:
         confirm_price_paise: int,
         suggested_top_up_paise: list[int] | None,
         reason: str,
+        prices_minor: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> dict[str, Any]:
         from apps.assistant.services.wallet import (
+            DEFAULT_ASSISTANT_PRICES_MINOR,
             DEFAULT_CONFIRM_PRICE_PAISE,
             DEFAULT_MESSAGE_PRICE_PAISE,
             DEFAULT_SUGGESTED_TOP_UPS,
@@ -1270,6 +1344,29 @@ class PlatformAdminService:
             tops.append(value)
         tops = sorted(set(tops))[:8] or list(DEFAULT_SUGGESTED_TOP_UPS)
 
+        incoming = prices_minor if isinstance(prices_minor, dict) else {}
+        usd_raw = incoming.get("USD") if isinstance(incoming.get("USD"), dict) else {}
+        usd_defaults = DEFAULT_ASSISTANT_PRICES_MINOR["USD"]
+
+        def _usd_tops(raw_list: object | None) -> list[int]:
+            values: list[int] = []
+            for raw in raw_list if isinstance(raw_list, list) else list(usd_defaults["top_ups"]):
+                value = int(raw)
+                if value < 1:
+                    raise ValidationError({"prices_minor": "Each USD top-up must be at least $0.01."})
+                if value > 100_000_00:
+                    raise ValidationError({"prices_minor": "Each USD top-up is too large."})
+                values.append(value)
+            return sorted(set(values))[:8] or list(usd_defaults["top_ups"])
+
+        usd_message = max(1, int(usd_raw.get("message") if usd_raw.get("message") is not None else usd_defaults["message"]))
+        usd_confirm = max(1, int(usd_raw.get("confirm") if usd_raw.get("confirm") is not None else usd_defaults["confirm"]))
+        usd_tops = _usd_tops(usd_raw.get("top_ups"))
+        resolved_minor = {
+            "INR": {"message": message_price, "confirm": confirm_price, "top_ups": tops},
+            "USD": {"message": usd_message, "confirm": usd_confirm, "top_ups": usd_tops},
+        }
+
         row, _created = PlatformAssistantSettings.objects.get_or_create(
             key="default",
             defaults={
@@ -1277,6 +1374,7 @@ class PlatformAdminService:
                 "message_price_paise": DEFAULT_MESSAGE_PRICE_PAISE,
                 "confirm_price_paise": DEFAULT_CONFIRM_PRICE_PAISE,
                 "suggested_top_up_paise": list(DEFAULT_SUGGESTED_TOP_UPS),
+                "prices_minor": dict(DEFAULT_ASSISTANT_PRICES_MINOR),
             },
         )
         before = serialize_platform_assistant_settings(row)
@@ -1284,12 +1382,14 @@ class PlatformAdminService:
         row.message_price_paise = message_price
         row.confirm_price_paise = confirm_price
         row.suggested_top_up_paise = tops
+        row.prices_minor = resolved_minor
         row.save(
             update_fields=[
                 "enabled",
                 "message_price_paise",
                 "confirm_price_paise",
                 "suggested_top_up_paise",
+                "prices_minor",
                 "updated_at",
                 "version",
             ]
@@ -1321,10 +1421,14 @@ class PlatformAdminService:
         output_usd_per_million: Decimal | float | str,
         suggested_top_up_paise: list[int] | None,
         reason: str,
+        prices_minor: dict[str, Any] | None = None,
         ip_address: str | None = None,
         user_agent: str = "",
     ) -> dict[str, Any]:
-        from apps.shopie.services.smart_lookup import serialize_platform_smart_lookup_settings
+        from apps.shopie.services.smart_lookup import (
+            DEFAULT_SMART_LOOKUP_PRICES_MINOR,
+            serialize_platform_smart_lookup_settings,
+        )
 
         reason = self.require_reason(reason)
         markup = max(0, int(markup_bps or 0))
@@ -1352,6 +1456,27 @@ class PlatformAdminService:
             tops.append(value)
         tops = sorted(set(tops))[:8]
 
+        incoming = prices_minor if isinstance(prices_minor, dict) else {}
+        usd_raw = incoming.get("USD") if isinstance(incoming.get("USD"), dict) else {}
+        usd_defaults = DEFAULT_SMART_LOOKUP_PRICES_MINOR["USD"]
+        usd_tops: list[int] = []
+        for raw in usd_raw.get("top_ups") if isinstance(usd_raw.get("top_ups"), list) else list(usd_defaults["top_ups"]):
+            value = int(raw)
+            if value < 1:
+                raise ValidationError({"prices_minor": "Each USD top-up must be at least $0.01."})
+            if value > 100_000_00:
+                raise ValidationError({"prices_minor": "Each USD top-up is too large."})
+            usd_tops.append(value)
+        usd_tops = sorted(set(usd_tops))[:8] or list(usd_defaults["top_ups"])
+        usd_min = max(
+            0,
+            int(usd_raw.get("min_charge") if usd_raw.get("min_charge") is not None else usd_defaults["min_charge"]),
+        )
+        resolved_minor = {
+            "INR": {"min_charge": min_charge, "top_ups": tops or list(DEFAULT_SMART_LOOKUP_PRICES_MINOR["INR"]["top_ups"])},
+            "USD": {"min_charge": usd_min, "top_ups": usd_tops},
+        }
+
         row, _created = PlatformSmartLookupSettings.objects.get_or_create(
             key="default",
             defaults={
@@ -1363,6 +1488,7 @@ class PlatformAdminService:
                 "input_usd_per_million": Decimal("0.10"),
                 "output_usd_per_million": Decimal("0.40"),
                 "suggested_top_up_paise": [5000, 10000, 25000, 50000],
+                "prices_minor": dict(DEFAULT_SMART_LOOKUP_PRICES_MINOR),
             },
         )
         before = serialize_platform_smart_lookup_settings(row)
@@ -1375,6 +1501,7 @@ class PlatformAdminService:
         row.input_usd_per_million = input_rate
         row.output_usd_per_million = output_rate
         row.suggested_top_up_paise = tops
+        row.prices_minor = resolved_minor
         update_fields = [
             "enabled",
             "usd_to_inr",
@@ -1384,6 +1511,7 @@ class PlatformAdminService:
             "input_usd_per_million",
             "output_usd_per_million",
             "suggested_top_up_paise",
+            "prices_minor",
             "updated_at",
             "version",
         ]

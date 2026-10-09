@@ -24,7 +24,7 @@ def build_customer_registration_invite(*, customer: Customer, business_name: str
 
     plain_text = (
         f"Hi {greeting},\n\n"
-        f"{product_name} added you as a customer. Create your account to book appointments, "
+        f"{product_name} invited you to book with them. Create your account to book appointments, "
         "view your visit history, and manage notifications.\n\n"
         f"Create your account: {register_url}\n\n"
         "If you were not expecting this email, you can ignore it.\n\n"
@@ -33,7 +33,7 @@ def build_customer_registration_invite(*, customer: Customer, business_name: str
 
     body = (
         f"Hi {greeting},\n\n"
-        f"{product_name} added you as a customer. Create your account to book appointments, "
+        f"{product_name} invited you to book with them. Create your account to book appointments, "
         "view your visit history, and manage notifications."
     )
     html = build_branded_email_html(

@@ -172,16 +172,16 @@ export function ShopGodownsPage() {
       if (editingId) {
         await patchGodown.mutateAsync({ godownId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Godown updated.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Godown details saved.', 'success'), 0);
       } else {
         await createGodown.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Godown saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Godown added.', 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to save godown.';
+      const text = error instanceof Error ? error.message : "Couldn't save this godown. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -215,7 +215,7 @@ export function ShopGodownsPage() {
         0,
       );
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to create transfer.';
+      const text = error instanceof Error ? error.message : "Couldn't create this transfer. Try again.";
       setTransferMessage(text);
       snackbar.push(text, 'error');
     }

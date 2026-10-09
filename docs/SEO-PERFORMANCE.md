@@ -18,6 +18,7 @@
 - Pricing static fallback (Starter ₹399 / Pro ₹799 / add-ons)
 - GA4 gated to marketing host/paths only
 - nginx exact locations for robots/sitemap; `X-Robots-Tag` on app prefixes
+- SITE_HOST `try_files $uri $uri/index.html /index.html` so sitemap paths (no trailing slash) return 200 instead of a directory 301
 
 ## Remaining risks
 
@@ -26,6 +27,7 @@
 - `/help/:slug` body from API
 - No historical CWV baseline in-repo
 - Admin host shares the same Vite CSS bundle (same fonts)
+- Do not revert SITE_HOST `try_files` to `$uri/` — that reintroduces GSC “Page with redirect” for every sitemap URL
 
 ## Strategy
 

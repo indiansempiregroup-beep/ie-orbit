@@ -353,7 +353,7 @@ export function CreateBookingScreen() {
                   initialBooking: booking,
                 });
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to create booking.'));
+                setError(getApiErrorMessage(err, "Couldn't create this booking. Check the details and try again."));
               } finally {
                 setLoading(false);
               }

@@ -20,6 +20,13 @@ def _cod_enabled_for_business(business: Business) -> bool:
     return True
 
 
+def _cod_allowed_for_instant_delivery(business: Business) -> bool:
+    shop_settings = getattr(business, "shop_settings", None)
+    if shop_settings is not None:
+        return bool(getattr(shop_settings, "cod_allowed_for_instant_delivery", True))
+    return True
+
+
 def _customer_payment_gateways(business: Business) -> dict[str, dict[str, bool]]:
     """Public customer-safe flags only (no secrets / key ids)."""
     try:
@@ -199,6 +206,9 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "upi_vpa": getattr(business, "upi_vpa", "") or "",
             "payment_qr_url": getattr(business, "payment_qr_url", "") or "",
             "cod_enabled": _cod_enabled_for_business(business),
+            "cod_allowed_for_instant_delivery": _cod_allowed_for_instant_delivery(
+                business
+            ),
             **_customer_payment_gateways(business),
         },
         "branding": {

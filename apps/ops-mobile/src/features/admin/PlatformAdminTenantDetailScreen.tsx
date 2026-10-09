@@ -78,12 +78,12 @@ export function PlatformAdminTenantDetailScreen() {
     setBusy(true);
     try {
       await client.platform.tenantAction(tenant.id, pendingAction, { reason: trimmed });
-      toast.push(`Tenant ${pendingAction === 'suspend' ? 'suspended' : 'reactivated'}`, 'success');
+      toast.push(`Tenant ${pendingAction === 'suspend' ? 'suspended' : 'reactivated'}.`, 'success');
       setPendingAction(null);
       setReason('');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : `Unable to ${pendingAction} tenant`, 'error');
+      toast.push(err instanceof Error ? err.message : `Couldn't ${pendingAction} this tenant. Try again.`, 'error');
     } finally {
       setBusy(false);
     }

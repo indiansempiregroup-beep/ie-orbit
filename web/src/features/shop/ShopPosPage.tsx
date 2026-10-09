@@ -560,7 +560,7 @@ export function ShopPosPage() {
         });
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to create bill.';
+      const text = error instanceof Error ? error.message : "Couldn't create this bill. Try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -761,7 +761,7 @@ export function ShopPosPage() {
                     >
                       <option value="">No discount</option>
                       <option value="percent">% off</option>
-                      <option value="amount">₹ off</option>
+                      <option value="amount">Amount off</option>
                     </select>
                     {line.discountType ? (
                       <input
@@ -994,7 +994,7 @@ export function ShopPosPage() {
                 >
                   <option value="">None</option>
                   <option value="percent">% off</option>
-                  <option value="amount">₹ off</option>
+                  <option value="amount">Amount off</option>
                 </select>
                 {billDiscountType ? (
                   <input

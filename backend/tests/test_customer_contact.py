@@ -16,6 +16,13 @@ def test_format_contact_phone_normalizes_india_numbers() -> None:
     assert format_contact_phone("+919876543210", e164=True) == "+919876543210"
 
 
+def test_format_contact_phone_international_e164() -> None:
+    assert format_contact_phone("+1 415 555 2671", default_country="US") == "+14155552671"
+    assert format_contact_phone("+49 151 12345678", default_country="DE") == "+4915112345678"
+    with pytest.raises(ValueError):
+        require_address_phone("123", default_country="US")
+
+
 def test_resolve_customer_phone_prefers_primary_number() -> None:
     class Customer:
         phone_number = "+91 90000 11111"

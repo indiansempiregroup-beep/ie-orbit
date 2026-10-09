@@ -274,7 +274,7 @@ export function StaffAvailabilityScreen() {
               await client.bookings.staffLeaves.delete(leave.id);
               await reload();
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to remove leave.'));
+              setError(getApiErrorMessage(err, "Couldn't remove leave. Try again."));
             } finally {
               setBusy(false);
             }
@@ -422,7 +422,7 @@ export function StaffAvailabilityScreen() {
                           await client.bookings.staffSlotBlocks.delete(block.id);
                           await reload();
                         } catch (err) {
-                          setError(getApiErrorMessage(err, 'Unable to remove block.'));
+                          setError(getApiErrorMessage(err, "Couldn't remove block. Try again."));
                         } finally {
                           setBusy(false);
                         }
@@ -471,7 +471,7 @@ export function StaffAvailabilityScreen() {
                           await client.bookings.staffEmergencySlots.delete(slot.id);
                           await reload();
                         } catch (err) {
-                          setError(getApiErrorMessage(err, 'Unable to remove emergency slot.'));
+                          setError(getApiErrorMessage(err, "Couldn't remove emergency slot. Try again."));
                         } finally {
                           setBusy(false);
                         }
@@ -551,7 +551,7 @@ export function StaffAvailabilityScreen() {
                       setServiceId('');
                       await reload();
                     } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to assign service.'));
+                      setError(getApiErrorMessage(err, "Couldn't assign service. Try again."));
                     } finally {
                       setBusy(false);
                     }
@@ -643,7 +643,7 @@ export function StaffAvailabilityScreen() {
                 setShowLeaveForm(false);
                 await reload();
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to add leave.'));
+                setError(getApiErrorMessage(err, "Couldn't add leave. Try again."));
               } finally {
                 setBusy(false);
               }
@@ -679,7 +679,7 @@ export function StaffAvailabilityScreen() {
                 setShowSpecialForm(false);
                 await reload();
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to add special availability.'));
+                setError(getApiErrorMessage(err, "Couldn't add special availability. Try again."));
               } finally {
                 setBusy(false);
               }
@@ -714,7 +714,7 @@ export function StaffAvailabilityScreen() {
                 setSlotReason('');
                 await reload();
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to block slot.'));
+                setError(getApiErrorMessage(err, "Couldn't block slot. Try again."));
               } finally {
                 setBusy(false);
               }
@@ -754,7 +754,7 @@ export function StaffAvailabilityScreen() {
                 setSlotReason('');
                 await reload();
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to add emergency slot.'));
+                setError(getApiErrorMessage(err, "Couldn't add emergency slot. Try again."));
               } finally {
                 setBusy(false);
               }

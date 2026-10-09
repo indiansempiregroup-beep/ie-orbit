@@ -408,6 +408,19 @@ class OrderService:
                         )
                     }
                 )
+            if (
+                mode == FulfillmentMode.DELIVERY
+                and selected_delivery_method == DELIVERY_METHOD_INSTANT
+                and not shop_settings.cod_allowed_for_instant_delivery
+            ):
+                raise ValidationError(
+                    {
+                        "payment_method": (
+                            "Cash on delivery is not available for instant delivery. "
+                            "Pay online instead."
+                        )
+                    }
+                )
         bill_dtype = str(bill_discount_type or "").strip().lower()
         bill_dvalue = Decimal(str(bill_discount_value or "0"))
         coupon_code = str(coupon_code or "").strip()

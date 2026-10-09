@@ -421,7 +421,7 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
       const result = await fn();
       const failed = payloadActionError(result.data);
       if (failed) {
-        setFeedback({ tone: 'error', title: `${label} failed`, detail: failed });
+        setFeedback({ tone: 'error', title: `Couldn't complete "${label}"`, detail: failed });
         snackbar.push(failed, 'error', 10000);
         return false;
       }
@@ -434,7 +434,7 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
           : label === 'Refresh store status'
             ? recipeData?.production?.refresh_note
             : undefined;
-      const okText = ACTION_OK[label] ?? `${label} succeeded`;
+      const okText = ACTION_OK[label] ?? `${label} completed.`;
       setFeedback({
         tone: 'ok',
         title: okText,
@@ -444,8 +444,8 @@ export function CustomerAppPanel({ businesses }: { businesses: PlatformTenantBus
       await query.refetch();
       return true;
     } catch (err) {
-      const detail = getApiErrorMessage(err, `${label} failed`);
-      setFeedback({ tone: 'error', title: `${label} failed`, detail });
+      const detail = getApiErrorMessage(err, `Couldn't complete "${label}". Try again.`);
+      setFeedback({ tone: 'error', title: `Couldn't complete "${label}"`, detail });
       snackbar.push(detail, 'error', 10000);
       return false;
     } finally {

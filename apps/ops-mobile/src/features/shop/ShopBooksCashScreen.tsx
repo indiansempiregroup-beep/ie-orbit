@@ -192,7 +192,7 @@ export function ShopBooksCashScreen() {
       setAccountOpening('0');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to add account', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't add this account. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -224,7 +224,7 @@ export function ShopBooksCashScreen() {
       setPaymentDate(todayIso());
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to record payment', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't record that payment. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -243,7 +243,7 @@ export function ShopBooksCashScreen() {
             toast.push('Payment voided', 'success');
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : 'Unable to void payment', 'error');
+            toast.push(err instanceof Error ? err.message : "Couldn't void this payment. Try again.", 'error');
           }
         },
       },

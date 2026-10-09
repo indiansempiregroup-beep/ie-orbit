@@ -131,7 +131,7 @@ export function ShopBooksPurchaseScreen() {
             toast.push('Purchase voided', 'success');
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : 'Unable to void purchase', 'error');
+            toast.push(err instanceof Error ? err.message : "Couldn't void this purchase. Try again.", 'error');
           }
         },
       },

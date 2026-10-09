@@ -613,7 +613,7 @@ export function BookingDetailScreen() {
         }
         setStaffModalOpen(false);
         setReassignError(null);
-        toast.push('Staff reassigned. Assigned staff members have been notified.', 'success');
+        toast.push("Staff updated — they've been notified.", 'success');
       } else {
         const successMessage =
           action === 'confirm'
@@ -626,13 +626,13 @@ export function BookingDetailScreen() {
                   ? 'Booking cancelled.'
                   : action === 'reschedule'
                     ? 'Booking rescheduled.'
-                    : 'Updated.';
+                    : 'Booking updated.';
         toast.push(successMessage, 'success');
       }
       bumpBookingsListRevision();
       await reload();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Action failed.');
+      const message = getApiErrorMessage(err, "That didn't go through. Try again.");
       if (action === 'reassign') {
         setReassignError(message);
       } else if (action === 'complete') {

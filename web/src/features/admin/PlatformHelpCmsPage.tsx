@@ -72,7 +72,7 @@ export function PlatformHelpCmsPage() {
       setMessage(isPublished ? 'Published' : 'Saved as draft');
       invalidate();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not save article');
+      setMessage(err instanceof Error ? err.message : "Couldn't save this article. Try again.");
     } finally {
       setBusy(false);
     }

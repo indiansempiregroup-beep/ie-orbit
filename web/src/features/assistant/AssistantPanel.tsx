@@ -388,7 +388,7 @@ export function AssistantPanel({ open, onClose }: Props) {
       if (result.usage) setUsage(result.usage);
       void accessQuery.refetch();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Confirm failed.');
+      setError(err instanceof Error ? err.message : "Couldn't confirm that action. Try again.");
     } finally {
       setActingId(null);
     }
@@ -409,7 +409,7 @@ export function AssistantPanel({ open, onClose }: Props) {
           .concat(result.assistant_message),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Cancel failed.');
+      setError(err instanceof Error ? err.message : "Couldn't cancel that action. Try again.");
     } finally {
       setActingId(null);
     }

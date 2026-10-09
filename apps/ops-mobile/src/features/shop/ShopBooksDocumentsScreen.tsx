@@ -352,7 +352,7 @@ export function ShopBooksDocumentsScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : `Unable to create ${meta.singular}`, 'error');
+      toast.push(err instanceof Error ? err.message : `Couldn't create this ${meta.singular}. Try again.`, 'error');
     } finally {
       setBusy(false);
     }
@@ -380,7 +380,7 @@ export function ShopBooksDocumentsScreen() {
       }
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to convert document', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't convert this document. Try again.", 'error');
     } finally {
       setConvertingId(null);
     }

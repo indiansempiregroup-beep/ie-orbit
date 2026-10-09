@@ -63,10 +63,10 @@ export function NotificationPreferencesScreen() {
       if (smsAvailable) notification_preferences.sms = sms;
       await mobileClient.auth.patchMe({ notification_preferences });
       await refreshProfile();
-      toast.push('Notification preferences updated.', 'success');
+      toast.push('Notification preferences saved.', 'success');
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Unable to save', err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert("Couldn't save", err instanceof Error ? err.message : 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -700,7 +700,7 @@ export function HelpSupportScreen() {
       setSubject('');
       setBody('');
       setStatus(t('help.ticketSubmitted'));
-      toast.push('Support ticket submitted.', 'success');
+      toast.push('Support request sent.', 'success');
       await loadTickets();
     } catch (err) {
       Alert.alert('Could not submit', getApiErrorMessage(err, 'Please try again.'));

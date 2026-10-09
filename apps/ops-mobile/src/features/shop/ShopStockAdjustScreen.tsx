@@ -152,7 +152,7 @@ export function ShopStockAdjustScreen() {
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to adjust stock', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't update stock. Try again.", 'error');
     } finally {
       setBusy(false);
     }

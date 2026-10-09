@@ -88,7 +88,7 @@ export function WhatsAppNotificationSettingsScreen() {
       setMessage(successMessage);
       toast.push(successMessage, 'success');
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to save WhatsApp settings.'));
+      setError(getApiErrorMessage(err, "Couldn't save WhatsApp settings. Try again."));
     } finally {
       setLoading(false);
       setTesting(false);

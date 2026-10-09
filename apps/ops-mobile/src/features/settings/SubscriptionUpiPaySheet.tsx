@@ -169,7 +169,7 @@ export function SubscriptionUpiPaySheet({
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to start UPI checkout. Set PLATFORM_UPI_VPA on the server.');
+      const message = getApiErrorMessage(err, "Couldn't start UPI checkout. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -250,7 +250,7 @@ export function SubscriptionUpiPaySheet({
       setStatus('awaiting');
       await onClaimed();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to submit payment claim.');
+      const message = getApiErrorMessage(err, "Couldn't submit the payment claim. Try again.");
       setFormError(message);
       onError(message);
     } finally {
@@ -280,11 +280,17 @@ export function SubscriptionUpiPaySheet({
             showsVerticalScrollIndicator
             bounces
           >
-            {status === 'idle' ? (
-              <Text style={styles.body}>
-                Pay IE Orbit via UPI for the exact amount, then submit your UTR for confirmation.
+            <View style={styles.steps}>
+              <Text style={styles.stepsTitle}>How to pay</Text>
+              <Text style={styles.stepItem}>1. Scan the QR or open your UPI app and pay the exact amount shown</Text>
+              <Text style={styles.stepItem}>
+                2. After payment succeeds, take a screenshot of the confirmation in your UPI app
               </Text>
-            ) : null}
+              <Text style={styles.stepItem}>
+                3. Upload that screenshot below (UTR optional), then tap submit for confirmation
+              </Text>
+              <Text style={styles.stepItem}>4. IE confirms — access restores until the next due date</Text>
+            </View>
 
             {session && (status === 'ready' || status === 'awaiting') ? (
               <>
@@ -306,7 +312,7 @@ export function SubscriptionUpiPaySheet({
                 {status === 'ready' ? (
                   <>
                     <Text style={styles.body}>
-                      After paying, enter your UTR / UPI reference and/or upload a payment screenshot.
+                      After you pay, upload the UPI confirmation screenshot below so we can verify it.
                     </Text>
                     <Input
                       label="UTR / UPI reference"
@@ -335,7 +341,7 @@ export function SubscriptionUpiPaySheet({
                         disabled={uploading}
                         onPress={() => void pickProof()}
                         style={fieldErrors.proof ? styles.proofButtonError : undefined}
-                        accessibilityHint="Upload a payment screenshot if you do not have a UTR"
+                        accessibilityHint="Upload the payment confirmation screenshot from your UPI app"
                       />
                       {fieldErrors.proof ? (
                         <Text style={fieldStyles.error} accessibilityRole="alert">
@@ -353,8 +359,8 @@ export function SubscriptionUpiPaySheet({
                   <View style={styles.awaiting}>
                     <Text style={styles.awaitingTitle}>Awaiting platform confirmation</Text>
                     <Text style={styles.meta}>
-                      Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Payment received — waiting for IE
-                      to confirm (usually same day).
+                      Your payment claim was submitted{utr ? ` · UTR ${utr}` : ''}. Payment received — IE usually
+                      confirms the same day.
                     </Text>
                   </View>
                 )}
@@ -430,6 +436,16 @@ const styles = StyleSheet.create({
   footer: { gap: spacing.sm, paddingTop: spacing.md },
   meta: { ...typography.caption, color: colors.mutedForeground },
   body: { ...typography.body, color: colors.foreground, lineHeight: 20 },
+  steps: {
+    gap: 6,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stepsTitle: { ...typography.label, fontFamily: fonts.bodyBold, color: colors.foreground, marginBottom: 2 },
+  stepItem: { ...typography.caption, color: colors.foreground, lineHeight: 18 },
   amountBox: {
     borderWidth: 1,
     borderColor: colors.border,

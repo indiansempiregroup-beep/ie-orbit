@@ -42,9 +42,9 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
       });
       setBusinessName('');
       setDisplayName('');
-      snackbar.push('Business and product configured successfully.', 'success');
+      snackbar.push('Business and product are set up.', 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to configure business.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't save business details. Try again.", 'error');
     } finally {
       setIsSaving(false);
     }

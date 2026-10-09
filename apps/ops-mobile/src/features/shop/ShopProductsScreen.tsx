@@ -234,13 +234,13 @@ export function ShopProductsScreen() {
         setBulkPrice('');
         setBulkPercent('');
       } else if (result.data.updated.length) {
-        toast.push(`Updated ${result.data.updated.length}, ${failed} failed.`, 'info');
+        toast.push(`Updated ${result.data.updated.length}; ${failed} didn't update.`, 'info');
       } else {
-        toast.push(result.data.errors[0]?.message || 'Unable to update the selected products.', 'error');
+        toast.push(result.data.errors[0]?.message || "Couldn't update the selected products. Try again.", 'error');
       }
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to update the selected products.', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't update the selected products. Try again.", 'error');
     } finally {
       setBulkBusy(false);
     }

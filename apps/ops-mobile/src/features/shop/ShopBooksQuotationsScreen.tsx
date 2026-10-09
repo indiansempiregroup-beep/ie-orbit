@@ -265,7 +265,7 @@ export function ShopBooksQuotationsScreen() {
       });
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to create quotation', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't create this quotation. Try again.", 'error');
     } finally {
       setBusy(false);
     }
@@ -281,7 +281,7 @@ export function ShopBooksQuotationsScreen() {
       toast.push(`Converted to sale ${response.data.voucher_number}`, 'success');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to convert quotation', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't convert this quotation. Try again.", 'error');
     } finally {
       setConvertingId(null);
     }

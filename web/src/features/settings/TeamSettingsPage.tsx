@@ -106,7 +106,7 @@ export function TeamSettingsPage() {
                         assignRole.mutate(
                           { userId: member.id, roleCode: role.code },
                           {
-                            onSuccess: () => snackbar.push(`Assigned ${role.name}.`, 'success'),
+                            onSuccess: () => snackbar.push(`${role.name} assigned.`, 'success'),
                             onError: (error: Error) => snackbar.push(error.message, 'error'),
                           },
                         )
@@ -133,7 +133,7 @@ export function TeamSettingsPage() {
               { email: inviteEmail, platform_role_code: inviteRole },
               {
                 onSuccess: () => {
-                  snackbar.push('Invitation sent.', 'success');
+                  snackbar.push('Invite sent.', 'success');
                   setInviteEmail('');
                 },
                 onError: (error) => snackbar.push(error.message, 'error'),
@@ -201,7 +201,7 @@ export function TeamSettingsPage() {
                     variant="ghost"
                     onClick={() =>
                       revokeInvitation.mutate(invitation.id, {
-                        onSuccess: () => snackbar.push('Invitation revoked.', 'success'),
+                        onSuccess: () => snackbar.push('Invite cancelled.', 'success'),
                         onError: (error: Error) => snackbar.push(error.message, 'error'),
                       })
                     }

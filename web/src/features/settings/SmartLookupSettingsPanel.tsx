@@ -265,12 +265,12 @@ export function SmartLookupSettingsPanel() {
                   .mutateAsync({ enabled: event.target.checked })
                   .then(() =>
                     snackbar.push(
-                      event.target.checked ? 'Smart lookup enabled.' : 'Smart lookup disabled.',
+                      event.target.checked ? 'Smart lookup on.' : 'Smart lookup off.',
                       'success',
                     ),
                   )
                   .catch((error) =>
-                    snackbar.push(getApiErrorMessage(error, 'Unable to update smart lookup.'), 'error'),
+                    snackbar.push(getApiErrorMessage(error, "Couldn't update Smart lookup. Try again."), 'error'),
                   );
               }}
             />
@@ -633,7 +633,7 @@ export function SmartLookupSettingsPanel() {
           amountPaise={topUpPaise}
           onClose={() => setTopUpPaise(null)}
           onClaimed={async () => {
-            snackbar.push('Top-up submitted. Wallet credits after IE confirms payment.', 'success');
+            snackbar.push('Top-up submitted — wallet credits after IE confirms.', 'success');
             void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup', businessId] });
             void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup-history', businessId] });
           }}

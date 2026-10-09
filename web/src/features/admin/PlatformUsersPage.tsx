@@ -199,14 +199,14 @@ export function PlatformUsersPage() {
         const issued = Boolean(data.sign_in_code_sent ?? data.reset_issued);
         setMessage(
           issued
-            ? `Sign-in code email sent to ${pending.user.email}.`
+            ? `Sign-in code emailed to ${pending.user.email}.`
             : `Sign-in code requested for ${pending.user.email}.`,
         );
       } else {
         setMessage(
           pending.action === 'enable'
             ? `${pending.user.email} can sign in again.`
-            : `${pending.user.email} is now disabled.`,
+            : `${pending.user.email} can't sign in now.`,
         );
       }
       setPending(null);
@@ -214,7 +214,7 @@ export function PlatformUsersPage() {
       invalidate();
       await usersQuery.refetch();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed');
+      setError(err instanceof Error ? err.message : "That action didn't go through. Try again.");
     } finally {
       setBusy(false);
     }

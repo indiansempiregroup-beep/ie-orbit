@@ -97,8 +97,14 @@ class BillingPlanCatalogView(APIView):
 
     @extend_schema(tags=["Billing"], description="List billable plans with effective pricing.")
     def get(self, request: Request) -> Response:
+        tenant: Tenant | None = getattr(request, "current_tenant", None)
+        business = None
+        business_id = request.headers.get("X-Business-ID") or request.query_params.get("business_id")
+        if tenant and business_id:
+            business = Business.objects.filter(id=business_id, tenant=tenant).first()
+        currency = request.query_params.get("currency")
         return success_response(
-            CheckoutService().list_plan_catalog(),
+            CheckoutService().list_plan_catalog(currency=currency, business=business),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -110,7 +116,10 @@ class BillingPublicPlanCatalogView(APIView):
     @extend_schema(tags=["Billing"], description="Public plan catalog for marketing pages.")
     def get(self, request: Request) -> Response:
         return success_response(
-            CheckoutService().list_public_plan_catalog(product_code=request.query_params.get("product_code")),
+            CheckoutService().list_public_plan_catalog(
+                product_code=request.query_params.get("product_code"),
+                currency=request.query_params.get("currency"),
+            ),
             request_id=getattr(request, "request_id", None),
         )
 
@@ -1389,6 +1398,26 @@ class CashfreeWebhookView(APIView):
             timestamp=timestamp,
             signature=signature,
             external_event_id=request.headers.get("x-idempotency-key"),
+        )
+        if not result.get("accepted"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return success_response(result, request_id=getattr(request, "request_id", None))
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class StripeWebhookView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    @extend_schema(tags=["Billing"], description="Stripe payment webhook endpoint (international SaaS).")
+    def post(self, request: Request) -> Response:
+        signature = request.headers.get("Stripe-Signature", "") or request.headers.get(
+            "stripe-signature", ""
+        )
+        result = WebhookService().process_stripe_webhook(
+            body=request.body,
+            signature_header=signature,
+            external_event_id=None,
         )
         if not result.get("accepted"):
             return Response(result, status=status.HTTP_400_BAD_REQUEST)

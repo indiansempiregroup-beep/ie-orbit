@@ -3,6 +3,7 @@ import { MapPin } from 'lucide-react';
 import type { Branch } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
+import { placesCountryCodeFromName } from '../../lib/placesCountryCode';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Dialog } from '../../components/Dialog';
@@ -152,14 +153,14 @@ export function BranchesPanel() {
     try {
       if (editingId) {
         await updateBranch.mutateAsync({ branchId: editingId, branch: payload });
-        snackbar.push('Office updated.', 'success');
+        snackbar.push('Office details saved.', 'success');
       } else {
         await createBranch.mutateAsync({ ...payload, is_primary: branches.length === 0 });
-        snackbar.push('Office created successfully.', 'success');
+        snackbar.push('Office added.', 'success');
       }
       closeForm();
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to save office.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't save this office. Check the details and try again.", 'error');
     }
   }
 
@@ -168,7 +169,7 @@ export function BranchesPanel() {
       await updateBranch.mutateAsync({ branchId, branch: { is_primary: true } });
       snackbar.push('Primary office updated.', 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to update office.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't update this office. Try again.", 'error');
     }
   }
 
@@ -183,9 +184,9 @@ export function BranchesPanel() {
         branchId: branch.id,
         branch: { status: deactivating ? 'inactive' : 'active' },
       });
-      snackbar.push(deactivating ? 'Office deactivated.' : 'Office reactivated.', 'success');
+      snackbar.push(deactivating ? 'Office deactivated.' : 'Office is active again.', 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to update office.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't update this office. Try again.", 'error');
     }
   }
 
@@ -374,6 +375,7 @@ export function BranchesPanel() {
             value={address}
             latitude={latitude}
             longitude={longitude}
+            countryCode={placesCountryCodeFromName(country)}
             onChangeText={setAddress}
             onPlaceSelected={(place) => {
               const cleared =

@@ -42,7 +42,7 @@ export function PaymentProofCameraScreen() {
       });
       navigation.goBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to capture photo.');
+      setError(err instanceof Error ? err.message : "Couldn't capture the photo. Try again.");
       setCapturing(false);
     }
   }

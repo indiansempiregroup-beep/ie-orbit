@@ -12,6 +12,7 @@ from apps.audit.services.audit import record_audit
 from apps.authentication.models import User, UserStatus
 from apps.authentication.services.roles import RoleService
 from apps.businesses.models import Business
+from apps.common.utils.business_identity import assert_no_staff_customer_conflict
 from apps.staff.models import INVITABLE_PLATFORM_ROLES, InvitationStatus, Staff, StaffInvitation
 from apps.tenancy.models import Tenant
 
@@ -45,6 +46,16 @@ class StaffInvitationService:
         role_code = platform_role_code.strip().lower()
         if role_code not in INVITABLE_PLATFORM_ROLES:
             raise ValidationError({"platform_role_code": "Only manager or staff roles can be invited."})
+
+        existing_user = User.objects.filter(email__iexact=normalized_email).first() if normalized_email else None
+        assert_no_staff_customer_conflict(
+            tenant=tenant,
+            business=business,
+            email=normalized_email,
+            phone=getattr(existing_user, "phone_number", "") or "",
+            user=existing_user,
+            creating="staff",
+        )
 
         existing = StaffInvitation.objects.filter(
             tenant=tenant,
@@ -214,6 +225,15 @@ class StaffInvitationService:
                 by_email.save(update_fields=["user", "email", "updated_at"])
             return by_email
 
+        assert_no_staff_customer_conflict(
+            tenant=tenant,
+            business=business,
+            email=normalized_email,
+            phone=user.phone_number or "",
+            user=user,
+            creating="staff",
+        )
+
         local_part = normalized_email.split("@")[0] if normalized_email else "staff"
         staff_code = local_part.replace(".", "-")[:40]
         suffix = 1
@@ -240,11 +260,11 @@ class StaffInvitationService:
         accept_url = f"{frontend_base.rstrip('/')}/auth/accept-invitation?token={invitation.token}"
         business_name = invitation.business.display_name
         body = (
-            f"You have been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
+            f"You've been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
             f"Accept the invitation to get started. This link expires on {invitation.expires_at:%Y-%m-%d}."
         )
         send_branded_email(
-            subject=f"You are invited to join {business_name} on IE Orbit",
+            subject=f"You're invited to join {business_name} on IE Orbit",
             body=body,
             recipient=invitation.email,
             business_name=business_name or "IE Orbit",

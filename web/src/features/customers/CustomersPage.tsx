@@ -204,7 +204,7 @@ export function CustomersPage() {
                             onClick={() =>
                               customer.id &&
                               restoreCustomer.mutate(customer.id, {
-                                onSuccess: () => snackbar.push('Customer activated.', 'success'),
+                                onSuccess: () => snackbar.push('Customer is active again.', 'success'),
                                 onError: (error) => snackbar.push(error.message, 'error'),
                               })
                             }
@@ -241,7 +241,7 @@ export function CustomersPage() {
                               updateCustomer.mutate(
                                 { customerId: customer.id, customer: { status: 'active' } },
                                 {
-                                  onSuccess: () => snackbar.push('Customer activated.', 'success'),
+                                  onSuccess: () => snackbar.push('Customer is active again.', 'success'),
                                   onError: (error) => snackbar.push(error.message, 'error'),
                                 },
                               )
@@ -331,7 +331,7 @@ export function CustomersPage() {
                 resetForm();
               },
               onError: (err) => {
-                setCreationError(err.message ?? 'Failed to create customer');
+                setCreationError(err.message ?? "Couldn't save this customer. Check the details and try again.");
               },
             });
           }}

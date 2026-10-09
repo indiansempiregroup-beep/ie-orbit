@@ -113,9 +113,9 @@ export function StaffDetailScreen() {
                 email: member.email,
                 platform_role_code: 'staff',
               });
-              setMessage('Invitation sent. They can accept via email, then sign in on OPS-Mobile.');
+              setMessage('Invite sent. They can accept by email, then sign in.');
             } catch (err) {
-              setError(getApiErrorMessage(err, 'Unable to send invitation.'));
+              setError(getApiErrorMessage(err, "Couldn't send the invite. Try again."));
             } finally {
               setBusy(false);
             }
@@ -152,7 +152,7 @@ export function StaffDetailScreen() {
                       else await mutations.deactivate(member.id);
                       await reload();
                     } catch (err) {
-                      setError(getApiErrorMessage(err, 'Unable to update staff status.'));
+                      setError(getApiErrorMessage(err, "Couldn't update their status. Try again."));
                     } finally {
                       setBusy(false);
                     }

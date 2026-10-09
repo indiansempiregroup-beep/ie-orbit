@@ -107,6 +107,9 @@ class ShopDeliverySettingsView(APIView):
                 business=business,
                 enabled=data.get("instant_delivery_enabled"),
                 incoming=dict(data.get("delivery_integration") or {}),
+                cod_allowed_for_instant_delivery=data.get(
+                    "cod_allowed_for_instant_delivery"
+                ),
             )
             if data.get("courier_integration") is not None:
                 settings = self.delivery.update_courier_settings(

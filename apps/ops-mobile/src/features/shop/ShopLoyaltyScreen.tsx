@@ -99,7 +99,7 @@ export function ShopLoyaltyScreen() {
       await refreshWorkspace();
       toast.push('Reward points settings saved', 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to save settings', 'error');
+      toast.push(err instanceof Error ? err.message : "Couldn't save settings. Try again.", 'error');
     } finally {
       setBusy(false);
     }

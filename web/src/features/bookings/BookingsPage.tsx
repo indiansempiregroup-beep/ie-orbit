@@ -339,7 +339,7 @@ export function BookingsPage() {
                 });
               },
               onError: (err) => {
-                setCreationError(err.message ?? 'Failed to create booking');
+                setCreationError(err.message ?? "Couldn't create this booking. Check the details and try again.");
               },
             });
           }}

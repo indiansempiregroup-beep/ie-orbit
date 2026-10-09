@@ -13,6 +13,18 @@ from apps.tenancy.models import Tenant
 DEFAULT_SUGGESTED_TOP_UPS = [5000, 10000, 25000, 50000]
 DEFAULT_MESSAGE_PRICE_PAISE = 50
 DEFAULT_CONFIRM_PRICE_PAISE = 100
+DEFAULT_ASSISTANT_PRICES_MINOR = {
+    "INR": {
+        "message": DEFAULT_MESSAGE_PRICE_PAISE,
+        "confirm": DEFAULT_CONFIRM_PRICE_PAISE,
+        "top_ups": list(DEFAULT_SUGGESTED_TOP_UPS),
+    },
+    "USD": {
+        "message": 1,
+        "confirm": 2,
+        "top_ups": [500, 1000, 2500, 5000],
+    },
+}
 
 
 def get_platform_assistant_row() -> PlatformAssistantSettings:
@@ -23,24 +35,82 @@ def get_platform_assistant_row() -> PlatformAssistantSettings:
             "message_price_paise": DEFAULT_MESSAGE_PRICE_PAISE,
             "confirm_price_paise": DEFAULT_CONFIRM_PRICE_PAISE,
             "suggested_top_up_paise": list(DEFAULT_SUGGESTED_TOP_UPS),
+            "prices_minor": dict(DEFAULT_ASSISTANT_PRICES_MINOR),
         },
     )
     return row
+
+
+def _assistant_prices_minor(settings: PlatformAssistantSettings) -> dict[str, dict[str, Any]]:
+    raw = getattr(settings, "prices_minor", None) or {}
+    inr_raw = raw.get("INR") if isinstance(raw, dict) else None
+    usd_raw = raw.get("USD") if isinstance(raw, dict) else None
+    tops = settings.suggested_top_up_paise if isinstance(settings.suggested_top_up_paise, list) else []
+    cleaned_inr = [int(v) for v in tops if int(v) > 0] or list(DEFAULT_SUGGESTED_TOP_UPS)
+    inr = {
+        "message": int(
+            (inr_raw or {}).get("message")
+            if isinstance(inr_raw, dict) and (inr_raw or {}).get("message") is not None
+            else settings.message_price_paise
+            or DEFAULT_MESSAGE_PRICE_PAISE
+        ),
+        "confirm": int(
+            (inr_raw or {}).get("confirm")
+            if isinstance(inr_raw, dict) and (inr_raw or {}).get("confirm") is not None
+            else settings.confirm_price_paise
+            or DEFAULT_CONFIRM_PRICE_PAISE
+        ),
+        "top_ups": (
+            [int(v) for v in (inr_raw or {}).get("top_ups", []) if int(v) > 0]
+            if isinstance(inr_raw, dict) and isinstance((inr_raw or {}).get("top_ups"), list)
+            else cleaned_inr
+        )
+        or cleaned_inr,
+    }
+    usd_defaults = DEFAULT_ASSISTANT_PRICES_MINOR["USD"]
+    usd = {
+        "message": int(
+            (usd_raw or {}).get("message")
+            if isinstance(usd_raw, dict) and (usd_raw or {}).get("message") is not None
+            else usd_defaults["message"]
+        ),
+        "confirm": int(
+            (usd_raw or {}).get("confirm")
+            if isinstance(usd_raw, dict) and (usd_raw or {}).get("confirm") is not None
+            else usd_defaults["confirm"]
+        ),
+        "top_ups": (
+            [int(v) for v in (usd_raw or {}).get("top_ups", []) if int(v) > 0]
+            if isinstance(usd_raw, dict) and isinstance((usd_raw or {}).get("top_ups"), list)
+            else list(usd_defaults["top_ups"])
+        )
+        or list(usd_defaults["top_ups"]),
+    }
+    return {"INR": inr, "USD": usd}
 
 
 def serialize_platform_assistant_settings(
     row: PlatformAssistantSettings | None = None,
 ) -> dict[str, Any]:
     settings = row or get_platform_assistant_row()
-    tops = settings.suggested_top_up_paise if isinstance(settings.suggested_top_up_paise, list) else []
-    cleaned = [int(v) for v in tops if int(v) > 0] or list(DEFAULT_SUGGESTED_TOP_UPS)
+    prices = _assistant_prices_minor(settings)
+    cleaned = prices["INR"]["top_ups"]
     return {
         "enabled": bool(settings.enabled),
-        "message_price_paise": int(settings.message_price_paise),
-        "confirm_price_paise": int(settings.confirm_price_paise),
+        "message_price_paise": int(prices["INR"]["message"]),
+        "confirm_price_paise": int(prices["INR"]["confirm"]),
         "suggested_top_up_paise": cleaned,
         "suggested_top_up_inr": [round(v / 100, 2) for v in cleaned],
+        "prices_minor": prices,
     }
+
+
+def assistant_prices_for_currency(currency: str = "INR") -> dict[str, Any]:
+    code = str(currency or "INR").strip().upper()
+    if code not in {"INR", "USD"}:
+        code = "INR"
+    prices = _assistant_prices_minor(get_platform_assistant_row())
+    return {"currency": code, **prices[code]}
 
 
 def serialize_ledger_row(row: AssistantWalletLedger) -> dict[str, Any]:
@@ -78,24 +148,34 @@ class AssistantWalletService:
     def platform_overage_enabled(self) -> bool:
         return bool(get_platform_assistant_row().enabled)
 
-    def message_price_paise(self) -> int:
-        return max(1, int(get_platform_assistant_row().message_price_paise or DEFAULT_MESSAGE_PRICE_PAISE))
+    def message_price_paise(self, *, currency: str = "INR") -> int:
+        prices = assistant_prices_for_currency(currency)
+        return max(1, int(prices["message"]))
 
-    def confirm_price_paise(self) -> int:
-        return max(1, int(get_platform_assistant_row().confirm_price_paise or DEFAULT_CONFIRM_PRICE_PAISE))
+    def confirm_price_paise(self, *, currency: str = "INR") -> int:
+        prices = assistant_prices_for_currency(currency)
+        return max(1, int(prices["confirm"]))
 
     def wallet_snapshot(self, *, tenant: Tenant, business: Business) -> dict[str, Any]:
+        from apps.billing.services.region import saas_currency_for_business
+
         wallet = self.ensure_wallet(tenant=tenant, business=business)
         settings = serialize_platform_assistant_settings()
+        currency = saas_currency_for_business(business)
+        prices = assistant_prices_for_currency(currency)
         balance = int(wallet.balance_paise)
+        tops = list(prices["top_ups"])
         return {
+            "currency": currency,
             "balance_paise": balance,
             "balance_inr": round(balance / 100, 2),
+            "balance_major": round(balance / 100, 2),
             "overage_enabled": bool(settings["enabled"]),
-            "message_price_paise": int(settings["message_price_paise"]),
-            "confirm_price_paise": int(settings["confirm_price_paise"]),
-            "suggested_top_up_paise": settings["suggested_top_up_paise"],
-            "suggested_top_up_inr": settings["suggested_top_up_inr"],
+            "message_price_paise": int(prices["message"]),
+            "confirm_price_paise": int(prices["confirm"]),
+            "suggested_top_up_paise": tops,
+            "suggested_top_up_inr": [round(v / 100, 2) for v in tops],
+            "suggested_top_up_major": [round(v / 100, 2) for v in tops],
         }
 
     @transaction.atomic

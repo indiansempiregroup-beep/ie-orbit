@@ -8,29 +8,73 @@ from apps.businesses.constants import PRODUCT_PLAN_CATALOG, plan_extra_cap
 
 
 def _fallback_definitions(product_code: str) -> list[dict[str, Any]]:
+    from apps.billing.constants import PLAN_PRICE_PAISE, PLAN_PRICE_USD_CENTS, YEARLY_PRICE_MULTIPLIER
+
     plans = PRODUCT_PLAN_CATALOG.get(product_code, [])
-    return [
-        {
-            "product_code": product_code,
-            "code": str(plan["code"]),
-            "name": str(plan.get("name", plan["code"])),
-            "description": str(plan.get("description", "")),
-            "billing_interval": str(plan.get("billing_interval", "monthly")),
-            "trial_days": int(plan.get("trial_days", 0) or 0),
-            "is_default": bool(plan.get("is_default", False)),
-            "max_staff": int(plan.get("max_staff", 1) or 1),
-            "max_branches": int(plan.get("max_branches", 1) or 1),
-            "max_extra_staff": plan_extra_cap(plan, "max_extra_staff"),
-            "max_extra_offices": plan_extra_cap(plan, "max_extra_offices"),
-            "bi_features": list(plan.get("bi_features") or []),
-            "features": list(plan.get("features") or []),
-            "is_public": True,
-        }
-        for plan in plans
-    ]
+    result: list[dict[str, Any]] = []
+    for plan in plans:
+        code = str(plan["code"])
+        monthly_inr = PLAN_PRICE_PAISE.get(code)
+        monthly_usd = PLAN_PRICE_USD_CENTS.get(code)
+        result.append(
+            {
+                "product_code": product_code,
+                "code": code,
+                "name": str(plan.get("name", plan["code"])),
+                "description": str(plan.get("description", "")),
+                "billing_interval": str(plan.get("billing_interval", "monthly")),
+                "trial_days": int(plan.get("trial_days", 0) or 0),
+                "is_default": bool(plan.get("is_default", False)),
+                "max_staff": int(plan.get("max_staff", 1) or 1),
+                "max_branches": int(plan.get("max_branches", 1) or 1),
+                "max_extra_staff": plan_extra_cap(plan, "max_extra_staff"),
+                "max_extra_offices": plan_extra_cap(plan, "max_extra_offices"),
+                "bi_features": list(plan.get("bi_features") or []),
+                "features": list(plan.get("features") or []),
+                "amount_paise": monthly_inr,
+                "yearly_amount_paise": (
+                    monthly_inr * YEARLY_PRICE_MULTIPLIER if monthly_inr is not None else None
+                ),
+                "prices_minor": {
+                    "INR": {
+                        "monthly": monthly_inr,
+                        "yearly": (
+                            monthly_inr * YEARLY_PRICE_MULTIPLIER if monthly_inr is not None else None
+                        ),
+                    },
+                    "USD": {
+                        "monthly": monthly_usd,
+                        "yearly": (
+                            monthly_usd * YEARLY_PRICE_MULTIPLIER if monthly_usd is not None else None
+                        ),
+                    },
+                },
+                "yearly_months_charged": YEARLY_PRICE_MULTIPLIER,
+                "is_public": True,
+            }
+        )
+    return result
 
 
 def _serialize_row(row: Any) -> dict[str, Any]:
+    from apps.billing.constants import PLAN_PRICE_USD_CENTS, YEARLY_PRICE_MULTIPLIER
+    from apps.billing.services.region import normalize_prices_minor
+
+    months = int(getattr(row, "yearly_months_charged", None) or 10)
+    prices_minor = normalize_prices_minor(getattr(row, "prices_minor", None))
+    if prices_minor["INR"]["monthly"] is None:
+        prices_minor["INR"]["monthly"] = int(row.amount_paise or 0) or None
+    if prices_minor["INR"]["yearly"] is None:
+        yearly = row.yearly_amount_paise
+        if yearly is not None:
+            prices_minor["INR"]["yearly"] = int(yearly)
+        elif prices_minor["INR"]["monthly"]:
+            prices_minor["INR"]["yearly"] = int(prices_minor["INR"]["monthly"]) * months
+    if prices_minor["USD"]["monthly"] is None:
+        usd = PLAN_PRICE_USD_CENTS.get(str(row.code))
+        if usd is not None:
+            prices_minor["USD"]["monthly"] = usd
+            prices_minor["USD"]["yearly"] = usd * (months or YEARLY_PRICE_MULTIPLIER)
     return {
         "id": str(row.id),
         "product_code": row.product_code,
@@ -48,7 +92,8 @@ def _serialize_row(row: Any) -> dict[str, Any]:
         "features": list(row.features or []),
         "amount_paise": row.amount_paise,
         "yearly_amount_paise": row.yearly_amount_paise,
-        "yearly_months_charged": int(getattr(row, "yearly_months_charged", None) or 10),
+        "prices_minor": prices_minor,
+        "yearly_months_charged": months,
         "is_public": bool(row.is_public),
     }
 

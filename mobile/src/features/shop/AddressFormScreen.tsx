@@ -140,14 +140,14 @@ export function AddressFormScreen() {
             business_code: businessCode,
             ...payload,
           });
-      toast.push(editing ? 'Address updated.' : 'Address saved.', 'success');
+      toast.push(editing ? 'Address details saved.' : 'Address saved.', 'success');
       if (selectOnSave && saved.data?.id) {
         navigation.navigate('Cart', { selectedAddressId: saved.data.id });
         return;
       }
       navigation.goBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save this address. Try again.');
+      setError(err instanceof Error ? err.message : "Couldn't save this address. Try again.");
     } finally {
       setSaving(false);
     }

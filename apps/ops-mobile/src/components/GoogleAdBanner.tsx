@@ -45,13 +45,38 @@ function useTestAdUnits() {
   );
 }
 
+async function requestIosAppTrackingTransparency() {
+  if (Platform.OS !== 'ios') return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const tracking = require('expo-tracking-transparency') as {
+      getTrackingPermissionsAsync?: () => Promise<{ status: string }>;
+      requestTrackingPermissionsAsync?: () => Promise<{ status: string }>;
+    };
+    if (!tracking?.getTrackingPermissionsAsync || !tracking?.requestTrackingPermissionsAsync) {
+      return;
+    }
+    const current = await tracking.getTrackingPermissionsAsync();
+    if (current.status === 'undetermined') {
+      await tracking.requestTrackingPermissionsAsync();
+    }
+  } catch {
+    // ATT not available — continue with non-personalized ads.
+  }
+}
+
 async function initializeAdsSdk(ads: AdsModule) {
-  // UMP can hang when no form is configured or the native UI never settles.
-  // Never block Mobile Ads init on consent — otherwise the slot stays empty forever.
+  // iOS ATT first (EU/App Store), then UMP. Neither may block Mobile Ads init forever.
+  await Promise.race([
+    requestIosAppTrackingTransparency().catch(() => null),
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), 2000);
+    }),
+  ]);
   await Promise.race([
     ads.AdsConsent.gatherConsent().catch(() => null),
     new Promise<null>((resolve) => {
-      setTimeout(() => resolve(null), 2500);
+      setTimeout(() => resolve(null), 3000);
     }),
   ]);
   return ads.MobileAds().initialize();

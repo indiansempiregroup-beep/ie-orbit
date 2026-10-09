@@ -93,13 +93,37 @@ class ProductEnrichmentService:
 
     @staticmethod
     def with_user_message(result: dict[str, Any]) -> dict[str, Any]:
-        """Ensure API payloads expose a shop-owner-friendly message (never raw source keys)."""
+        """Ensure API payloads expose a shop-owner-friendly message (never raw source keys).
+
+        Success copy always states whether the fill was free or deducted from Smart Fill wallet.
+        """
         if not isinstance(result, dict):
             return result
+
+        source = str(result.get("source") or "").strip()
+        found = bool(result.get("found"))
+        charged_paise = 0
+        try:
+            charged_paise = max(0, int(result.get("charged_paise") or 0))
+        except (TypeError, ValueError):
+            charged_paise = 0
+
+        free_note = " Free — no wallet charge."
+        if charged_paise > 0:
+            billing_note = f" ₹{charged_paise / 100:.2f} deducted from Smart Fill wallet."
+        else:
+            billing_note = ""
+
         existing = str(result.get("message") or "").strip()
-        if existing and "platform_gtin" not in existing and "_barcode" not in existing:
-            # Keep explicit messages unless they leak internal source tokens.
-            if not any(
+        # Keep carefully written miss / error messages that already explain next steps,
+        # unless this was a paid Smart hit that still needs the debit called out.
+        keep_existing = bool(
+            existing
+            and not found
+            and charged_paise <= 0
+            and "platform_gtin" not in existing
+            and "_barcode" not in existing
+            and not any(
                 token in existing
                 for token in (
                     "gemini_text",
@@ -113,60 +137,77 @@ class ProductEnrichmentService:
                     "shop_shared",
                     "commercial_",
                     "image_hint",
+                    "openmrp",
+                    "datakick",
+                    "public_go_upc",
                 )
-            ):
-                return result
+            )
+        )
+        if keep_existing:
+            return result
 
-        source = str(result.get("source") or "").strip()
-        found = bool(result.get("found"))
-        charged = result.get("charged_paise")
-        charge_note = ""
-        try:
-            if charged is not None and int(charged) > 0:
-                charge_note = f" (₹{int(charged) / 100:.2f})"
-        except (TypeError, ValueError):
-            charge_note = ""
-
-        if source == "platform_gtin":
-            message = "Filled from our product catalog. Review price and stock, then save."
-        elif source == "shop_catalog":
+        if source == "shop_catalog":
             name = str(result.get("existing_product_name") or result.get("name") or "this product").strip()
             message = f"Already in your catalog as {name}."
+        elif source == "platform_gtin":
+            message = (
+                f"Filled from our product catalog.{free_note} Review price and stock, then save."
+                if found
+                else "No catalog match for this barcode."
+            )
         elif source == "shop_shared":
-            message = "Filled from products saved by shops on the platform. Review price and stock, then save."
+            message = (
+                f"Filled from products shared by shops on the platform.{free_note} "
+                "Review price and stock, then save."
+                if found
+                else "No shared catalog match for this barcode."
+            )
         elif source == "openmrp":
             message = (
-                "Filled from OpenMRP (India product registry). Review price and stock, then save."
+                f"Filled from the India product registry.{free_note} Review price and stock, then save."
                 if found
-                else "No OpenMRP match for this barcode."
+                else "No match in the India product registry."
             )
         elif source == "datakick":
             message = (
-                "Filled from Datakick (open product database). Review details, then save."
+                f"Filled from an open product database.{free_note} Review details, then save."
                 if found
-                else "No Datakick match for this barcode."
+                else "No match in the open product database."
             )
         elif source.startswith("commercial_") or source == "public_go_upc":
             message = (
-                "Filled from a barcode data provider. Review price and stock, then save."
+                f"Filled from an online product database.{free_note} Review price and stock, then save."
                 if found
-                else "No match from the barcode data provider."
+                else "No match from the online product database."
             )
-        elif source in {"gemini_vision"}:
-            message = (
-                f"Filled from pack photo{charge_note}. Review carefully, then save."
-                if found
-                else "Could not read the pack photo clearly. Try again or fill details manually."
-            )
-        elif source in {"gemini_text"}:
-            message = (
-                f"Filled by Smart lookup{charge_note}. Review carefully — a pack photo improves accuracy."
-                if found
-                else "Smart lookup could not identify this barcode. Take a pack photo or enter details manually."
-            )
+        elif source == "gemini_vision":
+            if found and charged_paise > 0:
+                message = f"Filled from pack photo.{billing_note} Review carefully, then save."
+            elif found:
+                message = f"Filled from pack photo. No wallet charge. Review carefully, then save."
+            else:
+                message = existing or "Could not read the pack photo clearly. Try again or fill details manually."
+        elif source == "gemini_text":
+            if found:
+                billing = billing_note if charged_paise > 0 else " No wallet charge."
+                if result.get("needs_pack_photo"):
+                    message = (
+                        f"Possible match from Smart lookup (not verified).{billing} "
+                        "Review carefully, or capture a pack photo to confirm."
+                    )
+                else:
+                    message = (
+                        f"Filled by Smart lookup.{billing} "
+                        "Review carefully — a pack photo improves accuracy."
+                    )
+            else:
+                message = (
+                    existing
+                    or "Smart lookup could not identify this barcode. Take a pack photo or enter details manually."
+                )
         elif source.endswith("_barcode") or source.startswith("open_"):
             message = (
-                "Filled from an online product database. Review price and stock, then save."
+                f"Filled from an online product database.{free_note} Review price and stock, then save."
                 if found
                 else "No online match for this barcode — take a pack photo or fill details manually."
             )
@@ -174,10 +215,12 @@ class ProductEnrichmentService:
             message = "No online match for this barcode — take a pack photo or fill details manually."
         elif source == "image_hint":
             message = "Photo saved. Scan the barcode or enter the product name to look up details."
+        elif found and charged_paise > 0:
+            message = f"Product details filled.{billing_note} Review price and stock, then save."
         elif found:
-            message = "Product details filled. Review price and stock, then save."
+            message = f"Product details filled.{free_note} Review price and stock, then save."
         else:
-            message = "No match yet. Take a pack photo or enter details manually."
+            message = existing or "No match yet. Take a pack photo or enter details manually."
 
         result["message"] = message
         return result
@@ -207,50 +250,31 @@ class ProductEnrichmentService:
             result["code"] = normalized_code
             result["sku"] = normalized_code
 
-            # Free India registry before Open*Facts / Gemini.
-            # Also used to fill MRP gaps on catalog rows seeded from Open*Facts.
-            if self._needs_mrp(result):
-                for variant in variants:
-                    openmrp = lookup_openmrp_barcode(variant)
-                    if openmrp and openmrp.get("found") and openmrp.get("name"):
-                        openmrp["code"] = normalized_code
-                        openmrp["sku"] = normalized_code
-                        result = self._merge_enrichment(result, openmrp)
-                        break
+            # Stage B: race free providers that still apply (same steps, overlapped).
+            prefer = prefer_pet or any(self.looks_like_pet_query(v) for v in variants)
+            result = self._merge_provider_hits(
+                result,
+                normalized_code,
+                self._race_free_providers(
+                    variants=variants,
+                    normalized_code=normalized_code,
+                    needs_mrp=self._needs_mrp(result),
+                    needs_identity=not bool(result.get("found")),
+                    prefer_pet=prefer,
+                ),
+            )
 
-            if not result.get("found"):
-                for variant in variants:
-                    prefer = prefer_pet or self.looks_like_pet_query(variant)
-                    hit = self._fetch_by_barcode(variant, prefer_pet=prefer)
-                    if hit.get("found"):
-                        hit["code"] = normalized_code
-                        result = self._merge_enrichment(result, hit)
-                        break
-
-            # Free Datakick open product DB (GTIN-14) before paid commercial APIs.
-            if not result.get("found"):
-                datakick = lookup_datakick_barcode(normalized_code)
-                if datakick and datakick.get("found") and datakick.get("name"):
-                    datakick["code"] = normalized_code
-                    datakick["sku"] = normalized_code
-                    result = self._merge_enrichment(result, datakick)
-
-            # Commercial APIs sometimes include shelf price — useful when OpenMRP is down.
-            if (not result.get("found") or self._needs_mrp(result)) and barcode_api_configured():
-                commercial = lookup_commercial_barcode(normalized_code)
-                if commercial and commercial.get("found") and commercial.get("name"):
-                    commercial["code"] = normalized_code
-                    commercial["sku"] = normalized_code
-                    result = self._merge_enrichment(result, commercial)
-
-            # Free public pages often cover Indian retail EANs that Open*Facts / trial
-            # UPC APIs miss (e.g. Himalaya pet SKUs on Go-UPC).
-            if not result.get("found") or self._needs_pack_size(result):
-                public = lookup_public_barcode(normalized_code)
-                if public and public.get("found") and public.get("name"):
-                    public["code"] = normalized_code
-                    public["sku"] = normalized_code
-                    result = self._merge_enrichment(result, public)
+            # Stage C: commercial + public gap-fill in parallel when still incomplete.
+            result = self._merge_provider_hits(
+                result,
+                normalized_code,
+                self._race_gap_fill_providers(
+                    normalized_code=normalized_code,
+                    needs_identity=not bool(result.get("found")),
+                    needs_mrp=self._needs_mrp(result),
+                    needs_pack=self._needs_pack_size(result),
+                ),
+            )
 
             if result.get("found"):
                 result = self._ensure_pack_size(result)
@@ -274,6 +298,143 @@ class ProductEnrichmentService:
         return self.with_user_message(
             {"found": False, "code": code or "", "source": None, "confidence": "none"}
         )
+
+    def _race_free_providers(
+        self,
+        *,
+        variants: list[str],
+        normalized_code: str,
+        needs_mrp: bool,
+        needs_identity: bool,
+        prefer_pet: bool,
+    ) -> list[dict[str, Any]]:
+        """OpenMRP + Open*Facts + Datakick concurrently; all still run when needed."""
+        hits: list[dict[str, Any]] = []
+        if not needs_mrp and not needs_identity:
+            return hits
+
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures: dict[Any, str] = {}
+            if needs_mrp:
+                futures[pool.submit(self._lookup_openmrp_any, variants)] = "openmrp"
+            if needs_identity:
+                futures[pool.submit(self._lookup_openfacts_any, variants, prefer_pet)] = "openfacts"
+                futures[pool.submit(lookup_datakick_barcode, normalized_code)] = "datakick"
+            for future in as_completed(futures):
+                label = futures[future]
+                try:
+                    hit = future.result()
+                except Exception as exc:  # noqa: BLE001 — keep other providers
+                    logger.info("Free enrich provider %s failed: %s", label, exc)
+                    continue
+                if hit and hit.get("found") and hit.get("name"):
+                    hits.append(hit)
+        return hits
+
+    def _race_gap_fill_providers(
+        self,
+        *,
+        normalized_code: str,
+        needs_identity: bool,
+        needs_mrp: bool,
+        needs_pack: bool,
+    ) -> list[dict[str, Any]]:
+        """Commercial + public Go-UPC concurrently for remaining gaps."""
+        hits: list[dict[str, Any]] = []
+        want_commercial = (needs_identity or needs_mrp) and barcode_api_configured()
+        want_public = needs_identity or needs_pack
+        if not want_commercial and not want_public:
+            return hits
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures: dict[Any, str] = {}
+            if want_commercial:
+                futures[pool.submit(lookup_commercial_barcode, normalized_code)] = "commercial"
+            if want_public:
+                futures[pool.submit(lookup_public_barcode, normalized_code)] = "public"
+            for future in as_completed(futures):
+                label = futures[future]
+                try:
+                    hit = future.result()
+                except Exception as exc:  # noqa: BLE001 — keep other providers
+                    logger.info("Gap-fill enrich provider %s failed: %s", label, exc)
+                    continue
+                if hit and hit.get("found") and hit.get("name"):
+                    hits.append(hit)
+        return hits
+
+    def _lookup_openmrp_any(self, variants: list[str]) -> dict[str, Any] | None:
+        """Race GTIN variants against OpenMRP; first hit wins."""
+        if not variants:
+            return None
+        if len(variants) == 1:
+            return lookup_openmrp_barcode(variants[0])
+
+        with ThreadPoolExecutor(max_workers=min(4, len(variants))) as pool:
+            futures = [pool.submit(lookup_openmrp_barcode, variant) for variant in variants]
+            for future in as_completed(futures):
+                try:
+                    hit = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("OpenMRP variant race failed: %s", exc)
+                    continue
+                if hit and hit.get("found") and hit.get("name"):
+                    for pending in futures:
+                        pending.cancel()
+                    return hit
+        return None
+
+    def _lookup_openfacts_any(self, variants: list[str], prefer_pet: bool) -> dict[str, Any] | None:
+        """Race GTIN variants against Open*Facts catalogs; first hit wins."""
+        if not variants:
+            return None
+
+        def _one(variant: str) -> dict[str, Any] | None:
+            prefer = prefer_pet or self.looks_like_pet_query(variant)
+            hit = self._fetch_by_barcode(variant, prefer_pet=prefer)
+            if hit.get("found"):
+                return hit
+            return None
+
+        if len(variants) == 1:
+            return _one(variants[0])
+
+        with ThreadPoolExecutor(max_workers=min(4, len(variants))) as pool:
+            futures = [pool.submit(_one, variant) for variant in variants]
+            for future in as_completed(futures):
+                try:
+                    hit = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    logger.info("Open*Facts variant race failed: %s", exc)
+                    continue
+                if hit and hit.get("found"):
+                    for pending in futures:
+                        pending.cancel()
+                    return hit
+        return None
+
+    @classmethod
+    def _merge_provider_hits(
+        cls,
+        result: dict[str, Any],
+        normalized_code: str,
+        hits: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        # Identity catalogs first; OpenMRP / commercial last so MRP fills gaps.
+        def _merge_rank(hit: dict[str, Any]) -> int:
+            source = str(hit.get("source") or "")
+            if source.startswith("openmrp") or source.startswith("commercial_"):
+                return 2
+            if source in {"datakick", "public_go_upc"}:
+                return 1
+            return 0
+
+        for hit in sorted(hits, key=_merge_rank):
+            hit = dict(hit)
+            hit["code"] = normalized_code
+            hit["sku"] = normalized_code
+            result = cls._merge_enrichment(result, hit)
+        return result
 
     def contribute_from_shop_product(self, product: ShopProduct) -> int:
         """Share manufacturer GTINs from a shop product into the platform catalog (no shop price)."""

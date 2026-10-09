@@ -140,7 +140,7 @@ export function ServiceFormScreen() {
 
                 if (isEdit && route.params?.serviceId) {
                   await mutations.update(route.params.serviceId, payload);
-                  toast.push('Service updated.', 'success');
+                  toast.push('Service details saved.', 'success');
                   navigation.replace('ServiceDetail', { serviceId: route.params.serviceId });
                 } else {
                   const code = `svc-${Date.now().toString(36)}`;
@@ -149,11 +149,11 @@ export function ServiceFormScreen() {
                     service_code: code,
                     ...payload,
                   });
-                  toast.push('Service created.', 'success');
+                  toast.push('Service added.', 'success');
                   navigation.replace('ServiceDetail', { serviceId: created.id });
                 }
               } catch (err) {
-                setError(getApiErrorMessage(err, 'Unable to save service.'));
+                setError(getApiErrorMessage(err, "Couldn't save this service. Check the details and try again."));
               } finally {
                 setSubmitting(false);
               }

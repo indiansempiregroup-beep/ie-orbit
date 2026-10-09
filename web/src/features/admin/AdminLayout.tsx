@@ -18,6 +18,7 @@ import {
   TicketPercent,
   Users,
   Handshake,
+  Wallet,
 } from 'lucide-react';
 import { IE_ORBIT_ICON_SRC } from '../../components/BrandLockup';
 import { useAuth } from '../../hooks/useAuth';
@@ -40,6 +41,7 @@ const navGroups: Array<{
       { to: '/admin/tenants', label: 'Tenants', icon: <Building2 size={16} /> },
       { to: '/admin/subscriptions', label: 'Subscriptions', icon: <CreditCard size={16} /> },
       { to: '/admin/packages', label: 'Packages', icon: <Package size={16} /> },
+      { to: '/admin/usage-pricing', label: 'Usage pricing', icon: <Wallet size={16} /> },
       { to: '/admin/affiliates', label: 'Affiliates', icon: <Handshake size={16} /> },
       { to: '/admin/coupons', label: 'Coupons', icon: <TicketPercent size={16} /> },
     ],

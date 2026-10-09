@@ -342,6 +342,103 @@ def test_enrich_uses_datakick_after_open_facts_miss(monkeypatch: pytest.MonkeyPa
     assert PlatformGtinCatalog.objects.filter(code="41250500735", name="Vitamin C 500 mg").exists()
 
 
+@pytest.mark.django_db
+def test_enrich_parallel_merges_openfacts_and_openmrp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Open*Facts + OpenMRP both run; MRP from OpenMRP merges onto Open*Facts identity."""
+    enrichment = ProductEnrichmentService()
+    calls: list[str] = []
+
+    def fake_fetch(self, code: str, *, prefer_pet: bool = False):  # noqa: ARG001
+        calls.append("openfacts")
+        return {
+            "found": True,
+            "code": code,
+            "source": "open_food_facts_barcode",
+            "name": "Maggi Noodles",
+            "brand": "Maggi",
+            "pack_size": "70 g",
+            "image_url": "https://example.com/maggi.jpg",
+            "front_image_url": "https://example.com/maggi.jpg",
+            "images": {
+                "front": "https://example.com/maggi.jpg",
+                "back": "",
+                "gallery": ["https://example.com/maggi.jpg"],
+            },
+            "mrp": "0",
+            "confidence": "high",
+        }
+
+    def fake_openmrp(code: str):
+        calls.append("openmrp")
+        return {
+            "found": True,
+            "code": code,
+            "source": "openmrp",
+            "name": "Maggi 2-Minute Noodles",
+            "brand": "Maggi",
+            "pack_size": "70 g",
+            "mrp": "14",
+            "currency": "INR",
+            "image_url": "https://example.com/maggi.jpg",
+            "front_image_url": "https://example.com/maggi.jpg",
+            "images": {
+                "front": "https://example.com/maggi.jpg",
+                "back": "",
+                "gallery": ["https://example.com/maggi.jpg"],
+            },
+            "confidence": "high",
+        }
+
+    monkeypatch.setattr(ProductEnrichmentService, "_fetch_by_barcode", fake_fetch)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_openmrp_barcode", fake_openmrp)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_datakick_barcode", lambda code: None)  # noqa: ARG005
+    monkeypatch.setattr("apps.shopie.services.enrichment.barcode_api_configured", lambda: False)
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_public_barcode", lambda code: None)  # noqa: ARG005
+
+    result = enrichment.enrich(code="8901058000290")
+    assert result["found"] is True
+    assert result["mrp"] == "14"
+    assert "Maggi" in result["name"]
+    assert "openfacts" in calls
+    assert "openmrp" in calls
+
+
+@pytest.mark.django_db
+def test_enrich_complete_platform_gtin_skips_external(monkeypatch: pytest.MonkeyPatch) -> None:
+    PlatformGtinCatalog.objects.create(
+        code="8906002483999",
+        name="Complete Cached SKU",
+        brand="Acme",
+        pack_size="500 g",
+        mrp=99,
+        source="openmrp",
+        confidence="high",
+        image_url="https://example.com/acme.jpg",
+        images={"front": "https://example.com/acme.jpg", "back": "", "gallery": ["https://example.com/acme.jpg"]},
+    )
+    called: list[str] = []
+
+    def boom(name: str):
+        def _inner(*args, **kwargs):  # noqa: ARG001
+            called.append(name)
+            raise AssertionError(f"{name} should not run on complete cache hit")
+
+        return _inner
+
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_openmrp_barcode", boom("openmrp"))
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_datakick_barcode", boom("datakick"))
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_commercial_barcode", boom("commercial"))
+    monkeypatch.setattr("apps.shopie.services.enrichment.lookup_public_barcode", boom("public"))
+    monkeypatch.setattr(ProductEnrichmentService, "_fetch_by_barcode", boom("openfacts"))
+
+    result = ProductEnrichmentService().enrich(code="8906002483999")
+    assert result["found"] is True
+    assert result["source"] == "platform_gtin"
+    assert result["name"] == "Complete Cached SKU"
+    assert float(result["mrp"]) == 99.0
+    assert called == []
+
+
 def test_datakick_gtin14_parser(monkeypatch: pytest.MonkeyPatch) -> None:
     from apps.shopie.services import barcode_providers as providers
 

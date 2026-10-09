@@ -222,6 +222,10 @@ export function useUpdateAddonPricingMutation() {
       staff_price_paise: number;
       office_price_paise: number;
       pets_price_paise: number;
+      prices_minor?: {
+        INR?: { staff?: number; office?: number; pets?: number };
+        USD?: { staff?: number; office?: number; pets?: number };
+      };
       reason: string;
     }) => (await client.platform.updateAddonPricing(body)).data,
     onSuccess: () => {
@@ -258,6 +262,10 @@ export function useUpdateAssistantSettingsMutation() {
       message_price_paise: number;
       confirm_price_paise: number;
       suggested_top_up_paise: number[];
+      prices_minor?: {
+        INR?: { message?: number; confirm?: number; top_ups?: number[] };
+        USD?: { message?: number; confirm?: number; top_ups?: number[] };
+      };
       reason: string;
     }) => (await client.platform.updateAssistantSettings(body)).data,
     onSuccess: () => {
@@ -280,6 +288,10 @@ export function useUpdateSmartLookupSettingsMutation() {
       input_usd_per_million: number | string;
       output_usd_per_million: number | string;
       suggested_top_up_paise: number[];
+      prices_minor?: {
+        INR?: { min_charge?: number; top_ups?: number[] };
+        USD?: { min_charge?: number; top_ups?: number[] };
+      };
       reason: string;
     }) => (await client.platform.updateSmartLookupSettings(body)).data,
     onSuccess: () => {

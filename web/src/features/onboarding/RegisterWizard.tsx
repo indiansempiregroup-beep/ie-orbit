@@ -13,6 +13,7 @@ import { LogoUploadField } from '../../components/LogoUploadField';
 import { BusinessHoursEditor } from '../../components/BusinessHoursEditor';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { preferHumanAddress, placeToAddressFields } from '../../lib/placeAddress';
+import { placesCountryCodeFromName } from '../../lib/placesCountryCode';
 import { WizardShell } from './components/WizardShell';
 import { useOnboardingDraft } from './hooks/useOnboardingDraft';
 import { provisionWorkspace } from './provisionWorkspace';
@@ -519,6 +520,7 @@ export function RegisterWizard() {
                 value={values.address}
                 latitude={values.latitude}
                 longitude={values.longitude}
+                countryCode={placesCountryCodeFromName(values.country)}
                 onChangeText={(value) => setValue('address', value, { shouldDirty: true, shouldValidate: true })}
                 onPlaceSelected={applyPlace}
               />

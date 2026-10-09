@@ -120,7 +120,10 @@ def consume_message_quota(*, tenant: Tenant, business: Business, used: int) -> L
                 "detail": f"Daily free Assistant limit reached ({limit} messages). Try again tomorrow.",
             }
         )
-    price = wallet.message_price_paise()
+    from apps.billing.services.region import saas_currency_for_business
+
+    currency = saas_currency_for_business(business)
+    price = wallet.message_price_paise(currency=currency)
     balance = int(wallet.ensure_wallet(tenant=tenant, business=business).balance_paise)
     if balance < price:
         _raise_no_balance(kind="message", free_limit=limit)
@@ -129,7 +132,7 @@ def consume_message_quota(*, tenant: Tenant, business: Business, used: int) -> L
         business=business,
         amount_paise=price,
         source="message",
-        metadata={"unit_price_paise": price},
+        metadata={"unit_price_paise": price, "currency": currency},
     )
     return "wallet"
 
@@ -148,7 +151,10 @@ def consume_confirm_quota(*, tenant: Tenant, business: Business, used: int) -> L
                 "detail": f"Daily free Assistant confirm limit reached ({limit}). Try again tomorrow.",
             }
         )
-    price = wallet.confirm_price_paise()
+    from apps.billing.services.region import saas_currency_for_business
+
+    currency = saas_currency_for_business(business)
+    price = wallet.confirm_price_paise(currency=currency)
     balance = int(wallet.ensure_wallet(tenant=tenant, business=business).balance_paise)
     if balance < price:
         _raise_no_balance(kind="confirm", free_limit=limit)
@@ -157,6 +163,6 @@ def consume_confirm_quota(*, tenant: Tenant, business: Business, used: int) -> L
         business=business,
         amount_paise=price,
         source="confirm",
-        metadata={"unit_price_paise": price},
+        metadata={"unit_price_paise": price, "currency": currency},
     )
     return "wallet"

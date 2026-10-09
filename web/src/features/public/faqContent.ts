@@ -155,7 +155,7 @@ export const faqSections: FaqSection[] = [
       },
       {
         q: 'Which currencies and regions are supported?',
-        a: 'You choose a currency during onboarding (common options include INR, USD, EUR, GBP, and others). The choice is stored on your business profile. Pricing on this website is shown in INR; UPI billing is designed for Indian businesses.',
+        a: 'You choose an operating currency during onboarding (INR, USD, EUR, GBP, and others). IE Orbit SaaS subscription billing follows your business region: India workspaces bill in INR via UPI (plus Razorpay/Cashfree where configured); international workspaces bill in USD via Stripe. Public pricing on this site is often shown in INR for India.',
       },
     ],
   },
@@ -207,18 +207,18 @@ export const faqSections: FaqSection[] = [
         q: 'How does subscription billing work?',
         a: {
           paragraphs: [
-            'Subscriptions are billed in INR. Pay monthly or yearly via UPI from your workspace billing area.',
-            'After you pay, submit a payment claim with your UTR or a screenshot so our team can confirm and activate your subscription. This manual confirmation step applies to UPI payments today.',
+            'India: subscriptions are billed in INR. Pay monthly or yearly via UPI from Products & Billing (Razorpay/Cashfree may also be available). After a UPI transfer, submit a payment claim with your UTR or a screenshot so our team can confirm activation.',
+            'International: subscriptions are billed in USD via Stripe Checkout from Products & Billing. Tax may be calculated with Stripe Tax where applicable.',
           ],
         },
       },
       {
         q: 'Do I need a credit card?',
-        a: 'No. You can start the trial and explore the full Pro feature set without a credit card. Subscription is via UPI when you choose to upgrade.',
+        a: 'No credit card is required to start the trial. In India you can upgrade with UPI (and optional gateways). Outside India, paid subscription uses Stripe (card and other methods Stripe supports).',
       },
       {
         q: 'How do customer payments work (Razorpay)?',
-        a: 'On eligible Orbit Mart Pro plans, you can connect your own Razorpay account so customers pay you directly for shop orders. Platform subscription (your bill to IE Orbit) is separate and uses UPI plus payment claims as described above.',
+        a: 'On eligible Orbit Mart Pro plans in India, you can connect Razorpay and/or Cashfree so customers pay you for shop orders. Internationally, Stripe Connect may be available when offered. Your IE Orbit SaaS bill (INR/UPI or USD/Stripe) is always separate from customer checkout.',
       },
       {
         q: 'What if my trial ends and I do not upgrade?',

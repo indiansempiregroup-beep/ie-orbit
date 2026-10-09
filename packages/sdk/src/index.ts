@@ -378,6 +378,7 @@ export type BusinessProductPlanChangeInput = {
 
 export type BillingStatus = {
   provider: string;
+  billing_region?: 'IN' | 'INTL';
   configured: boolean;
   key_id?: string | null;
   webhook_configured: boolean;
@@ -394,13 +395,18 @@ export type BillingStatus = {
     webhook_configured: boolean;
     env?: string;
   };
+  stripe?: {
+    configured: boolean;
+    publishable_key?: string | null;
+    webhook_configured: boolean;
+  };
 };
 
 export type BillingCheckoutInput = {
   product_code: string;
   plan_code: string;
   business_id?: string;
-  provider?: 'razorpay' | 'cashfree';
+  provider?: 'razorpay' | 'cashfree' | 'stripe';
 };
 
 export type BillingCheckoutSession = {
@@ -408,6 +414,7 @@ export type BillingCheckoutSession = {
   provider?: string;
   order_id: string;
   payment_session_id?: string;
+  checkout_url?: string;
   amount: number;
   currency: string;
   product_code: string;
@@ -1089,6 +1096,7 @@ export type MobileBootstrapResponse = {
     upi_vpa?: string;
     payment_qr_url?: string;
     cod_enabled?: boolean;
+    cod_allowed_for_instant_delivery?: boolean;
     razorpay?: { can_accept_payments?: boolean };
     cashfree?: { can_accept_payments?: boolean };
   };
@@ -1623,6 +1631,10 @@ export type PlatformPlanPackage = {
   features: string[];
   amount_paise: number;
   yearly_amount_paise?: number | null;
+  prices_minor?: {
+    INR?: { monthly?: number | null; yearly?: number | null };
+    USD?: { monthly?: number | null; yearly?: number | null };
+  };
   yearly_months_charged?: number;
   is_active: boolean;
   is_public: boolean;
@@ -1773,6 +1785,14 @@ export type PlatformAddonPricing = {
   staff_price_inr: number;
   office_price_inr: number;
   pets_price_inr: number;
+  currency?: string;
+  staff_price_major?: number;
+  office_price_major?: number;
+  pets_price_major?: number;
+  prices_minor?: {
+    INR?: { staff?: number; office?: number; pets?: number };
+    USD?: { staff?: number; office?: number; pets?: number };
+  };
 };
 
 export type PlatformSmartLookupSettings = {
@@ -1788,6 +1808,10 @@ export type PlatformSmartLookupSettings = {
   output_usd_per_million: number;
   suggested_top_up_paise: number[];
   suggested_top_up_inr: number[];
+  prices_minor?: {
+    INR?: { min_charge?: number; top_ups?: number[] };
+    USD?: { min_charge?: number; top_ups?: number[] };
+  };
   model: string;
   refresh?: {
     usd_to_inr: number;
@@ -1803,6 +1827,10 @@ export type PlatformAssistantSettings = {
   confirm_price_paise: number;
   suggested_top_up_paise: number[];
   suggested_top_up_inr: number[];
+  prices_minor?: {
+    INR?: { message?: number; confirm?: number; top_ups?: number[] };
+    USD?: { message?: number; confirm?: number; top_ups?: number[] };
+  };
 };
 
 export type PlatformProductCatalogItem = {
@@ -2252,6 +2280,7 @@ export type Business = {
   gst_tax_number?: string | null;
   status?: string;
   currency?: string | null;
+  saas_currency?: 'INR' | 'USD' | string | null;
   timezone?: string | null;
   primary_contact?: string | null;
   website?: string | null;
@@ -2828,6 +2857,8 @@ export type ShopDeliveryLive = {
 
 export type ShopDeliverySettings = {
   instant_delivery_enabled: boolean;
+  /** When false, customers cannot pay cash for Porter/Shiprocket instant orders. */
+  cod_allowed_for_instant_delivery?: boolean;
   delivery_sla?: {
     default_delivery_days_min?: number | string;
     default_delivery_days_max?: number | string;
@@ -2987,6 +3018,30 @@ export type WhatsAppActivityRow = {
   external_id: string;
 };
 
+export type MerchantStripeSettings = {
+  provider: 'stripe';
+  configured: boolean;
+  connected: boolean;
+  platform_enabled: boolean;
+  plan_entitled: boolean;
+  region_supported?: boolean;
+  available: boolean;
+  enabled: boolean;
+  can_accept_payments: boolean;
+  status:
+    | 'disabled_by_platform'
+    | 'not_in_plan'
+    | 'not_configured'
+    | 'verification_required'
+    | 'paused'
+    | 'live';
+  account_id: string;
+  account_id_masked?: string;
+  onboarding_url?: string;
+  charges_enabled?: boolean;
+  last_onboarded_at?: string | null;
+};
+
 export type MerchantPaymentSettings = {
   provider: 'razorpay';
   configured: boolean;
@@ -3011,7 +3066,9 @@ export type MerchantPaymentSettings = {
   webhook_url: string;
   upi_vpa: string;
   cod_enabled: boolean;
+  billing_region?: 'IN' | 'INTL';
   cashfree?: MerchantCashfreeSettings;
+  stripe?: MerchantStripeSettings;
 };
 
 export type MerchantRazorpayCheckout = {
@@ -4850,6 +4907,11 @@ class ApiClient {
         env?: string;
         test_connection?: boolean;
       };
+      stripe?: {
+        action?: 'start_connect' | 'connect' | 'complete' | 'mark_complete';
+        refresh_url?: string;
+        return_url?: string;
+      };
     }) => this.request<MerchantPaymentSettings>('/shop/payment-settings', { method: 'PATCH', body }),
     createRazorpayCheckout: (orderId: string) =>
       this.request<MerchantRazorpayCheckout>(`/shop/orders/${orderId}/razorpay-checkout`, {
@@ -4979,6 +5041,7 @@ class ApiClient {
     patchDeliverySettings: (body: {
       business_id: string;
       instant_delivery_enabled?: boolean;
+      cod_allowed_for_instant_delivery?: boolean;
       delivery_integration?: ShopDeliverySettings['delivery_integration'];
       courier_integration?: ShopDeliverySettings['courier_integration'];
     }) => this.request<ShopDeliverySettings>('/shop/delivery-settings', { method: 'PATCH', body }),
@@ -5894,6 +5957,10 @@ class ApiClient {
       staff_price_paise: number;
       office_price_paise: number;
       pets_price_paise: number;
+      prices_minor?: {
+        INR?: { staff?: number; office?: number; pets?: number };
+        USD?: { staff?: number; office?: number; pets?: number };
+      };
       reason: string;
     }) => this.request<PlatformAddonPricing>('/platform/addon-pricing', { method: 'PUT', body }),
     smartLookupSettings: () =>
@@ -5907,6 +5974,10 @@ class ApiClient {
       input_usd_per_million: number | string;
       output_usd_per_million: number | string;
       suggested_top_up_paise: number[];
+      prices_minor?: {
+        INR?: { min_charge?: number; top_ups?: number[] };
+        USD?: { min_charge?: number; top_ups?: number[] };
+      };
       reason: string;
     }) => this.request<PlatformSmartLookupSettings>('/platform/smart-lookup-settings', { method: 'PUT', body }),
     assistantSettings: () =>
@@ -5938,6 +6009,10 @@ class ApiClient {
       message_price_paise: number;
       confirm_price_paise: number;
       suggested_top_up_paise: number[];
+      prices_minor?: {
+        INR?: { message?: number; confirm?: number; top_ups?: number[] };
+        USD?: { message?: number; confirm?: number; top_ups?: number[] };
+      };
       reason: string;
     }) => this.request<PlatformAssistantSettings>('/platform/assistant-settings', { method: 'PUT', body }),
     refreshSmartLookupFx: (body?: { reason?: string }) =>
@@ -6105,9 +6180,10 @@ class ApiClient {
   billing = {
     status: () => this.request<BillingStatus>('/billing/status', { method: 'GET' }),
     plans: () => this.request<BillingPlanCatalogItem[]>('/billing/plans', { method: 'GET' }),
-    publicPlans: (query?: { product_code?: string }) =>
+    publicPlans: (query?: { product_code?: string; currency?: 'INR' | 'USD' | string }) =>
       this.request<{
         trial_days: number;
+        currency?: string;
         addon_staff_price_paise: number;
         addon_office_price_paise: number;
         addon_pets_price_paise: number;

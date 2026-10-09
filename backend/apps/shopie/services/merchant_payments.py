@@ -9,10 +9,21 @@ from django.utils import timezone
 
 from apps.billing.services.cashfree_client import CashfreeClient, CashfreeConfig
 from apps.billing.services.razorpay_client import RazorpayClient, RazorpayConfig
-from apps.businesses.constants import FEATURE_CASHFREE_PAYMENTS, FEATURE_RAZORPAY_PAYMENTS
+from apps.billing.services.region import billing_region_for_business
+from apps.billing.services.stripe_client import StripeClient
+from apps.businesses.constants import (
+    FEATURE_CASHFREE_PAYMENTS,
+    FEATURE_RAZORPAY_PAYMENTS,
+    FEATURE_STRIPE_PAYMENTS,
+)
 from apps.businesses.models import Business
 from apps.businesses.services.entitlements import EntitlementService
-from apps.platform_admin.feature_flags import CASHFREE_FLAG, RAZORPAY_FLAG, tenant_feature_enabled
+from apps.platform_admin.feature_flags import (
+    CASHFREE_FLAG,
+    RAZORPAY_FLAG,
+    STRIPE_FLAG,
+    tenant_feature_enabled,
+)
 from apps.shopie.models import ShopBusinessSettings, ShopOrder
 from apps.shopie.services.delivery_secrets import decrypt_secret, encrypt_secret, mask_secret
 
@@ -56,6 +67,7 @@ class MerchantCashfreeConfig:
 class MerchantPaymentService:
     metadata_key = "razorpay"
     cashfree_metadata_key = "cashfree"
+    stripe_metadata_key = "stripe"
 
     def ensure_settings(self, *, business: Business) -> ShopBusinessSettings:
         settings, _ = ShopBusinessSettings.objects.get_or_create(
@@ -130,10 +142,12 @@ class MerchantPaymentService:
             "webhook_url": webhook_url,
             "upi_vpa": business.upi_vpa or "",
             "cod_enabled": bool(settings.cod_enabled),
+            "billing_region": billing_region_for_business(business),
             "cashfree": self.cashfree_public_settings(
                 business=business,
                 webhook_url=cashfree_webhook_url,
             ),
+            "stripe": self.stripe_public_settings(business=business),
         }
 
     def update_cod_enabled(self, *, business: Business, cod_enabled: bool) -> None:
@@ -597,6 +611,125 @@ class MerchantPaymentService:
             "payment_status": str(pos.get("payment_status") or "due"),
         }
 
+    def stripe_availability(self, *, business: Business) -> dict[str, bool]:
+        settings = self.ensure_settings(business=business)
+        metadata = settings.metadata if isinstance(settings.metadata, dict) else {}
+        stored = metadata.get(self.stripe_metadata_key)
+        raw = stored if isinstance(stored, dict) else {}
+        platform_enabled = tenant_feature_enabled(
+            tenant=business.tenant,
+            key=STRIPE_FLAG,
+        )
+        plan_entitled = FEATURE_STRIPE_PAYMENTS in EntitlementService().entitled_features(
+            business=business
+        )
+        region_ok = billing_region_for_business(business) == "INTL"
+        enabled = bool(raw.get("enabled", True))
+        return {
+            "platform_enabled": platform_enabled,
+            "plan_entitled": plan_entitled,
+            "region_supported": region_ok,
+            "available": platform_enabled and plan_entitled and region_ok,
+            "enabled": enabled,
+        }
+
+    def stripe_public_settings(self, *, business: Business) -> dict[str, Any]:
+        settings = self.ensure_settings(business=business)
+        metadata = settings.metadata if isinstance(settings.metadata, dict) else {}
+        stored = metadata.get(self.stripe_metadata_key)
+        raw = stored if isinstance(stored, dict) else {}
+        account_id = str(raw.get("account_id") or "").strip()
+        availability = self.stripe_availability(business=business)
+        configured = bool(account_id)
+        connected = configured and bool(raw.get("charges_enabled") or raw.get("onboarding_complete"))
+        can_accept = connected and availability["available"] and availability["enabled"]
+        return {
+            "provider": "stripe",
+            "configured": configured,
+            "connected": connected,
+            **availability,
+            "can_accept_payments": can_accept,
+            "status": self._status(
+                configured=configured,
+                connected=connected,
+                availability=availability,
+            ),
+            "account_id": account_id,
+            "account_id_masked": mask_secret(account_id) if account_id else "",
+            "onboarding_url": str(raw.get("onboarding_url") or ""),
+            "charges_enabled": bool(raw.get("charges_enabled")),
+            "last_onboarded_at": raw.get("last_onboarded_at"),
+        }
+
+    def start_stripe_connect(
+        self,
+        *,
+        business: Business,
+        refresh_url: str,
+        return_url: str,
+        email: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or resume Stripe Connect Express onboarding for INTL merchants."""
+        availability = self.stripe_availability(business=business)
+        if not availability["available"]:
+            raise ValidationError(
+                {
+                    "stripe": (
+                        "Stripe Connect is available for international businesses on eligible Pro plans."
+                    )
+                }
+            )
+        settings = self.ensure_settings(business=business)
+        metadata = dict(settings.metadata or {})
+        existing = metadata.get(self.stripe_metadata_key)
+        stored = dict(existing) if isinstance(existing, dict) else {}
+        from apps.billing.services.region import is_india_country
+
+        client = StripeClient()
+        account_id = str(stored.get("account_id") or "").strip()
+        country = str(getattr(business, "country", "") or "US")
+        country_iso = country.strip().upper()[:2] if len(country.strip()) >= 2 else "US"
+        if is_india_country(country):
+            raise ValidationError(
+                {"stripe": "India businesses use Razorpay or Cashfree for customer payments."}
+            )
+        if not account_id:
+            remote = client.create_connect_express_account(
+                email=email or str(getattr(business, "email", "") or "") or None,
+                country=country_iso if len(country_iso) == 2 and country_iso.isalpha() else "US",
+            )
+            account_id = str(remote.get("id") or "")
+            if not account_id:
+                raise ValidationError({"stripe": "Unable to create Stripe Connect account."})
+            stored["account_id"] = account_id
+        link = client.create_connect_account_link(
+            account_id=account_id,
+            refresh_url=refresh_url,
+            return_url=return_url,
+        )
+        onboarding_url = str(link.get("url") or "")
+        stored["onboarding_url"] = onboarding_url
+        stored["enabled"] = True
+        stored["last_onboarded_at"] = timezone.now().isoformat()
+        metadata[self.stripe_metadata_key] = stored
+        settings.metadata = metadata
+        settings.save(update_fields=["metadata", "updated_at", "version"])
+        return self.public_settings(business=business)
+
+    def mark_stripe_connect_complete(self, *, business: Business) -> dict[str, Any]:
+        settings = self.ensure_settings(business=business)
+        metadata = dict(settings.metadata or {})
+        existing = metadata.get(self.stripe_metadata_key)
+        stored = dict(existing) if isinstance(existing, dict) else {}
+        if not stored.get("account_id"):
+            raise ValidationError({"stripe": "Start Stripe Connect onboarding first."})
+        stored["onboarding_complete"] = True
+        stored["charges_enabled"] = True
+        metadata[self.stripe_metadata_key] = stored
+        settings.metadata = metadata
+        settings.save(update_fields=["metadata", "updated_at", "version"])
+        return self.public_settings(business=business)
+
     @staticmethod
     def _status(
         *,
@@ -604,14 +737,16 @@ class MerchantPaymentService:
         connected: bool,
         availability: dict[str, bool],
     ) -> str:
-        if not availability["platform_enabled"]:
+        if not availability.get("platform_enabled", True):
             return "disabled_by_platform"
-        if not availability["plan_entitled"]:
+        if not availability.get("plan_entitled", True):
+            return "not_in_plan"
+        if availability.get("region_supported") is False:
             return "not_in_plan"
         if not configured:
             return "not_configured"
         if not connected:
             return "verification_required"
-        if not availability["enabled"]:
+        if not availability.get("enabled", True):
             return "paused"
         return "live"

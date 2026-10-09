@@ -930,8 +930,15 @@ def _payload_from_voucher(
     if einvoice is not None:
         irn = str(getattr(einvoice, "irn", "") or "")
     # Credit/debit notes do not collect payment via UPI on the document itself.
+    # Borrow/credit bills also omit UPI QR — paying that link does not settle Orbit dues.
     upi_url = ""
-    if kind_key == ShopDocumentKind.SALE and due > 0 and seller.get("upi_vpa"):
+    allow_upi_pay = (
+        kind_key == ShopDocumentKind.SALE
+        and due > 0
+        and seller.get("upi_vpa")
+        and payment_method != "borrow"
+    )
+    if allow_upi_pay:
         upi_url = build_upi_pay_url(
             vpa=seller["upi_vpa"],
             payee_name=seller["name"] or seller["display_name"] or "Shop",
@@ -995,7 +1002,7 @@ def _payload_from_voucher(
         "notes": voucher.notes or "",
         "irn": irn,
         "upi_pay_url": upi_url,
-        "payment_qr_url": seller.get("payment_qr_url") or "" if kind_key == ShopDocumentKind.SALE else "",
+        "payment_qr_url": (seller.get("payment_qr_url") or "") if allow_upi_pay else "",
         "public_url": public_url,
         "customer_id": buyer.get("customer_id"),
         "customer_phone": buyer.get("phone") or "",
@@ -1828,7 +1835,7 @@ class ShopDocumentService:
     .qr-img {{ width:140px; height:140px; border-radius:8px; background:#fff; padding:6px; border:1px solid #f5e0b0; }}
     .sheet.thermal .qr-img {{ width:120px; height:120px; }}
     .loyalty-highlight {{
-      margin-top:14px; display:flex; flex-wrap:nowrap; align-items:baseline; justify-content:center;
+      margin-top:10px; display:flex; flex-wrap:nowrap; align-items:baseline; justify-content:center;
       gap:6px; text-align:center; padding:10px 12px; border-radius:10px;
       background:linear-gradient(135deg, #ecfdf5 0%, #e8f6f4 100%);
       border:1px solid #a7f3d0; color:#065f46; white-space:nowrap;
@@ -1840,7 +1847,7 @@ class ShopDocumentService:
       border-color:#fde68a; color:#92400e;
     }}
     .loyalty-value {{ font-size:14px; font-weight:800; letter-spacing:-.01em; }}
-    .sheet.thermal .loyalty-highlight {{ margin-top:10px; padding:8px 10px; border-radius:8px; }}
+    .sheet.thermal .loyalty-highlight {{ margin-top:8px; padding:8px 10px; border-radius:8px; }}
     .sheet.thermal .loyalty-value {{ font-size:12.5px; }}
     .footer {{ margin-top:14px; font-size:11.5px; color:var(--muted); line-height:1.5; }}
     .sheet.thermal .footer {{ font-size:11px; text-align:center; }}
@@ -1895,6 +1902,7 @@ class ShopDocumentService:
       <div class="summary">
         <div>
           <div class="words"><strong>Amount in words:</strong> {words}</div>
+          {loyalty_highlight_html}
           {due_block}
           {f'<div class="footer">Notes: {notes}</div>' if notes else ''}
           {supply_meta}
@@ -1906,7 +1914,6 @@ class ShopDocumentService:
           {totals_html}
         </div>
       </div>
-      {loyalty_highlight_html}
     </div>
   </div>
   <script>
@@ -2354,11 +2361,12 @@ class ShopDocumentService:
             text_at(margin_x + 10, wy, chunk, size=8)
             wy -= 11
 
-        footer_y = min(words_bottom, totals_bottom) - 18
+        # Loyalty callout sits directly under amount-in-words (left column).
         loyalty_fill = (0.925, 0.990, 0.961)
         loyalty_ink = (0.024, 0.373, 0.275)
         loyalty_border = (0.655, 0.953, 0.816)
         loyalty_line = ""
+        loyalty_bottom = words_bottom
         if bill.get("loyalty_enabled"):
             loyalty_line = _loyalty_highlight_text(
                 points_earned=int(bill.get("points_earned") or 0),
@@ -2371,28 +2379,29 @@ class ShopDocumentService:
                 loyalty_border = (0.992, 0.906, 0.541)
         if loyalty_line:
             loyalty_h = 26.0
-            loyalty_bottom = footer_y - loyalty_h
-            fill_rect(margin_x, loyalty_bottom, content_w, loyalty_h, loyalty_fill)
-            stroke_rect(margin_x, loyalty_bottom, content_w, loyalty_h, loyalty_border)
-            line_text = fit_width(loyalty_line, size=10, max_w=content_w - 24, bold=True)
-            text_w = _pdf_text_width(line_text, 10, bold=True)
+            loyalty_gap = 8.0
+            loyalty_top = words_bottom - loyalty_gap
+            loyalty_bottom = loyalty_top - loyalty_h
+            fill_rect(margin_x, loyalty_bottom, words_w, loyalty_h, loyalty_fill)
+            stroke_rect(margin_x, loyalty_bottom, words_w, loyalty_h, loyalty_border)
+            line_text = fit_width(loyalty_line, size=9, max_w=words_w - 20, bold=True)
+            text_w = _pdf_text_width(line_text, 9, bold=True)
             text_at(
-                margin_x + max(12.0, (content_w - text_w) / 2),
-                footer_y - 17,
+                margin_x + max(10.0, (words_w - text_w) / 2),
+                loyalty_top - 17,
                 line_text,
-                size=10,
+                size=9,
                 bold=True,
                 rgb=loyalty_ink,
             )
-            footer_y = loyalty_bottom - 16
-        else:
-            footer_y -= 6
+
+        footer_y = min(loyalty_bottom, totals_bottom) - 18
 
         due = _q(payload.get("amount_due"))
         if due > 0:
             text_at(margin_x, footer_y, f"Amount due  {money(due)}", size=11, bold=True, rgb=(0.47, 0.21, 0.0))
             footer_y -= 14
-            if seller.get("upi_vpa"):
+            if payload.get("upi_pay_url") and seller.get("upi_vpa"):
                 text_at(margin_x, footer_y, f"Pay via UPI: {seller.get('upi_vpa')}", size=9, bold=True)
                 footer_y -= 14
         if payload.get("notes"):
@@ -2462,12 +2471,14 @@ class ShopDocumentService:
         estimated += len(seller_detail) * 10
         estimated += len(buyer_name_lines) * 10
         estimated += len(buyer_detail) * 10
-        if _q(payload.get("amount_due")) > 0 and seller.get("upi_vpa"):
+        if _q(payload.get("amount_due")) > 0 and payload.get("upi_pay_url") and seller.get("upi_vpa"):
             estimated += 20
+        # Amount in words + optional loyalty callout under it.
+        estimated += 40
         if payload.get("loyalty_enabled") and (
             int(payload.get("points_earned") or 0) > 0 or int(payload.get("points_to_earn") or 0) > 0
         ):
-            estimated += 28
+            estimated += 20
         if payload.get("notes"):
             estimated += 16
         height = float(max(420, min(estimated, 1600)))
@@ -2647,6 +2658,15 @@ class ShopDocumentService:
             tot("Payment", bill["payment_label"])
         tot("Received", payload.get("amount_paid"))
         tot("Due", payload.get("amount_due"), bold=True)
+        y -= 2
+        rule(y, dashed=True)
+        y -= 11
+        words = _amount_in_words(payload.get("total"), currency)
+        words_block = f"Amount in words: {words}"
+        # Wrap only to the printable thermal width (word boundaries), not a fixed char count.
+        for chunk in _pdf_wrap_to_width(words_block, size=7, max_w=right - left)[:4]:
+            text_at(left, y, chunk, size=7)
+            y -= 9
         if bill.get("loyalty_enabled"):
             loyalty_line = _loyalty_highlight_text(
                 points_earned=int(bill.get("points_earned") or 0),
@@ -2655,9 +2675,7 @@ class ShopDocumentService:
                 compact=True,
             )
             if loyalty_line:
-                y -= 4
-                rule(y, dashed=True)
-                y -= 12
+                y -= 2
                 text_center(
                     y,
                     fit_thermal(loyalty_line, size=8, max_w=right - left, bold=True),
@@ -2665,7 +2683,7 @@ class ShopDocumentService:
                     bold=True,
                 )
                 y -= 12
-        if _q(payload.get("amount_due")) > 0 and seller.get("upi_vpa"):
+        if _q(payload.get("amount_due")) > 0 and payload.get("upi_pay_url") and seller.get("upi_vpa"):
             y -= 2
             text_center(y, f"UPI {seller.get('upi_vpa')}", size=8, bold=True)
             y -= 12
@@ -2758,9 +2776,9 @@ class ShopDocumentService:
         title = str(payload.get("short_title") or "Document")
         payment_label = str(payload.get("payment_label") or "").strip()
         if remind_payment and due_amt > 0:
-            base = f"{business}: payment reminder for {title} {number}. Due {currency} {due}."
+            base = f"{business}: friendly reminder — {title} {number} has {currency} {due} due."
         else:
-            parts = [f"{business}: your {title} {number} for {currency} {total}"]
+            parts = [f"{business}: here's your {title} {number} ({currency} {total})"]
             if payment_label:
                 parts.append(f"Payment: {payment_label}")
             if _q(payload.get("amount_paid")) > 0 or due_amt > 0:

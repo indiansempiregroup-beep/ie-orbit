@@ -343,12 +343,12 @@ export function ShopProductsPage() {
         setBulkPrice('');
         setBulkPercent('');
       } else if (result.updated.length) {
-        snackbar.push(`Updated ${result.updated.length}, ${failed} failed.`, 'info');
+        snackbar.push(`Updated ${result.updated.length}; ${failed} didn't update.`, 'info');
       } else {
-        snackbar.push(result.errors[0]?.message || 'Unable to update the selected products.', 'error');
+        snackbar.push(result.errors[0]?.message || "Couldn't update the selected products. Try again.", 'error');
       }
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Unable to update the selected products.', 'error');
+      snackbar.push(error instanceof Error ? error.message : "Couldn't update the selected products. Try again.", 'error');
     }
   }
 
@@ -613,7 +613,7 @@ export function ShopProductsPage() {
         setMessage(syncJob.error || 'Analysis timed out. Try again or use barcode lookup.');
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to analyse packaging.');
+      setMessage(error instanceof Error ? error.message : "Couldn't analyse packaging. Try again.");
     } finally {
       setAnalyzing(false);
     }
@@ -637,7 +637,7 @@ export function ShopProductsPage() {
         categorySlug = created.data.slug;
         void queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Unable to create category.');
+        setMessage(error instanceof Error ? error.message : "Couldn't create this category. Try again.");
         return;
       }
     }
@@ -671,11 +671,11 @@ export function ShopProductsPage() {
       if (editingId) {
         await update.mutateAsync({ productId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Product updated.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Product details saved.', 'success'), 0);
       } else {
         await create.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Product saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push('Product added.', 'success'), 0);
       }
       setForm({ ...emptyForm, images: emptyProductImageSlots() });
       setEditingId(null);
@@ -683,7 +683,7 @@ export function ShopProductsPage() {
       setNameLookup('');
       setNeedsPackPhoto(false);
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Unable to save product.';
+      const text = error instanceof Error ? error.message : "Couldn't save this product. Check the details and try again.";
       setMessage(text);
       snackbar.push(text, 'error');
     }
