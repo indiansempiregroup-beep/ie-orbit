@@ -921,7 +921,7 @@ export function BIProfitPage() {
                 <div>
                   <div style={{ fontWeight: 600 }}>{row.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    {'stock_on_hand' in row
+                    {stockRisk.length
                       ? `Stock ${row.stock_on_hand}`
                       : `Gap ${formatMoney(Number(row.margin), currency)}`}
                   </div>
