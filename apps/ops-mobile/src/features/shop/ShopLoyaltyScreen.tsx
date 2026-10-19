@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -11,7 +11,7 @@ import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
-import type { Customer } from '@ie-orbit/sdk';
+import type { Customer, CustomerLoyaltyBalance, CustomerLoyaltyReport } from '@ie-orbit/sdk';
 import { customerLabel, formatMoney } from './shopBooksHelpers';
 import { readLoyaltyPrefs } from '../../utils/loyalty';
 
@@ -30,15 +30,18 @@ export function ShopLoyaltyScreen() {
   const [minRedeemPoints, setMinRedeemPoints] = useState('10');
   const [earnPointsPer100, setEarnPointsPer100] = useState('1');
   const [customerId, setCustomerId] = useState('');
+  const [report, setReport] = useState<CustomerLoyaltyReport | null>(null);
+  const [customerLoyalty, setCustomerLoyalty] = useState<CustomerLoyaltyBalance | null>(null);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
     setError(null);
     try {
-      const [businessRes, customersRes] = await Promise.all([
+      const [businessRes, customersRes, reportRes] = await Promise.all([
         client.businesses.get(businessId),
         client.customers.list({ business: businessId }),
+        client.customers.loyaltyReport({ business: businessId, limit: 30 }),
       ]);
       const prefs = readLoyaltyPrefs(
         (businessRes.data.settings ?? {}) as Record<string, unknown>,
@@ -49,6 +52,7 @@ export function ShopLoyaltyScreen() {
       setMinRedeemPoints(String(prefs.min_redeem_points));
       setEarnPointsPer100(String(prefs.earn_points_per_100));
       setCustomers(customersRes.data ?? []);
+      setReport(reportRes.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load reward points settings');
     } finally {
@@ -76,6 +80,25 @@ export function ShopLoyaltyScreen() {
     () => customers.find((c) => c.id === customerId) ?? null,
     [customers, customerId],
   );
+
+  useEffect(() => {
+    if (!client || !customerId) {
+      setCustomerLoyalty(null);
+      return;
+    }
+    let cancelled = false;
+    void client.customers
+      .getLoyaltyBalance(customerId)
+      .then((response) => {
+        if (!cancelled) setCustomerLoyalty(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomerLoyalty(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, customerId]);
 
   async function save() {
     if (!client || !businessId) return;
@@ -175,6 +198,15 @@ export function ShopLoyaltyScreen() {
         keyboardType="number-pad"
       />
 
+      {report?.summary ? (
+        <View style={styles.customerCard}>
+          <Text style={styles.section}>Activity totals</Text>
+          <Text style={styles.meta}>Given · {report.summary.points_earned}</Text>
+          <Text style={styles.meta}>Redeemed · {report.summary.points_redeemed}</Text>
+          <Text style={styles.meta}>Net · {report.summary.net_points}</Text>
+        </View>
+      ) : null}
+
       <Text style={styles.section}>Customer lookup</Text>
       <SelectField
         label="Customer"
@@ -193,12 +225,34 @@ export function ShopLoyaltyScreen() {
             </Text>
           ) : null}
           <Text style={styles.meta}>
-            Reward points · {selectedCustomer.loyalty_points ?? 0}
+            Reward points ·{' '}
+            {customerLoyalty?.points_balance ?? selectedCustomer.loyalty_points ?? 0}
           </Text>
+          {(customerLoyalty?.ledger ?? []).slice(0, 8).map((entry) => (
+            <Text key={entry.id} style={styles.meta}>
+              {entry.points_delta >= 0 ? `+${entry.points_delta}` : entry.points_delta} ·{' '}
+              {entry.reason || 'Update'}
+            </Text>
+          ))}
         </View>
       ) : (
         <Text style={styles.meta}>Search a customer to see their reward points balance.</Text>
       )}
+
+      {(report?.ledger ?? []).length ? (
+        <>
+          <Text style={styles.section}>Recent points given / redeemed</Text>
+          {report!.ledger.slice(0, 12).map((entry) => (
+            <View key={entry.id} style={styles.customerCard}>
+              <Text style={styles.customerName}>
+                {entry.customer_name || 'Customer'} ·{' '}
+                {entry.points_delta >= 0 ? `+${entry.points_delta}` : entry.points_delta}
+              </Text>
+              <Text style={styles.meta}>{entry.reason || entry.entry_type || 'Update'}</Text>
+            </View>
+          ))}
+        </>
+      ) : null}
     </FormScreen>
   );
 }

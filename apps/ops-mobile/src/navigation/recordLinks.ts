@@ -102,7 +102,7 @@ export function navigateFromNotificationData(
       return true;
     }
     if (returnId) {
-      navigateRoot('ShopOrderDetail', { orderId: returnId });
+      navigateRoot('ShopReturnDetail', { returnId });
       return true;
     }
     if (bookingId) {

@@ -31,8 +31,10 @@ import {
   SHOP_ORDER_STATUS_OPTIONS,
   shopOrderBadgeStyle,
 } from './posPayment';
+import { orderReturnWindow } from './shopBooksHelpers';
 import { deliveryMethodForOrder } from './deliveryTracking';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { SaleInsightChips } from './SaleInsightChips';
 
 /** Online shopping only — counter Sale (POS) lives in Books as GST invoices. */
 const ONLINE_MODES = new Set(['pickup', 'delivery']);
@@ -288,6 +290,7 @@ export function ShopOrdersScreen() {
                     ? 'Deliver now'
                     : 'Delivery'
                   : formatShopOrderFulfillment(item.fulfillment_mode);
+              const returnWindow = orderReturnWindow(item);
               return (
                 <Pressable
                   key={item.id}
@@ -324,6 +327,17 @@ export function ShopOrdersScreen() {
                           .filter(Boolean)
                           .join(' · ')}
                       </Text>
+                      {returnWindow ? (
+                        <Text
+                          style={[styles.returnBy, !returnWindow.open && styles.returnByEnded]}
+                          numberOfLines={1}
+                        >
+                          {returnWindow.summary}
+                        </Text>
+                      ) : null}
+                      <View style={styles.insightRow}>
+                        <SaleInsightChips source={item} currency={item.currency} hideWhenEmpty />
+                      </View>
                       {address ? (
                         <Text style={styles.address} numberOfLines={1}>
                           {address}
@@ -458,6 +472,14 @@ const styles = StyleSheet.create({
   amount: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.foreground },
   amountDue: { color: colors.destructive },
   body: { ...typography.caption, color: colors.mutedForeground, marginTop: 4, lineHeight: 18 },
+  returnBy: {
+    ...typography.caption,
+    color: '#1d4ed8',
+    fontFamily: fonts.bodySemi,
+    marginTop: 4,
+  },
+  returnByEnded: { color: '#92400e' },
+  insightRow: { marginTop: 6 },
   address: { ...typography.caption, color: colors.foreground, marginTop: 2, lineHeight: 18 },
   action: { color: colors.primary, fontSize: 13, fontFamily: fonts.bodySemi, marginTop: 8 },
   rowActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingTop: 2 },

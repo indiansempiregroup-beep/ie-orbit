@@ -99,41 +99,54 @@ export function ShopProductsScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () =>
-        canWrite ? (
-          <View style={styles.headerActions}>
-            {isDesktop ? (
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => navigation.navigate('BI', { tab: 'profit' })}
+            accessibilityRole="button"
+            accessibilityLabel="BI Profit insights"
+            hitSlop={8}
+            style={isDesktop ? styles.headerTextBtn : styles.headerBtn}
+          >
+            <Feather name="trending-up" size={isDesktop ? 16 : 18} color={colors.primary} />
+            {isDesktop ? <Text style={styles.headerTextBtnLabel}>BI Profit</Text> : null}
+          </Pressable>
+          {canWrite ? (
+            <>
+              {isDesktop ? (
+                <Pressable
+                  onPress={() => navigation.navigate('ShopProductsAddMany')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add many products"
+                  style={styles.headerTextBtn}
+                >
+                  <Feather name="grid" size={16} color={colors.primary} />
+                  <Text style={styles.headerTextBtnLabel}>Add many</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => navigation.navigate('ShopProductsAddMany')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add many products"
+                  hitSlop={8}
+                  style={styles.headerBtn}
+                >
+                  <Feather name="grid" size={18} color={colors.primary} />
+                </Pressable>
+              )}
               <Pressable
-                onPress={() => navigation.navigate('ShopProductsAddMany')}
+                onPress={() => navigation.navigate('ShopProductAdd')}
                 accessibilityRole="button"
-                accessibilityLabel="Add many products"
-                style={styles.headerTextBtn}
-              >
-                <Feather name="grid" size={16} color={colors.primary} />
-                <Text style={styles.headerTextBtnLabel}>Add many</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => navigation.navigate('ShopProductsAddMany')}
-                accessibilityRole="button"
-                accessibilityLabel="Add many products"
+                accessibilityLabel="Add product"
                 hitSlop={8}
                 style={styles.headerBtn}
               >
-                <Feather name="grid" size={18} color={colors.primary} />
+                <Feather name="plus" size={20} color={colors.primary} />
               </Pressable>
-            )}
-            <Pressable
-              onPress={() => navigation.navigate('ShopProductAdd')}
-              accessibilityRole="button"
-              accessibilityLabel="Add product"
-              hitSlop={8}
-              style={styles.headerBtn}
-            >
-              <Feather name="plus" size={20} color={colors.primary} />
-            </Pressable>
-          </View>
-        ) : null,
+            </>
+          ) : null}
+        </View>
+      ),
     });
   }, [canWrite, isDesktop, navigation]);
 

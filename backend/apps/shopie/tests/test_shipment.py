@@ -107,6 +107,61 @@ def test_ship_order_creates_shipment_and_moves_out_for_delivery(shipment_ctx) ->
 
 
 @pytest.mark.django_db
+def test_self_delivery_ship_does_not_require_awb(shipment_ctx) -> None:
+    tenant, business, customer, product = shipment_ctx
+    product.stock_on_hand = Decimal("10")
+    product.save(update_fields=["stock_on_hand", "updated_at"])
+
+    DeliveryZoneService().create_zone(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Local",
+            "cities": [],
+            "postal_prefixes": [],
+            "fee": Decimal("0"),
+            "enabled": True,
+        },
+    )
+
+    order = OrderService().create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.DELIVERY,
+        delivery_address="12 MG Road, Nashik",
+        delivery_city="Nashik",
+        delivery_postal_code="422001",
+        delivery_method="standard",
+        lines=[{"product_id": product.id, "quantity": 1}],
+        confirm=False,
+    )
+    order = OrderService().transition(
+        tenant=tenant, business=business, order=order, status=OrderStatus.CONFIRMED, notify=False
+    )
+    order = OrderService().transition(
+        tenant=tenant, business=business, order=order, status=OrderStatus.READY, notify=False
+    )
+
+    shipment = ShipmentService().ship_order(
+        tenant=tenant,
+        business=business,
+        order=order,
+        carrier="self",
+        tracking_number="",
+        notify_customer=False,
+    )
+    order.refresh_from_db()
+
+    assert shipment.carrier == "self"
+    assert shipment.carrier_label == "Deliver myself"
+    assert shipment.tracking_number == ""
+    assert shipment.tracking_url == ""
+    assert shipment.status == "out_for_delivery"
+    assert order.status == OrderStatus.OUT_FOR_DELIVERY
+
+
+@pytest.mark.django_db
 def test_min_order_total_blocks_standard_delivery(shipment_ctx) -> None:
     tenant, business, customer, product = shipment_ctx
 

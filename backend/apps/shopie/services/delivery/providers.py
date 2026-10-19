@@ -120,12 +120,25 @@ class MockDeliveryProvider:
                 drop.get("longitude", ""),
             )
         )
+        rider = dict(self.RIDER)
+        # Seed a GPS pin near pickup so live maps work before the first track poll.
+        try:
+            plat = float(pickup.get("latitude"))
+            plng = float(pickup.get("longitude"))
+            dlat = float(drop.get("latitude"))
+            dlng = float(drop.get("longitude"))
+            rider["location"] = {
+                "latitude": plat + (dlat - plat) * 0.08,
+                "longitude": plng + (dlng - plng) * 0.08,
+            }
+        except (TypeError, ValueError):
+            pass
         return {
             "booking_id": f"mock_delivery_{stamp}_{route}_{uuid.uuid4().hex}",
             "tracking_url": "",
             "partner_status": "rider_assigned",
             "eta_minutes": int(payload.get("eta_minutes") or 25),
-            "rider": dict(self.RIDER),
+            "rider": rider,
         }
 
     def cancel(self, booking_id: str) -> dict[str, Any]:
@@ -149,7 +162,9 @@ class MockDeliveryProvider:
                 if booked_at
                 else 0
             )
-            progress = min(1.0, max(0.0, (elapsed - 60) / 120))
+            # Never sit exactly on pickup — the rider pin would hide under the
+            # customer/shop marker on live maps (esp. reverse pickup).
+            progress = min(1.0, max(0.08, (elapsed - 30) / 150))
             rider["location"] = {
                 "latitude": pickup_lat + (drop_lat - pickup_lat) * progress,
                 "longitude": pickup_lng + (drop_lng - pickup_lng) * progress,

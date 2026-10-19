@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import uuid
 from datetime import timedelta
 from decimal import Decimal
@@ -17,11 +18,14 @@ from apps.businesses.models import Branch, BranchStatus, Business
 from apps.shopie.models import (
     DeliveryAttemptStatus,
     DeliveryWebhookStatus,
+    FulfillmentMode,
     OrderStatus,
+    ReturnMethod,
     ShopBusinessSettings,
     ShopDeliveryAttempt,
     ShopDeliveryWebhookEvent,
     ShopOrder,
+    ShopReturn,
     TrackingEventSource,
 )
 from apps.shopie.services.delivery.providers import DeliveryQuote, get_delivery_provider
@@ -534,12 +538,14 @@ class DeliveryService:
             raise ValidationError({"delivery_provider": "Provider did not return a booking ID."})
         status = normalize_partner_status(booked.get("partner_status"))
         now = timezone.now().isoformat()
+        rider = dict(booked.get("rider") or {})
+        rider_loc = rider.get("location") if isinstance(rider.get("location"), dict) else {}
         delivery.update(
             {
                 "booking_id": booking_id,
                 "tracking_url": str(booked.get("tracking_url") or ""),
                 "partner_status": status,
-                "rider": booked.get("rider") or {},
+                "rider": {key: value for key, value in rider.items() if key != "location"},
                 "eta_minutes": booked.get("eta_minutes") or delivery.get("eta_minutes"),
                 "events": [
                     *(delivery.get("events") or []),
@@ -550,6 +556,11 @@ class DeliveryService:
                 "reason": "",
             }
         )
+        rider_lat = self._coord(rider_loc.get("latitude") or rider_loc.get("lat"))
+        rider_lng = self._coord(rider_loc.get("longitude") or rider_loc.get("lng"))
+        if rider_lat is not None and rider_lng is not None:
+            delivery["rider_lat"] = rider_lat
+            delivery["rider_lng"] = rider_lng
         metadata["delivery"] = delivery
         order.metadata = metadata
         if retrying:
@@ -580,6 +591,463 @@ class DeliveryService:
         )
         notify_online_order(order=order, status=status)
         return order
+
+    def _customer_location_from_order(self, *, order: ShopOrder) -> dict[str, Any]:
+        """Customer address pin used as reverse-pickup collection point.
+
+        Prefers the order delivery pin; falls back to the customer's default
+        mapped address so pickup/instant-return still works when the original
+        order lacked coordinates.
+        """
+        metadata = order.metadata if isinstance(order.metadata, dict) else {}
+        delivery = metadata.get("delivery") if isinstance(metadata.get("delivery"), dict) else {}
+        drop = dict(delivery.get("drop") or {})
+        lat = self._coord(drop.get("latitude")) or self._coord(metadata.get("delivery_latitude"))
+        lng = self._coord(drop.get("longitude")) or self._coord(metadata.get("delivery_longitude"))
+        address = str(drop.get("address") or order.delivery_address or "")
+        address_2 = str(
+            drop.get("address_2")
+            or drop.get("address_line2")
+            or metadata.get("delivery_address_line2")
+            or ""
+        )
+        city = str(drop.get("city") or metadata.get("delivery_city") or "")
+        state = str(drop.get("state") or metadata.get("delivery_state") or "")
+        postal_code = str(
+            drop.get("postal_code") or metadata.get("delivery_postal_code") or ""
+        )
+        if lat is None or lng is None:
+            customer = getattr(order, "customer", None)
+            if customer is not None:
+                from apps.customers.models import CustomerAddress
+
+                addr = (
+                    CustomerAddress.objects.filter(customer=customer)
+                    .exclude(latitude__isnull=True)
+                    .exclude(longitude__isnull=True)
+                    .order_by("-is_default", "-created_at")
+                    .first()
+                )
+                if addr is not None:
+                    lat = self._coord(addr.latitude)
+                    lng = self._coord(addr.longitude)
+                    if not address:
+                        address = ", ".join(
+                            part
+                            for part in [
+                                str(addr.line1 or "").strip(),
+                                str(addr.line2 or "").strip(),
+                                str(addr.city or "").strip(),
+                            ]
+                            if part
+                        )
+                    if not address_2:
+                        address_2 = str(addr.line2 or "").strip()
+                    if not city:
+                        city = str(addr.city or "").strip()
+                    if not state:
+                        state = str(addr.state or "").strip()
+                    if not postal_code:
+                        postal_code = str(addr.postal_code or "").strip()
+        if lat is None or lng is None:
+            raise ValidationError(
+                {
+                    "delivery_address": (
+                        "Instant return pickup needs a mapped address. "
+                        "Add a delivery pin on your address book and try again."
+                    )
+                }
+            )
+        customer_name, customer_phone = resolve_order_delivery_contact(
+            order=order,
+            delivery=delivery,
+        )
+        drop_contact = drop.get("contact") if isinstance(drop.get("contact"), dict) else {}
+        return self._location(
+            latitude=lat,
+            longitude=lng,
+            address=address,
+            address_2=address_2,
+            city=city,
+            state=state,
+            postal_code=postal_code,
+            contact_name=str(drop_contact.get("name") or customer_name),
+            contact_phone=str(drop_contact.get("phone") or customer_phone),
+        )
+
+    def quote_return_pickup(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        order: ShopOrder,
+    ) -> dict[str, Any]:
+        """Quote a rider to collect from the customer and drop at the shop."""
+        settings = self.ensure_settings(tenant=tenant, business=business)
+        if not settings.instant_delivery_enabled:
+            return {"available": False, "reason": "instant_delivery_disabled"}
+        customer_pickup = self._customer_location_from_order(order=order)
+        shop_source = self.pickup_source(business=business)
+        if shop_source is None:
+            return {"available": False, "reason": "shop_pickup_unavailable"}
+        zone = DeliveryZoneService().match_zone(
+            tenant=tenant,
+            business=business,
+            city=str(customer_pickup.get("city") or ""),
+            postal_code=str(customer_pickup.get("postal_code") or ""),
+        )
+        if zone is None:
+            return {"available": False, "reason": "outside_delivery_zone"}
+        if not zone.instant_delivery_enabled:
+            return {"available": False, "reason": "instant_delivery_disabled_for_zone"}
+        # Swap vs outbound: pickup = customer, drop = shop.
+        shop_drop = self._location(
+            latitude=shop_source["latitude"],
+            longitude=shop_source["longitude"],
+            address=", ".join(
+                part
+                for part in (
+                    shop_source.get("address_parts")
+                    or [
+                        shop_source.get("address_line1"),
+                        shop_source.get("address_line2"),
+                        shop_source.get("city"),
+                        shop_source.get("state"),
+                        shop_source.get("postal_code"),
+                    ]
+                )
+                if part
+            ),
+            city=str(shop_source.get("city") or ""),
+            state=str(shop_source.get("state") or ""),
+            postal_code=str(shop_source.get("postal_code") or ""),
+            contact_name=str(shop_source.get("contact_name") or business.display_name),
+            contact_phone=str(shop_source.get("contact_phone") or business.primary_contact or ""),
+        )
+        shop_drop["branch_id"] = shop_source.get("branch_id") or ""
+        customer_name = str((customer_pickup.get("contact") or {}).get("name") or "")
+        customer_phone = str((customer_pickup.get("contact") or {}).get("phone") or "")
+        config = self._decrypted_config(settings)
+        provider = get_delivery_provider(config)
+        payload = {
+            "pickup": customer_pickup,
+            "drop": shop_drop,
+            "customer": {"name": customer_name, "phone": customer_phone},
+        }
+        result: DeliveryQuote = provider.quote(payload)
+        # Merchant bears reverse-pickup fee in v1 (not charged to customer).
+        return {
+            "available": True,
+            "provider": result.provider,
+            "provider_label": (
+                "Shiprocket Quick"
+                if result.provider == "shiprocket_quick"
+                else result.provider.title()
+            ),
+            "quote_id": result.quote_id,
+            "quoted_fee": str(result.fee.quantize(Decimal("0.01"))),
+            "customer_fee": "0.00",
+            "merchant_fee": str(result.fee.quantize(Decimal("0.01"))),
+            "eta_minutes": result.eta_minutes,
+            "expires_in_seconds": result.expires_in_seconds,
+            "delivery_zone_id": str(zone.id),
+            "delivery_zone_name": zone.name,
+            "pickup": customer_pickup,
+            "drop": shop_drop,
+            "direction": "return_pickup",
+            "partner_status": "packing",
+        }
+
+    @transaction.atomic
+    def dispatch_return_pickup(self, *, shop_return: ShopReturn) -> ShopReturn:
+        shop_return = (
+            ShopReturn.objects.select_for_update(of=("self",))
+            .select_related("business", "customer", "tenant", "order", "order__customer")
+            .get(id=shop_return.id)
+        )
+        if shop_return.return_method != ReturnMethod.INSTANT_PICKUP:
+            raise ValidationError(
+                {"return_method": "Instant rider dispatch is only for instant pickup returns."}
+            )
+        if shop_return.status in {"completed", "rejected"}:
+            raise ValidationError({"status": "This return can no longer be updated."})
+        metadata = dict(shop_return.metadata or {})
+        delivery = dict(metadata.get("delivery") or {})
+        if not delivery:
+            raise ValidationError({"delivery": "This return has no instant-pickup quote."})
+        if delivery.get("booking_id"):
+            return shop_return
+        settings = self.ensure_settings(
+            tenant=shop_return.tenant, business=shop_return.business
+        )
+        if not settings.instant_delivery_enabled:
+            raise ValidationError({"delivery": "Instant delivery is not enabled for this shop."})
+        config = self._decrypted_config(settings)
+        provider = get_delivery_provider(config)
+        order = shop_return.order
+        customer_name, customer_phone = resolve_order_delivery_contact(
+            order=order,
+            delivery=dict((order.metadata or {}).get("delivery") or {}),
+        )
+        pickup = merge_location_contact(
+            delivery.get("pickup") or {},
+            name=customer_name,
+            phone=customer_phone,
+        )
+        drop = merge_location_contact(delivery.get("drop") or {})
+        if not customer_phone:
+            raise ValidationError(
+                {"delivery": "Customer mobile number is required before dispatching a rider."}
+            )
+        payload = {
+            "request_id": str(shop_return.id),
+            "quote_id": delivery.get("quote_id"),
+            "pickup": pickup,
+            "drop": drop,
+            "customer": {
+                "name": customer_name,
+                "phone": customer_phone,
+            },
+            "order": {
+                "id": str(order.id),
+                "number": order.order_number,
+                "amount": str(shop_return.refund_total),
+                "payment_method": "",
+            },
+            "eta_minutes": delivery.get("eta_minutes"),
+        }
+        booked = provider.book(payload)
+        booking_id = str(booked.get("booking_id") or "")
+        if not booking_id:
+            raise ValidationError({"delivery_provider": "Provider did not return a booking ID."})
+        status = normalize_partner_status(booked.get("partner_status"))
+        now = timezone.now().isoformat()
+        rider = dict(booked.get("rider") or {})
+        rider_loc = rider.get("location") if isinstance(rider.get("location"), dict) else {}
+        delivery.update(
+            {
+                "booking_id": booking_id,
+                "tracking_url": str(booked.get("tracking_url") or ""),
+                "partner_status": status,
+                "rider": {key: value for key, value in rider.items() if key != "location"},
+                "eta_minutes": booked.get("eta_minutes") or delivery.get("eta_minutes"),
+                "events": [
+                    *(delivery.get("events") or []),
+                    {"status": status, "occurred_at": now, "label": "Pickup requested"},
+                ],
+                "last_updated": now,
+                "reason": "",
+                "direction": "return_pickup",
+            }
+        )
+        rider_lat = self._coord(rider_loc.get("latitude") or rider_loc.get("lat"))
+        rider_lng = self._coord(rider_loc.get("longitude") or rider_loc.get("lng"))
+        if rider_lat is not None and rider_lng is not None:
+            delivery["rider_lat"] = rider_lat
+            delivery["rider_lng"] = rider_lng
+        metadata["delivery"] = delivery
+        shop_return.metadata = metadata
+        shop_return.pickup_arranged_at = timezone.now()
+        if booked.get("tracking_url"):
+            shop_return.pickup_tracking_number = str(booking_id)[:128]
+        shop_return.status = "approved"
+        shop_return.save(
+            update_fields=[
+                "metadata",
+                "pickup_arranged_at",
+                "pickup_tracking_number",
+                "status",
+                "updated_at",
+                "version",
+            ]
+        )
+        history = TrackingHistoryService()
+        history.open_attempt(
+            shop_return=shop_return,
+            provider=str(delivery.get("provider") or ""),
+            booking_id=booking_id,
+            tracking_url=str(delivery.get("tracking_url") or ""),
+            rider=dict(delivery.get("rider") or {}),
+        )
+        return shop_return
+
+    @transaction.atomic
+    def apply_return_tracking(
+        self,
+        *,
+        shop_return: ShopReturn,
+        payload: dict[str, Any],
+        source: str = TrackingEventSource.POLL,
+        source_key: str = "",
+        attempt: ShopDeliveryAttempt | None = None,
+    ) -> ShopReturn:
+        shop_return = ShopReturn.objects.select_for_update().get(id=shop_return.id)
+        metadata = dict(shop_return.metadata or {})
+        delivery = dict(metadata.get("delivery") or {})
+        tracking = self._extract_tracking(payload)
+        history = TrackingHistoryService()
+        attempt = attempt or history.active_attempt_for_return(shop_return=shop_return)
+        if attempt is not None and attempt.status != DeliveryAttemptStatus.ACTIVE:
+            return shop_return
+        previous = str(delivery.get("partner_status") or "")
+        current = self._resolve_partner_status(
+            previous=previous,
+            incoming=tracking["partner_status"],
+        )
+        tracking["partner_status"] = current
+        delivery["rider"] = self._merge_rider(
+            existing=dict(delivery.get("rider") or {}),
+            incoming=dict(tracking.pop("rider") or {}),
+        )
+        for key, value in tracking.items():
+            if value not in (None, "", {}):
+                delivery[key] = value
+        if current != previous:
+            delivery["events"] = [
+                *(delivery.get("events") or []),
+                {
+                    "status": current,
+                    "occurred_at": timezone.now().isoformat(),
+                    "label": current.replace("_", " ").title(),
+                    **({"reason": tracking["reason"]} if tracking.get("reason") else {}),
+                },
+            ]
+        delivery["last_updated"] = timezone.now().isoformat()
+        if current in {"failed", "cancelled"}:
+            delivery = self._archive_failed_booking(delivery)
+        metadata["delivery"] = delivery
+        shop_return.metadata = metadata
+        shop_return.save(update_fields=["metadata", "updated_at", "version"])
+        if attempt is not None:
+            history.update_attempt(
+                attempt=attempt,
+                rider=dict(delivery.get("rider") or {}),
+                tracking_url=str(delivery.get("tracking_url") or ""),
+            )
+        if attempt is not None and current in TERMINAL_PARTNER_STATUSES:
+            attempt_status = {
+                "delivered": DeliveryAttemptStatus.DELIVERED,
+                "failed": DeliveryAttemptStatus.FAILED,
+                "cancelled": DeliveryAttemptStatus.CANCELLED,
+            }[current]
+            history.update_attempt(
+                attempt=attempt,
+                status=attempt_status,
+                reason=str(tracking.get("reason") or ""),
+                ended_at=timezone.now(),
+            )
+        return shop_return
+
+    def refresh_return_tracking(self, *, shop_return: ShopReturn) -> ShopReturn:
+        delivery = (shop_return.metadata or {}).get("delivery") or {}
+        booking_id = str(delivery.get("booking_id") or "")
+        if not booking_id or delivery.get("partner_status") in TERMINAL_PARTNER_STATUSES:
+            return shop_return
+        settings = self.ensure_settings(
+            tenant=shop_return.tenant, business=shop_return.business
+        )
+        provider = get_delivery_provider(self._decrypted_config(settings))
+        return self.apply_return_tracking(
+            shop_return=shop_return,
+            payload=provider.track(booking_id),
+            source=TrackingEventSource.POLL,
+        )
+
+    def live_return_payload(
+        self, *, shop_return: ShopReturn, refresh: bool = False
+    ) -> dict[str, Any]:
+        if refresh:
+            shop_return = self.refresh_return_tracking(shop_return=shop_return)
+        delivery = dict((shop_return.metadata or {}).get("delivery") or {})
+        rider = dict(delivery.get("rider") or {})
+        status = str(delivery.get("partner_status") or "packing")
+        rider_name = str(rider.get("name") or "").strip()
+        headlines = {
+            "packing": "Waiting for the shop to dispatch a pickup rider",
+            "finding_rider": "Finding a pickup rider",
+            "rider_assigned": f"{rider_name or 'Your rider'} is heading to you",
+            "at_pickup": f"{rider_name or 'Your rider'} has arrived for pickup",
+            "picked_up": f"{rider_name or 'Your rider'} is returning items to the shop",
+            "nearby": "Almost at the shop",
+            "delivered": "Items delivered to the shop — awaiting confirmation",
+            "failed": "Pickup needs attention",
+            "cancelled": "Pickup was cancelled",
+        }
+        eta = delivery.get("eta_minutes")
+        headline = headlines.get(status, "Pickup update")
+        if eta and status not in TERMINAL_PARTNER_STATUSES:
+            headline = f"{headline} · {eta} min"
+        events = list(delivery.get("events") or [])
+        last_updated = delivery.get("last_updated")
+        parsed_last_updated = parse_datetime(str(last_updated or ""))
+        terminal = status in TERMINAL_PARTNER_STATUSES or shop_return.status in {
+            "completed",
+            "rejected",
+        }
+        stale = bool(
+            not terminal
+            and parsed_last_updated
+            and (timezone.now() - parsed_last_updated).total_seconds() > 45
+        )
+        pickup = dict(delivery.get("pickup") or {})
+        drop = dict(delivery.get("drop") or {})
+        for place in (pickup, drop):
+            place["latitude"] = self._coord(place.get("latitude"))
+            place["longitude"] = self._coord(place.get("longitude"))
+        rider_lat = self._coord(delivery.get("rider_lat"))
+        rider_lng = self._coord(delivery.get("rider_lng"))
+        dispatched = bool(delivery.get("booking_id"))
+        # If partner GPS is missing (or still on the pickup pin), nudge toward the
+        # shop so the rider marker is visible and not buried under the customer pin.
+        pickup_lat = pickup.get("latitude")
+        pickup_lng = pickup.get("longitude")
+        drop_lat = drop.get("latitude")
+        drop_lng = drop.get("longitude")
+        if dispatched and pickup_lat is not None and drop_lat is not None:
+            try:
+                nudged_lat = float(pickup_lat) + (float(drop_lat) - float(pickup_lat)) * 0.08
+                nudged_lng = float(pickup_lng) + (float(drop_lng) - float(pickup_lng)) * 0.08
+            except (TypeError, ValueError):
+                nudged_lat = nudged_lng = None
+            else:
+                coincident = (
+                    rider_lat is not None
+                    and rider_lng is not None
+                    and abs(rider_lat - float(pickup_lat)) < 1e-5
+                    and abs(rider_lng - float(pickup_lng)) < 1e-5
+                )
+                if rider_lat is None or rider_lng is None or coincident:
+                    rider_lat, rider_lng = nudged_lat, nudged_lng
+        has_map_pins = (
+            pickup_lat is not None and pickup_lng is not None
+        ) or (drop_lat is not None and drop_lng is not None)
+        return {
+            "available": shop_return.return_method == ReturnMethod.INSTANT_PICKUP,
+            "return_id": str(shop_return.id),
+            "return_status": shop_return.status,
+            "delivery_method": "instant_pickup",
+            "provider": delivery.get("provider"),
+            "dispatched": dispatched,
+            "partner_status": status,
+            "headline": headline,
+            "subtitle": str(delivery.get("reason") or ""),
+            "eta_minutes": eta,
+            "rider": rider,
+            "pickup": pickup,
+            "drop": drop,
+            "rider_location": {
+                "latitude": rider_lat,
+                "longitude": rider_lng,
+            },
+            "location_trail": [],
+            "events": events,
+            "tracking_url": str(delivery.get("tracking_url") or ""),
+            "can_call_rider": bool(rider.get("phone")),
+            "last_updated": last_updated or (events[-1].get("occurred_at") if events else None),
+            "terminal": terminal,
+            "stale": stale,
+            "show_map": dispatched and has_map_pins,
+        }
 
     def _extract_tracking(self, payload: dict[str, Any]) -> dict[str, Any]:
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
@@ -821,35 +1289,145 @@ class DeliveryService:
             source=TrackingEventSource.POLL,
         )
 
+    def _coord(self, value: object) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    def _map_places_for_order(
+        self,
+        *,
+        order: ShopOrder,
+        delivery: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Shop pickup + customer drop pins for the live map (instant or standard)."""
+        metadata = order.metadata if isinstance(order.metadata, dict) else {}
+        fulfillment = metadata.get("fulfillment") if isinstance(metadata.get("fulfillment"), dict) else {}
+        fulfillment_pickup = (
+            fulfillment.get("pickup") if isinstance(fulfillment.get("pickup"), dict) else {}
+        )
+
+        pickup = dict(delivery.get("pickup") or {})
+        if self._coord(pickup.get("latitude")) is None or self._coord(pickup.get("longitude")) is None:
+            pickup = {
+                **pickup,
+                "latitude": self._coord(fulfillment_pickup.get("latitude")),
+                "longitude": self._coord(fulfillment_pickup.get("longitude")),
+                "address": pickup.get("address")
+                or ", ".join(
+                    part
+                    for part in [
+                        str(fulfillment_pickup.get("address_line1") or "").strip(),
+                        str(fulfillment_pickup.get("address_line2") or "").strip(),
+                        str(fulfillment_pickup.get("city") or "").strip(),
+                    ]
+                    if part
+                ),
+                "contact": pickup.get("contact")
+                or {
+                    "name": str(fulfillment_pickup.get("contact_name") or "").strip(),
+                    "phone": str(fulfillment_pickup.get("contact_phone") or "").strip(),
+                },
+            }
+
+        drop = dict(delivery.get("drop") or {})
+        if self._coord(drop.get("latitude")) is None or self._coord(drop.get("longitude")) is None:
+            drop = {
+                **drop,
+                "latitude": self._coord(metadata.get("delivery_latitude")),
+                "longitude": self._coord(metadata.get("delivery_longitude")),
+                "address": drop.get("address") or str(order.delivery_address or "").strip(),
+                "contact": drop.get("contact")
+                or {
+                    "name": str(getattr(getattr(order, "customer", None), "display_name", "") or "").strip(),
+                    "phone": str(getattr(getattr(order, "customer", None), "phone_number", "") or "").strip(),
+                },
+            }
+        elif not drop.get("address"):
+            drop["address"] = str(order.delivery_address or "").strip()
+
+        # Normalize numeric coords for map clients.
+        for place in (pickup, drop):
+            lat = self._coord(place.get("latitude"))
+            lng = self._coord(place.get("longitude"))
+            place["latitude"] = lat
+            place["longitude"] = lng
+        return pickup, drop
+
     def live_payload(self, *, order: ShopOrder, refresh: bool = False) -> dict[str, Any]:
         if refresh:
             order = self.refresh_tracking(order=order)
         from apps.shopie.services.delivery_promise import promise_from_shipment
         from apps.shopie.services.shipment import ShipmentService
 
-        delivery_method = str((order.metadata or {}).get("delivery_method") or "standard")
+        is_pickup = order.fulfillment_mode == FulfillmentMode.PICKUP
+        delivery_method = (
+            "pickup"
+            if is_pickup
+            else str((order.metadata or {}).get("delivery_method") or "standard")
+        )
         shipment = ShipmentService().get_shipment(order=order)
         shipment_data = ShipmentService().serialize(shipment)
         delivery = dict((order.metadata or {}).get("delivery") or {})
+        map_pickup, map_drop = (
+            ({}, {})
+            if is_pickup
+            else self._map_places_for_order(order=order, delivery=delivery)
+        )
+        has_drop_pin = map_drop.get("latitude") is not None and map_drop.get("longitude") is not None
         order_completed = order.status == OrderStatus.COMPLETED
-        if order_completed:
+        if is_pickup:
+            status = canonical_order_status(order, order.status) or "order_placed"
+            headlines = {
+                "order_placed": "Order placed",
+                "confirmed": "Order confirmed",
+                "ready": "Ready for pickup",
+                "completed": "Picked up",
+                "cancelled": "Cancelled",
+            }
+            headline = headlines.get(status, "Order update")
+            if order_completed:
+                promise = {
+                    "label": "Picked up",
+                    "detail": "Your order has been picked up.",
+                    "arrives_by": None,
+                }
+            else:
+                promise = {}
+        elif order_completed:
             status = "delivered"
             headline = "Delivered"
             promise = {"label": "Delivered", "detail": "Your order has been delivered.", "arrives_by": None}
         elif shipment is not None and delivery_method == "standard":
+            from apps.shopie.services.carriers import is_self_delivery_carrier
+
             status = str(shipment.status or "shipped")
             carrier = shipment.carrier_label or "Courier"
+            self_delivery = is_self_delivery_carrier(shipment.carrier)
             promise = promise_from_shipment(
                 estimated_delivery_at=shipment.estimated_delivery_at,
                 status=status,
             )
-            headlines = {
-                "shipped": f"Shipped with {carrier}",
-                "in_transit": "Your package is on the way",
-                "out_for_delivery": promise.get("label") or "Arriving today",
-                "delivered": "Delivered",
-                "failed": "Delivery needs attention",
-            }
+            if self_delivery:
+                headlines = {
+                    "shipped": "Shop is delivering your order",
+                    "in_transit": "Shop is on the way",
+                    "out_for_delivery": "Shop is on the way",
+                    "delivered": "Delivered",
+                    "failed": "Delivery needs attention",
+                }
+            else:
+                headlines = {
+                    "shipped": f"Shipped with {carrier}",
+                    "in_transit": "Your package is on the way",
+                    "out_for_delivery": promise.get("label") or "Arriving today",
+                    "delivered": "Delivered",
+                    "failed": "Delivery needs attention",
+                }
             headline = headlines.get(status, "Shipment update")
         else:
             status = str(
@@ -882,13 +1460,18 @@ class DeliveryService:
             if eta and status not in TERMINAL_PARTNER_STATUSES:
                 headline = f"{headline} · {eta} min"
             promise = {}
+        TrackingHistoryService().ensure_baseline_history(order=order)
         history = TrackingHistoryService().payload(order=order)
         events = history["events"] or delivery.get("events") or []
         last_updated = delivery.get("last_updated")
         if shipment is not None and shipment.shipped_at:
             last_updated = shipment.shipped_at.isoformat()
         parsed_last_updated = parse_datetime(str(last_updated or ""))
-        terminal = order.status in {OrderStatus.COMPLETED, OrderStatus.CANCELLED}
+        terminal = order.status in {
+            OrderStatus.COMPLETED,
+            OrderStatus.RETURNED,
+            OrderStatus.CANCELLED,
+        }
         stale = bool(
             not terminal
             and parsed_last_updated
@@ -900,35 +1483,46 @@ class DeliveryService:
         if shipment is not None:
             tracking_url = shipment.tracking_url or tracking_url
         return {
-            "available": order.fulfillment_mode == "delivery",
+            "available": order.fulfillment_mode
+            in {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP},
             "order_id": str(order.id),
             "order_status": order.status,
             "delivery_method": delivery_method,
-            "provider": delivery.get("provider"),
-            "dispatched": bool(delivery.get("booking_id")) or shipment is not None,
+            "provider": None if is_pickup else delivery.get("provider"),
+            "dispatched": False
+            if is_pickup
+            else bool(delivery.get("booking_id")) or shipment is not None,
             "partner_status": status,
             "headline": headline,
-            "subtitle": delivery.get("reason") or "",
-            "eta_minutes": eta,
-            "rider": rider,
-            "pickup": delivery.get("pickup") or {},
-            "drop": delivery.get("drop") or {},
+            "subtitle": "" if is_pickup else (delivery.get("reason") or ""),
+            "eta_minutes": None if is_pickup else eta,
+            "rider": {} if is_pickup else rider,
+            "pickup": map_pickup,
+            "drop": map_drop,
             "rider_location": {
-                "latitude": delivery.get("rider_lat"),
-                "longitude": delivery.get("rider_lng"),
+                "latitude": None if is_pickup else delivery.get("rider_lat"),
+                "longitude": None if is_pickup else delivery.get("rider_lng"),
             },
             "events": events,
-            "attempts": history["attempts"],
-            "active_attempt_number": history["active_attempt_number"],
-            "location_trail": history["location_trail"],
-            "tracking_url": tracking_url,
-            "shipment": shipment_data,
-            "delivery_promise": promise if shipment is not None else (order.metadata or {}).get("delivery_promise") or {},
-            "can_call_rider": bool(rider.get("phone")),
+            "attempts": [] if is_pickup else history["attempts"],
+            "active_attempt_number": None if is_pickup else history["active_attempt_number"],
+            "location_trail": [] if is_pickup else history["location_trail"],
+            "tracking_url": "" if is_pickup else tracking_url,
+            "shipment": None if is_pickup else shipment_data,
+            "delivery_promise": promise
+            if is_pickup or shipment is not None
+            else (order.metadata or {}).get("delivery_promise") or {},
+            "can_call_rider": False if is_pickup else bool(rider.get("phone")),
             "last_updated": last_updated or (events[-1].get("occurred_at") if events else None),
             "terminal": terminal,
-            "stale": stale,
-            "show_map": delivery_method == "instant" and bool(delivery.get("booking_id")),
+            "stale": False if is_pickup else stale,
+            # Instant: live rider map. Standard: static shop → customer pins when we have coords.
+            "show_map": False
+            if is_pickup
+            else (
+                (delivery_method == "instant" and bool(delivery.get("booking_id")))
+                or has_drop_pin
+            ),
         }
 
     def verify_webhook(
@@ -999,20 +1593,43 @@ class DeliveryService:
         ).first()
         if order is None and attempt is not None and attempt.business_id == business.id:
             order = attempt.order
+        shop_return = None
         if order is None:
+            shop_return = ShopReturn.objects.filter(
+                tenant=business.tenant,
+                business=business,
+                metadata__delivery__booking_id=booking_id,
+            ).first()
+            if (
+                shop_return is None
+                and attempt is not None
+                and attempt.business_id == business.id
+                and attempt.shop_return_id
+            ):
+                shop_return = attempt.shop_return
+        if order is None and shop_return is None:
             event.status = DeliveryWebhookStatus.IGNORED
-            event.error_message = "No matching order."
+            event.error_message = "No matching order or return."
         else:
             try:
-                order = self.apply_tracking(
-                    order=order,
-                    payload=payload,
-                    source=TrackingEventSource.WEBHOOK,
-                    source_key=f"webhook:{provider}:{event_id}",
-                    webhook_event=event,
-                    attempt=attempt,
-                )
-                event.order = order
+                if shop_return is not None:
+                    self.apply_return_tracking(
+                        shop_return=shop_return,
+                        payload=payload,
+                        source=TrackingEventSource.WEBHOOK,
+                        source_key=f"webhook:{provider}:{event_id}",
+                        attempt=attempt,
+                    )
+                else:
+                    order = self.apply_tracking(
+                        order=order,
+                        payload=payload,
+                        source=TrackingEventSource.WEBHOOK,
+                        source_key=f"webhook:{provider}:{event_id}",
+                        webhook_event=event,
+                        attempt=attempt,
+                    )
+                    event.order = order
                 event.status = DeliveryWebhookStatus.PROCESSED
                 event.processed_at = timezone.now()
             except Exception as exc:
@@ -1064,22 +1681,45 @@ class DeliveryService:
         ).first()
         if order is None and attempt is not None and attempt.business_id == event.business_id:
             order = attempt.order
+        shop_return = None
         if order is None:
+            shop_return = ShopReturn.objects.filter(
+                tenant=event.tenant,
+                business=event.business,
+                metadata__delivery__booking_id=booking_id,
+            ).first()
+            if (
+                shop_return is None
+                and attempt is not None
+                and attempt.business_id == event.business_id
+                and attempt.shop_return_id
+            ):
+                shop_return = attempt.shop_return
+        if order is None and shop_return is None:
             event.status = DeliveryWebhookStatus.IGNORED
-            event.error_message = "No matching order."
+            event.error_message = "No matching order or return."
             event.next_retry_at = None
             event.save()
             return {"processed": False, "status": event.status}
         try:
-            order = self.apply_tracking(
-                order=order,
-                payload=payload,
-                source=TrackingEventSource.WEBHOOK,
-                source_key=f"webhook:{event.provider}:{event.external_event_id}",
-                webhook_event=event,
-                attempt=attempt,
-            )
-            event.order = order
+            if shop_return is not None:
+                self.apply_return_tracking(
+                    shop_return=shop_return,
+                    payload=payload,
+                    source=TrackingEventSource.WEBHOOK,
+                    source_key=f"webhook:{event.provider}:{event.external_event_id}",
+                    attempt=attempt,
+                )
+            else:
+                order = self.apply_tracking(
+                    order=order,
+                    payload=payload,
+                    source=TrackingEventSource.WEBHOOK,
+                    source_key=f"webhook:{event.provider}:{event.external_event_id}",
+                    webhook_event=event,
+                    attempt=attempt,
+                )
+                event.order = order
             event.status = DeliveryWebhookStatus.PROCESSED
             event.processed_at = timezone.now()
             event.next_retry_at = None

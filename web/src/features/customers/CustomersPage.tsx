@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import type { CustomerLoyaltyBalance } from '@ie-orbit/sdk';
 import {
   useCustomerArchive,
   useCustomerCreate,
@@ -16,6 +17,7 @@ import { Dialog } from '../../components/Dialog';
 import { ManagementListToolbar } from '../../components/ManagementListToolbar';
 import { SubmitOverlay } from '../../components/SubmitOverlay';
 import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/useActiveBusinessFormField';
+import { useApiClient } from '../../hooks/useApiClient';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -25,9 +27,15 @@ import { hasSubscribedProduct } from '../../config/products';
 export function CustomersPage() {
   const snackbar = useSnackbar();
   const navigate = useNavigate();
+  const client = useApiClient();
   const { activeBusiness } = useWorkspace();
   const showGstFields = hasSubscribedProduct(activeBusiness?.product_subscriptions, 'shopie');
   const [searchTerm, setSearchTerm] = useState('');
+  const [loyaltyCustomerId, setLoyaltyCustomerId] = useState<string | null>(null);
+  const [loyaltyCustomerName, setLoyaltyCustomerName] = useState('');
+  const [loyaltyBusy, setLoyaltyBusy] = useState(false);
+  const [loyaltyError, setLoyaltyError] = useState<string | null>(null);
+  const [loyaltyData, setLoyaltyData] = useState<CustomerLoyaltyBalance | null>(null);
   const createCustomer = useCustomerCreate();
   const updateCustomer = useCustomerUpdate();
   const archiveCustomer = useCustomerArchive();
@@ -117,6 +125,9 @@ export function CustomersPage() {
             <p style={{ margin: 0, color: '#6b7280' }}>Review customer records, tags, and recent activity in one place.</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Link to="/shop/loyalty">
+              <Button variant="neutral">Reward points activity</Button>
+            </Link>
             <Button variant="primary" onClick={() => dialog.show()}>Add customer</Button>
             <Button variant="neutral" onClick={() => refetch()}>Refresh</Button>
           </div>
@@ -147,10 +158,11 @@ export function CustomersPage() {
           />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr 1.2fr', padding: '16px 20px', background: '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.7fr 0.7fr 1.3fr', padding: '16px 20px', background: '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
               <span>Name</span>
               <span>Email</span>
               <span>Phone</span>
+              <span>Points</span>
               <span>Status</span>
               <span>Actions</span>
             </div>
@@ -170,7 +182,7 @@ export function CustomersPage() {
                       key={customer.id}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr 1.2fr',
+                        gridTemplateColumns: '1.4fr 1fr 1fr 0.7fr 0.7fr 1.3fr',
                         padding: '16px 20px',
                         background: '#fff',
                         alignItems: 'center',
@@ -193,6 +205,38 @@ export function CustomersPage() {
                       </span>
                       <span>{customer.email ?? '—'}</span>
                       <span>{customer.phone_number ?? '—'}</span>
+                      <span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!customer.id) return;
+                            setLoyaltyCustomerId(customer.id);
+                            setLoyaltyCustomerName(customer.full_name ?? 'Customer');
+                            setLoyaltyData(null);
+                            setLoyaltyError(null);
+                            setLoyaltyBusy(true);
+                            void client.customers
+                              .getLoyaltyBalance(customer.id)
+                              .then((response) => setLoyaltyData(response.data))
+                              .catch((error) =>
+                                setLoyaltyError(
+                                  error instanceof Error ? error.message : 'Unable to load points',
+                                ),
+                              )
+                              .finally(() => setLoyaltyBusy(false));
+                          }}
+                          style={{
+                            border: 0,
+                            background: 'transparent',
+                            color: '#2563eb',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            padding: 0,
+                          }}
+                        >
+                          {customer.loyalty_points ?? 0}
+                        </button>
+                      </span>
                       <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{customer.status ?? 'Unknown'}</span>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {isArchived ? (
@@ -448,6 +492,61 @@ export function CustomersPage() {
           </div>
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}
         </form>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(loyaltyCustomerId)}
+        onClose={() => {
+          setLoyaltyCustomerId(null);
+          setLoyaltyData(null);
+          setLoyaltyError(null);
+        }}
+        title={`Reward points · ${loyaltyCustomerName}`}
+        labelledBy="customer-loyalty-dialog"
+        busy={loyaltyBusy}
+      >
+        {loyaltyBusy ? <p>Loading…</p> : null}
+        {loyaltyError ? <p role="alert" style={{ color: '#dc2626' }}>{loyaltyError}</p> : null}
+        {loyaltyData ? (
+          <div style={{ display: 'grid', gap: 12 }}>
+            <p style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+              Balance {loyaltyData.points_balance}
+              {!loyaltyData.enabled ? (
+                <span style={{ marginLeft: 8, fontSize: 13, color: '#b45309', fontWeight: 600 }}>
+                  (program off)
+                </span>
+              ) : null}
+            </p>
+            <div style={{ display: 'grid', gap: 8, maxHeight: 320, overflow: 'auto' }}>
+              {(loyaltyData.ledger ?? []).map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    padding: '8px 0',
+                    borderBottom: '1px solid #f3f4f6',
+                    fontSize: 13,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{entry.reason || 'Points update'}</div>
+                    <div style={{ color: '#6b7280' }}>
+                      {entry.created_at ? new Date(entry.created_at).toLocaleString() : '—'}
+                    </div>
+                  </div>
+                  <strong style={{ color: entry.points_delta >= 0 ? '#047857' : '#b91c1c' }}>
+                    {entry.points_delta >= 0 ? `+${entry.points_delta}` : entry.points_delta}
+                  </strong>
+                </div>
+              ))}
+              {!loyaltyData.ledger?.length ? (
+                <p style={{ margin: 0, color: '#6b7280' }}>No recent points activity.</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </Dialog>
     </div>
   );

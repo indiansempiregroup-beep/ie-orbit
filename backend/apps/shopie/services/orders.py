@@ -7,7 +7,7 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import QuerySet, Sum
 from django.utils import timezone
 
 from apps.businesses.models import Business
@@ -63,6 +63,7 @@ class OrderService:
             ShopOrder.objects.filter(tenant=tenant, business=business)
             .select_related("customer", "business")
             .prefetch_related("lines__product")
+            .annotate(annotated_gross_profit=Sum("profit_facts__gross_profit"))
             .order_by("-created_at")
         )
         if status:
@@ -76,6 +77,7 @@ class OrderService:
             ShopOrder.objects.filter(tenant=tenant, business=business, id=order_id)
             .select_related("customer", "business")
             .prefetch_related("lines__product")
+            .annotate(annotated_gross_profit=Sum("profit_facts__gross_profit"))
             .get()
         )
 
@@ -455,7 +457,7 @@ class OrderService:
             delivery_address=delivery_address or "",
             metadata=metadata,
         )
-        if mode == FulfillmentMode.DELIVERY:
+        if mode in {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP}:
             from apps.shopie.services.tracking import TrackingHistoryService
 
             TrackingHistoryService().record_order_status(
@@ -478,6 +480,12 @@ class OrderService:
                 raise ValidationError({"lines": "Quantity must be positive."})
             unit_price = Decimal(
                 str(raw.get("unit_price") if raw.get("unit_price") is not None else product.price)
+            )
+            from apps.shopie.services.profit_facts import ShopProfitFactService
+
+            purchase_price_snapshot = ShopProfitFactService.unit_cost_for_product(
+                avg_cost=product.avg_cost,
+                purchase_price=product.purchase_price,
             )
             tax_rate = Decimal(
                 str(raw.get("tax_rate") if raw.get("tax_rate") is not None else product.tax_rate)
@@ -514,6 +522,7 @@ class OrderService:
                     barcode_scanned=str(raw.get("barcode_scanned") or ""),
                     quantity=qty,
                     unit_price=unit_price,
+                    purchase_price_snapshot=purchase_price_snapshot,
                     tax_rate=tax_rate,
                     discount_type=str(raw.get("discount_type") or "").strip().lower(),
                     discount_value=Decimal(str(raw.get("discount_value") or "0")),
@@ -911,16 +920,28 @@ class OrderService:
                 OrderStatus.COMPLETED,
                 OrderStatus.CANCELLED,
             },
-            OrderStatus.COMPLETED: set(),
+            OrderStatus.COMPLETED: {OrderStatus.RETURNED},
+            OrderStatus.RETURNED: set(),
             OrderStatus.CANCELLED: set(),
         }
+        # Full merchandise return can also close unpaid / early POS bills that
+        # never moved past confirmed/ready.
+        if status == OrderStatus.RETURNED:
+            allowed[OrderStatus.CONFIRMED] = {
+                *allowed[OrderStatus.CONFIRMED],
+                OrderStatus.RETURNED,
+            }
+            allowed[OrderStatus.READY] = {
+                *allowed[OrderStatus.READY],
+                OrderStatus.RETURNED,
+            }
         if status not in allowed.get(order.status, set()):
             raise ValidationError({"status": f"Cannot move from {order.status} to {status}."})
 
         previous = order.status
         order.status = status
         order.save(update_fields=["status", "updated_at", "version"])
-        if order.fulfillment_mode == FulfillmentMode.DELIVERY:
+        if order.fulfillment_mode in {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP}:
             from apps.shopie.services.tracking import TrackingHistoryService
 
             TrackingHistoryService().record_order_status(
@@ -953,6 +974,9 @@ class OrderService:
                     # recorded as backorder on the order rather than blocking the sale.
                     allow_backorder=True,
                 )
+            from apps.shopie.services.profit_facts import ShopProfitFactService
+
+            ShopProfitFactService().record_sale_facts(order=order)
         if status == OrderStatus.CANCELLED and previous in {
             OrderStatus.CONFIRMED,
             OrderStatus.READY,
@@ -969,6 +993,9 @@ class OrderService:
                     order=order,
                     godown_id=source_godown_id,
                 )
+            from apps.shopie.services.profit_facts import ShopProfitFactService
+
+            ShopProfitFactService().record_cancel_facts(order=order)
         refreshed = self.get_order(tenant=tenant, business=business, order_id=order.id)
         if status == OrderStatus.COMPLETED:
             refreshed = self._sync_shipment_delivered(order=refreshed)

@@ -8,10 +8,14 @@ import pytest
 from apps.authentication.models import User, UserStatus
 from apps.businesses.models import Business
 from apps.customers.models import Customer
+from django.core.exceptions import ValidationError
+
 from apps.shopie.models import (
     FulfillmentMode,
     OrderStatus,
     ProductStatus,
+    ReturnMethod,
+    ReturnStatus,
     ShopDeliveryAttempt,
     ShopDeliveryWebhookEvent,
     ShopDeliveryZone,
@@ -22,6 +26,7 @@ from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.delivery import DeliveryService, normalize_partner_status
 from apps.shopie.services.delivery.providers import MockDeliveryProvider
 from apps.shopie.services.orders import OrderService
+from apps.shopie.services.returns import ReturnService
 from apps.tenancy.models import Organization, Tenant
 
 
@@ -530,6 +535,146 @@ def test_standard_delivery_records_complete_merchant_driven_timeline(delivery_ct
 
 
 @pytest.mark.django_db
+def test_pickup_order_records_and_exposes_full_status_history(delivery_ctx) -> None:
+    tenant, business, customer = delivery_ctx
+    order = ShopOrder.objects.create(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        order_number="SO-PICKUP-TRACKING",
+        status=OrderStatus.PENDING,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        currency="INR",
+        total=Decimal("180"),
+        metadata={"preferred_date": "2026-10-18", "preferred_time": "19:30"},
+    )
+    from apps.shopie.services.tracking import TrackingHistoryService
+
+    TrackingHistoryService().record_order_status(
+        order=order,
+        status=OrderStatus.PENDING,
+        occurred_at=order.created_at,
+    )
+    orders = OrderService()
+    for status in (OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED):
+        order = orders.transition(
+            tenant=tenant,
+            business=business,
+            order=order,
+            status=status,
+        )
+
+    live = DeliveryService().live_payload(order=order)
+    assert live["available"] is True
+    assert live["delivery_method"] == "pickup"
+    assert live["headline"] == "Picked up"
+    assert live["show_map"] is False
+    assert live["attempts"] == []
+    assert [event["status"] for event in live["events"]] == [
+        "order_placed",
+        "confirmed",
+        "ready",
+        "completed",
+    ]
+    assert [event["label"] for event in live["events"]] == [
+        "Order placed",
+        "Order confirmed",
+        "Ready for pickup",
+        "Picked up",
+    ]
+
+
+@pytest.mark.django_db
+def test_pickup_live_payload_backfills_missing_history(delivery_ctx) -> None:
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    tenant, business, customer = delivery_ctx
+    placed_at = timezone.now() - timedelta(minutes=5)
+    confirmed_at = placed_at + timedelta(minutes=2)
+    completed_at = confirmed_at + timedelta(seconds=15)
+    order = ShopOrder.objects.create(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        order_number="SO-PICKUP-BACKFILL",
+        status=OrderStatus.COMPLETED,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        currency="INR",
+        total=Decimal("90"),
+        metadata={
+            "pos": {
+                "confirmed_at": confirmed_at.isoformat(),
+                "payment_status": "paid",
+            }
+        },
+    )
+    ShopOrder.objects.filter(id=order.id).update(created_at=placed_at, updated_at=completed_at)
+    order.refresh_from_db()
+    assert ShopOrderTrackingEvent.objects.filter(order=order).count() == 0
+
+    live = DeliveryService().live_payload(order=order)
+    assert live["available"] is True
+    assert [event["status"] for event in live["events"]] == [
+        "order_placed",
+        "confirmed",
+        "completed",
+    ]
+    confirmed = next(event for event in live["events"] if event["status"] == "confirmed")
+    assert confirmed["label"] == "Order confirmed"
+    assert confirmed["occurred_at"].startswith(confirmed_at.isoformat()[:19])
+
+
+@pytest.mark.django_db
+def test_pickup_live_payload_gap_fills_confirmed_between_placed_and_completed(
+    delivery_ctx,
+) -> None:
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    tenant, business, customer = delivery_ctx
+    placed_at = timezone.now() - timedelta(minutes=5)
+    confirmed_at = placed_at + timedelta(minutes=2)
+    completed_at = confirmed_at + timedelta(seconds=15)
+    order = ShopOrder.objects.create(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        order_number="SO-PICKUP-GAPFILL",
+        status=OrderStatus.COMPLETED,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        currency="INR",
+        total=Decimal("90"),
+        metadata={"pos": {"confirmed_at": confirmed_at.isoformat()}},
+    )
+    ShopOrder.objects.filter(id=order.id).update(created_at=placed_at, updated_at=completed_at)
+    order.refresh_from_db()
+    from apps.shopie.services.tracking import TrackingHistoryService
+
+    TrackingHistoryService().record_status(
+        order=order,
+        status="order_placed",
+        occurred_at=order.created_at,
+        source_key="order-status:order_placed:seed",
+    )
+    TrackingHistoryService().record_status(
+        order=order,
+        status="completed",
+        occurred_at=order.updated_at,
+        source_key="order-status:completed:seed",
+    )
+
+    live = DeliveryService().live_payload(order=order)
+    assert [event["status"] for event in live["events"]] == [
+        "order_placed",
+        "confirmed",
+        "completed",
+    ]
+
+
+@pytest.mark.django_db
 def test_late_archived_attempt_webhook_is_deduplicated_without_rewriting_history(
     delivery_ctx,
 ) -> None:
@@ -643,8 +788,6 @@ def test_shiprocket_logs_in_and_quotes_from_serviceability(monkeypatch) -> None:
 
 
 def test_shiprocket_quote_requires_pin_codes() -> None:
-    from django.core.exceptions import ValidationError
-
     from apps.shopie.services.delivery.providers import ShiprocketQuickProvider
 
     with pytest.raises(ValidationError):
@@ -654,3 +797,356 @@ def test_shiprocket_quote_requires_pin_codes() -> None:
                 "drop": {"latitude": 19.08, "longitude": 72.88},
             }
         )
+
+
+def _completed_delivery_order(delivery_ctx, *, price: str = "120.00", name: str = "Return item"):
+    tenant, business, customer = delivery_ctx
+    DeliveryService().update_settings(
+        tenant=tenant,
+        business=business,
+        enabled=True,
+        incoming={"provider": "mock", "charge_bearer": "customer"},
+    )
+    product = CatalogService().create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": name,
+            "price": price,
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "10",
+        },
+    )
+    order = OrderService().create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.DELIVERY,
+        delivery_method="instant",
+        delivery_address="2 Customer Road",
+        delivery_city="Mumbai",
+        delivery_postal_code="400002",
+        delivery_latitude=Decimal("19.086000"),
+        delivery_longitude=Decimal("72.887700"),
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    OrderService().transition(
+        tenant=tenant,
+        business=business,
+        order=order,
+        status=OrderStatus.COMPLETED,
+        notify=False,
+    )
+    return tenant, business, customer, product, order
+
+
+@pytest.mark.django_db
+def test_customer_cannot_create_instant_pickup_return(delivery_ctx) -> None:
+    tenant, business, _, _, order = _completed_delivery_order(delivery_ctx, name="No customer instant")
+    with pytest.raises(ValidationError) as exc:
+        ReturnService().create_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+            complete=False,
+            require_delivered=True,
+            return_method=ReturnMethod.INSTANT_PICKUP,
+        )
+    assert "drop-off or request pickup" in str(exc.value).lower() or "shop will arrange" in str(
+        exc.value
+    ).lower()
+
+
+@pytest.mark.django_db
+def test_ops_instant_pickup_merchant_bears_fee(delivery_ctx) -> None:
+    tenant, business, _, product, order = _completed_delivery_order(
+        delivery_ctx, price="120.00", name="Merchant bears"
+    )
+    returns = ReturnService()
+    delivery = DeliveryService()
+    product.refresh_from_db()
+    stock_after = product.stock_on_hand
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    original = Decimal(str(pending.refund_total))
+    quote = returns.quote_pickup(tenant=tenant, business=business, shop_return=pending)
+    assert quote["available"] is True
+    fee = Decimal(str(quote["quoted_fee"]))
+
+    arranged = returns.arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        mode="instant",
+        charge_bearer="merchant",
+    )
+    assert arranged.return_method == ReturnMethod.INSTANT_PICKUP
+    assert arranged.status == ReturnStatus.APPROVED
+    assert Decimal(str(arranged.refund_total)) == original
+    assert arranged.metadata["pickup_charge"]["charge_bearer"] == "merchant"
+    booked = arranged.metadata["delivery"]
+    assert str(booked["booking_id"]).startswith("mock_delivery_")
+    assert float(booked["pickup"]["latitude"]) == pytest.approx(19.086)
+    assert float(booked["drop"]["latitude"]) == pytest.approx(19.076)
+    attempt = ShopDeliveryAttempt.objects.get(booking_id=booked["booking_id"])
+    assert attempt.shop_return_id == arranged.id
+    assert attempt.order_id is None
+
+    live = delivery.live_return_payload(shop_return=arranged)
+    assert live["dispatched"] is True
+    assert live["show_map"] is True
+
+    received = returns.receive_return(
+        tenant=tenant, business=business, shop_return=arranged
+    )
+    product.refresh_from_db()
+    assert received.status == ReturnStatus.COMPLETED
+    assert Decimal(str(received.refund_total)) == original
+    assert product.stock_on_hand == stock_after + Decimal("1")
+    assert fee >= 0
+
+
+@pytest.mark.django_db
+def test_ops_instant_pickup_customer_pays_awaits_accept(delivery_ctx) -> None:
+    tenant, business, _, _, order = _completed_delivery_order(
+        delivery_ctx, price="120.00", name="Customer pays"
+    )
+    returns = ReturnService()
+    delivery = DeliveryService()
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    original = Decimal(str(pending.refund_total))
+    quote = returns.quote_pickup(tenant=tenant, business=business, shop_return=pending)
+    fee = Decimal(str(quote["quoted_fee"]))
+    expected_net = max(Decimal("0.00"), (original - fee).quantize(Decimal("0.01")))
+
+    proposed = returns.arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        mode="instant",
+        charge_bearer="customer",
+    )
+    assert proposed.status == ReturnStatus.AWAITING_CUSTOMER
+    assert Decimal(str(proposed.refund_total)) == original
+    assert proposed.metadata["pickup_charge"]["status"] == "proposed"
+    assert proposed.metadata["pickup_charge"]["charge_bearer"] == "customer"
+    assert Decimal(str(proposed.metadata["pickup_charge"]["fee"])) == fee
+    assert Decimal(str(proposed.metadata["pickup_charge"]["net_refund"])) == expected_net
+    assert "booking_id" not in (proposed.metadata.get("delivery") or {})
+
+    with pytest.raises(ValidationError):
+        returns.receive_return(tenant=tenant, business=business, shop_return=proposed)
+
+    accepted = returns.accept_pickup_charge(
+        tenant=tenant, business=business, shop_return=proposed
+    )
+    assert accepted.status == ReturnStatus.APPROVED
+    assert Decimal(str(accepted.refund_total)) == expected_net
+    assert accepted.metadata["pickup_charge"]["status"] == "accepted"
+    booked = accepted.metadata["delivery"]
+    assert str(booked["booking_id"]).startswith("mock_delivery_")
+    live = delivery.live_return_payload(shop_return=accepted)
+    assert live["dispatched"] is True
+
+    received = returns.receive_return(
+        tenant=tenant, business=business, shop_return=accepted
+    )
+    assert Decimal(str(received.refund_total)) == expected_net
+
+
+@pytest.mark.django_db
+def test_ops_instant_pickup_customer_declines_cancels_return(delivery_ctx) -> None:
+    tenant, business, _, _, order = _completed_delivery_order(
+        delivery_ctx, price="90.00", name="Customer declines"
+    )
+    returns = ReturnService()
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    original = Decimal(str(pending.refund_total))
+    proposed = returns.arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        mode="instant",
+        charge_bearer="customer",
+    )
+    assert proposed.status == ReturnStatus.AWAITING_CUSTOMER
+    declined = returns.decline_pickup_charge(
+        tenant=tenant, business=business, shop_return=proposed
+    )
+    assert declined.status == ReturnStatus.REJECTED
+    assert Decimal(str(declined.refund_total)) == original
+    assert declined.metadata["pickup_charge"]["status"] == "declined"
+
+
+@pytest.mark.django_db
+def test_ops_manual_pickup_customer_pays_fee_then_accept(delivery_ctx) -> None:
+    tenant, business, _, _, order = _completed_delivery_order(
+        delivery_ctx, price="75.00", name="Manual customer fee"
+    )
+    returns = ReturnService()
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    original = Decimal(str(pending.refund_total))
+    fee = Decimal("25.00")
+    expected_net = max(Decimal("0.00"), (original - fee).quantize(Decimal("0.01")))
+    proposed = returns.arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        mode="manual",
+        charge_bearer="customer",
+        fee=fee,
+        notes="Blue dart",
+        tracking_number="BD123",
+    )
+    assert proposed.status == ReturnStatus.AWAITING_CUSTOMER
+    assert Decimal(str(proposed.refund_total)) == original
+    accepted = returns.accept_pickup_charge(
+        tenant=tenant, business=business, shop_return=proposed
+    )
+    assert accepted.status == ReturnStatus.APPROVED
+    assert Decimal(str(accepted.refund_total)) == expected_net
+    assert accepted.pickup_tracking_number == "BD123"
+    assert "Blue dart" in (accepted.pickup_notes or "")
+
+
+@pytest.mark.django_db
+def test_ops_instant_pickup_unavailable_when_disabled(delivery_ctx) -> None:
+    tenant, business, customer = delivery_ctx
+    DeliveryService().update_settings(
+        tenant=tenant,
+        business=business,
+        enabled=False,
+        incoming={"provider": "mock"},
+    )
+    product = CatalogService().create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "No instant return",
+            "price": "50.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "3",
+        },
+    )
+    order = OrderService().create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    order.metadata = {
+        **(order.metadata or {}),
+        "delivery_latitude": "19.086",
+        "delivery_longitude": "72.8877",
+        "delivery_city": "Mumbai",
+        "delivery_postal_code": "400002",
+    }
+    order.save(update_fields=["metadata", "updated_at", "version"])
+    OrderService().transition(
+        tenant=tenant,
+        business=business,
+        order=order,
+        status=OrderStatus.COMPLETED,
+        notify=False,
+    )
+    pending = ReturnService().create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    with pytest.raises(ValidationError):
+        ReturnService().arrange_pickup(
+            tenant=tenant,
+            business=business,
+            shop_return=pending,
+            mode="instant",
+            charge_bearer="merchant",
+        )
+
+
+@pytest.mark.django_db
+def test_return_pickup_webhook_updates_return_metadata(delivery_ctx) -> None:
+    tenant, business, _, _, order = _completed_delivery_order(
+        delivery_ctx, price="80.00", name="Webhook return item"
+    )
+    delivery = DeliveryService()
+    delivery.update_settings(
+        tenant=tenant,
+        business=business,
+        enabled=True,
+        incoming={"provider": "mock", "charge_bearer": "customer", "webhook_secret": "ret-secret"},
+    )
+    pending = ReturnService().create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    arranged = ReturnService().arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        mode="instant",
+        charge_bearer="merchant",
+    )
+    booking_id = arranged.metadata["delivery"]["booking_id"]
+    body = json.dumps(
+        {
+            "booking_id": booking_id,
+            "event_id": "return-pickup-1",
+            "status": "picked_up",
+        }
+    ).encode()
+    signature = hmac.new(b"ret-secret", body, hashlib.sha256).hexdigest()
+    result = delivery.process_webhook(
+        provider="mock",
+        business=business,
+        body=body,
+        signature=signature,
+    )
+    arranged.refresh_from_db()
+    assert result["accepted"] is True
+    assert result["status"] == "processed"
+    assert arranged.metadata["delivery"]["partner_status"] == "picked_up"

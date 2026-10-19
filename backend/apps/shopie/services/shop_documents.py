@@ -540,29 +540,43 @@ def _lines_with_product_discount_only(
     product_discount_total: Decimal,
     bill_level_discount: Decimal,
 ) -> list[dict[str, Any]]:
-    """Show only product-level ₹ in the Disc column; bill/coupon stay in the summary."""
-    if _q(bill_level_discount) <= 0:
-        return lines
+    """Shelf Amount = qty × rate; Disc shows product ₹ only. Bill/coupon/loyalty stay in summary."""
     folded = sum((_q(line.get("discount") or "0") for line in lines), Decimal("0.00"))
-    if folded <= 0:
-        return lines
     product_total = max(Decimal("0.00"), _q(product_discount_total))
     remaining = product_total
+    use_product_split = _q(bill_level_discount) > 0 and folded > 0
     adjusted: list[dict[str, Any]] = []
     for index, line in enumerate(lines):
-        folded_disc = _q(line.get("discount") or "0")
-        if index == len(lines) - 1:
-            product_part = remaining
-        elif product_total > 0 and folded > 0:
-            product_part = (product_total * folded_disc / folded).quantize(Decimal("0.01"))
-            remaining -= product_part
+        gross = _q(line.get("gross") or "0")
+        if gross <= 0:
+            qty = Decimal(str(line.get("qty") or "0"))
+            rate = _q(line.get("rate") or "0")
+            gross = (qty * rate).quantize(Decimal("0.01"))
+        if use_product_split:
+            folded_disc = _q(line.get("discount") or "0")
+            if index == len(lines) - 1:
+                product_part = remaining
+            elif product_total > 0:
+                product_part = (product_total * folded_disc / folded).quantize(Decimal("0.01"))
+                remaining -= product_part
+            else:
+                product_part = Decimal("0.00")
+            if product_part < 0:
+                product_part = Decimal("0.00")
+            if product_part > folded_disc:
+                product_part = folded_disc
         else:
-            product_part = Decimal("0.00")
-        if product_part < 0:
-            product_part = Decimal("0.00")
-        if product_part > folded_disc:
-            product_part = folded_disc
-        adjusted.append({**line, "discount": _dec_str(product_part)})
+            # No bill-level fold: keep stored product discount for the Disc column.
+            product_part = _q(line.get("discount") or "0")
+        # Amount column always shelf gross — discounts are listed in the bill summary.
+        adjusted.append(
+            {
+                **line,
+                "gross": _dec_str(gross),
+                "discount": _dec_str(product_part),
+                "total": _dec_str(gross),
+            }
+        )
     return adjusted
 
 
@@ -932,11 +946,12 @@ def _payload_from_voucher(
     # Credit/debit notes do not collect payment via UPI on the document itself.
     # Borrow/credit bills also omit UPI QR — paying that link does not settle Orbit dues.
     upi_url = ""
+    is_borrow_or_credit = payment_method in {"borrow", "credit"}
     allow_upi_pay = (
         kind_key == ShopDocumentKind.SALE
         and due > 0
         and seller.get("upi_vpa")
-        and payment_method != "borrow"
+        and not is_borrow_or_credit
     )
     if allow_upi_pay:
         upi_url = build_upi_pay_url(
@@ -1094,16 +1109,29 @@ def _pos_bill_summary_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         (_q(line.get("total") or "0") for line in (payload.get("lines") or []) if isinstance(line, dict)),
         Decimal("0.00"),
     )
-    line_discount, bill_discount, coupon_discount, reward_discount = _reconcile_discount_parts(
-        merchandise_gross=merchandise_gross,
-        line_total_sum=line_total_sum if line_total_sum > 0 else max(Decimal("0.00"), merchandise_gross - _q(payload.get("discount_total") or "0")),
-        line_discount_total=line_discount,
-        bill_discount_total=bill_discount,
-        coupon_discount=coupon_discount,
-        coupon_code=coupon_code,
-        reward_discount=reward_discount,
-        voucher_discount_total=_q(payload.get("discount_total") or "0"),
+    # Invoice line Amounts are shelf gross (qty × rate). Do not re-anchor discounts to
+    # gross − Σ(line totals) or bill/coupon/loyalty rows disappear from the summary.
+    lines_are_shelf_gross = merchandise_gross > 0 and line_total_sum >= (
+        merchandise_gross - Decimal("0.009")
     )
+    if not lines_are_shelf_gross:
+        line_discount, bill_discount, coupon_discount, reward_discount = _reconcile_discount_parts(
+            merchandise_gross=merchandise_gross,
+            line_total_sum=(
+                line_total_sum
+                if line_total_sum > 0
+                else max(
+                    Decimal("0.00"),
+                    merchandise_gross - _q(payload.get("discount_total") or "0"),
+                )
+            ),
+            line_discount_total=line_discount,
+            bill_discount_total=bill_discount,
+            coupon_discount=coupon_discount,
+            coupon_code=coupon_code,
+            reward_discount=reward_discount,
+            voucher_discount_total=_q(payload.get("discount_total") or "0"),
+        )
     after_line = max(Decimal("0.00"), merchandise_gross - line_discount)
     return {
         "merchandise_gross": merchandise_gross,
@@ -1391,10 +1419,16 @@ class ShopDocumentService:
                 f"<div class='pay-title'>Amount due</div>"
                 f"<div class='pay-amount'>{currency_sym}{_money(due)}</div>"
             )
-            if qr_url:
+            # A4 view/PDF: amount due + UPI text only (no QR/barcode).
+            # Thermal receipts keep the scannable QR for customers at the counter.
+            if layout_key == LAYOUT_THERMAL and qr_url:
                 due_block += (
                     f"<img class='qr-img' src='{escape(qr_url)}' alt='UPI QR'/>"
                     f"<div class='muted'>Scan to pay · {escape(str(seller.get('upi_vpa') or ''))}</div>"
+                )
+            elif seller.get("upi_vpa") and upi_url:
+                due_block += (
+                    f"<div class='muted'>Pay via UPI · {escape(str(seller.get('upi_vpa') or ''))}</div>"
                 )
             elif upi_url:
                 due_block += f"<div class='muted break'>{escape(upi_url)}</div>"
@@ -1903,12 +1937,12 @@ class ShopDocumentService:
         <div>
           <div class="words"><strong>Amount in words:</strong> {words}</div>
           {loyalty_highlight_html}
+          <div class="footer">This is a computer-generated document.</div>
           {due_block}
           {f'<div class="footer">Notes: {notes}</div>' if notes else ''}
           {supply_meta}
           {f'<div class="footer">IRN: {irn}</div>' if irn else ''}
           {f'<div class="footer">Online copy: {public_url}</div>' if public_url and not is_thermal else ''}
-          <div class="footer">This is a computer-generated document.</div>
         </div>
         <div class="totals">
           {totals_html}
@@ -2395,7 +2429,11 @@ class ShopDocumentService:
                 rgb=loyalty_ink,
             )
 
-        footer_y = min(loyalty_bottom, totals_bottom) - 18
+        # Left-column footer flows under loyalty / amount-in-words (do not jump
+        # down to totals_bottom — that left a large gap above Notes).
+        footer_y = loyalty_bottom - 14
+        text_at(margin_x, footer_y, "This is a computer-generated document.", size=8, rgb=muted_rgb)
+        footer_y -= 16
 
         due = _q(payload.get("amount_due"))
         if due > 0:
@@ -2410,7 +2448,6 @@ class ShopDocumentService:
         if payload.get("irn"):
             text_at(margin_x, footer_y, f"IRN: {payload.get('irn')}", size=8, rgb=muted_rgb)
             footer_y -= 12
-        text_at(margin_x, 36, "This is a computer-generated document.", size=8, rgb=muted_rgb)
 
         return _pdf_bytes(ops, width=int(page_w), height=int(page_h))
 
@@ -2683,6 +2720,9 @@ class ShopDocumentService:
                     bold=True,
                 )
                 y -= 12
+        y -= 2
+        text_center(y, "Thank you!", size=9, bold=True)
+        y -= 12
         if _q(payload.get("amount_due")) > 0 and payload.get("upi_pay_url") and seller.get("upi_vpa"):
             y -= 2
             text_center(y, f"UPI {seller.get('upi_vpa')}", size=8, bold=True)
@@ -2691,10 +2731,6 @@ class ShopDocumentService:
             for chunk in _pdf_wrap(f"Note: {payload.get('notes')}", width=30)[:2]:
                 text_at(left, y, chunk, size=7)
                 y -= 9
-        y -= 4
-        rule(y, dashed=True)
-        y -= 14
-        text_center(y, "Thank you!", size=9, bold=True)
         return _pdf_bytes(ops, width=int(width), height=int(height))
 
     @transaction.atomic

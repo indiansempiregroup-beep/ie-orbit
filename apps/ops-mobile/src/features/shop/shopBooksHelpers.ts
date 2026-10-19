@@ -1,7 +1,55 @@
-import type { Customer, ShopBooksVoucher, ShopSupplier } from '@ie-orbit/sdk';
-import { formatTime } from '../../utils/format';
+import type { Customer, ShopBooksVoucher, ShopOrder, ShopSupplier } from '@ie-orbit/sdk';
+import { formatDate, formatTime } from '../../utils/format';
 
 export { formatMoney } from './posPayment';
+
+/** True once the sale is done (delivered/picked up, or POS counter sale confirmed). */
+export function orderReturnBadgeReady(
+  order?: Pick<ShopOrder, 'status' | 'fulfillment_mode'> | null,
+): boolean {
+  if (!order) return false;
+  const status = String(order.status || '').toLowerCase();
+  if (status === 'completed' || status === 'delivered' || status === 'returned') return true;
+  // POS counter sales are final at confirm — no separate delivery step.
+  if (
+    String(order.fulfillment_mode || '').toLowerCase() === 'pos' &&
+    ['confirmed', 'ready', 'packed', 'completed', 'returned'].includes(status)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Return-window copy for POS sale invoices and online orders.
+ * Returns null until the order is delivered / picked up (or POS confirmed).
+ */
+export function orderReturnWindow(
+  order?: Pick<
+    ShopOrder,
+    'status' | 'fulfillment_mode' | 'return_days' | 'return_eligible_until' | 'return_window_open'
+  > | null,
+): { days: number; open: boolean; untilLabel: string; summary: string } | null {
+  const days = Number(order?.return_days ?? 0);
+  if (!order || !Number.isFinite(days) || days <= 0) return null;
+  if (!orderReturnBadgeReady(order)) return null;
+  const untilLabel = order.return_eligible_until ? formatDate(order.return_eligible_until) : '';
+  const open = order.return_window_open !== false;
+  if (!untilLabel) {
+    return {
+      days,
+      open,
+      untilLabel: '',
+      summary: `${days}-day return policy`,
+    };
+  }
+  return {
+    days,
+    open,
+    untilLabel,
+    summary: open ? `Returns until ${untilLabel}` : `Returns closed ${untilLabel}`,
+  };
+}
 
 export const VOUCHER_STATUS_STYLES: Record<string, { bg: string; text: string }> = {
   posted: { bg: '#D1FAE5', text: '#047857' },
@@ -15,6 +63,30 @@ export const VOUCHER_STATUS_STYLES: Record<string, { bg: string; text: string }>
 
 export function voucherStatusStyle(status?: string) {
   return VOUCHER_STATUS_STYLES[(status || '').toLowerCase()] ?? { bg: '#E2E8F0', text: '#475569' };
+}
+
+/** Where this sale invoice came from — POS counter, online shop, or booking. */
+export function saleInvoiceSourceLabel(
+  voucher: ShopBooksVoucher,
+  order?: { fulfillment_mode?: string | null } | null,
+): string {
+  const meta =
+    voucher.metadata && typeof voucher.metadata === 'object'
+      ? (voucher.metadata as Record<string, unknown>)
+      : {};
+  const source = String(meta.source || '').trim().toLowerCase();
+  if (source === 'booking' || meta.source_booking_id) return 'Booking';
+
+  const mode = String(order?.fulfillment_mode || meta.fulfillment_mode || meta.channel || '')
+    .trim()
+    .toLowerCase();
+  if (mode === 'pos') return 'POS';
+  if (mode === 'pickup' || mode === 'online_pickup') return 'Online order · Pickup';
+  if (mode === 'delivery' || mode === 'online_delivery') return 'Online order · Delivery';
+  // Linked shop order but mode not loaded yet — don't guess POS vs online.
+  if (voucher.linked_order && !order) return 'Shop sale';
+  if (voucher.linked_order) return 'Online order';
+  return 'Books sale';
 }
 
 export function isVoidedVoucher(status?: string) {

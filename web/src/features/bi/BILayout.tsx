@@ -6,16 +6,24 @@ import { getSubscribedProductIds } from '../../config/products';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 
 const biNav = [
-  { to: '/bi/overview', labelKey: 'bi.overview', feature: 'overview', appointieOnly: false },
-  { to: '/bi/growth', labelKey: 'bi.growth', feature: 'growth', appointieOnly: true },
-  { to: '/bi/revenue', labelKey: 'bi.revenue', feature: 'revenue', appointieOnly: true },
-  { to: '/bi/forecast', labelKey: 'bi.forecast', feature: 'forecast', appointieOnly: true },
-  { to: '/bi/reports', labelKey: 'bi.reports', feature: 'reports', appointieOnly: true },
+  { to: '/bi/overview', labelKey: 'bi.overview', feature: 'overview', appointieOnly: false, shopieOnly: false },
+  { to: '/bi/profit', labelKey: 'bi.profit', feature: 'profit', appointieOnly: false, shopieOnly: true },
+  { to: '/bi/growth', labelKey: 'bi.growth', feature: 'growth', appointieOnly: true, shopieOnly: false },
+  { to: '/bi/revenue', labelKey: 'bi.revenue', feature: 'revenue', appointieOnly: true, shopieOnly: false },
+  { to: '/bi/forecast', labelKey: 'bi.forecast', feature: 'forecast', appointieOnly: true, shopieOnly: false },
+  { to: '/bi/reports', labelKey: 'bi.reports', feature: 'reports', appointieOnly: true, shopieOnly: false },
 ] as const;
 
 function featureFromPath(pathname: string) {
   const match = biNav.find((item) => pathname.startsWith(item.to));
   return match?.feature ?? 'overview';
+}
+
+function featureAllowed(allowed: Set<string>, feature: string) {
+  if (allowed.has(feature)) return true;
+  // Existing Starter packages only list overview; Profit is Mart analytics at Overview access.
+  if (feature === 'profit' && allowed.has('overview')) return true;
+  return false;
 }
 
 export function BILayout() {
@@ -28,15 +36,23 @@ export function BILayout() {
     [workspace.activeBusiness?.product_subscriptions],
   );
   const hasAppointie = subscribedIds.includes('appointie') || subscribedIds.length === 0;
+  const hasShopie = subscribedIds.includes('shopie');
   const visibleNav = useMemo(
-    () => biNav.filter((item) => !item.appointieOnly || hasAppointie),
-    [hasAppointie],
+    () =>
+      biNav.filter((item) => {
+        if (item.shopieOnly && !hasShopie) return false;
+        if (item.appointieOnly && !hasAppointie) return false;
+        return true;
+      }),
+    [hasAppointie, hasShopie],
   );
-  const allowed = new Set(billingQuery.data?.bi_features ?? ['overview']);
+  const allowed = new Set(billingQuery.data?.bi_features ?? ['overview', 'profit']);
   const currentFeature = featureFromPath(location.pathname);
   const currentItem = biNav.find((item) => item.feature === currentFeature);
-  const productBlocked = Boolean(currentItem?.appointieOnly && !hasAppointie);
-  const locked = productBlocked || !allowed.has(currentFeature);
+  const productBlocked = Boolean(
+    (currentItem?.appointieOnly && !hasAppointie) || (currentItem?.shopieOnly && !hasShopie),
+  );
+  const locked = productBlocked || !featureAllowed(allowed, currentFeature);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16, alignItems: 'start' }}>
@@ -53,7 +69,7 @@ export function BILayout() {
         <strong style={{ display: 'block', marginBottom: 10 }}>{t('bi.title')}</strong>
         <nav style={{ display: 'grid', gap: 6 }}>
           {visibleNav.map((item) => {
-            const itemLocked = !allowed.has(item.feature);
+            const itemLocked = !featureAllowed(allowed, item.feature);
             if (itemLocked) {
               return (
                 <div
@@ -91,7 +107,7 @@ export function BILayout() {
         </nav>
         {billingQuery.data && (billingQuery.data.bi_features?.length ?? 0) <= 1 ? (
           <p style={{ margin: '12px 0 0', fontSize: 13, color: 'var(--muted-foreground, #6b7280)' }}>
-            Starter includes Overview only.{' '}
+            Starter includes Overview and Profit.{' '}
             <Link to="/settings" style={{ color: 'var(--primary)' }}>
               Upgrade to Pro
             </Link>
@@ -114,11 +130,19 @@ export function BILayout() {
             gap: 12,
           }}
         >
-          <h2 style={{ margin: 0 }}>{productBlocked ? 'Orbit Appoint feature' : 'Pro feature'}</h2>
+          <h2 style={{ margin: 0 }}>
+            {productBlocked
+              ? currentItem?.shopieOnly
+                ? 'Orbit Mart feature'
+                : 'Orbit Appoint feature'
+              : 'Pro feature'}
+          </h2>
           <p style={{ margin: 0, color: 'var(--muted-foreground, #6b7280)' }}>
             {productBlocked
-              ? 'This BI tab is available when Orbit Appoint is subscribed. Overview covers Orbit Mart analytics.'
-              : 'Your current plan includes BI Overview only. Upgrade to Pro for Growth, Revenue, Forecast, and Reports.'}
+              ? currentItem?.shopieOnly
+                ? 'Profit insights are available when Orbit Mart is subscribed.'
+                : 'This BI tab is available when Orbit Appoint is subscribed. Overview covers Orbit Mart analytics.'
+              : 'Your current plan includes BI Overview and Profit. Upgrade to Pro for Growth, Revenue, Forecast, and Reports.'}
           </p>
           <Link to="/settings" style={{ color: 'var(--primary)', fontWeight: 600, width: 'fit-content' }}>
             {productBlocked ? 'Manage products' : 'Upgrade plan'}

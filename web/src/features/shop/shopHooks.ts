@@ -415,19 +415,73 @@ export function useShopReturnMutations() {
   const queryClient = useQueryClient();
   const businessId = workspace.businessId ?? '';
 
+  const invalidateReturns = () => {
+    queryClient.invalidateQueries({ queryKey: ['shop-returns'] });
+    queryClient.invalidateQueries({ queryKey: ['shop-orders'] });
+    queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+    queryClient.invalidateQueries({ queryKey: ['shop-vouchers'] });
+  };
+
   const createReturn = useMutation({
     mutationFn: async (body: Omit<ShopReturnCreateInput, 'business_id'>) => {
       const response = await client.shop.createReturn({ ...body, business_id: businessId });
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['shop-returns'] });
-      queryClient.invalidateQueries({ queryKey: ['shop-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['shop-products'] });
-    },
+    onSuccess: invalidateReturns,
   });
 
-  return { createReturn };
+  const arrangePickup = useMutation({
+    mutationFn: async ({
+      returnId,
+      notes,
+      tracking_number,
+      mode,
+      charge_bearer,
+      fee,
+    }: {
+      returnId: string;
+      notes?: string;
+      tracking_number?: string;
+      mode?: 'instant' | 'manual' | string;
+      charge_bearer?: 'merchant' | 'customer' | string;
+      fee?: string | number;
+    }) => {
+      const response = await client.shop.arrangeReturnPickup(returnId, {
+        business_id: businessId,
+        notes,
+        tracking_number,
+        mode,
+        charge_bearer,
+        fee,
+      });
+      return response.data;
+    },
+    onSuccess: invalidateReturns,
+  });
+
+  const receiveReturn = useMutation({
+    mutationFn: async ({ returnId, restock }: { returnId: string; restock?: boolean }) => {
+      const response = await client.shop.receiveReturn(returnId, {
+        business_id: businessId,
+        restock,
+      });
+      return response.data;
+    },
+    onSuccess: invalidateReturns,
+  });
+
+  const rejectReturn = useMutation({
+    mutationFn: async ({ returnId, reason }: { returnId: string; reason?: string }) => {
+      const response = await client.shop.rejectReturn(returnId, {
+        business_id: businessId,
+        reason,
+      });
+      return response.data;
+    },
+    onSuccess: invalidateReturns,
+  });
+
+  return { createReturn, arrangePickup, receiveReturn, rejectReturn };
 }
 
 export function useShopDeliveryZoneMutations() {
@@ -532,6 +586,7 @@ export function useShopSettingsMutations() {
       enabled_packs?: string[];
       default_fulfillment_mode?: string;
       same_day_delivery_enabled?: boolean;
+      return_days?: number;
     }) => {
       const response = await client.shop.patchSettings({ ...body, business_id: businessId });
       return response.data;
@@ -722,6 +777,7 @@ export type ShopVoucherFilters = {
   date_to?: string;
   customer_id?: string;
   supplier_id?: string;
+  source?: string;
 };
 
 export function useShopVouchers(filters: ShopVoucherFilters = {}) {
@@ -733,6 +789,18 @@ export function useShopVouchers(filters: ShopVoucherFilters = {}) {
     enabled: Boolean(businessId),
     queryFn: async () => {
       const response = await client.shop.listVouchers({ business_id: businessId, ...filters });
+      return response.data;
+    },
+  });
+}
+
+export function useShopVoucher(voucherId: string | null | undefined) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['shop-books-voucher', voucherId],
+    enabled: Boolean(voucherId),
+    queryFn: async () => {
+      const response = await client.shop.getVoucher(String(voucherId));
       return response.data;
     },
   });

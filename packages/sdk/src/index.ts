@@ -1097,6 +1097,8 @@ export type MobileBootstrapResponse = {
     payment_qr_url?: string;
     cod_enabled?: boolean;
     cod_allowed_for_instant_delivery?: boolean;
+    /** Shop has instant rider delivery enabled (also gates Instant return pickup). */
+    instant_delivery_enabled?: boolean;
     razorpay?: { can_accept_payments?: boolean };
     cashfree?: { can_accept_payments?: boolean };
   };
@@ -2418,6 +2420,10 @@ export type ShopProduct = {
   details_html?: string;
   status: string;
   price: string | number;
+  /** Owner-only last buy cost; omitted on customer mobile / public catalog. */
+  purchase_price?: string | number;
+  /** Owner-only weighted average on-hand cost. */
+  avg_cost?: string | number;
   tax_rate?: string | number;
   gst_rate?: string | number;
   tax_inclusive?: boolean;
@@ -2452,6 +2458,7 @@ export type ShopProductWriteInput = {
   details_html?: string;
   status?: string;
   price?: string | number;
+  purchase_price?: string | number;
   tax_rate?: string | number;
   gst_rate?: string | number;
   hsn_sac?: string;
@@ -2469,6 +2476,285 @@ export type ShopProductWriteInput = {
     barcode_type?: string;
     is_primary?: boolean;
   }>;
+};
+
+export type ShopProductProfitInsights = {
+  currency: string;
+  date_from: string;
+  date_to: string;
+  channel?: string;
+  q?: string;
+  sort?: string;
+  order?: string;
+  limit?: number;
+  offset?: number;
+  sales_total?: number;
+  summary: {
+    product_count: number;
+    products_sold_count?: number;
+    order_count?: number;
+    period_days?: number;
+    inventory_at_cost: string;
+    potential_profit: string;
+    sales_revenue: string;
+    shelf_revenue?: string;
+    sales_cogs: string;
+    sales_cogs_net?: string;
+    gross_profit: string;
+    gross_margin_percent?: string;
+    cogs_ratio_percent?: string;
+    gst_collected?: string;
+    gst_to_remit?: string;
+    units_sold?: string;
+    sale_units_gross?: string;
+    sale_revenue_gross?: string;
+    sale_cogs_gross?: string;
+    sale_profit_gross?: string;
+    kept_profit?: string;
+    kept_rate_percent?: string;
+    leakage_total?: string;
+    avg_profit_per_unit?: string;
+    avg_revenue_per_unit?: string;
+    avg_order_profit?: string;
+    avg_order_revenue?: string;
+    avg_daily_profit?: string;
+    avg_daily_revenue?: string;
+    discounts_total?: string;
+    line_discounts_total?: string;
+    bill_discounts_total?: string;
+    discount_rate_percent?: string;
+    returns_revenue?: string;
+    returns_cogs?: string;
+    returns_profit?: string;
+    return_rate_percent?: string;
+    cancels_profit?: string;
+    cancel_rate_percent?: string;
+    top5_profit_share_percent?: string;
+    low_margin_sold_count?: number;
+    healthy_margin_sold_count?: number;
+    missing_cost_count?: number;
+    loss_maker_count?: number;
+    stock_risk_count?: number;
+    inventory_days_cover?: string;
+    best_channel?: string;
+    best_channel_profit?: string;
+    best_weekday?: string;
+    best_weekday_profit?: string;
+    best_category?: string;
+    best_category_profit?: string;
+  };
+  comparison?: {
+    previous_from?: string;
+    previous_to?: string;
+    sales_revenue?: string;
+    gross_profit?: string;
+    units_sold?: string;
+    revenue_delta_percent?: string;
+    profit_delta_percent?: string;
+    units_delta_percent?: string;
+  };
+  insights?: Array<{
+    tone: string;
+    title: string;
+    detail: string;
+  }>;
+  rupee_composition?: Array<{
+    key: string;
+    label: string;
+    value: string;
+    color: string;
+  }>;
+  by_channel?: Array<{
+    channel: string;
+    revenue: string;
+    cogs: string;
+    gross_profit: string;
+    units: string;
+    margin_percent: string;
+  }>;
+  by_category?: Array<{
+    category: string;
+    category_label?: string;
+    revenue: string;
+    cogs: string;
+    gross_profit: string;
+    units: string;
+    margin_percent: string;
+  }>;
+  by_weekday?: Array<{
+    weekday: number;
+    label: string;
+    revenue: string;
+    gross_profit: string;
+    units: string;
+    margin_percent: string;
+  }>;
+  series?: Array<{
+    date: string;
+    revenue: string;
+    cogs: string;
+    gross_profit: string;
+    units: string;
+  }>;
+  catalog: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    category?: string;
+    price: string;
+    purchase_price: string;
+    avg_cost?: string;
+    margin: string;
+    margin_percent: string;
+    stock_on_hand: string;
+    inventory_at_cost: string;
+    potential_profit: string;
+    currency?: string;
+  }>;
+  top_margins?: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    price: string;
+    purchase_price: string;
+    avg_cost?: string;
+    margin: string;
+    margin_percent: string;
+    stock_on_hand: string;
+    inventory_at_cost: string;
+    potential_profit: string;
+    currency?: string;
+  }>;
+  low_margins?: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    price: string;
+    purchase_price: string;
+    avg_cost?: string;
+    margin: string;
+    margin_percent: string;
+    stock_on_hand: string;
+    inventory_at_cost: string;
+    potential_profit: string;
+    currency?: string;
+  }>;
+  top_profit_products?: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    units_sold: string;
+    revenue: string;
+    cogs: string;
+    gross_profit: string;
+    margin_percent?: string;
+    discounts?: string;
+  }>;
+  loss_makers?: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    units_sold: string;
+    revenue: string;
+    cogs: string;
+    gross_profit: string;
+    margin_percent?: string;
+    discounts?: string;
+  }>;
+  stock_risk?: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    price: string;
+    purchase_price: string;
+    avg_cost?: string;
+    margin: string;
+    margin_percent: string;
+    stock_on_hand: string;
+    inventory_at_cost: string;
+    potential_profit: string;
+    currency?: string;
+  }>;
+  sales: Array<{
+    product_id: string;
+    name: string;
+    sku?: string;
+    units_sold: string;
+    revenue: string;
+    discounts?: string;
+    cogs: string;
+    gross_profit: string;
+    margin_percent?: string;
+    avg_unit_cost?: string;
+  }>;
+};
+
+export type CustomerLoyaltyLedgerEntry = {
+  id: string;
+  customer_id?: string | null;
+  customer_name?: string;
+  points_delta: number;
+  reason: string;
+  entry_type?: string;
+  direction?: 'given' | 'used' | 'other' | string;
+  booking_id?: string | null;
+  order_id?: string | null;
+  voucher_id?: string | null;
+  order_number?: string;
+  booking_number?: string;
+  voucher_number?: string;
+  voucher_type?: string;
+  /** POS, Online order, Booking, Books sale, etc. */
+  source_label?: string;
+  /** Books sale voucher to open in the invoice popup (POS / booking / books). */
+  invoice_voucher_id?: string;
+  /** Linked shop order id when this entry should open the online order page. */
+  linked_order_id?: string;
+  /** Kept profit for the linked shop sale (null for bookings / no sale facts). */
+  gross_profit?: string | null;
+  /** Money given to the customer via redeemed points on this linked sale. */
+  redeem_discount_amount?: string | null;
+  /** Total points earned on the linked sale (may include companion earn row). */
+  record_points_earned?: number;
+  /** Total points redeemed on the linked sale (may include companion redeem row). */
+  record_points_redeemed?: number;
+  record_label?: string;
+  record_kind?: 'order' | 'booking' | 'voucher' | '' | string;
+  created_at?: string;
+};
+
+export type CustomerLoyaltyBalance = {
+  enabled: boolean;
+  points_balance: number;
+  program?: Record<string, unknown>;
+  ledger: CustomerLoyaltyLedgerEntry[];
+};
+
+export type CustomerLoyaltyReport = {
+  enabled: boolean;
+  program?: Record<string, unknown>;
+  date_from: string;
+  date_to: string;
+  direction?: string;
+  entry_type?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  ledger_total?: number;
+  has_next?: boolean;
+  has_previous?: boolean;
+  summary: {
+    points_earned: number;
+    points_redeemed: number;
+    net_points: number;
+    entry_count: number;
+    /** Currency amount given to customers via redeemed points in this period. */
+    redeem_discount_total?: string;
+  };
+  ledger: CustomerLoyaltyLedgerEntry[];
 };
 
 export type ShopProductBulkError = {
@@ -2736,6 +3022,18 @@ export type ShopOrder = {
   coupon_discount?: string | number;
   books_voucher_id?: string | null;
   books_voucher_number?: string | null;
+  /** Reward points given on this order (from metadata). */
+  points_earned?: number;
+  /** Reward points redeemed on this order (from metadata). */
+  points_redeemed?: number;
+  /** Net sold profit from sale profit facts (null when unknown). */
+  gross_profit?: string | null;
+  /** Shop return policy in days. 0 = no time limit. */
+  return_days?: number;
+  /** ISO datetime when the return window ends. Null when unlimited. */
+  return_eligible_until?: string | null;
+  /** False when return_days is set and the deadline has passed. */
+  return_window_open?: boolean;
   lines?: ShopOrderLine[];
   created_at?: string;
   updated_at?: string;
@@ -3099,6 +3397,45 @@ export type MerchantCashfreeCheckout = {
   payment_status: string;
 };
 
+export type ShopReturnMethod = 'in_store' | 'dropoff' | 'reverse_pickup' | 'instant_pickup';
+
+export type ShopReturnPickupLive = {
+  available: boolean;
+  return_id: string;
+  return_status: string;
+  delivery_method: string;
+  provider?: string | null;
+  dispatched: boolean;
+  partner_status: string;
+  headline: string;
+  subtitle?: string;
+  eta_minutes?: number | string | null;
+  rider?: {
+    name?: string;
+    phone?: string;
+    vehicle?: string;
+    photo_url?: string;
+    [key: string]: unknown;
+  };
+  pickup?: ShopDeliveryPlace;
+  drop?: ShopDeliveryPlace;
+  rider_location?: { latitude?: number | null; longitude?: number | null };
+  location_trail?: ShopDeliveryLocation[];
+  events?: Array<{
+    status?: string;
+    label?: string;
+    occurred_at?: string;
+    reason?: string;
+    [key: string]: unknown;
+  }>;
+  tracking_url?: string;
+  can_call_rider?: boolean;
+  last_updated?: string | null;
+  terminal?: boolean;
+  stale?: boolean;
+  show_map?: boolean;
+};
+
 export type ShopReturn = {
   id: string;
   business: string;
@@ -3106,10 +3443,15 @@ export type ShopReturn = {
   customer?: string | null;
   return_number: string;
   status: string;
+  return_method?: ShopReturnMethod | string;
   reason?: string;
   restock: boolean;
   refund_total: string | number;
   currency?: string;
+  received_at?: string | null;
+  pickup_arranged_at?: string | null;
+  pickup_notes?: string;
+  pickup_tracking_number?: string;
   credit_invoice?: string | null;
   line_items?: unknown[];
   metadata?: Record<string, unknown>;
@@ -3125,6 +3467,7 @@ export type ShopReturnCreateInput = {
   reason?: string;
   restock?: boolean;
   complete?: boolean;
+  return_method?: ShopReturnMethod | string;
   lines: Array<{
     order_line_id: string;
     quantity: string | number;
@@ -3202,6 +3545,8 @@ export type ShopSettings = {
   default_fulfillment_mode?: string;
   same_day_delivery_enabled?: boolean;
   instant_delivery_enabled?: boolean;
+  /** Days after purchase/delivery returns are accepted. 0 = no limit. */
+  return_days?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -3513,6 +3858,12 @@ export type ShopBooksVoucher = {
   linked_order?: string | null;
   linked_invoice?: string | null;
   metadata?: Record<string, unknown>;
+  /** Reward points given on this sale (from metadata). */
+  points_earned?: number;
+  /** Reward points redeemed on this sale (from metadata). */
+  points_redeemed?: number;
+  /** Net sold profit when linked to a shop order (null for bookings / unknown). */
+  gross_profit?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -4815,6 +5166,23 @@ class ApiClient {
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
     createProduct: (body: ShopProductWriteInput) =>
       this.request<ShopProduct>('/shop/products', { method: 'POST', body }),
+    productProfitInsights: (query: {
+      business_id: string;
+      date_from?: string;
+      date_to?: string;
+      channel?: string;
+      q?: string;
+      category?: string;
+      sort?: string;
+      order?: string;
+      limit?: number;
+      offset?: number;
+      include_catalog?: boolean | string;
+    }) =>
+      this.request<ShopProductProfitInsights>('/shop/products/profit-insights', {
+        method: 'GET',
+        query,
+      }),
     createProductsBulk: (body: ShopProductBulkCreateInput) =>
       this.request<ShopProductBulkCreateResult>('/shop/products/bulk', { method: 'POST', body }),
     getProduct: (productId: string) => this.request<ShopProduct>(`/shop/products/${productId}`, { method: 'GET' }),
@@ -4950,7 +5318,8 @@ class ApiClient {
       orderId: string,
       body: {
         carrier: string;
-        tracking_number: string;
+        /** Required for courier carriers; optional when carrier is `self` (own delivery). */
+        tracking_number?: string;
         carrier_label?: string;
         tracking_url?: string;
         estimated_delivery_at?: string;
@@ -4997,6 +5366,52 @@ class ApiClient {
       this.request<ShopReturn[]>('/shop/returns', { method: 'GET', query }),
     createReturn: (body: ShopReturnCreateInput) =>
       this.request<ShopReturn>('/shop/returns', { method: 'POST', body }),
+    arrangeReturnPickup: (
+      returnId: string,
+      body: {
+        business_id: string;
+        notes?: string;
+        tracking_number?: string;
+        /** instant = book rider; manual = notes/tracking only */
+        mode?: 'instant' | 'manual' | string;
+        /** merchant = shop pays; customer = deduct fee from refund after they accept */
+        charge_bearer?: 'merchant' | 'customer' | string;
+        /** Courier fee when mode=manual and charge_bearer=customer */
+        fee?: string | number;
+      },
+    ) =>
+      this.request<ShopReturn>(`/shop/returns/${returnId}/arrange-pickup`, {
+        method: 'POST',
+        body,
+      }),
+    quoteReturnPickup: (returnId: string, query: { business_id: string }) =>
+      this.request<{
+        available: boolean;
+        reason?: string;
+        provider?: string;
+        provider_label?: string;
+        quoted_fee?: string;
+        merchant_fee?: string;
+        customer_fee?: string;
+        eta_minutes?: number | null;
+        refund_total?: string;
+        customer_net_refund_if_charged?: string;
+        currency?: string;
+        return_id?: string;
+        [key: string]: unknown;
+      }>(`/shop/returns/${returnId}/pickup-quote`, { method: 'GET', query }),
+    getReturnPickupLive: (
+      returnId: string,
+      query: { business_id: string; refresh?: boolean | string },
+    ) =>
+      this.request<ShopReturnPickupLive>(`/shop/returns/${returnId}/pickup-live`, {
+        method: 'GET',
+        query,
+      }),
+    receiveReturn: (returnId: string, body: { business_id: string; restock?: boolean }) =>
+      this.request<ShopReturn>(`/shop/returns/${returnId}/receive`, { method: 'POST', body }),
+    rejectReturn: (returnId: string, body: { business_id: string; reason?: string }) =>
+      this.request<ShopReturn>(`/shop/returns/${returnId}/reject`, { method: 'POST', body }),
     listDeliveryZones: (query: { business_id: string }) =>
       this.request<ShopDeliveryZone[]>('/shop/delivery-zones', { method: 'GET', query }),
     createDeliveryZone: (body: ShopDeliveryZoneWriteInput) =>
@@ -5057,6 +5472,7 @@ class ApiClient {
       enable_pets?: boolean;
       default_fulfillment_mode?: string;
       same_day_delivery_enabled?: boolean;
+      return_days?: number;
       metadata?: Record<string, unknown>;
     }) => this.request<ShopSettings>('/shop/settings', { method: 'PATCH', body }),
     listPets: (query: { business_id: string; customer_id?: string }) =>
@@ -5188,6 +5604,8 @@ class ApiClient {
       date_to?: string;
       customer_id?: string;
       supplier_id?: string;
+      /** When `pos`, only counter/POS sale invoices (excludes booking + online). */
+      source?: 'pos' | string;
     }) => this.request<ShopBooksVoucher[]>('/shop/books/vouchers', { method: 'GET', query }),
     createVoucher: (body: ShopBooksVoucherCreateInput) =>
       this.request<ShopBooksVoucher>('/shop/books/vouchers', { method: 'POST', body }),
@@ -5513,6 +5931,21 @@ class ApiClient {
         method: 'POST',
         body,
       }),
+    getLoyaltyBalance: (customerId: string) =>
+      this.request<CustomerLoyaltyBalance>(`/customers/${customerId}/loyalty`, { method: 'GET' }),
+    loyaltyReport: (query: {
+      business?: string;
+      business_id?: string;
+      date_from?: string;
+      date_to?: string;
+      customer?: string;
+      direction?: string;
+      entry_type?: string;
+      q?: string;
+      limit?: number;
+      offset?: number;
+    }) =>
+      this.request<CustomerLoyaltyReport>('/customers/loyalty/report', { method: 'GET', query }),
   };
 
   services = {
@@ -6695,10 +7128,35 @@ class ApiClient {
       business_code: string;
       order_id: string;
       reason?: string;
+      return_method: ShopReturnMethod | 'dropoff' | 'reverse_pickup';
       lines: Array<{ order_line_id: string; quantity: string | number }>;
     }) => this.request<ShopReturn>('/mobile/shop/returns', { method: 'POST', body }),
     getMyReturn: (returnId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopReturn>(`/mobile/shop/returns/${returnId}`, { method: 'GET', query }),
+    getMyReturnPickupLive: (
+      returnId: string,
+      query: { tenant_slug: string; business_code: string; refresh?: boolean | string },
+    ) =>
+      this.request<ShopReturnPickupLive>(`/mobile/shop/returns/${returnId}/pickup-live`, {
+        method: 'GET',
+        query,
+      }),
+    acceptMyReturnPickupFee: (
+      returnId: string,
+      query: { tenant_slug: string; business_code: string },
+    ) =>
+      this.request<ShopReturn>(`/mobile/shop/returns/${returnId}/accept-pickup-fee`, {
+        method: 'POST',
+        query,
+      }),
+    declineMyReturnPickupFee: (
+      returnId: string,
+      query: { tenant_slug: string; business_code: string },
+    ) =>
+      this.request<ShopReturn>(`/mobile/shop/returns/${returnId}/decline-pickup-fee`, {
+        method: 'POST',
+        query,
+      }),
     listAddresses: (query: { tenant_slug: string; business_code: string }) =>
       this.request<CustomerAddress[]>('/mobile/customer/addresses', { method: 'GET', query }),
     createAddress: (body: Record<string, unknown> & { tenant_slug: string; business_code: string }) =>

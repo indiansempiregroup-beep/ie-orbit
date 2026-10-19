@@ -30,8 +30,8 @@ from apps.shopie.api.serializers import (
     RazorpayPaymentVerifySerializer,
     ShopDashboardAdSerializer,
     ShopPetSerializer,
+    ShopProductPublicSerializer,
     ShopProductReviewSerializer,
-    ShopProductSerializer,
     ShopReturnSerializer,
 )
 from apps.shopie.models import (
@@ -193,7 +193,7 @@ class MobileShopProductListView(APIView):
         )
         category_labels = self.masters.category_labels_map(tenant=tenant, business=business)
         return success_response(
-            ShopProductSerializer(
+            ShopProductPublicSerializer(
                 products[:100],
                 many=True,
                 context={"category_labels": category_labels},
@@ -220,7 +220,7 @@ class MobileShopProductDetailView(APIView):
         except (ValueError, ShopProduct.DoesNotExist) as exc:
             return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
         category_labels = self.masters.category_labels_map(tenant=tenant, business=business)
-        payload = ShopProductSerializer(product, context={"category_labels": category_labels}).data
+        payload = ShopProductPublicSerializer(product, context={"category_labels": category_labels}).data
         review_qs = self.reviews.list_reviews(tenant=tenant, business=business, product=product)[:20]
         payload["reviews"] = ShopProductReviewSerializer(review_qs, many=True).data
         payload["rating_breakdown"] = self.reviews.rating_breakdown(
@@ -1106,6 +1106,16 @@ class MobileShopReturnListView(APIView):
             FulfillmentMode.DELIVERY,
         }:
             raise ValidationError({"order": "Returns are available for pickup and delivery orders."})
+        method = str(request.data.get("return_method") or "").strip().lower()
+        if method not in {"dropoff", "reverse_pickup"}:
+            raise ValidationError(
+                {
+                    "return_method": (
+                        "Choose how you'll return the items: dropoff or reverse_pickup. "
+                        "Instant pickup is arranged by the shop."
+                    )
+                }
+            )
         try:
             shop_return = self.returns.create_return(
                 tenant=tenant,
@@ -1114,8 +1124,9 @@ class MobileShopReturnListView(APIView):
                 lines=request.data.get("lines") or [],
                 reason=str(request.data.get("reason") or "").strip(),
                 restock=True,
-                complete=True,
+                complete=False,
                 require_delivered=True,
+                return_method=method,
             )
         except DjangoValidationError as exc:
             raise _django_validation(exc) from exc
@@ -1140,6 +1151,64 @@ class MobileShopReturnDetailView(APIView):
         )
         if shop_return is None:
             return Response({"error": {"message": "Not found."}}, status=status.HTTP_404_NOT_FOUND)
+        return success_response(ShopReturnSerializer(shop_return).data)
+
+
+class MobileShopReturnAcceptPickupFeeView(APIView):
+    permission_classes = [IsAuthenticated]
+    returns = ReturnService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, return_id) -> Response:
+        try:
+            tenant, business = _scope_from_request(request)
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        shop_return = (
+            ShopReturn.objects.filter(
+                tenant=tenant, business=business, id=return_id, customer_id=customer.id
+            )
+            .select_related("order", "customer", "credit_invoice")
+            .first()
+        )
+        if shop_return is None:
+            return Response({"error": {"message": "Not found."}}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            shop_return = self.returns.accept_pickup_charge(
+                tenant=tenant, business=business, shop_return=shop_return
+            )
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
+        return success_response(ShopReturnSerializer(shop_return).data)
+
+
+class MobileShopReturnDeclinePickupFeeView(APIView):
+    permission_classes = [IsAuthenticated]
+    returns = ReturnService()
+
+    @extend_schema(tags=["Mobile Shop"])
+    def post(self, request: Request, return_id) -> Response:
+        try:
+            tenant, business = _scope_from_request(request)
+        except ValueError as exc:
+            return Response({"error": {"message": str(exc)}}, status=status.HTTP_404_NOT_FOUND)
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        shop_return = (
+            ShopReturn.objects.filter(
+                tenant=tenant, business=business, id=return_id, customer_id=customer.id
+            )
+            .select_related("order", "customer", "credit_invoice")
+            .first()
+        )
+        if shop_return is None:
+            return Response({"error": {"message": "Not found."}}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            shop_return = self.returns.decline_pickup_charge(
+                tenant=tenant, business=business, shop_return=shop_return
+            )
+        except DjangoValidationError as exc:
+            raise _django_validation(exc) from exc
         return success_response(ShopReturnSerializer(shop_return).data)
 
 

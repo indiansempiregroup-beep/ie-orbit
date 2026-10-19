@@ -158,6 +158,34 @@ class ShopProductDetailView(APIView):
         return success_response(ShopProductSerializer(product).data)
 
 
+class ShopProductProfitInsightsView(APIView):
+    permission_classes = [ShopAccessPermission]
+    catalog = CatalogService()
+
+    @extend_schema(tags=["Shop Products"])
+    def get(self, request: Request) -> Response:
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, features=CATALOG_FEATURES)
+        include_catalog_raw = str(request.query_params.get("include_catalog") or "true").lower()
+        data = self.catalog.product_profit_insights(
+            tenant=request.current_tenant,
+            business=business,
+            date_from=request.query_params.get("date_from") or None,
+            date_to=request.query_params.get("date_to") or None,
+            channel=request.query_params.get("channel") or None,
+            q=request.query_params.get("q") or None,
+            category=request.query_params.get("category") or None,
+            sort=request.query_params.get("sort") or None,
+            order=request.query_params.get("order") or None,
+            limit=request.query_params.get("limit") or None,
+            offset=request.query_params.get("offset") or None,
+            include_catalog=include_catalog_raw not in {"0", "false", "no"},
+        )
+        return success_response(data)
+
+
 class ShopProductBulkView(APIView):
     permission_classes = [ShopAccessPermission]
     catalog = CatalogService()

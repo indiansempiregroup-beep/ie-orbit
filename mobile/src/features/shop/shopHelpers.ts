@@ -133,7 +133,83 @@ export function formatShopOrderPlaced(iso?: string | null): string {
   });
 }
 
-export type ShopOrderStatusFilter = 'all' | 'processing' | 'ready' | 'completed' | 'cancelled';
+/** Date + time for return activity (e.g. "18 Oct 2026, 9:05 PM"). */
+export function formatShopDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(getActiveIntlLocale(), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+export function shopReturnMethodLabel(method?: string | null): string {
+  const value = String(method || '').toLowerCase();
+  if (value === 'dropoff') return 'Drop off at shop';
+  if (value === 'reverse_pickup') return 'Pickup requested';
+  if (value === 'instant_pickup') return 'Instant pickup';
+  if (value === 'in_store') return 'In store';
+  return '';
+}
+
+/** Customer-facing status for online return logistics. */
+export function shopReturnStatusLabel(item: {
+  status?: string | null;
+  return_method?: string | null;
+  pickup_arranged_at?: string | null;
+}): string {
+  const status = String(item.status || '').toLowerCase();
+  const method = String(item.return_method || '').toLowerCase();
+  if (status === 'completed') return 'Completed';
+  if (status === 'rejected') return 'Declined';
+  if (status === 'awaiting_customer') return 'Accept pickup fee';
+  if (status === 'approved' || item.pickup_arranged_at) {
+    return method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged';
+  }
+  if (method === 'dropoff') return 'Awaiting drop-off';
+  if (method === 'instant_pickup') return 'Awaiting instant pickup';
+  if (method === 'reverse_pickup') return 'Awaiting pickup';
+  if (status === 'pending') return 'Pending';
+  return status || 'Pending';
+}
+
+/** True when the order has a mapped delivery pin suitable for instant return pickup. */
+export function shopOrderHasReturnPickupPin(order: {
+  metadata?: Record<string, unknown> | null;
+}): boolean {
+  const raw = order.metadata && typeof order.metadata === 'object' ? order.metadata : {};
+  const lat = raw.delivery_latitude;
+  const lng = raw.delivery_longitude;
+  if (lat != null && lng != null && String(lat) !== '' && String(lng) !== '') return true;
+  const delivery = raw.delivery && typeof raw.delivery === 'object' ? (raw.delivery as Record<string, unknown>) : null;
+  const drop = delivery?.drop && typeof delivery.drop === 'object' ? (delivery.drop as Record<string, unknown>) : null;
+  return drop?.latitude != null && drop?.longitude != null;
+}
+
+
+/** Calendar date for return-window deadlines (e.g. "25 Oct 2026"). */
+export function formatShopReturnByDate(iso?: string | null): string {
+  return formatShopOrderPlaced(iso);
+}
+
+export function shopOrderReturnWindowOpen(
+  order: Pick<ShopOrder, 'return_days' | 'return_eligible_until' | 'return_window_open'>,
+): boolean {
+  if (order.return_window_open != null) return Boolean(order.return_window_open);
+  const days = Number(order.return_days ?? 0);
+  if (!Number.isFinite(days) || days <= 0) return true;
+  if (!order.return_eligible_until) return true;
+  const deadline = new Date(order.return_eligible_until);
+  if (Number.isNaN(deadline.getTime())) return true;
+  return Date.now() <= deadline.getTime();
+}
+
+export type ShopOrderStatusFilter = 'all' | 'processing' | 'ready' | 'completed' | 'returned' | 'cancelled';
 export type ShopOrderPeriodFilter = '30d' | '3m' | 'year' | 'all';
 export type ShopOrderFulfillmentFilter = 'all' | 'pickup' | 'delivery' | 'pos';
 export type ShopOrderPaymentFilter = 'all' | 'unpaid';
@@ -144,6 +220,7 @@ export const SHOP_ORDER_STATUS_FILTERS: Array<{ id: ShopOrderStatusFilter; label
   { id: 'processing', label: 'Processing' },
   { id: 'ready', label: 'Ready' },
   { id: 'completed', label: 'Completed' },
+  { id: 'returned', label: 'Returned' },
   { id: 'cancelled', label: 'Cancelled' },
 ];
 
@@ -245,6 +322,7 @@ export function isShopOrderUnpaid(order: Pick<ShopOrder, 'payment_status'>): boo
 export function shopOrderStatusTone(status?: string | null): ShopOrderStatusTone {
   const value = String(status || '').toLowerCase();
   if (value === 'completed' || value === 'delivered') return 'success';
+  if (value === 'returned') return 'info';
   if (['ready', 'packed', 'confirmed', 'out_for_delivery'].includes(value)) return 'info';
   if (value === 'pending' || value === 'order_placed') return 'warning';
   if (['cancelled', 'delivery_cancelled', 'delivery_failed', 'failed'].includes(value)) return 'danger';
@@ -382,6 +460,13 @@ export function shopOrderHeadline(
   if (status === 'cancelled' || status === 'delivery_cancelled') {
     return { title: 'Cancelled', subtitle: 'This order was cancelled.', tone };
   }
+  if (status === 'returned') {
+    return {
+      title: 'Returned',
+      subtitle: 'All items from this order have been returned.',
+      tone: 'info',
+    };
+  }
   if (status === 'delivery_failed' || status === 'failed') {
     return {
       title: 'Delivery needs attention',
@@ -502,7 +587,7 @@ export function shopOrderDeliverySummary(
     ? (metadata.delivery_promise as Record<string, unknown>)
     : null;
   const eta = Number(delivery.eta_minutes ?? metadata.eta_minutes);
-  const terminal = ['completed', 'delivered', 'cancelled'].includes(status);
+  const terminal = ['completed', 'delivered', 'returned', 'cancelled'].includes(status);
   let etaLabel: string | null = null;
   if (!terminal && Number.isFinite(eta) && eta > 0 && orderDeliveryMethod(order) === 'instant') {
     etaLabel = `${Math.round(eta)} min`;
@@ -528,6 +613,7 @@ export function shopOrderCanReturn(
   fulfillmentMode?: string | null,
 ): boolean {
   const value = String(status || '').toLowerCase();
+  if (value === 'returned') return false;
   if (value === 'completed' || value === 'delivered') return true;
   // Older POS bills may remain "confirmed" even though the sale is done.
   if (
@@ -663,6 +749,7 @@ export function shopOrderMatchesFilters(
   if (filters.status === 'completed') {
     if (!['completed', 'delivered'].includes(status) && !posDone) return false;
   }
+  if (filters.status === 'returned' && status !== 'returned') return false;
   if (filters.status === 'cancelled' && status !== 'cancelled') return false;
 
   if (filters.fulfillment !== 'all' && mode !== filters.fulfillment) return false;

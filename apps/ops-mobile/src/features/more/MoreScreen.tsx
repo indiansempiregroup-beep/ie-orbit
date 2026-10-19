@@ -136,6 +136,14 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopProducts')}
               />
             ) : null}
+            {has(PlanFeature.shopieProducts) ? (
+              <MenuRow
+                icon="trending-up"
+                label="BI Profit"
+                subtitle="Margins and sold profit in Business Intelligence"
+                onPress={() => navigation.navigate('BI', { tab: 'profit' })}
+              />
+            ) : null}
             {has(PlanFeature.shopieOrders) ? (
               <MenuRow
                 icon="list"

@@ -58,7 +58,12 @@ from apps.shopie.api.extended_views import (
     ShopPetDetailView,
     ShopPetListCreateView,
     ShopPetNotifyView,
+    ShopReturnArrangePickupView,
     ShopReturnListCreateView,
+    ShopReturnPickupLiveView,
+    ShopReturnPickupQuoteView,
+    ShopReturnReceiveView,
+    ShopReturnRejectView,
     ShopSettingsView,
 )
 from apps.shopie.api.grow_views import (
@@ -98,6 +103,7 @@ from apps.shopie.api.views import (
     ShopProductDetailView,
     ShopProductListCreateView,
     ShopProductOfficeStockView,
+    ShopProductProfitInsightsView,
     ShopQuotationListCreateView,
     ShopCashfreeWebhookView,
     ShopRazorpayWebhookView,
@@ -141,6 +147,11 @@ urlpatterns = [
         name="public-shop-document-pdf",
     ),
     path("shop/products/bulk", ShopProductBulkView.as_view(), name="shop-product-bulk"),
+    path(
+        "shop/products/profit-insights",
+        ShopProductProfitInsightsView.as_view(),
+        name="shop-product-profit-insights",
+    ),
     path("shop/products/<uuid:product_id>", ShopProductDetailView.as_view(), name="shop-product-detail"),
     path(
         "shop/products/<uuid:product_id>/stock-adjust",
@@ -253,6 +264,31 @@ urlpatterns = [
         name="shop-order-invoice",
     ),
     path("shop/returns", ShopReturnListCreateView.as_view(), name="shop-return-list-create"),
+    path(
+        "shop/returns/<uuid:return_id>/arrange-pickup",
+        ShopReturnArrangePickupView.as_view(),
+        name="shop-return-arrange-pickup",
+    ),
+    path(
+        "shop/returns/<uuid:return_id>/pickup-quote",
+        ShopReturnPickupQuoteView.as_view(),
+        name="shop-return-pickup-quote",
+    ),
+    path(
+        "shop/returns/<uuid:return_id>/pickup-live",
+        ShopReturnPickupLiveView.as_view(),
+        name="shop-return-pickup-live",
+    ),
+    path(
+        "shop/returns/<uuid:return_id>/receive",
+        ShopReturnReceiveView.as_view(),
+        name="shop-return-receive",
+    ),
+    path(
+        "shop/returns/<uuid:return_id>/reject",
+        ShopReturnRejectView.as_view(),
+        name="shop-return-reject",
+    ),
     path("shop/delivery-zones", ShopDeliveryZoneListCreateView.as_view(), name="shop-delivery-zone-list-create"),
     path("shop/delivery-zones/match", ShopDeliveryMatchView.as_view(), name="shop-delivery-zone-match"),
     path(

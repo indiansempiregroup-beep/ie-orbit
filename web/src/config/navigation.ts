@@ -20,6 +20,7 @@ import {
   Scissors,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   TicketPercent,
   Truck,
   UserCog,
@@ -94,6 +95,14 @@ export const navigationItems: AppNavItem[] = [
     group: 'operations',
     products: ['shopie'],
     anyPermissions: ['business:read', 'service:read'],
+  },
+  {
+    to: '/shop/loyalty',
+    labelKey: 'nav.shopLoyalty',
+    icon: Sparkles,
+    group: 'operations',
+    products: ['shopie'],
+    anyPermissions: ['business:read', 'booking:read'],
   },
   {
     to: '/shop/master',

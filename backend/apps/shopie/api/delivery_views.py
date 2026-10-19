@@ -24,7 +24,7 @@ from apps.shopie.api.serializers import (
     ShopOrderShipSerializer,
     ShopOrderShipmentPatchSerializer,
 )
-from apps.shopie.models import OrderStatus, ShopOrder, ShopProduct
+from apps.shopie.models import OrderStatus, ShopOrder, ShopProduct, ShopReturn
 from apps.shopie.services.delivery import DeliveryService
 from apps.shopie.services.fulfillment import FulfillmentService
 from apps.shopie.services.orders import OrderService
@@ -419,6 +419,38 @@ class MobileShopOrderDeliveryLiveView(APIView):
         }
         try:
             return success_response(self.delivery.live_payload(order=order, refresh=refresh))
+        except DjangoValidationError as exc:
+            raise _api_validation(exc) from exc
+
+
+class MobileShopReturnPickupLiveView(APIView):
+    """Customer live map / rider status for instant return pickup."""
+
+    permission_classes = [IsAuthenticated]
+    delivery = DeliveryService()
+
+    def get(self, request: Request, return_id) -> Response:
+        try:
+            tenant, business = _scope_from_request(request)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+        customer = ensure_customer_for_user(tenant=tenant, business=business, user=request.user)
+        shop_return = get_object_or_404(
+            ShopReturn.objects.select_related("business", "tenant", "order", "order__customer"),
+            tenant=tenant,
+            business=business,
+            customer_id=customer.id,
+            id=return_id,
+        )
+        refresh = str(request.query_params.get("refresh", "true")).lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        try:
+            return success_response(
+                self.delivery.live_return_payload(shop_return=shop_return, refresh=refresh)
+            )
         except DjangoValidationError as exc:
             raise _api_validation(exc) from exc
 

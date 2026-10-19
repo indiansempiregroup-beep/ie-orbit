@@ -1,15 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { colors, spacing } from '../../theme/tokens';
 import {
   DELIVERY_MAP_COLORS,
   deliveryMapGeometry,
   deliveryPlaceLabel,
+  isReturnPickupLive,
+  type OpsDeliveryMapLive,
 } from './deliveryTracking';
 
 type Props = {
-  delivery: ShopDeliveryLive;
+  delivery: OpsDeliveryMapLive;
 };
 
 function LegendRow({ color, label, value }: { color: string; label: string; value: string }) {
@@ -27,12 +28,13 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
 export function DeliveryMapLegend({ delivery }: Props) {
   const { pickup, drop, rider } = deliveryMapGeometry(delivery);
   if (!pickup && !drop) return null;
+  const returnPickup = isReturnPickupLive(delivery);
   return (
     <View style={styles.wrap}>
       {pickup ? (
         <LegendRow
           color={DELIVERY_MAP_COLORS.pickup}
-          label="Pickup from"
+          label={returnPickup ? 'Collect from customer' : 'Pickup from'}
           value={deliveryPlaceLabel(delivery.pickup)}
         />
       ) : null}
@@ -46,7 +48,7 @@ export function DeliveryMapLegend({ delivery }: Props) {
       {drop ? (
         <LegendRow
           color={DELIVERY_MAP_COLORS.drop}
-          label="Deliver to"
+          label={returnPickup ? 'Return to shop' : 'Deliver to'}
           value={deliveryPlaceLabel(delivery.drop)}
         />
       ) : null}

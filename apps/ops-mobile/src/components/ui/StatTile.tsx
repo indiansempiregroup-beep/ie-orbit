@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { HelpModal } from './HelpModal';
 import { IconBadge } from './IconBadge';
 import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 
@@ -10,6 +11,8 @@ type Props = {
   label: string;
   value: string;
   hint?: string;
+  /** Plain-language explanation shown when user taps the ? icon */
+  help?: string;
   tone?: Tone;
   onPress?: () => void;
   style?: ViewStyle;
@@ -22,16 +25,34 @@ export function StatTile({
   label,
   value,
   hint,
+  help,
   tone = 'default',
   onPress,
   style,
   icon,
   iconTone = 'blue',
 }: Props) {
+  const [helpOpen, setHelpOpen] = useState(false);
+
   const content = (
-    <View style={[styles.tile, style]}>
+    <View style={[styles.tile, helpOpen && styles.tileHelpOpen, style]}>
       <View style={styles.topRow}>
-        <Text style={styles.label}>{label}</Text>
+        <View style={styles.labelRow}>
+          <Text style={styles.label} numberOfLines={2}>
+            {label}
+          </Text>
+          {help ? (
+            <Pressable
+              onPress={() => setHelpOpen(true)}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`About ${label}`}
+              style={[styles.helpBtn, helpOpen && styles.helpBtnActive]}
+            >
+              <Text style={[styles.helpBtnText, helpOpen && styles.helpBtnTextActive]}>?</Text>
+            </Pressable>
+          ) : null}
+        </View>
         {icon ? <IconBadge icon={icon} tone={iconTone} size="sm" /> : null}
       </View>
       <Text
@@ -52,10 +73,19 @@ export function StatTile({
           {tone === 'negative' ? <Feather name="arrow-down" size={12} color={colors.destructive} /> : null}
           {tone === 'positive' ? <Feather name="arrow-up" size={12} color={colors.success} /> : null}
           {tone === 'warning' ? <Feather name="alert-circle" size={12} color={colors.warning} /> : null}
-          <Text style={styles.hint} numberOfLines={1}>
+          <Text style={styles.hint} numberOfLines={2}>
             {hint}
           </Text>
         </View>
+      ) : null}
+
+      {help ? (
+        <HelpModal
+          visible={helpOpen}
+          title={label}
+          body={help}
+          onClose={() => setHelpOpen(false)}
+        />
       ) : null}
     </View>
   );
@@ -83,8 +113,35 @@ const styles = StyleSheet.create({
     gap: 4,
     ...shadows.soft,
   },
+  tileHelpOpen: {
+    borderColor: colors.primary,
+  },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  label: { ...typography.caption, color: colors.mutedForeground },
+  labelRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  label: { ...typography.caption, color: colors.mutedForeground, flexShrink: 1 },
+  helpBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  helpBtnText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 12,
+    color: colors.mutedForeground,
+    lineHeight: 14,
+  },
+  helpBtnTextActive: {
+    color: colors.primaryForeground,
+  },
   value: {
     fontFamily: fonts.bodyBold,
     fontSize: 22,

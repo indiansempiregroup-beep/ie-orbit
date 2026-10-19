@@ -35,12 +35,15 @@ from apps.shopie.api.serializers import (
     ShopPetSerializer,
     ShopPetWriteSerializer,
     ShopProductSerializer,
+    ShopReturnArrangePickupSerializer,
     ShopReturnCreateSerializer,
+    ShopReturnReceiveSerializer,
+    ShopReturnRejectSerializer,
     ShopReturnSerializer,
     ShopSettingsPatchSerializer,
     ShopSettingsSerializer,
 )
-from apps.shopie.models import ShopDeliveryZone, ShopOrder, ShopPet, VerticalPack
+from apps.shopie.models import ShopDeliveryZone, ShopOrder, ShopPet, ShopReturn, VerticalPack
 from apps.shopie.services import CatalogService
 from apps.shopie.services.pets import PetsService
 from apps.shopie.services.returns import ReturnService
@@ -110,10 +113,143 @@ class ShopReturnListCreateView(APIView):
                 reason=data.get("reason") or "",
                 restock=bool(data.get("restock", True)),
                 complete=bool(data.get("complete", True)),
+                return_method=data.get("return_method") or None,
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         return success_response(ShopReturnSerializer(shop_return).data, status_code=status.HTTP_201_CREATED)
+
+
+class ShopReturnArrangePickupView(APIView):
+    permission_classes = [ShopAccessPermission]
+    returns = ReturnService()
+
+    def post(self, request: Request, return_id) -> Response:
+        serializer = ShopReturnArrangePickupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_RETURNS)
+        shop_return = get_object_or_404(
+            ShopReturn, tenant=request.current_tenant, business=business, id=return_id
+        )
+        try:
+            shop_return = self.returns.arrange_pickup(
+                tenant=request.current_tenant,
+                business=business,
+                shop_return=shop_return,
+                notes=data.get("notes") or "",
+                tracking_number=data.get("tracking_number") or "",
+                mode=data.get("mode") or "",
+                charge_bearer=data.get("charge_bearer") or "merchant",
+                fee=data.get("fee"),
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopReturnSerializer(shop_return).data)
+
+
+class ShopReturnPickupQuoteView(APIView):
+    permission_classes = [ShopAccessPermission]
+    returns = ReturnService()
+
+    def get(self, request: Request, return_id) -> Response:
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_RETURNS)
+        shop_return = get_object_or_404(
+            ShopReturn.objects.select_related("business", "tenant", "order", "order__customer"),
+            tenant=request.current_tenant,
+            business=business,
+            id=return_id,
+        )
+        try:
+            return success_response(
+                self.returns.quote_pickup(
+                    tenant=request.current_tenant,
+                    business=business,
+                    shop_return=shop_return,
+                )
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+
+
+class ShopReturnPickupLiveView(APIView):
+    permission_classes = [ShopAccessPermission]
+
+    def get(self, request: Request, return_id) -> Response:
+        from apps.shopie.services.delivery.service import DeliveryService
+
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business_id": "This field is required."})
+        business = _business(request, business_id, feature=FEATURE_SHOPIE_RETURNS)
+        shop_return = get_object_or_404(
+            ShopReturn.objects.select_related("business", "tenant", "order"),
+            tenant=request.current_tenant,
+            business=business,
+            id=return_id,
+        )
+        refresh = str(request.query_params.get("refresh") or "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        try:
+            return success_response(
+                DeliveryService().live_return_payload(shop_return=shop_return, refresh=refresh)
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+
+
+class ShopReturnReceiveView(APIView):
+    permission_classes = [ShopAccessPermission]
+    returns = ReturnService()
+
+    def post(self, request: Request, return_id) -> Response:
+        serializer = ShopReturnReceiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_RETURNS)
+        shop_return = get_object_or_404(
+            ShopReturn, tenant=request.current_tenant, business=business, id=return_id
+        )
+        try:
+            shop_return = self.returns.receive_return(
+                tenant=request.current_tenant,
+                business=business,
+                shop_return=shop_return,
+                restock=data.get("restock"),
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopReturnSerializer(shop_return).data)
+
+
+class ShopReturnRejectView(APIView):
+    permission_classes = [ShopAccessPermission]
+    returns = ReturnService()
+
+    def post(self, request: Request, return_id) -> Response:
+        serializer = ShopReturnRejectSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        business = _business(request, data["business_id"], feature=FEATURE_SHOPIE_RETURNS)
+        shop_return = get_object_or_404(
+            ShopReturn, tenant=request.current_tenant, business=business, id=return_id
+        )
+        try:
+            shop_return = self.returns.reject_return(
+                tenant=request.current_tenant,
+                business=business,
+                shop_return=shop_return,
+                reason=data.get("reason") or "",
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopReturnSerializer(shop_return).data)
 
 
 class ShopDeliveryZoneListCreateView(APIView):
@@ -232,6 +368,8 @@ class ShopSettingsView(APIView):
             settings.default_fulfillment_mode = data["default_fulfillment_mode"]
         if "same_day_delivery_enabled" in data and data["same_day_delivery_enabled"] is not None:
             settings.same_day_delivery_enabled = data["same_day_delivery_enabled"]
+        if "return_days" in data and data["return_days"] is not None:
+            settings.return_days = int(data["return_days"])
         if "metadata" in data and data["metadata"] is not None:
             settings.metadata = data["metadata"]
         settings.save()

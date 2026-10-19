@@ -72,6 +72,29 @@ def test_discount_summary_does_not_double_count_coupon_and_bill():
     assert summary["after_line"] == Decimal("3117.00")
 
 
+def test_shelf_gross_line_amounts_keep_summary_discounts():
+    """When line Amounts are qty×rate, summary still shows bill / loyalty discounts."""
+    summary = _pos_bill_summary_from_payload(
+        {
+            "merchandise_gross": "100.00",
+            "line_discount_total": "0",
+            "bill_discount_total": "10.00",
+            "coupon_discount": "0",
+            "reward_discount": "5.00",
+            "points_used": 50,
+            "discount_total": "15.00",
+            "taxable_value": "85.00",
+            "total": "85.00",
+            "loyalty_enabled": True,
+            "lines": [{"total": "100.00", "gross": "100.00", "rate": "100", "qty": "1"}],
+        }
+    )
+    assert summary["merchandise_gross"] == Decimal("100.00")
+    assert summary["bill_discount"] == Decimal("10.00")
+    assert summary["reward_discount"] == Decimal("5.00")
+    assert summary["after_line"] == Decimal("100.00")
+
+
 def _product(business, *, name: str, price: str, gst_rate: str) -> ShopProduct:
     return ShopProduct.objects.create(
         tenant=business.tenant,
@@ -130,7 +153,19 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
     assert "Amt" in html
     assert voucher.voucher_number in html
     assert "Amount in words" in html
-    assert docs.build_pdf(payload, layout="a4").startswith(b"%PDF")
+    # A4 view/PDF: no payment QR/barcode; loyalty footer sits under amount-in-words.
+    assert "qr-img" not in html
+    assert "Scan to pay" not in html
+    assert "This is a computer-generated document." in html
+    words_idx = html.index("Amount in words")
+    loyalty_or_footer = html.find("loyalty-highlight", words_idx)
+    generated_idx = html.index("This is a computer-generated document.", words_idx)
+    assert generated_idx > words_idx
+    if loyalty_or_footer != -1:
+        assert generated_idx > loyalty_or_footer
+    a4_pdf = docs.build_pdf(payload, layout="a4")
+    assert a4_pdf.startswith(b"%PDF")
+    assert b"This is a computer-generated document." in a4_pdf
     assert docs.build_pdf(payload, layout=LAYOUT_THERMAL).startswith(b"%PDF")
     thermal_html = docs.render_html(payload, layout=LAYOUT_THERMAL)
     assert "thermal-items" in thermal_html
@@ -139,6 +174,9 @@ def test_sale_document_payload_pdf_and_share(shop_business, customer, cash_accou
     assert "Amt" in thermal_html
     assert "Received" in thermal_html
     assert "Product discount" in thermal_html
+    # Thermal receipts still show the scannable UPI QR for counter collection.
+    assert "qr-img" in thermal_html
+    assert "Scan to pay" in thermal_html
 
     link = docs.create_share_link(
         tenant=shop_business.tenant,

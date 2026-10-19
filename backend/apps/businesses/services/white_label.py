@@ -13,18 +13,32 @@ from apps.businesses.services.entitlements import EntitlementService
 from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
 
 
+def _shop_settings_for(business: Business):
+    try:
+        return business.shop_settings
+    except Exception:
+        return None
+
+
 def _cod_enabled_for_business(business: Business) -> bool:
-    shop_settings = getattr(business, "shop_settings", None)
+    shop_settings = _shop_settings_for(business)
     if shop_settings is not None:
         return bool(shop_settings.cod_enabled)
     return True
 
 
 def _cod_allowed_for_instant_delivery(business: Business) -> bool:
-    shop_settings = getattr(business, "shop_settings", None)
+    shop_settings = _shop_settings_for(business)
     if shop_settings is not None:
         return bool(getattr(shop_settings, "cod_allowed_for_instant_delivery", True))
     return True
+
+
+def _instant_delivery_enabled(business: Business) -> bool:
+    shop_settings = _shop_settings_for(business)
+    if shop_settings is not None:
+        return bool(getattr(shop_settings, "instant_delivery_enabled", False))
+    return False
 
 
 def _customer_payment_gateways(business: Business) -> dict[str, dict[str, bool]]:
@@ -209,6 +223,7 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
             "cod_allowed_for_instant_delivery": _cod_allowed_for_instant_delivery(
                 business
             ),
+            "instant_delivery_enabled": _instant_delivery_enabled(business),
             **_customer_payment_gateways(business),
         },
         "branding": {

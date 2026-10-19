@@ -298,12 +298,24 @@ def _copy_for_shipment(
     shipment: ShopShipment,
     status: str,
 ) -> tuple[str, str, str]:
+    from apps.shopie.services.carriers import is_self_delivery_carrier
+
     name = _customer_name(order)
     number = order.order_number
+    shop = str(getattr(order.business, "display_name", "") or "the shop")
     carrier = shipment.carrier_label or "Courier"
     awb = shipment.tracking_number or ""
     awb_text = f" AWB {awb}." if awb else ""
     normalized = str(status or "").strip().lower()
+    if is_self_delivery_carrier(shipment.carrier) and normalized in {
+        "shipped",
+        "out_for_delivery",
+    }:
+        return (
+            f"On the way · #{number}",
+            f"Hi {name},\n\n{shop} is delivering order #{number} themselves. Open the order for updates.",
+            "On the way",
+        )
     if normalized == "shipped":
         return (
             f"Shipped · #{number}",
@@ -503,7 +515,17 @@ def notify_shipment_milestone(*, order: ShopOrder, shipment: ShopShipment, statu
         )
 
 
-def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
+def notify_online_return(
+    *,
+    shop_return: ShopReturn,
+    event: str | None = None,
+    completed: bool | None = None,
+) -> None:
+    """Notify customer about an online return lifecycle event.
+
+    ``event``: requested | pickup_arranged | completed | rejected
+    ``completed`` is kept for older callers (True → completed, False → requested).
+    """
     order = getattr(shop_return, "order", None)
     if order is None or not _is_online(order) or not shop_return.customer_id:
         return
@@ -513,28 +535,159 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
     shop = str(getattr(order.business, "display_name", "") or "the shop")
     name = str(getattr(customer, "display_name", "") or "there")
     refund = _money(shop_return.refund_total, shop_return.currency or order.currency or "INR")
-    if completed:
+    kind = str(event or "").strip().lower()
+    if not kind and completed is not None:
+        kind = "completed" if completed else "requested"
+    if not kind:
+        kind = "requested"
+
+    method = str(getattr(shop_return, "return_method", "") or "").strip().lower()
+    if kind == "completed":
         subject = f"Return complete · {shop_return.return_number}"
         body = (
             f"Hi {name},\n\nYour return {shop_return.return_number} for order #{order.order_number} "
-            f"is complete. Refund value {refund} has been applied, and sellable items are back in stock."
+            f"is complete. We received your items. Refund value {refund} has been applied."
         )
-        event = "ShopReturnCompleted"
+        event_type = "ShopReturnCompleted"
         kicker = "Return complete"
+        refund_title = "Refund issued"
+        refund_lines = [
+            f"{refund} refunded",
+            "Usually shows in 1–3 business days",
+        ]
+    elif kind == "fee_proposed":
+        charge = (
+            (shop_return.metadata or {}).get("pickup_charge")
+            if isinstance(getattr(shop_return, "metadata", None), dict)
+            else {}
+        )
+        fee_amt = str((charge or {}).get("fee") or "0").strip() if isinstance(charge, dict) else "0"
+        net_amt = (
+            str((charge or {}).get("net_refund") or shop_return.refund_total or "0").strip()
+            if isinstance(charge, dict)
+            else str(shop_return.refund_total or "0")
+        )
+        currency = shop_return.currency or order.currency or "INR"
+        pending_mode = (
+            str((charge or {}).get("pending_mode") or "").strip().lower()
+            if isinstance(charge, dict)
+            else ""
+        )
+        how = "an instant rider pickup" if pending_mode == "instant" else "a courier pickup"
+        subject = f"Pickup fee approval · {shop_return.return_number}"
+        body = (
+            f"Hi {name},\n\n{shop} wants to arrange {how} for return "
+            f"{shop_return.return_number} (order #{order.order_number}). "
+            f"A pickup fee of {currency} {fee_amt} would be deducted from your refund "
+            f"(net refund {currency} {net_amt}). "
+            f"Open the app to accept the fee or cancel the return."
+        )
+        event_type = "ShopReturnPickupFeeProposed"
+        kicker = "Accept pickup fee?"
+        refund_title = "Refund if you accept"
+        refund_lines = [
+            f"{currency} {net_amt} after items are received",
+            f"Pickup fee {currency} {fee_amt} deducted if you accept",
+            "Cancel the return if you don’t want to pay the fee.",
+        ]
+    elif kind == "pickup_arranged":
+        tracking = str(getattr(shop_return, "pickup_tracking_number", "") or "").strip()
+        notes = str(getattr(shop_return, "pickup_notes", "") or "").strip()
+        delivery = (
+            (shop_return.metadata or {}).get("delivery")
+            if isinstance(getattr(shop_return, "metadata", None), dict)
+            else {}
+        )
+        tracking_url = str((delivery or {}).get("tracking_url") or "").strip()
+        extras = []
+        if tracking:
+            extras.append(f"Tracking: {tracking}")
+        if tracking_url:
+            extras.append(f"Track: {tracking_url}")
+        if notes:
+            extras.append(notes)
+        extra_line = f" {' '.join(extras)}" if extras else ""
+        charge = (
+            (shop_return.metadata or {}).get("pickup_charge")
+            if isinstance(getattr(shop_return, "metadata", None), dict)
+            else {}
+        )
+        fee_line = ""
+        if (
+            isinstance(charge, dict)
+            and str(charge.get("charge_bearer") or "") == "customer"
+            and str(charge.get("status") or "") == "accepted"
+        ):
+            fee_amt = str(charge.get("fee") or "").strip()
+            if fee_amt:
+                fee_line = (
+                    f" A pickup fee of {shop_return.currency or order.currency or 'INR'} "
+                    f"{fee_amt} was deducted from your refund."
+                )
+        if method == "instant_pickup":
+            subject = f"Pickup rider dispatched · {shop_return.return_number}"
+            body = (
+                f"Hi {name},\n\n{shop} has dispatched a rider to collect your return "
+                f"{shop_return.return_number} (order #{order.order_number}).{extra_line}"
+                f"{fee_line} Refund {refund} will be issued after the items are received."
+            )
+            kicker = "Rider dispatched"
+        else:
+            subject = f"Pickup arranged · {shop_return.return_number}"
+            body = (
+                f"Hi {name},\n\n{shop} has arranged a pickup for your return "
+                f"{shop_return.return_number} (order #{order.order_number}).{extra_line}"
+                f"{fee_line} Refund {refund} will be issued after the items are received."
+            )
+            kicker = "Pickup arranged"
+        event_type = "ShopReturnPickupArranged"
+        refund_title = "Refund pending"
+        refund_lines = [
+            f"{refund} after items are received",
+            "We’ll update you when the return is complete.",
+        ]
+        if fee_line:
+            refund_lines.insert(1, "Pickup fee deducted from refund")
+    elif kind == "rejected":
+        subject = f"Return declined · {shop_return.return_number}"
+        body = (
+            f"Hi {name},\n\n{shop} could not accept return {shop_return.return_number} "
+            f"for order #{order.order_number}. No refund was issued. Contact the shop if you need help."
+        )
+        event_type = "ShopReturnRejected"
+        kicker = "Return declined"
+        refund_title = "No refund"
+        refund_lines = [f"{refund} was not issued"]
     else:
+        if method == "reverse_pickup":
+            how = (
+                f"{shop} will arrange a pickup for your items. "
+                "Refund is issued only after the shop receives them."
+            )
+        elif method == "dropoff":
+            how = (
+                f"Please drop the items off at {shop}. "
+                "Refund is issued only after the shop receives them."
+            )
+        else:
+            how = f"{shop} will process your return shortly. Refund is issued after items are received."
         subject = f"Return requested · {shop_return.return_number}"
         body = (
             f"Hi {name},\n\nWe've received your return request {shop_return.return_number} "
-            f"for order #{order.order_number} ({refund}). {shop} will process it shortly."
+            f"for order #{order.order_number} ({refund}). {how}"
         )
-        event = "ShopReturnRequested"
+        event_type = "ShopReturnRequested"
         kicker = "Return requested"
+        refund_title = "Refund pending"
+        refund_lines = [
+            f"{refund} after items are received",
+            "We’ll update you when the shop confirms receipt.",
+        ]
     item_rows = [
         {"name": raw.get("name"), "qty": raw.get("quantity"), "amount": ""}
         for raw in (shop_return.line_items or [])
         if isinstance(raw, dict)
     ]
-    refund_title = "Refund issued" if completed else "Refund requested"
     extra = (
         email_info_card(
             title=kicker,
@@ -546,10 +699,7 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
         + email_item_rows(item_rows)
         + email_info_card(
             title=refund_title,
-            lines=[
-                f"{refund}" + (" refunded" if completed else " pending review"),
-                "Usually shows in 1–3 business days" if completed else "We’ll update you when it’s processed.",
-            ],
+            lines=refund_lines,
         )
     )
     try:
@@ -570,11 +720,12 @@ def notify_online_return(*, shop_return: ShopReturn, completed: bool) -> None:
             subject=subject,
             body=body,
             channels=["in_app", "email"],
-            event_type=event,
+            event_type=event_type,
             metadata={
                 "order_id": str(order.id),
                 "return_id": str(shop_return.id),
                 "return_number": shop_return.return_number,
+                "return_event": kind,
             },
             extra_html=extra,
             headline=kicker,

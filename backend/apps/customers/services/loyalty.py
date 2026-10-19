@@ -199,6 +199,583 @@ class LoyaltyService:
             ],
         }
 
+    def _serialize_ledger_entry(self, entry: CustomerLoyaltyLedger) -> dict[str, Any]:
+        customer = getattr(entry, "customer", None)
+        display_name = ""
+        if customer is not None:
+            display_name = (
+                getattr(customer, "display_name", None)
+                or " ".join(
+                    part
+                    for part in [
+                        getattr(customer, "first_name", "") or "",
+                        getattr(customer, "last_name", "") or "",
+                    ]
+                    if part
+                ).strip()
+                or getattr(customer, "phone_number", "")
+                or ""
+            )
+        meta = entry.metadata if isinstance(entry.metadata, dict) else {}
+        entry_type = str(meta.get("type") or "")
+        direction = "given" if int(entry.points_delta or 0) > 0 else "used" if int(entry.points_delta or 0) < 0 else "other"
+        return {
+            "id": str(entry.id),
+            "customer_id": str(entry.customer_id) if entry.customer_id else None,
+            "customer_name": display_name,
+            "points_delta": int(entry.points_delta or 0),
+            "reason": entry.reason or "",
+            "entry_type": entry_type,
+            "direction": direction,
+            "booking_id": str(entry.booking_id) if entry.booking_id else None,
+            "order_id": str(entry.order_id) if entry.order_id else None,
+            "voucher_id": str(entry.voucher_id) if entry.voucher_id else None,
+            "order_number": "",
+            "booking_number": "",
+            "voucher_number": "",
+            "voucher_type": "",
+            "source_label": "",
+            "invoice_voucher_id": "",
+            "linked_order_id": "",
+            "gross_profit": None,
+            "redeem_discount_amount": None,
+            "record_points_earned": 0,
+            "record_points_redeemed": 0,
+            "record_label": "",
+            "record_kind": "",
+            "created_at": entry.created_at,
+        }
+
+    def _enrich_ledger_links(
+        self, *, tenant: Any, business: Any, entries: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        if not entries:
+            return entries
+        order_ids = [row["order_id"] for row in entries if row.get("order_id")]
+        booking_ids = [row["booking_id"] for row in entries if row.get("booking_id")]
+        voucher_ids = [row["voucher_id"] for row in entries if row.get("voucher_id")]
+
+        order_map: dict[str, dict[str, str]] = {}
+        booking_map: dict[str, str] = {}
+        voucher_map: dict[str, dict[str, str]] = {}
+
+        def _source_from_fulfillment(mode: str) -> str:
+            key = (mode or "").strip().lower()
+            if key == "pos":
+                return "POS"
+            if key in {"pickup", "online_pickup"}:
+                return "Online order"
+            if key in {"delivery", "online_delivery"}:
+                return "Online order"
+            return ""
+
+        order_voucher_map: dict[str, str] = {}
+        booking_voucher_map: dict[str, str] = {}
+
+        if order_ids:
+            from apps.shopie.models import ShopOrder, ShopBooksVoucher
+
+            for row in (
+                ShopOrder.objects.require_tenant(tenant)
+                .filter(business=business, id__in=order_ids)
+                .values("id", "order_number", "fulfillment_mode")
+            ):
+                order_map[str(row["id"])] = {
+                    "order_number": str(row["order_number"] or ""),
+                    "fulfillment_mode": str(row["fulfillment_mode"] or ""),
+                }
+            for row in (
+                ShopBooksVoucher.objects.require_tenant(tenant)
+                .filter(business=business, voucher_type="sale", linked_order_id__in=order_ids)
+                .order_by("-created_at")
+                .values("id", "linked_order_id")
+            ):
+                linked = str(row["linked_order_id"] or "")
+                if linked and linked not in order_voucher_map:
+                    order_voucher_map[linked] = str(row["id"])
+
+        if booking_ids:
+            from apps.bookings.models import Booking
+            from apps.shopie.models import ShopBooksVoucher
+
+            for row in (
+                Booking.objects.require_tenant(tenant)
+                .filter(business=business, id__in=booking_ids)
+                .values("id", "booking_number")
+            ):
+                booking_map[str(row["id"])] = str(row["booking_number"] or "")
+            booking_id_strs = [str(value) for value in booking_ids]
+            for row in (
+                ShopBooksVoucher.objects.require_tenant(tenant)
+                .filter(
+                    business=business,
+                    voucher_type="sale",
+                    metadata__source_booking_id__in=booking_id_strs,
+                )
+                .order_by("-created_at")
+                .values("id", "metadata")
+            ):
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                booking_key = str(meta.get("source_booking_id") or "")
+                if booking_key and booking_key not in booking_voucher_map:
+                    booking_voucher_map[booking_key] = str(row["id"])
+
+        if voucher_ids:
+            from apps.shopie.models import ShopBooksVoucher, ShopOrder
+
+            voucher_rows = list(
+                ShopBooksVoucher.objects.require_tenant(tenant)
+                .filter(business=business, id__in=voucher_ids)
+                .values("id", "voucher_number", "voucher_type", "linked_order_id", "metadata")
+            )
+            linked_order_ids = [
+                row["linked_order_id"] for row in voucher_rows if row.get("linked_order_id")
+            ]
+            linked_mode_map: dict[str, str] = {}
+            if linked_order_ids:
+                for row in (
+                    ShopOrder.objects.require_tenant(tenant)
+                    .filter(business=business, id__in=linked_order_ids)
+                    .values("id", "fulfillment_mode")
+                ):
+                    linked_mode_map[str(row["id"])] = str(row["fulfillment_mode"] or "")
+
+            for row in voucher_rows:
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                linked_id = str(row["linked_order_id"] or "")
+                mode = str(
+                    meta.get("fulfillment_mode")
+                    or linked_mode_map.get(linked_id)
+                    or meta.get("channel")
+                    or ""
+                )
+                source = str(meta.get("source") or "").strip().lower()
+                if source == "booking" or meta.get("source_booking_id"):
+                    source_label = "Booking"
+                else:
+                    source_label = _source_from_fulfillment(mode) or (
+                        "Online order" if linked_id else "Books sale"
+                    )
+                voucher_map[str(row["id"])] = {
+                    "voucher_number": str(row["voucher_number"] or ""),
+                    "voucher_type": str(row["voucher_type"] or ""),
+                    "source_label": source_label,
+                    "linked_order_id": linked_id,
+                }
+
+        for row in entries:
+            order_info = order_map.get(str(row.get("order_id") or ""), {})
+            order_number = order_info.get("order_number", "")
+            booking_number = booking_map.get(str(row.get("booking_id") or ""), "")
+            voucher_info = voucher_map.get(str(row.get("voucher_id") or ""), {})
+            voucher_number = voucher_info.get("voucher_number", "")
+            voucher_type = voucher_info.get("voucher_type", "")
+            row["order_number"] = order_number
+            row["booking_number"] = booking_number
+            row["voucher_number"] = voucher_number
+            row["voucher_type"] = voucher_type
+            row["invoice_voucher_id"] = ""
+            row["linked_order_id"] = ""
+            if order_number or row.get("order_id"):
+                order_id = str(row.get("order_id") or "")
+                row["record_kind"] = "order"
+                row["record_label"] = order_number or "Order"
+                row["source_label"] = _source_from_fulfillment(
+                    order_info.get("fulfillment_mode", "")
+                ) or "Online order"
+                row["linked_order_id"] = order_id
+                row["invoice_voucher_id"] = order_voucher_map.get(order_id, "")
+            elif booking_number or row.get("booking_id"):
+                booking_id = str(row.get("booking_id") or "")
+                row["record_kind"] = "booking"
+                row["record_label"] = booking_number or "Booking"
+                row["source_label"] = "Booking"
+                row["invoice_voucher_id"] = booking_voucher_map.get(booking_id, "")
+            elif voucher_number or row.get("voucher_id"):
+                # Shop Books accounting document (GST sale / purchase invoice, etc.)
+                voucher_id = str(row.get("voucher_id") or "")
+                row["record_kind"] = "voucher"
+                row["source_label"] = voucher_info.get("source_label", "") or "Books sale"
+                row["invoice_voucher_id"] = voucher_id
+                row["linked_order_id"] = voucher_info.get("linked_order_id", "")
+                if voucher_type == "sale":
+                    row["record_label"] = voucher_number or "Books sale"
+                elif voucher_type == "purchase":
+                    row["record_label"] = voucher_number or "Books purchase"
+                    row["source_label"] = "Books purchase"
+                else:
+                    row["record_label"] = voucher_number or "Books entry"
+            else:
+                row["record_kind"] = ""
+                row["record_label"] = ""
+                row["source_label"] = ""
+
+        # Sold profit for shop orders only (never for bookings).
+        profit_order_ids: set[str] = set()
+        for row in entries:
+            if row.get("record_kind") == "booking" or row.get("source_label") == "Booking":
+                row["gross_profit"] = None
+                continue
+            order_for_profit = str(row.get("linked_order_id") or row.get("order_id") or "").strip()
+            if order_for_profit:
+                profit_order_ids.add(order_for_profit)
+            else:
+                row["gross_profit"] = None
+
+        profit_map: dict[str, str] = {}
+        if profit_order_ids:
+            from decimal import Decimal
+
+            from django.db.models import Sum
+
+            from apps.shopie.models import ShopSaleProfitFact
+
+            for agg in (
+                ShopSaleProfitFact.objects.require_tenant(tenant)
+                .filter(business=business, order_id__in=list(profit_order_ids))
+                .values("order_id")
+                .annotate(total=Sum("gross_profit"))
+            ):
+                total = Decimal(str(agg.get("total") or "0")).quantize(Decimal("0.01"))
+                profit_map[str(agg["order_id"])] = f"{total:.2f}"
+
+        for row in entries:
+            if row.get("record_kind") == "booking" or row.get("source_label") == "Booking":
+                row["gross_profit"] = None
+                continue
+            order_for_profit = str(row.get("linked_order_id") or row.get("order_id") or "").strip()
+            row["gross_profit"] = profit_map.get(order_for_profit) if order_for_profit else None
+
+        entries = self._enrich_record_point_activity(
+            tenant=tenant, business=business, entries=entries
+        )
+        return self._collapse_linked_ledger_rows(entries)
+
+    @staticmethod
+    def _ledger_link_key(row: dict[str, Any]) -> str:
+        if row.get("order_id"):
+            return f"o:{row['order_id']}"
+        if row.get("voucher_id"):
+            return f"v:{row['voucher_id']}"
+        if row.get("booking_id"):
+            return f"b:{row['booking_id']}"
+        return f"id:{row.get('id') or ''}"
+
+    def _enrich_record_point_activity(
+        self, *, tenant: Any, business: Any, entries: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Attach earn + redeem totals (and redeem money given) for the linked sale/booking."""
+        if not entries:
+            return entries
+        from decimal import Decimal
+
+        from django.db.models import Q
+
+        order_ids = [row["order_id"] for row in entries if row.get("order_id")]
+        voucher_ids = [row["voucher_id"] for row in entries if row.get("voucher_id")]
+        booking_ids = [row["booking_id"] for row in entries if row.get("booking_id")]
+
+        activity: dict[str, dict[str, Any]] = {}
+
+        def _ensure(key: str) -> dict[str, Any]:
+            if key not in activity:
+                activity[key] = {
+                    "earned": 0,
+                    "redeemed": 0,
+                    "discount": Decimal("0.00"),
+                }
+            return activity[key]
+
+        related = CustomerLoyaltyLedger.objects.require_tenant(tenant).filter(business=business)
+        filters = Q()
+        if order_ids:
+            filters |= Q(order_id__in=order_ids)
+        if voucher_ids:
+            filters |= Q(voucher_id__in=voucher_ids)
+        if booking_ids:
+            filters |= Q(booking_id__in=booking_ids)
+        if not filters:
+            for row in entries:
+                delta = int(row.get("points_delta") or 0)
+                row["record_points_earned"] = delta if delta > 0 else 0
+                row["record_points_redeemed"] = abs(delta) if delta < 0 else 0
+                row["redeem_discount_amount"] = None
+            return entries
+
+        for entry in related.filter(filters).only(
+            "order_id", "voucher_id", "booking_id", "points_delta", "metadata"
+        ):
+            key = self._ledger_link_key(
+                {
+                    "order_id": str(entry.order_id) if entry.order_id else None,
+                    "voucher_id": str(entry.voucher_id) if entry.voucher_id else None,
+                    "booking_id": str(entry.booking_id) if entry.booking_id else None,
+                    "id": str(entry.id),
+                }
+            )
+            bucket = _ensure(key)
+            delta = int(entry.points_delta or 0)
+            meta = entry.metadata if isinstance(entry.metadata, dict) else {}
+            meta_type = str(meta.get("type") or "").strip().lower()
+            # Return clawbacks are earn reversals — not customer redemptions.
+            if delta > 0:
+                bucket["earned"] += delta
+            elif meta_type == "earn_reversal":
+                bucket["earned"] -= abs(delta)
+            elif delta < 0:
+                bucket["redeemed"] += abs(delta)
+            if meta_type == "redeem":
+                try:
+                    bucket["discount"] += Decimal(str(meta.get("discount_amount") or "0"))
+                except Exception:
+                    pass
+
+        for row in entries:
+            key = self._ledger_link_key(row)
+            bucket = activity.get(key)
+            if bucket is None:
+                delta = int(row.get("points_delta") or 0)
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                meta_type = str(meta.get("type") or "").strip().lower()
+                if delta > 0:
+                    row["record_points_earned"] = delta
+                    row["record_points_redeemed"] = 0
+                elif meta_type == "earn_reversal":
+                    row["record_points_earned"] = 0
+                    row["record_points_redeemed"] = 0
+                    row["points_delta"] = delta
+                    row["direction"] = "given"
+                    row["redeem_discount_amount"] = None
+                    continue
+                else:
+                    row["record_points_earned"] = 0
+                    row["record_points_redeemed"] = abs(delta) if delta < 0 else 0
+                row["redeem_discount_amount"] = None
+                continue
+            row["record_points_earned"] = max(0, int(bucket["earned"]))
+            row["record_points_redeemed"] = max(0, int(bucket["redeemed"]))
+            discount = Decimal(str(bucket["discount"] or 0)).quantize(Decimal("0.01"))
+            row["redeem_discount_amount"] = f"{discount:.2f}" if discount > 0 else None
+
+            # Shop profit facts already reduce revenue for reward discounts. Still expose the
+            # gift amount; for bookings leave profit empty.
+            if row.get("record_kind") == "booking" or row.get("source_label") == "Booking":
+                row["gross_profit"] = None
+            elif row.get("gross_profit") is None and discount > 0:
+                # No sale-profit facts (e.g. pure books without order): show the money given as loss.
+                row["gross_profit"] = f"{(-discount):.2f}"
+
+            earned = int(row["record_points_earned"])
+            redeemed = int(row["record_points_redeemed"])
+            if earned and redeemed:
+                row["direction"] = "both"
+                row["points_delta"] = earned - redeemed
+                if not (row.get("reason") or "").strip():
+                    row["reason"] = "Points given and used"
+                elif "given and used" not in (row.get("reason") or "").lower():
+                    # Keep original reason; UI shows both point totals.
+                    pass
+            elif earned:
+                row["direction"] = "given"
+                row["points_delta"] = earned
+            elif redeemed:
+                row["direction"] = "used"
+                row["points_delta"] = -redeemed
+            else:
+                # Fully clawed-back earn (e.g. full return) — keep a quiet given row at 0.
+                row["direction"] = "given"
+                row["points_delta"] = 0
+
+        return entries
+
+    def _collapse_linked_ledger_rows(self, entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One row per linked sale/booking when earn + redeem both appear on the page."""
+        if len(entries) < 2:
+            return entries
+        grouped: dict[str, dict[str, Any]] = {}
+        order_keys: list[str] = []
+        for row in entries:
+            key = self._ledger_link_key(row)
+            if key.startswith("id:"):
+                grouped[f"solo:{row.get('id')}"] = row
+                order_keys.append(f"solo:{row.get('id')}")
+                continue
+            existing = grouped.get(key)
+            if existing is None:
+                grouped[key] = row
+                order_keys.append(key)
+                continue
+            # Prefer the newer entry's timestamp label stack; keep combined point fields.
+            existing_created = existing.get("created_at")
+            row_created = row.get("created_at")
+            keep = existing
+            other = row
+            if row_created and existing_created and row_created > existing_created:
+                keep = row
+                other = existing
+            keep["record_points_earned"] = max(
+                int(keep.get("record_points_earned") or 0),
+                int(other.get("record_points_earned") or 0),
+                int(keep.get("points_delta") or 0) if int(keep.get("points_delta") or 0) > 0 else 0,
+                int(other.get("points_delta") or 0) if int(other.get("points_delta") or 0) > 0 else 0,
+            )
+            keep["record_points_redeemed"] = max(
+                int(keep.get("record_points_redeemed") or 0),
+                int(other.get("record_points_redeemed") or 0),
+                abs(int(keep.get("points_delta") or 0))
+                if int(keep.get("points_delta") or 0) < 0
+                else 0,
+                abs(int(other.get("points_delta") or 0))
+                if int(other.get("points_delta") or 0) < 0
+                else 0,
+            )
+            if keep.get("redeem_discount_amount") in (None, "", "0", "0.00") and other.get(
+                "redeem_discount_amount"
+            ):
+                keep["redeem_discount_amount"] = other.get("redeem_discount_amount")
+            if keep.get("gross_profit") is None and other.get("gross_profit") is not None:
+                keep["gross_profit"] = other.get("gross_profit")
+            earned = int(keep.get("record_points_earned") or 0)
+            redeemed = int(keep.get("record_points_redeemed") or 0)
+            if earned and redeemed:
+                keep["direction"] = "both"
+                keep["points_delta"] = earned - redeemed
+                keep["reason"] = "Points given and used"
+            elif earned:
+                keep["direction"] = "given"
+                keep["points_delta"] = earned
+            elif redeemed:
+                keep["direction"] = "used"
+                keep["points_delta"] = -redeemed
+            grouped[key] = keep
+        return [grouped[key] for key in order_keys if key in grouped]
+
+    def business_ledger_report(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        customer_id: str | None = None,
+        direction: str | None = None,
+        entry_type: str | None = None,
+        q: str | None = None,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        from django.db.models import Q, Sum
+        from django.db.models.functions import Coalesce
+        from django.utils.dateparse import parse_date
+
+        program = self.get_program_summary(business=business)
+        qs = (
+            CustomerLoyaltyLedger.objects.require_tenant(tenant)
+            .filter(business=business)
+            .select_related("customer")
+            .order_by("-created_at")
+        )
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+        if date_from:
+            parsed = parse_date(date_from)
+            if parsed:
+                qs = qs.filter(created_at__date__gte=parsed)
+        if date_to:
+            parsed = parse_date(date_to)
+            if parsed:
+                qs = qs.filter(created_at__date__lte=parsed)
+
+        direction_key = (direction or "all").strip().lower()
+        if direction_key in {"given", "earn", "earned"}:
+            qs = qs.filter(Q(points_delta__gt=0) | Q(metadata__type="earn_reversal"))
+        elif direction_key in {"used", "redeem", "redeemed"}:
+            # Real redemptions only — return clawbacks are earn reversals.
+            qs = qs.filter(points_delta__lt=0).exclude(metadata__type="earn_reversal")
+
+        type_key = (entry_type or "").strip().lower()
+        if type_key:
+            qs = qs.filter(metadata__type=type_key)
+
+        search = (q or "").strip()
+        if search:
+            qs = qs.filter(
+                Q(reason__icontains=search)
+                | Q(customer__first_name__icontains=search)
+                | Q(customer__last_name__icontains=search)
+                | Q(customer__phone_number__icontains=search)
+                | Q(customer__display_name__icontains=search)
+            )
+
+        from decimal import Decimal
+
+        gross_earned = int(
+            qs.filter(points_delta__gt=0).aggregate(total=Coalesce(Sum("points_delta"), 0))["total"]
+            or 0
+        )
+        reversal_raw = int(
+            qs.filter(points_delta__lt=0, metadata__type="earn_reversal").aggregate(
+                total=Coalesce(Sum("points_delta"), 0)
+            )["total"]
+            or 0
+        )
+        earned = max(0, gross_earned - abs(reversal_raw))
+        redeemed_raw = int(
+            qs.filter(points_delta__lt=0)
+            .exclude(metadata__type="earn_reversal")
+            .aggregate(total=Coalesce(Sum("points_delta"), 0))["total"]
+            or 0
+        )
+        redeemed = abs(redeemed_raw)
+        # Money given to customers via point redemptions in this filter window.
+        redeem_discount_total = Decimal("0.00")
+        for meta in (
+            qs.filter(points_delta__lt=0, metadata__type="redeem")
+            .exclude(metadata={})
+            .values_list("metadata", flat=True)[:5000]
+        ):
+            if not isinstance(meta, dict):
+                continue
+            try:
+                redeem_discount_total += Decimal(str(meta.get("discount_amount") or "0"))
+            except Exception:
+                continue
+        redeem_discount_total = redeem_discount_total.quantize(Decimal("0.01"))
+        total_count = qs.count()
+        cap = max(1, min(int(limit or 200), 500))
+        start = max(0, int(offset or 0))
+        if start >= total_count and total_count > 0:
+            start = (max(0, (total_count - 1) // cap)) * cap
+        entries = [self._serialize_ledger_entry(row) for row in qs[start : start + cap]]
+        entries = self._enrich_ledger_links(tenant=tenant, business=business, entries=entries)
+        total_pages = max(1, (total_count + cap - 1) // cap) if total_count else 1
+        page = (start // cap) + 1 if total_count else 1
+        return {
+            "enabled": bool(program.get("enabled")),
+            "program": program,
+            "date_from": date_from or "",
+            "date_to": date_to or "",
+            "direction": direction_key if direction_key else "all",
+            "entry_type": type_key,
+            "q": search,
+            "limit": cap,
+            "offset": start,
+            "page": page,
+            "page_size": cap,
+            "total_pages": total_pages,
+            "summary": {
+                "points_earned": earned,
+                "points_redeemed": redeemed,
+                "net_points": earned - redeemed,
+                "entry_count": total_count,
+                "redeem_discount_total": f"{redeem_discount_total:.2f}",
+            },
+            "ledger_total": total_count,
+            "has_next": start + cap < total_count,
+            "has_previous": start > 0,
+            "ledger": entries,
+        }
+
     def resolve_service_price(self, *, tenant: Any, service_id: Any) -> Decimal:
         pricing = (
             ServicePricing.objects.require_tenant(tenant)

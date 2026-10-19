@@ -137,6 +137,8 @@
     "notifications": "Notifications",
     "pos": "Sale",
     "shopProducts": "Products",
+    "shopProductProfit": "Product profit",
+    "shopLoyalty": "Reward points",
     "shopMasterFiles": "Master Files",
     "shopOrders": "Online orders",
     "shopBilling": "Billing",
@@ -216,6 +218,7 @@
   "bi": {
     "title": "Business Intelligence",
     "overview": "Overview",
+    "profit": "Profit",
     "growth": "Growth",
     "revenue": "Revenue",
     "forecast": "Forecast",

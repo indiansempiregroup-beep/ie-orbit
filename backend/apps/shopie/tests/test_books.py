@@ -348,6 +348,59 @@ def test_daybook_includes_exportable_gst_fields(
     assert row["igst"] == "0.00"
     assert row["tax_total"] == "18.00"
     assert row["place_of_supply"] == "Maharashtra"
+    assert row["sale_source"] == ""
+
+
+@pytest.mark.django_db
+def test_daybook_sale_source_pos_online_booking(
+    shop_business: Business, customer: Customer
+) -> None:
+    from apps.shopie.models import FulfillmentMode
+
+    pos = ShopBooksVoucher.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher_type=VoucherType.SALE,
+        voucher_number="SV-SRC-POS",
+        voucher_date=date(2026, 8, 24),
+        status=VoucherStatus.CONFIRMED,
+        customer=customer,
+        total=Decimal("10.00"),
+        metadata={"fulfillment_mode": FulfillmentMode.POS},
+    )
+    online = ShopBooksVoucher.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher_type=VoucherType.SALE,
+        voucher_number="SV-SRC-ONLINE",
+        voucher_date=date(2026, 8, 24),
+        status=VoucherStatus.CONFIRMED,
+        customer=customer,
+        total=Decimal("20.00"),
+        metadata={"fulfillment_mode": FulfillmentMode.DELIVERY},
+    )
+    booking = ShopBooksVoucher.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher_type=VoucherType.SALE,
+        voucher_number="SV-SRC-BOOK",
+        voucher_date=date(2026, 8, 24),
+        status=VoucherStatus.CONFIRMED,
+        customer=customer,
+        total=Decimal("30.00"),
+        metadata={
+            "source": "booking",
+            "source_booking_id": "00000000-0000-0000-0000-000000000099",
+        },
+    )
+
+    rows = {
+        item["id"]: item
+        for item in BooksService().daybook(tenant=shop_business.tenant, business=shop_business)
+    }
+    assert rows[str(pos.id)]["sale_source"] == "pos"
+    assert rows[str(online.id)]["sale_source"] == "online"
+    assert rows[str(booking.id)]["sale_source"] == "booking"
 
 
 @pytest.mark.django_db
@@ -550,3 +603,105 @@ def test_confirmed_pos_order_creates_sale_invoice(
     assert voucher.total == order.total
     assert voucher.amount_paid == order.total
     assert "Sale" in (voucher.notes or "")
+
+
+@pytest.mark.django_db
+def test_list_vouchers_source_pos_excludes_booking_and_online(
+    shop_business: Business, customer: Customer, cash_account: ShopCashAccount
+) -> None:
+    from apps.shopie.models import FulfillmentMode, ProductStatus
+    from apps.shopie.services.catalog import CatalogService
+    from apps.shopie.services.orders import OrderService
+
+    books = BooksService()
+    catalog = CatalogService()
+    orders = OrderService()
+    product = catalog.create_product(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "name": "Filter Item",
+            "price": "40.00",
+            "tax_rate": "0",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "50",
+        },
+    )
+    pos_order = orders.create_order(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+    )
+    online_order = orders.create_order(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        payment_method="cash",
+        confirm=True,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+    )
+    online_voucher = books.create_sale_from_order(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        order=online_order,
+    )
+    booking_voucher = books.create_sale_voucher(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "customer": customer,
+            "voucher_date": date.today(),
+            "lines": [
+                {
+                    "product_id": str(product.id),
+                    "name": product.name,
+                    "qty": "1",
+                    "rate": "40.00",
+                    "gst_rate": "0",
+                }
+            ],
+            "amount_paid": "40.00",
+            "cash_account_id": cash_account.id,
+            "adjust_stock": False,
+            "metadata": {
+                "source": "booking",
+                "source_booking_id": "00000000-0000-0000-0000-000000000099",
+            },
+        },
+    )
+
+    pos_voucher = ShopBooksVoucher.objects.filter(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        linked_order=pos_order,
+        voucher_type=VoucherType.SALE,
+    ).get()
+
+    all_sales = list(
+        books.list_vouchers(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            voucher_type=VoucherType.SALE,
+        )
+    )
+    pos_only = list(
+        books.list_vouchers(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            voucher_type=VoucherType.SALE,
+            source="pos",
+        )
+    )
+    pos_ids = {str(v.id) for v in pos_only}
+    all_ids = {str(v.id) for v in all_sales}
+
+    assert str(pos_voucher.id) in pos_ids
+    assert str(online_voucher.id) in all_ids
+    assert str(online_voucher.id) not in pos_ids
+    assert str(booking_voucher.id) in all_ids
+    assert str(booking_voucher.id) not in pos_ids

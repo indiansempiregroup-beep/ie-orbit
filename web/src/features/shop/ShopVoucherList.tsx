@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Eye, Plus, Share2, SlidersHorizontal } from 'lucide-react';
 import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
@@ -7,7 +7,6 @@ import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { Input } from '../../components/Input';
 import { Select } from '../../components/Select';
-import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
@@ -17,11 +16,14 @@ import { loyaltyBillHighlight, readLoyaltyPrefs } from '../../lib/loyalty';
 import { ShopFilterBar } from './ShopFilterBar';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentView } from './shopDocumentActions';
+import { voucherLineGrossAmount } from './saleInvoiceSource';
+import { SaleInsightChips } from './SaleInsightChips';
 import { useAuthContext } from '../../contexts/AuthContext';
 import {
   useShopComplianceMutations,
   useShopEInvoice,
   useShopEWayList,
+  useShopVoucher,
   useShopVoucherMutations,
   useShopVouchers,
 } from './shopHooks';
@@ -464,12 +466,15 @@ export function ShopVoucherList({
   title,
   emptyLabel,
   heading,
+  source,
 }: {
   voucherType: 'sale' | 'purchase';
   newPath: string;
   title: string;
   emptyLabel: string;
   heading?: string;
+  /** Sale list: pass `pos` to show only counter/POS invoices. */
+  source?: string;
 }) {
   const workspace = useWorkspace();
   const auth = useAuthContext();
@@ -478,8 +483,11 @@ export function ShopVoucherList({
     (workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined,
   ).enabled;
   const snackbar = useSnackbar();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { voucherId: voucherIdParam } = useParams<{ voucherId?: string }>();
   const createdNumber = searchParams.get('created');
+  const openVoucherId = (voucherIdParam && voucherIdParam !== 'new' ? voucherIdParam : null) || searchParams.get('voucher');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [payment, setPayment] = useState('');
@@ -487,8 +495,9 @@ export function ShopVoucherList({
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
-  const detailDialog = useDialog();
+  const [detailOpen, setDetailOpen] = useState(false);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const deepLinkHandled = useRef<string | null>(null);
   const isSale = voucherType === 'sale';
   const pageTitle = heading ?? (isSale ? 'Sale invoices' : 'Purchases');
 
@@ -497,12 +506,15 @@ export function ShopVoucherList({
     status: status || undefined,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
+    source: source || undefined,
   });
+  const deepLinkedVoucher = useShopVoucher(openVoucherId);
   const { voidVoucher } = useShopVoucherMutations();
 
   const filtered = useMemo(() => {
+    const list = Array.isArray(vouchers.data) ? vouchers.data : [];
     const term = search.trim().toLowerCase();
-    return (vouchers.data ?? []).filter((voucher) => {
+    return list.filter((voucher) => {
       const total = Number(voucher.total ?? 0);
       const paidAmt = Number(voucher.amount_paid ?? 0);
       const due = Math.max(0, total - paidAmt);
@@ -517,6 +529,48 @@ export function ShopVoucherList({
         .includes(term);
     });
   }, [vouchers.data, search, payment]);
+
+  useEffect(() => {
+    if (!openVoucherId) {
+      deepLinkHandled.current = null;
+      return;
+    }
+    if (deepLinkedVoucher.isLoading) return;
+    if (deepLinkHandled.current === openVoucherId) return;
+    if (deepLinkedVoucher.isError) {
+      deepLinkHandled.current = openVoucherId;
+      snackbar.push("Couldn't open that books invoice.", 'error');
+      return;
+    }
+    const voucher = deepLinkedVoucher.data;
+    if (!voucher) return;
+    const type = String(voucher.voucher_type || '').toLowerCase();
+    if (type && type !== voucherType) {
+      deepLinkHandled.current = openVoucherId;
+      navigate(type === 'purchase' ? `/shop/books/purchase/${voucher.id}` : `/shop/books/sale/${voucher.id}`, {
+        replace: true,
+      });
+      return;
+    }
+    deepLinkHandled.current = openVoucherId;
+    setSelected(voucher);
+    setDetailOpen(true);
+  }, [
+    openVoucherId,
+    deepLinkedVoucher.data,
+    deepLinkedVoucher.isLoading,
+    deepLinkedVoucher.isError,
+    voucherType,
+    navigate,
+    snackbar,
+  ]);
+
+  function closeDetail() {
+    setDetailOpen(false);
+    if (voucherIdParam) {
+      navigate(voucherType === 'purchase' ? '/shop/books/purchase' : '/shop/books/sale', { replace: true });
+    }
+  }
 
   const summary = useMemo(() => {
     let total = 0;
@@ -553,7 +607,7 @@ export function ShopVoucherList({
 
   function openDetail(voucher: ShopBooksVoucher) {
     setSelected(voucher);
-    detailDialog.show();
+    setDetailOpen(true);
   }
 
   async function handleVoid(voucher: ShopBooksVoucher) {
@@ -561,7 +615,7 @@ export function ShopVoucherList({
     try {
       await voidVoucher.mutateAsync(voucher.id);
       snackbar.push(`${voucher.voucher_number} voided.`, 'success');
-      detailDialog.hide();
+      closeDetail();
     } catch (error) {
       snackbar.push(getApiErrorMessage(error, "Couldn't void this voucher. Try again."), 'error');
     }
@@ -702,6 +756,11 @@ export function ShopVoucherList({
                       ? ` · ${formatVoucherWhen(voucher.voucher_date, voucher.created_at)}`
                       : ''}
                   </span>
+                  {isSale ? (
+                    <div style={{ marginTop: 6 }}>
+                      <SaleInsightChips source={voucher} currency={currency} hideWhenEmpty />
+                    </div>
+                  ) : null}
                 </div>
                 <div className="invoice-row__side">
                   <strong>{formatMoney(total, currency)}</strong>
@@ -773,8 +832,8 @@ export function ShopVoucherList({
       </Card>
 
       <Dialog
-        open={detailDialog.open}
-        onClose={detailDialog.hide}
+        open={detailOpen}
+        onClose={closeDetail}
         title={selected ? selected.voucher_number : 'Voucher'}
         labelledBy="voucher-detail-dialog"
         busy={voidVoucher.isPending}
@@ -790,7 +849,9 @@ export function ShopVoucherList({
                   <span>
                     {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
                   </span>
-                  <strong>{formatMoney(Number(line.total ?? 0), currency)}</strong>
+                  <strong>
+                    {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
+                  </strong>
                 </div>
               ))}
               {!selected.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
@@ -801,6 +862,9 @@ export function ShopVoucherList({
               loyaltyEnabled={loyaltyEnabled}
               pointsBalance={null}
             />
+            {voucherType === 'sale' ? (
+              <SaleInsightChips source={selected} currency={currency} />
+            ) : null}
             {selected.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {selected.notes}</p> : null}
 
             {voucherType === 'sale' ? <GstComplianceSection voucher={selected} /> : null}
@@ -828,7 +892,7 @@ export function ShopVoucherList({
                   {voidVoucher.isPending ? 'Voiding…' : 'Void voucher'}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" onClick={detailDialog.hide}>
+              <Button type="button" variant="ghost" onClick={closeDetail}>
                 Close
               </Button>
             </div>

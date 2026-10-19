@@ -12,21 +12,23 @@ import {
   shopOrderStatusLabel,
 } from './shopOrderStatus';
 import { DeliveryRouteMap } from './DeliveryRouteMap';
+import { SaleInsightChips } from './SaleInsightChips';
 
 export function ShopOrderDetailPage() {
   const { orderId = '' } = useParams();
   const client = useApiClient();
   const queryClient = useQueryClient();
   const returns = useShopReturns(orderId);
-  const { createReturn } = useShopReturnMutations();
+  const { createReturn, arrangePickup, receiveReturn, rejectReturn } = useShopReturnMutations();
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [shipOpen, setShipOpen] = useState(false);
-  const [shipCarrier, setShipCarrier] = useState('delhivery');
+  const [shipCarrier, setShipCarrier] = useState('self');
   const [shipAwb, setShipAwb] = useState('');
   const [shipEta, setShipEta] = useState('');
   const [shipNotify, setShipNotify] = useState(true);
+  const isSelfDeliveryShip = shipCarrier === 'self';
   const createInvoice = useMutation({
     mutationFn: async () => {
       const response = await client.shop.createInvoiceFromOrder(orderId);
@@ -47,7 +49,8 @@ export function ShopOrderDetailPage() {
   });
   const deliveryLive = useQuery({
     queryKey: ['shop-order-delivery-live', orderId],
-    enabled: order.data?.fulfillment_mode === 'delivery',
+    enabled:
+      order.data?.fulfillment_mode === 'delivery' || order.data?.fulfillment_mode === 'pickup',
     queryFn: async () => {
       const response = await client.shop.getOrderDeliveryLive(orderId, true);
       return response.data;
@@ -89,6 +92,9 @@ export function ShopOrderDetailPage() {
   });
   const shipOrder = useMutation({
     mutationFn: async () => {
+      if (shipCarrier !== 'self' && !shipAwb.trim()) {
+        throw new Error('AWB or tracking number is required.');
+      }
       const response = await client.shop.shipOrder(orderId, {
         carrier: shipCarrier,
         tracking_number: shipAwb.trim(),
@@ -100,7 +106,11 @@ export function ShopOrderDetailPage() {
     onSuccess: () => {
       setShipOpen(false);
       setShipAwb('');
-      setMessage('Shipment saved — customer can track it now.');
+      setMessage(
+        shipCarrier === 'self'
+          ? 'Marked out for delivery — you are delivering this order.'
+          : 'Shipment saved — customer can track it now.',
+      );
       void order.refetch();
       void deliveryLive.refetch();
     },
@@ -180,7 +190,24 @@ export function ShopOrderDetailPage() {
   if (order.error || !order.data) return <p role="alert">Order not found.</p>;
 
   const data = order.data;
-  const canReturn = ['confirmed', 'ready', 'completed'].includes(data.status);
+  const statusLower = String(data.status || '').toLowerCase();
+  const fulfillmentLower = String(data.fulfillment_mode || '').toLowerCase();
+  const returnBadgeReady =
+    statusLower === 'completed' ||
+    statusLower === 'delivered' ||
+    (fulfillmentLower === 'pos' &&
+      ['confirmed', 'ready', 'packed', 'completed'].includes(statusLower));
+  const returnByLabel =
+    returnBadgeReady && data.return_eligible_until
+      ? new Date(data.return_eligible_until).toLocaleDateString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : '';
+  const returnWindowOpen = data.return_window_open !== false;
+  const canReturn =
+    ['confirmed', 'ready', 'completed'].includes(data.status) && returnWindowOpen;
   const fulfillment =
     data.metadata && typeof data.metadata === 'object'
       ? (data.metadata as Record<string, unknown>).fulfillment as
@@ -236,6 +263,7 @@ export function ShopOrderDetailPage() {
         reason,
         restock: true,
         complete: true,
+        return_method: 'in_store',
         lines,
       });
       setMessage(`Return ${shopReturn.return_number} completed.`);
@@ -259,6 +287,9 @@ export function ShopOrderDetailPage() {
                   ? 'deliver now'
                   : 'standard delivery'
                 : data.fulfillment_mode}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <SaleInsightChips source={data} currency={data.currency} />
             </div>
             {data.customer_id ? (
               <div
@@ -335,23 +366,10 @@ export function ShopOrderDetailPage() {
               </>
             ) : null}
             {data.fulfillment_mode === 'delivery' &&
-            !isInstantDelivery &&
-            ['out_for_delivery', 'delivery_failed'].includes(data.status) ? (
+            ['ready', 'out_for_delivery', 'delivery_failed'].includes(data.status) ? (
               <Button
                 type="button"
-                variant="primary"
-                disabled={updateStatus.isPending}
-                onClick={() => updateStatus.mutate('completed')}
-              >
-                Mark delivered
-              </Button>
-            ) : null}
-            {data.fulfillment_mode === 'delivery' &&
-            isInstantDelivery &&
-            data.status === 'delivery_failed' ? (
-              <Button
-                type="button"
-                variant="neutral"
+                variant={data.status === 'ready' ? 'neutral' : 'primary'}
                 disabled={updateStatus.isPending}
                 onClick={() => updateStatus.mutate('completed')}
               >
@@ -396,12 +414,17 @@ export function ShopOrderDetailPage() {
           </p>
         ) : null}
         <ul>
-          {(data.lines ?? []).map((line) => (
-            <li key={line.id}>
-              {line.product_name} × {line.quantity} ={' '}
-              {formatMoney(Number(line.line_total ?? 0), data.currency)}
-            </li>
-          ))}
+          {(data.lines ?? []).map((line) => {
+            const qty = Number(line.quantity ?? 0);
+            const rate = Number(line.unit_price ?? 0);
+            const gross = Math.round((qty * rate + Number.EPSILON) * 100) / 100;
+            return (
+              <li key={line.id}>
+                {line.product_name} × {line.quantity} ={' '}
+                {formatMoney(gross, data.currency)}
+              </li>
+            );
+          })}
         </ul>
         {data.delivery_address ? <p>Delivery: {data.delivery_address}</p> : null}
         {fulfillment?.branch_name ? (
@@ -438,18 +461,30 @@ export function ShopOrderDetailPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <div>
               <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800, letterSpacing: '.08em' }}>
-                {isInstantDelivery ? 'DELIVERY PARTNER' : 'STANDARD DELIVERY'}
+                {deliveryLive.data.delivery_method === 'pickup'
+                  ? 'ORDER STATUS'
+                  : isInstantDelivery
+                    ? 'DELIVERY PARTNER'
+                    : 'STANDARD DELIVERY'}
               </div>
               <h2 style={{ margin: '4px 0 0', fontSize: 28 }}>{deliveryLive.data.headline}</h2>
               {deliveryLive.data.subtitle ? (
                 <p style={{ margin: '5px 0 0', color: '#6b7280' }}>{deliveryLive.data.subtitle}</p>
               ) : null}
-              <div style={{ marginTop: 6, color: deliveryLive.data.stale ? '#b45309' : '#047857', fontSize: 13 }}>
-                {deliveryLive.data.stale ? 'Location may be stale' : 'Tracking up to date'}
-                {deliveryLive.data.last_updated
-                  ? ` · ${new Date(deliveryLive.data.last_updated).toLocaleString()}`
-                  : ''}
-              </div>
+              {deliveryLive.data.delivery_method === 'pickup' ? (
+                deliveryLive.data.last_updated ? (
+                  <div style={{ marginTop: 6, color: '#6b7280', fontSize: 13 }}>
+                    Updated · {new Date(deliveryLive.data.last_updated).toLocaleString()}
+                  </div>
+                ) : null
+              ) : (
+                <div style={{ marginTop: 6, color: deliveryLive.data.stale ? '#b45309' : '#047857', fontSize: 13 }}>
+                  {deliveryLive.data.stale ? 'Location may be stale' : 'Tracking up to date'}
+                  {deliveryLive.data.last_updated
+                    ? ` · ${new Date(deliveryLive.data.last_updated).toLocaleString()}`
+                    : ''}
+                </div>
+              )}
               {deliveryFailureReason ? (
                 <p style={{ color: '#b42318', margin: '6px 0 0' }}>{deliveryFailureReason}</p>
               ) : null}
@@ -482,15 +517,19 @@ export function ShopOrderDetailPage() {
               </a>
             </p>
           ) : null}
-          <div style={{ marginTop: 16 }}>
-            <DeliveryRouteMap delivery={deliveryLive.data} />
-          </div>
+          {deliveryLive.data.delivery_method !== 'pickup' ? (
+            <div style={{ marginTop: 16 }}>
+              <DeliveryRouteMap delivery={deliveryLive.data} />
+            </div>
+          ) : null}
           <div style={{ display: 'grid', gap: 16, marginTop: 20 }}>
             {deliveryGroups.map((group) => (
               <section key={group.number ?? 'order'} style={{ borderTop: '1px solid var(--border, #ddd)', paddingTop: 12 }}>
                 <strong>
                   {group.number == null
-                    ? 'Order updates'
+                    ? deliveryLive.data.delivery_method === 'pickup'
+                      ? 'Order history'
+                      : 'Order updates'
                     : `Attempt ${group.number}${group.attempt?.provider ? ` · ${group.attempt.provider}` : ''}`}
                 </strong>
                 {group.attempt?.reason ? <p style={{ color: '#b42318', margin: '5px 0' }}>{group.attempt.reason}</p> : null}
@@ -540,6 +579,9 @@ export function ShopOrderDetailPage() {
       {canReturn ? (
         <Card>
           <h2>Return / credit note</h2>
+          {returnByLabel ? (
+            <p style={{ marginTop: 0, color: '#6b7280' }}>Returns accepted until {returnByLabel}.</p>
+          ) : null}
           <form onSubmit={processReturn} style={{ display: 'grid', gap: 10 }}>
             {(data.lines ?? []).map((line) => (
               <label key={line.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -573,11 +615,100 @@ export function ShopOrderDetailPage() {
 
       <Card>
         <h2>Returns on this order</h2>
-        {(returns.data ?? []).map((item) => (
-          <div key={item.id}>
-            {item.return_number} · {item.status} · {formatMoney(Number(item.refund_total ?? 0), data.currency)}
-          </div>
-        ))}
+        {(returns.data ?? []).map((item) => {
+          const open =
+            item.status === 'pending' ||
+            item.status === 'awaiting_customer' ||
+            item.status === 'approved';
+          const canArrange =
+            open &&
+            item.status === 'pending' &&
+            (item.return_method === 'reverse_pickup' ||
+              item.return_method === 'instant_pickup' ||
+              item.return_method === 'dropoff');
+          return (
+            <div key={item.id} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+              <div>
+                {item.return_number} · {item.status}
+                {item.return_method ? ` · ${item.return_method.replace(/_/g, ' ')}` : ''} ·{' '}
+                {formatMoney(Number(item.refund_total ?? 0), data.currency)}
+              </div>
+              {open ? (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {canArrange ? (
+                    <Button
+                      type="button"
+                      variant="neutral"
+                      disabled={arrangePickup.isPending}
+                      onClick={() =>
+                        void (async () => {
+                          const modeRaw = window.prompt(
+                            'Pickup mode: "instant" for rider, or "manual" for courier',
+                            'instant',
+                          );
+                          if (modeRaw === null) return;
+                          const mode =
+                            modeRaw.trim().toLowerCase() === 'manual' ? 'manual' : 'instant';
+                          if (mode === 'instant') {
+                            const who = window.prompt(
+                              'Who pays pickup fee? "customer" = they must accept (deduct from refund), blank = shop pays',
+                              '',
+                            );
+                            if (who === null) return;
+                            await arrangePickup.mutateAsync({
+                              returnId: item.id,
+                              mode: 'instant',
+                              charge_bearer:
+                                who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant',
+                            });
+                          } else {
+                            const who = window.prompt(
+                              'Who pays courier fee? "customer" = they must accept, blank = shop',
+                              '',
+                            );
+                            if (who === null) return;
+                            const charge_bearer =
+                              who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant';
+                            let fee: string | undefined;
+                            if (charge_bearer === 'customer') {
+                              const feeRaw = window.prompt('Courier fee to deduct', '0');
+                              if (feeRaw === null) return;
+                              fee = feeRaw.trim() || '0';
+                            }
+                            await arrangePickup.mutateAsync({
+                              returnId: item.id,
+                              mode: 'manual',
+                              charge_bearer,
+                              fee,
+                            });
+                          }
+                        })()
+                      }
+                    >
+                      Arrange pickup
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={receiveReturn.isPending}
+                    onClick={() => void receiveReturn.mutateAsync({ returnId: item.id })}
+                  >
+                    Mark received
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    disabled={rejectReturn.isPending}
+                    onClick={() => void rejectReturn.mutateAsync({ returnId: item.id })}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
         {!returns.data?.length ? <p>No returns yet.</p> : null}
       </Card>
 
@@ -600,7 +731,9 @@ export function ShopOrderDetailPage() {
             <Card style={{ width: '100%', maxWidth: 480 }}>
             <h2 style={{ marginTop: 0 }}>Ship order</h2>
             <p style={{ color: '#64748b' }}>
-              Add courier tracking so customers can follow the shipment like Amazon.
+              {isSelfDeliveryShip
+                ? 'Deliver this order yourself — no courier AWB needed.'
+                : 'Add courier tracking so customers can follow the shipment.'}
             </p>
             <form
               style={{ display: 'grid', gap: 12 }}
@@ -610,8 +743,9 @@ export function ShopOrderDetailPage() {
               }}
             >
               <label style={{ display: 'grid', gap: 6 }}>
-                Carrier
+                How are you sending it?
                 <select value={shipCarrier} onChange={(event) => setShipCarrier(event.target.value)}>
+                  <option value="self">Deliver myself</option>
                   <option value="delhivery">Delhivery</option>
                   <option value="bluedart">Blue Dart</option>
                   <option value="dtdc">DTDC</option>
@@ -622,15 +756,17 @@ export function ShopOrderDetailPage() {
                   <option value="other">Other</option>
                 </select>
               </label>
-              <label style={{ display: 'grid', gap: 6 }}>
-                AWB / tracking number
-                <input
-                  value={shipAwb}
-                  onChange={(event) => setShipAwb(event.target.value)}
-                  required
-                  placeholder="1234567890123"
-                />
-              </label>
+              {!isSelfDeliveryShip ? (
+                <label style={{ display: 'grid', gap: 6 }}>
+                  AWB / tracking number
+                  <input
+                    value={shipAwb}
+                    onChange={(event) => setShipAwb(event.target.value)}
+                    required
+                    placeholder="1234567890123"
+                  />
+                </label>
+              ) : null}
               <label style={{ display: 'grid', gap: 6 }}>
                 Estimated delivery (optional)
                 <input
@@ -648,8 +784,16 @@ export function ShopOrderDetailPage() {
                 Notify customer
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button type="submit" variant="primary" disabled={shipOrder.isPending || !shipAwb.trim()}>
-                  {shipOrder.isPending ? 'Saving…' : 'Mark shipped'}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={shipOrder.isPending || (!isSelfDeliveryShip && !shipAwb.trim())}
+                >
+                  {shipOrder.isPending
+                    ? 'Saving…'
+                    : isSelfDeliveryShip
+                      ? 'Start delivery'
+                      : 'Mark shipped'}
                 </Button>
                 <Button type="button" variant="neutral" onClick={() => setShipOpen(false)}>
                   Cancel

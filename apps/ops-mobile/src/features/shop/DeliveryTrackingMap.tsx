@@ -1,17 +1,19 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { colors } from '../../theme/tokens';
+import { openInGoogleMaps } from '../../utils/openInGoogleMaps';
 import {
   DELIVERY_MAP_COLORS,
   deliveryMapGeometry,
   deliveryMapPointSignature,
   deliveryPlaceLabel,
+  isReturnPickupLive,
+  type OpsDeliveryMapLive,
 } from './deliveryTracking';
 
 type Props = {
-  delivery: ShopDeliveryLive;
+  delivery: OpsDeliveryMapLive;
 };
 
 export function DeliveryTrackingMap({ delivery }: Props) {
@@ -48,6 +50,10 @@ export function DeliveryTrackingMap({ delivery }: Props) {
     );
   }
 
+  const returnPickup = isReturnPickupLive(delivery);
+  const pickupTitle = returnPickup ? 'Customer' : 'Pickup';
+  const dropTitle = returnPickup ? 'Shop' : 'Drop-off';
+
   const latitudes = points.map((point) => point.latitude);
   const longitudes = points.map((point) => point.longitude);
   const minLatitude = Math.min(...latitudes);
@@ -73,17 +79,29 @@ export function DeliveryTrackingMap({ delivery }: Props) {
       {pickup ? (
         <Marker
           coordinate={pickup}
-          title="Pickup"
+          title={pickupTitle}
           description={deliveryPlaceLabel(delivery.pickup)}
           pinColor={DELIVERY_MAP_COLORS.pickup}
+          onCalloutPress={() =>
+            void openInGoogleMaps(pickup.latitude, pickup.longitude, deliveryPlaceLabel(delivery.pickup))
+          }
+          onPress={() =>
+            void openInGoogleMaps(pickup.latitude, pickup.longitude, deliveryPlaceLabel(delivery.pickup))
+          }
         />
       ) : null}
       {drop ? (
         <Marker
           coordinate={drop}
-          title="Drop-off"
+          title={dropTitle}
           description={deliveryPlaceLabel(delivery.drop)}
           pinColor={DELIVERY_MAP_COLORS.drop}
+          onCalloutPress={() =>
+            void openInGoogleMaps(drop.latitude, drop.longitude, deliveryPlaceLabel(delivery.drop))
+          }
+          onPress={() =>
+            void openInGoogleMaps(drop.latitude, drop.longitude, deliveryPlaceLabel(delivery.drop))
+          }
         />
       ) : null}
       {rider ? (
@@ -92,6 +110,12 @@ export function DeliveryTrackingMap({ delivery }: Props) {
           title={delivery.rider?.name || 'Rider'}
           description="Latest reported rider location"
           pinColor={DELIVERY_MAP_COLORS.rider}
+          onCalloutPress={() =>
+            void openInGoogleMaps(rider.latitude, rider.longitude, delivery.rider?.name || 'Rider')
+          }
+          onPress={() =>
+            void openInGoogleMaps(rider.latitude, rider.longitude, delivery.rider?.name || 'Rider')
+          }
         />
       ) : null}
       {trail.length > 1 ? (

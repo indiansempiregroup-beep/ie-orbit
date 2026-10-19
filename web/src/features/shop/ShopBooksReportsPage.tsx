@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ShopBooksReportSlug, ShopBooksVoucher } from '@ie-orbit/sdk';
-import { Download, Eye, Printer, RefreshCw, Share2 } from 'lucide-react';
+import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
+import { Download, Eye, Printer, RefreshCw, Share2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Dialog } from '../../components/Dialog';
@@ -10,11 +10,39 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
-import { getApiErrorMessage } from '../../lib/apiClient';
+import { BooksInvoiceDrawer } from './BooksInvoiceDrawer';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentView } from './shopDocumentActions';
 import { ShopFilterBar } from './ShopFilterBar';
+import { SaleInsightChips } from './SaleInsightChips';
 import { useShopBooksReport } from './shopHooks';
+
+type SaleSource = 'pos' | 'online' | 'booking';
+
+const SALE_SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All sources' },
+  { value: 'pos', label: 'POS' },
+  { value: 'online', label: 'Online Orders' },
+  { value: 'booking', label: 'Bookings' },
+];
+
+const SALE_SOURCE_LABELS: Record<SaleSource, string> = {
+  pos: 'POS',
+  online: 'Online',
+  booking: 'Booking',
+};
+
+const SALE_SOURCE_TONES: Record<SaleSource, { bg: string; text: string }> = {
+  pos: { bg: '#e0f2fe', text: '#0369a1' },
+  online: { bg: '#ede9fe', text: '#6d28d9' },
+  booking: { bg: '#fef3c7', text: '#b45309' },
+};
+
+function parseSaleSource(value: unknown): SaleSource | null {
+  const key = String(value ?? '').trim().toLowerCase();
+  if (key === 'pos' || key === 'online' || key === 'booking') return key;
+  return null;
+}
 
 const REPORT_TABS: Array<{ slug: ShopBooksReportSlug; label: string; description: string }> = [
   { slug: 'sales', label: 'Sales', description: 'GST sales summary for the period' },
@@ -116,6 +144,11 @@ type ReportRecord = {
   igst?: number;
   gstin?: string;
   placeOfSupply?: string;
+  /** POS / online / booking when the voucher came from a shop or booking sale. */
+  saleSource: SaleSource | null;
+  pointsEarned: number;
+  pointsRedeemed: number;
+  grossProfit: string | null;
 };
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -197,6 +230,11 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
     igst: row.igst == null ? undefined : num(row.igst),
     gstin: row.party_gstin == null ? undefined : String(row.party_gstin),
     placeOfSupply: row.place_of_supply == null ? undefined : String(row.place_of_supply),
+    saleSource: parseSaleSource(row.sale_source),
+    pointsEarned: Math.max(0, Math.floor(num(row.points_earned))),
+    pointsRedeemed: Math.max(0, Math.floor(num(row.points_redeemed))),
+    grossProfit:
+      row.gross_profit == null || row.gross_profit === '' ? null : String(row.gross_profit),
   };
 }
 
@@ -222,6 +260,11 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     igst: num(row.igst),
     gstin: String(row.customer_gstin ?? ''),
     placeOfSupply: String(row.place_of_supply ?? ''),
+    saleSource: parseSaleSource(row.sale_source),
+    pointsEarned: Math.max(0, Math.floor(num(row.points_earned))),
+    pointsRedeemed: Math.max(0, Math.floor(num(row.points_redeemed))),
+    grossProfit:
+      row.gross_profit == null || row.gross_profit === '' ? null : String(row.gross_profit),
   };
 }
 
@@ -259,6 +302,7 @@ function recordExportRow(record: ReportRecord) {
     date: record.date,
     number: record.number,
     type: record.typeLabel,
+    source: record.saleSource ? SALE_SOURCE_LABELS[record.saleSource] : '',
     party: record.party,
     status: record.status,
     total: record.total,
@@ -334,7 +378,7 @@ export function ShopBooksReportsPage() {
   const auth = useAuthContext();
   const client = useApiClient();
   const snackbar = useSnackbar();
-  const detailDialog = useDialog();
+  const filterDialog = useDialog();
   const currency = workspace.activeBusiness?.currency;
   const businessId = workspace.businessId ?? '';
   const [slug, setSlug] = useState<ShopBooksReportSlug>('sales');
@@ -344,12 +388,11 @@ export function ShopBooksReportsPage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
   const [sort, setSort] = useState<SortKey>('date_desc');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [caPackBusy, setCaPackBusy] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<ReportRecord | null>(null);
-  const [selectedVoucher, setSelectedVoucher] = useState<ShopBooksVoucher | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [booksInvoiceId, setBooksInvoiceId] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const range = { date_from: dateFrom || undefined, date_to: dateTo || undefined };
@@ -372,19 +415,6 @@ export function ShopBooksReportsPage() {
     return allowed ? source.filter((record) => allowed.includes(record.type)) : source;
   }, [slug, rows, ledger.data]);
 
-  /** Daybook and GSTR-1 return plain row lists, so their headline figures are derived here. */
-  const listTotals = useMemo(() => {
-    const total = rows.reduce((sum, row) => sum + num(row.total), 0);
-    const settled = rows.reduce((sum, row) => sum + num(row.amount_paid), 0);
-    return {
-      total,
-      settled,
-      outstanding: Math.max(total - settled, 0),
-      taxable: rows.reduce((sum, row) => sum + num(row.taxable_value), 0),
-      b2b: rows.filter((row) => String(row.invoice_type ?? '') === 'B2B').length,
-    };
-  }, [rows]);
-
   const typeOptions = useMemo(() => {
     const seen = new Map<string, string>();
     records.forEach((record) => seen.set(record.type, record.typeLabel));
@@ -397,6 +427,7 @@ export function ShopBooksReportsPage() {
   }, [records]);
 
   const showPaymentFilter = useMemo(() => records.some((record) => paymentState(record) != null), [records]);
+  const showSourceFilter = useMemo(() => records.some((record) => record.saleSource != null), [records]);
 
   const filteredRecords = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -404,6 +435,7 @@ export function ShopBooksReportsPage() {
       if (typeFilter && record.type !== typeFilter) return false;
       if (statusFilter && record.status !== statusFilter) return false;
       if (paymentFilter && paymentState(record) !== paymentFilter) return false;
+      if (sourceFilter && record.saleSource !== sourceFilter) return false;
       if (!term) return true;
       return (
         record.number.toLowerCase().includes(term) ||
@@ -417,7 +449,7 @@ export function ShopBooksReportsPage() {
       const compared = a.date.localeCompare(b.date);
       return sort === 'date_asc' ? compared : -compared;
     });
-  }, [records, search, typeFilter, statusFilter, paymentFilter, sort]);
+  }, [records, search, typeFilter, statusFilter, paymentFilter, sourceFilter, sort]);
 
   const filteredTotals = useMemo(
     () =>
@@ -428,24 +460,50 @@ export function ShopBooksReportsPage() {
             (slug === 'sales' && record.type === 'credit_note') ||
             (slug === 'purchase' && record.type === 'debit_note');
           const sign = adjustment ? -1 : 1;
+          const paid = record.paid == null ? 0 : record.paid;
           return {
+            count: acc.count + 1,
             taxable: acc.taxable + (record.taxable ?? 0) * sign,
+            cgst: acc.cgst + (record.cgst ?? 0) * sign,
+            sgst: acc.sgst + (record.sgst ?? 0) * sign,
+            igst: acc.igst + (record.igst ?? 0) * sign,
             gst:
               acc.gst +
               ((record.cgst ?? 0) + (record.sgst ?? 0) + (record.igst ?? 0)) * sign,
             total: acc.total + record.total * sign,
+            settled: acc.settled + Math.min(paid, record.total) * sign,
             due:
               acc.due +
               (record.paid == null ? 0 : Math.max(record.total - record.paid, 0)) * sign,
           };
         },
-        { taxable: 0, gst: 0, total: 0, due: 0 },
+        {
+          count: 0,
+          taxable: 0,
+          cgst: 0,
+          sgst: 0,
+          igst: 0,
+          gst: 0,
+          total: 0,
+          settled: 0,
+          due: 0,
+        },
       ),
     [filteredRecords, slug],
   );
 
+  /** Sales/Purchase/Daybook/GSTR-1 headlines follow the same filters as the record list. */
+  const headlineFromFilters =
+    slug === 'daybook' ||
+    slug === 'gstr1' ||
+    ((slug === 'sales' || slug === 'purchase') && Array.isArray(ledger.data));
+
   const activeFilterCount =
-    (typeFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (paymentFilter ? 1 : 0) + (search.trim() ? 1 : 0);
+    (typeFilter ? 1 : 0) +
+    (statusFilter ? 1 : 0) +
+    (paymentFilter ? 1 : 0) +
+    (sourceFilter ? 1 : 0) +
+    (search.trim() ? 1 : 0);
 
   const exportSummary = useMemo(
     () => flattenSummary(data).filter((row) => row.metric !== 'rows' || !records.length),
@@ -454,47 +512,27 @@ export function ShopBooksReportsPage() {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [slug, search, typeFilter, statusFilter, paymentFilter, sort]);
+  }, [slug, search, typeFilter, statusFilter, paymentFilter, sourceFilter, sort]);
 
   function resetFilters() {
     setSearch('');
     setTypeFilter('');
     setStatusFilter('');
     setPaymentFilter('');
+    setSourceFilter('');
     setSort('date_desc');
   }
 
-  const openRecord = useCallback(
-    async (record: ReportRecord) => {
-      if (!record.id || !client) return;
-      setSelectedRecord(record);
-      setSelectedVoucher(null);
-      setDetailLoading(true);
-      detailDialog.show();
-      try {
-        const response = await client.shop.getVoucher(record.id);
-        setSelectedVoucher(response.data);
-      } catch (error) {
-        snackbar.push(getApiErrorMessage(error, 'Unable to open this record.'), 'error');
-        detailDialog.hide();
-        setSelectedRecord(null);
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [client, detailDialog.hide, detailDialog.show, snackbar],
-  );
-
   const openDocActions = useCallback(
-    (record: ReportRecord, voucher?: ShopBooksVoucher | null) => {
+    (record: ReportRecord) => {
       if (!businessId || !record.id || !record.docKind) return;
       setDocActions({
         kind: record.docKind,
         id: record.id,
         number: record.number,
         businessId,
-        phone: voucher?.customer_phone || '',
-        email: voucher?.customer_email || '',
+        phone: '',
+        email: '',
       });
     },
     [businessId],
@@ -649,6 +687,17 @@ export function ShopBooksReportsPage() {
             <Button type="button" variant="neutral" onClick={() => void report.refetch()} disabled={report.isFetching || invalidRange}>
               <RefreshCw size={15} aria-hidden="true" /> {report.isFetching ? 'Refreshing…' : 'Refresh'}
             </Button>
+            <Button
+              type="button"
+              variant="neutral"
+              onClick={filterDialog.show}
+              disabled={!data}
+              aria-haspopup="dialog"
+              aria-expanded={filterDialog.open}
+            >
+              <SlidersHorizontal size={15} aria-hidden="true" />
+              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </Button>
             <Button type="button" variant="neutral" onClick={downloadCsv} disabled={!data || invalidRange}>
               <Download size={15} aria-hidden="true" /> CSV for CA
             </Button>
@@ -721,30 +770,57 @@ export function ShopBooksReportsPage() {
 
         {!report.isLoading && data && (slug === 'sales' || slug === 'purchase') && isRecord(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-            <StatTile label="Vouchers" value={String(data.count ?? 0)} />
-            <StatTile label="Taxable value" value={formatMoney(Number(data.taxable_value ?? 0), currency)} />
-            <StatTile label="CGST" value={formatMoney(Number(data.cgst ?? 0), currency)} />
-            <StatTile label="SGST" value={formatMoney(Number(data.sgst ?? 0), currency)} />
-            <StatTile label="IGST" value={formatMoney(Number(data.igst ?? 0), currency)} />
-            <StatTile label="Total" value={formatMoney(Number(data.total ?? 0), currency)} />
+            <StatTile
+              label="Vouchers"
+              value={String(headlineFromFilters ? filteredTotals.count : Number(data.count ?? 0))}
+            />
+            <StatTile
+              label="Taxable value"
+              value={formatMoney(
+                headlineFromFilters ? filteredTotals.taxable : Number(data.taxable_value ?? 0),
+                currency,
+              )}
+            />
+            <StatTile
+              label="CGST"
+              value={formatMoney(headlineFromFilters ? filteredTotals.cgst : Number(data.cgst ?? 0), currency)}
+            />
+            <StatTile
+              label="SGST"
+              value={formatMoney(headlineFromFilters ? filteredTotals.sgst : Number(data.sgst ?? 0), currency)}
+            />
+            <StatTile
+              label="IGST"
+              value={formatMoney(headlineFromFilters ? filteredTotals.igst : Number(data.igst ?? 0), currency)}
+            />
+            <StatTile
+              label="Total"
+              value={formatMoney(headlineFromFilters ? filteredTotals.total : Number(data.total ?? 0), currency)}
+            />
           </div>
         ) : null}
 
         {!report.isLoading && data && slug === 'daybook' && Array.isArray(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-            <StatTile label="Entries" value={String(rows.length)} />
-            <StatTile label="Gross value" value={formatMoney(listTotals.total, currency)} />
-            <StatTile label="Settled amount" value={formatMoney(listTotals.settled, currency)} />
-            <StatTile label="Outstanding" value={formatMoney(listTotals.outstanding, currency)} />
+            <StatTile label="Entries" value={String(filteredRecords.length)} />
+            <StatTile label="Gross value" value={formatMoney(filteredTotals.total, currency)} />
+            <StatTile label="Settled amount" value={formatMoney(filteredTotals.settled, currency)} />
+            <StatTile
+              label="Outstanding"
+              value={formatMoney(Math.max(filteredTotals.total - filteredTotals.settled, 0), currency)}
+            />
           </div>
         ) : null}
 
         {!report.isLoading && data && slug === 'gstr1' && Array.isArray(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-            <StatTile label="Invoices" value={String(rows.length)} />
-            <StatTile label="B2B invoices" value={String(listTotals.b2b)} />
-            <StatTile label="Taxable value" value={formatMoney(listTotals.taxable, currency)} />
-            <StatTile label="Invoice value" value={formatMoney(listTotals.total, currency)} />
+            <StatTile label="Invoices" value={String(filteredRecords.length)} />
+            <StatTile
+              label="B2B invoices"
+              value={String(filteredRecords.filter((record) => record.type === 'B2B').length)}
+            />
+            <StatTile label="Taxable value" value={formatMoney(filteredTotals.taxable, currency)} />
+            <StatTile label="Invoice value" value={formatMoney(filteredTotals.total, currency)} />
           </div>
         ) : null}
 
@@ -826,7 +902,7 @@ export function ShopBooksReportsPage() {
 
       {!report.isLoading && data ? (
         <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 16 }}>All records</h3>
               <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
@@ -839,12 +915,84 @@ export function ShopBooksReportsPage() {
             </div>
           </div>
 
+          <div style={{ marginBottom: 12 }}>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search voucher number, party or GSTIN…"
+              aria-label="Search voucher number, party or GSTIN"
+              style={{
+                width: '100%',
+                borderRadius: 12,
+                border: '1px solid var(--border, #e5e7eb)',
+                padding: '10px 14px',
+                background: 'var(--card, #fff)',
+              }}
+            />
+          </div>
+
+          {needsLedger && ledger.isLoading ? <p role="status">Loading underlying records…</p> : null}
+          {needsLedger && ledger.error ? <p role="alert">{(ledger.error as Error).message}</p> : null}
+          {records.some((record) => record.status === 'void') ? (
+            <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: '0 0 10px' }}>
+              Void entries are listed here but excluded from report totals.
+            </p>
+          ) : null}
+
+          {filteredRecords.length ? (
+            <RecordTable
+              records={filteredRecords}
+              limit={visibleCount}
+              totals={filteredTotals}
+              currency={currency}
+              onOpenRecord={(record) => {
+                if (record.id) setBooksInvoiceId(record.id);
+              }}
+              onView={viewDocument}
+              onShare={(record) => openDocActions(record)}
+            />
+          ) : (
+            <p>{records.length ? 'No records match the current filters.' : 'No vouchers were posted in this period.'}</p>
+          )}
+
+          {filteredRecords.length > visibleCount ? (
+            <div style={{ marginTop: 12 }}>
+              <Button type="button" variant="neutral" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
+                Show {Math.min(PAGE_SIZE, filteredRecords.length - visibleCount)} more
+              </Button>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
+      <Dialog
+        open={filterDialog.open}
+        onClose={filterDialog.hide}
+        title="Record filters"
+        labelledBy="report-record-filters-dialog"
+      >
+        <div style={{ marginTop: 12 }}>
           <ShopFilterBar
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search voucher number, party or GSTIN…"
-            onClear={resetFilters}
+            hideSearch
+            onClear={() => {
+              resetFilters();
+            }}
             filters={[
+              ...(showSourceFilter
+                ? [
+                    {
+                      id: 'source',
+                      label: 'Source',
+                      value: sourceFilter,
+                      onChange: setSourceFilter,
+                      options: SALE_SOURCE_OPTIONS,
+                    },
+                  ]
+                : []),
               ...(typeOptions.length > 1
                 ? [
                     {
@@ -892,128 +1040,19 @@ export function ShopBooksReportsPage() {
               },
             ]}
           />
-
-          {needsLedger && ledger.isLoading ? <p role="status">Loading underlying records…</p> : null}
-          {needsLedger && ledger.error ? <p role="alert">{(ledger.error as Error).message}</p> : null}
-          {records.some((record) => record.status === 'void') ? (
-            <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: '0 0 10px' }}>
-              Void entries are listed here but excluded from report totals.
-            </p>
-          ) : null}
-
-          {filteredRecords.length ? (
-            <RecordTable
-              records={filteredRecords}
-              limit={visibleCount}
-              totals={filteredTotals}
-              currency={currency}
-              onOpenRecord={(record) => void openRecord(record)}
-              onView={viewDocument}
-              onShare={(record) => openDocActions(record)}
-            />
-          ) : (
-            <p>{records.length ? 'No records match the current filters.' : 'No vouchers were posted in this period.'}</p>
-          )}
-
-          {filteredRecords.length > visibleCount ? (
-            <div style={{ marginTop: 12 }}>
-              <Button type="button" variant="neutral" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
-                Show {Math.min(PAGE_SIZE, filteredRecords.length - visibleCount)} more
-              </Button>
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
-
-      <Dialog
-        open={detailDialog.open}
-        onClose={() => {
-          detailDialog.hide();
-          setSelectedRecord(null);
-          setSelectedVoucher(null);
-        }}
-        title={selectedRecord ? selectedRecord.number : 'Voucher'}
-        labelledBy="report-record-detail-dialog"
-        busy={detailLoading}
-      >
-        {selectedRecord ? (
-          <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320 }}>
-            <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
-              {formatVoucherDate(selectedRecord.date)} · {selectedRecord.typeLabel} ·{' '}
-              {selectedVoucher?.customer_name ||
-                selectedVoucher?.supplier_name ||
-                selectedVoucher?.cash_account_name ||
-                selectedRecord.party}
-            </div>
-            {detailLoading ? (
-              <p role="status">Loading record…</p>
-            ) : (
-              <>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {((selectedVoucher?.line_items as Array<Record<string, unknown>> | undefined) ?? []).map(
-                    (line, index) => (
-                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span>
-                          {String(line.name || line.product_name || `Item ${index + 1}`)}
-                          {line.qty != null || line.quantity != null
-                            ? ` × ${line.qty ?? line.quantity}`
-                            : ''}
-                        </span>
-                        <strong>{formatMoney(Number(line.total ?? 0), currency)}</strong>
-                      </div>
-                    ),
-                  )}
-                  {selectedVoucher && !selectedVoucher.line_items?.length ? (
-                    <p style={{ margin: 0 }}>No line items.</p>
-                  ) : null}
-                </div>
-                <div style={{ display: 'grid', gap: 4, borderTop: '1px solid #eee', paddingTop: 10, fontSize: 13 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Subtotal</span>
-                    <span>{formatMoney(Number(selectedVoucher?.subtotal ?? 0), currency)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Tax</span>
-                    <span>{formatMoney(Number(selectedVoucher?.tax_total ?? 0), currency)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                    <span>Total</span>
-                    <span>{formatMoney(Number(selectedVoucher?.total ?? selectedRecord.total), currency)}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Amount paid</span>
-                    <span>{formatMoney(Number(selectedVoucher?.amount_paid ?? 0), currency)}</span>
-                  </div>
-                </div>
-                {selectedVoucher?.notes ? (
-                  <p style={{ margin: 0, fontSize: 13 }}>Notes: {selectedVoucher.notes}</p>
-                ) : null}
-              </>
-            )}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              {selectedRecord.docKind && businessId ? (
-                <Button
-                  type="button"
-                  onClick={() => openDocActions(selectedRecord, selectedVoucher)}
-                >
-                  View / Print / Share
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  detailDialog.hide();
-                  setSelectedRecord(null);
-                  setSelectedVoucher(null);
-                }}
-              >
-                Close
-              </Button>
-            </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button type="button" variant="ghost" onClick={filterDialog.hide}>
+              Done
+            </Button>
           </div>
-        ) : null}
+        </div>
       </Dialog>
+
+      <BooksInvoiceDrawer
+        voucherId={booksInvoiceId}
+        open={Boolean(booksInvoiceId)}
+        onClose={() => setBooksInvoiceId(null)}
+      />
 
       <DocumentActionsSheet
         open={Boolean(docActions)}
@@ -1045,6 +1084,25 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+function SourcePill({ source }: { source: SaleSource }) {
+  const tone = SALE_SOURCE_TONES[source];
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: tone.bg,
+        color: tone.text,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {SALE_SOURCE_LABELS[source]}
+    </span>
+  );
+}
+
 function RecordTable({
   records,
   limit,
@@ -1064,6 +1122,11 @@ function RecordTable({
 }) {
   /** Column visibility is derived from the whole filtered set so paging never shifts columns. */
   const showStatus = records.some((record) => record.status);
+  const showSource = records.some((record) => record.saleSource != null);
+  const showInsights = records.some(
+    (record) =>
+      record.pointsEarned > 0 || record.pointsRedeemed > 0 || record.grossProfit != null,
+  );
   const showGst = records.some(hasGstDetail);
   const showGstin = records.some((record) => record.gstin);
   const showPos = records.some((record) => record.placeOfSupply);
@@ -1082,6 +1145,8 @@ function RecordTable({
             <th style={cell}>Date</th>
             <th style={cell}>Voucher</th>
             <th style={cell}>Type</th>
+            {showSource ? <th style={cell}>Source</th> : null}
+            {showInsights ? <th style={cell}>Points / profit</th> : null}
             <th style={cell}>Party</th>
             {showGstin ? <th style={cell}>GSTIN</th> : null}
             {showPos ? <th style={cell}>Place of supply</th> : null}
@@ -1128,6 +1193,23 @@ function RecordTable({
                   {record.number}
                 </td>
                 <td style={cell}>{record.typeLabel}</td>
+                {showSource ? (
+                  <td style={cell}>{record.saleSource ? <SourcePill source={record.saleSource} /> : '—'}</td>
+                ) : null}
+                {showInsights ? (
+                  <td style={cell}>
+                    <SaleInsightChips
+                      source={{
+                        points_earned: record.pointsEarned,
+                        points_redeemed: record.pointsRedeemed,
+                        gross_profit: record.grossProfit,
+                        hideProfit: record.saleSource === 'booking',
+                      }}
+                      currency={currency}
+                      hideWhenEmpty
+                    />
+                  </td>
+                ) : null}
                 <td style={cell}>{record.party}</td>
                 {showGstin ? <td style={cell}>{record.gstin || '—'}</td> : null}
                 {showPos ? <td style={cell}>{record.placeOfSupply || '—'}</td> : null}
@@ -1206,7 +1288,17 @@ function RecordTable({
         </tbody>
         <tfoot>
           <tr style={{ borderTop: '1px solid var(--border, #e5e7eb)', fontWeight: 700 }}>
-            <td style={cell} colSpan={4 + (showGstin ? 1 : 0) + (showPos ? 1 : 0) + (showStatus ? 1 : 0)}>
+            <td
+              style={cell}
+              colSpan={
+                4 +
+                (showSource ? 1 : 0) +
+                (showInsights ? 1 : 0) +
+                (showGstin ? 1 : 0) +
+                (showPos ? 1 : 0) +
+                (showStatus ? 1 : 0)
+              }
+            >
               Filtered totals · {records.length} record{records.length === 1 ? '' : 's'}
             </td>
             {showGst ? <td style={numeric}>{formatMoney(totals.taxable, currency)}</td> : null}

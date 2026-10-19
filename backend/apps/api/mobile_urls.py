@@ -32,6 +32,7 @@ from apps.notifications.api.stream_views import MobileNotificationStreamView
 from apps.shopie.api.delivery_views import (
     MobileShopDeliveryQuoteView,
     MobileShopOrderDeliveryLiveView,
+    MobileShopReturnPickupLiveView,
 )
 from apps.shopie.api.mobile_views import (
     MobileShopAdListView,
@@ -59,6 +60,8 @@ from apps.shopie.api.mobile_views import (
     MobileShopProductReviewListCreateView,
     MobileShopReferralApplyView,
     MobileShopReferralView,
+    MobileShopReturnAcceptPickupFeeView,
+    MobileShopReturnDeclinePickupFeeView,
     MobileShopReturnDetailView,
     MobileShopReturnListView,
     MobileUpiPreviewView,
@@ -236,6 +239,21 @@ urlpatterns = [
         "mobile/shop/returns/<uuid:return_id>",
         MobileShopReturnDetailView.as_view(),
         name="mobile-shop-return-detail",
+    ),
+    path(
+        "mobile/shop/returns/<uuid:return_id>/pickup-live",
+        MobileShopReturnPickupLiveView.as_view(),
+        name="mobile-shop-return-pickup-live",
+    ),
+    path(
+        "mobile/shop/returns/<uuid:return_id>/accept-pickup-fee",
+        MobileShopReturnAcceptPickupFeeView.as_view(),
+        name="mobile-shop-return-accept-pickup-fee",
+    ),
+    path(
+        "mobile/shop/returns/<uuid:return_id>/decline-pickup-fee",
+        MobileShopReturnDeclinePickupFeeView.as_view(),
+        name="mobile-shop-return-decline-pickup-fee",
     ),
     path("mobile/shop/upi-preview", MobileUpiPreviewView.as_view(), name="mobile-shop-upi-preview"),
 ]

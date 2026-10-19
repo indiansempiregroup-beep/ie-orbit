@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from apps.authentication.models import User, UserStatus
 from apps.businesses.models import Business
@@ -13,6 +15,11 @@ from apps.shopie.models import (
     FulfillmentMode,
     OrderStatus,
     ProductStatus,
+    ProfitFactKind,
+    ReturnMethod,
+    ReturnStatus,
+    ShopBusinessSettings,
+    ShopSaleProfitFact,
     VerticalPack,
 )
 from apps.shopie.services.catalog import CatalogService
@@ -199,6 +206,63 @@ def test_return_restock_and_credit(shop_ctx: tuple[Tenant, Business, Customer]) 
     assert Decimal(str(sale.amount_paid)) == Decimal("50.00")
     assert Decimal(str(sale.metadata.get("net_amount_paid"))) == Decimal("50.00")
     assert Decimal(str(sale.metadata.get("net_amount_due"))) == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_full_return_marks_order_returned(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Mug",
+            "price": "40.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "10",
+        },
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 2}],
+        confirm=True,
+    )
+    line_id = str(order.lines.first().id)
+    returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": line_id, "quantity": 1}],
+        complete=True,
+    )
+    order.refresh_from_db()
+    assert order.status != OrderStatus.RETURNED
+
+    returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": line_id, "quantity": 1}],
+        complete=True,
+    )
+    order.refresh_from_db()
+    assert order.status == OrderStatus.RETURNED
+    assert (order.metadata or {}).get("returns", {}).get("fully_returned") is True
+
+    with pytest.raises(ValidationError, match="already been returned"):
+        returns.create_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            lines=[{"order_line_id": line_id, "quantity": 1}],
+            complete=True,
+        )
 
 
 @pytest.mark.django_db
@@ -548,5 +612,371 @@ def test_customer_return_requires_delivered(shop_ctx: tuple[Tenant, Business, Cu
     assert shop_return.status == "completed"
     assert shop_return.metadata.get("refund_mode") == "original_payment"
     assert "UPI" in str(shop_return.metadata.get("refund_instruction") or "")
+
+
+@pytest.mark.django_db
+def test_return_days_policy_blocks_expired_pos_and_online(
+    shop_ctx: tuple[Tenant, Business, Customer],
+) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+    settings, _ = ShopBusinessSettings.objects.get_or_create(tenant=tenant, business=business)
+    settings.return_days = 7
+    settings.save(update_fields=["return_days", "updated_at", "version"])
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Shampoo",
+            "price": "30.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "20",
+        },
+        barcodes=[{"code": "890555", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    pos_order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    online_order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+        payment_method="upi",
+        payment_proof_url="https://cdn.example.com/upi-proof-return.png",
+    )
+    orders.transition(
+        tenant=tenant, business=business, order=online_order, status=OrderStatus.COMPLETED
+    )
+    online_order.refresh_from_db()
+
+    stale = timezone.now() - timedelta(days=10)
+    type(pos_order).objects.filter(id=pos_order.id).update(created_at=stale, updated_at=stale)
+    type(online_order).objects.filter(id=online_order.id).update(created_at=stale, updated_at=stale)
+    pos_order.refresh_from_db()
+    online_order.refresh_from_db()
+
+    with pytest.raises(ValidationError, match="within 7 days"):
+        returns.create_return(
+            tenant=tenant,
+            business=business,
+            order=pos_order,
+            lines=[{"order_line_id": str(pos_order.lines.first().id), "quantity": 1}],
+            complete=True,
+        )
+    with pytest.raises(ValidationError, match="within 7 days"):
+        returns.create_return(
+            tenant=tenant,
+            business=business,
+            order=online_order,
+            lines=[{"order_line_id": str(online_order.lines.first().id), "quantity": 1}],
+            require_delivered=True,
+            complete=True,
+        )
+
+    settings.return_days = 0
+    settings.save(update_fields=["return_days", "updated_at", "version"])
+    allowed = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=pos_order,
+        lines=[{"order_line_id": str(pos_order.lines.first().id), "quantity": 1}],
+        complete=True,
+    )
+    assert allowed.status == "completed"
+
+
+@pytest.mark.django_db
+def test_return_eligible_until_exposed_on_order(
+    shop_ctx: tuple[Tenant, Business, Customer],
+) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    settings, _ = ShopBusinessSettings.objects.get_or_create(tenant=tenant, business=business)
+    settings.return_days = 7
+    settings.save(update_fields=["return_days", "updated_at", "version"])
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Serum",
+            "price": "55.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "8",
+        },
+        barcodes=[{"code": "890557", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    from apps.shopie.api.serializers import ShopOrderSerializer
+    from apps.shopie.services.returns import ReturnService
+
+    payload = ShopOrderSerializer(order).data
+    assert payload["return_days"] == 7
+    assert payload["return_window_open"] is True
+    assert payload["return_eligible_until"]
+    deadline = ReturnService.return_eligible_until(business=business, order=order)
+    assert deadline is not None
+    assert payload["return_eligible_until"].startswith(deadline.date().isoformat())
+
+
+@pytest.mark.django_db
+def test_return_days_policy_allows_within_window(
+    shop_ctx: tuple[Tenant, Business, Customer],
+) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+    settings, _ = ShopBusinessSettings.objects.get_or_create(tenant=tenant, business=business)
+    settings.return_days = 7
+    settings.save(update_fields=["return_days", "updated_at", "version"])
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Conditioner",
+            "price": "25.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "12",
+        },
+        barcodes=[{"code": "890556", "barcode_type": BarcodeType.MANUFACTURER}],
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    shop_return = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=True,
+    )
+    assert shop_return.status == "completed"
+
+
+@pytest.mark.django_db
+def test_online_return_pending_until_received(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Online Soap",
+            "price": "40.00",
+            "purchase_price": "20.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "10",
+        },
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.DELIVERY,
+        lines=[{"product_id": str(product.id), "quantity": 2}],
+        confirm=True,
+    )
+    orders.transition(
+        tenant=tenant,
+        business=business,
+        order=order,
+        status=OrderStatus.COMPLETED,
+        notify=False,
+    )
+    product.refresh_from_db()
+    stock_after_sale = product.stock_on_hand
+    line_id = str(order.lines.first().id)
+
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": line_id, "quantity": 1}],
+        reason="Wrong size",
+        restock=True,
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.DROPOFF,
+    )
+    product.refresh_from_db()
+    assert pending.status == ReturnStatus.PENDING
+    assert pending.return_method == ReturnMethod.DROPOFF
+    assert pending.received_at is None
+    assert product.stock_on_hand == stock_after_sale
+    assert (
+        ShopSaleProfitFact.objects.filter(order=order, fact_kind=ProfitFactKind.RETURN).count()
+        == 0
+    )
+
+    received = returns.receive_return(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+    )
+    product.refresh_from_db()
+    assert received.status == ReturnStatus.COMPLETED
+    assert received.received_at is not None
+    assert product.stock_on_hand == stock_after_sale + Decimal("1")
+    assert (
+        ShopSaleProfitFact.objects.filter(order=order, fact_kind=ProfitFactKind.RETURN).count()
+        == 1
+    )
+
+
+@pytest.mark.django_db
+def test_reverse_pickup_arrange_and_reject(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Pickup Tea",
+            "price": "30.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "8",
+        },
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        lines=[{"product_id": str(product.id), "quantity": 2}],
+        confirm=True,
+    )
+    orders.transition(
+        tenant=tenant,
+        business=business,
+        order=order,
+        status=OrderStatus.COMPLETED,
+        notify=False,
+    )
+    line_id = str(order.lines.first().id)
+    pending = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": line_id, "quantity": 1}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.REVERSE_PICKUP,
+    )
+    arranged = returns.arrange_pickup(
+        tenant=tenant,
+        business=business,
+        shop_return=pending,
+        notes="Rider tomorrow morning",
+        tracking_number="RP-100",
+    )
+    assert arranged.status == ReturnStatus.APPROVED
+    assert arranged.pickup_arranged_at is not None
+    assert arranged.pickup_tracking_number == "RP-100"
+    assert arranged.pickup_notes == "Rider tomorrow morning"
+
+    # Quantity still reserved while approved — cannot over-return.
+    with pytest.raises(ValidationError):
+        returns.create_return(
+            tenant=tenant,
+            business=business,
+            order=order,
+            lines=[{"order_line_id": line_id, "quantity": 2}],
+            complete=False,
+            require_delivered=True,
+            return_method=ReturnMethod.DROPOFF,
+        )
+
+    rejected = returns.reject_return(
+        tenant=tenant,
+        business=business,
+        shop_return=arranged,
+        reason="Item missing",
+    )
+    assert rejected.status == ReturnStatus.REJECTED
+    # After reject, full qty is returnable again.
+    again = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": line_id, "quantity": 2}],
+        complete=False,
+        require_delivered=True,
+        return_method=ReturnMethod.DROPOFF,
+    )
+    assert again.status == ReturnStatus.PENDING
+
+
+@pytest.mark.django_db
+def test_pos_return_still_completes_immediately(shop_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = shop_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    returns = ReturnService()
+
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Counter Bar",
+            "price": "15.00",
+            "status": ProductStatus.ACTIVE,
+            "stock_on_hand": "5",
+        },
+    )
+    order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": str(product.id), "quantity": 1}],
+        confirm=True,
+    )
+    product.refresh_from_db()
+    stock_after_sale = product.stock_on_hand
+    shop_return = returns.create_return(
+        tenant=tenant,
+        business=business,
+        order=order,
+        lines=[{"order_line_id": str(order.lines.first().id), "quantity": 1}],
+        complete=True,
+        return_method=ReturnMethod.IN_STORE,
+    )
+    product.refresh_from_db()
+    assert shop_return.status == ReturnStatus.COMPLETED
+    assert shop_return.return_method == ReturnMethod.IN_STORE
+    assert shop_return.received_at is not None
+    assert product.stock_on_hand == stock_after_sale + Decimal("1")
 
 

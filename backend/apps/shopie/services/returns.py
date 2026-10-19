@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -10,14 +11,19 @@ from django.utils import timezone
 
 from apps.businesses.models import Business
 from apps.shopie.models import (
+    FulfillmentMode,
     InvoiceStatus,
     OrderStatus,
+    ReturnMethod,
     ReturnStatus,
+    ShopBusinessSettings,
     ShopInvoice,
     ShopOrder,
     ShopOrderLine,
+    ShopOrderTrackingEvent,
     ShopReturn,
     StockMovementType,
+    TrackingEventKind,
 )
 from apps.shopie.services.catalog import CatalogService
 from apps.tenancy.models import Tenant
@@ -27,6 +33,56 @@ class ReturnService:
     catalog = CatalogService()
 
     @staticmethod
+    def return_days_for_business(*, business: Business) -> int:
+        settings, _ = ShopBusinessSettings.objects.get_or_create(
+            tenant=business.tenant,
+            business=business,
+        )
+        return max(0, int(settings.return_days or 0))
+
+    @staticmethod
+    def return_anchor_at(order: ShopOrder):
+        """Purchase/delivery time used to start the return window."""
+        delivered = (
+            ShopOrderTrackingEvent.objects.filter(
+                order_id=order.id,
+                kind=TrackingEventKind.STATUS,
+                status__in={"delivered", "completed"},
+            )
+            .order_by("occurred_at")
+            .values_list("occurred_at", flat=True)
+            .first()
+        )
+        if delivered:
+            return delivered
+        if order.status == OrderStatus.COMPLETED:
+            return order.updated_at
+        return order.created_at
+
+    @classmethod
+    def return_eligible_until(cls, *, business: Business, order: ShopOrder):
+        """Deadline datetime for returns, or None when unlimited."""
+        days = cls.return_days_for_business(business=business)
+        if days <= 0:
+            return None
+        return cls.return_anchor_at(order) + timedelta(days=days)
+
+    def _assert_within_return_window(self, *, business: Business, order: ShopOrder) -> None:
+        deadline = self.return_eligible_until(business=business, order=order)
+        if deadline is None:
+            return
+        days = self.return_days_for_business(business=business)
+        if timezone.now() > deadline:
+            raise ValidationError(
+                {
+                    "order": (
+                        f"Returns are only allowed within {days} day"
+                        f"{'' if days == 1 else 's'} of purchase or delivery."
+                    )
+                }
+            )
+
+    @staticmethod
     def returned_qty_by_line(order: ShopOrder) -> dict[str, Decimal]:
         """Sum quantities already returned (pending/approved/completed) per order line."""
         totals: dict[str, Decimal] = {}
@@ -34,6 +90,7 @@ class ReturnService:
             order=order,
             status__in={
                 ReturnStatus.PENDING,
+                ReturnStatus.AWAITING_CUSTOMER,
                 ReturnStatus.APPROVED,
                 ReturnStatus.COMPLETED,
             },
@@ -48,6 +105,18 @@ class ReturnService:
                     Decimal("0.01")
                 )
         return totals
+
+    @classmethod
+    def is_order_fully_returned(cls, order: ShopOrder) -> bool:
+        """True when every sold line qty is covered by active/completed returns."""
+        lines = list(ShopOrderLine.objects.filter(order=order))
+        if not lines:
+            return False
+        returned = cls.returned_qty_by_line(order)
+        return all(
+            returned.get(str(line.id), Decimal("0")) >= Decimal(str(line.quantity or "0"))
+            for line in lines
+        )
 
     @staticmethod
     def _line_refund_amount(*, order_line: ShopOrderLine, qty: Decimal) -> Decimal:
@@ -93,6 +162,21 @@ class ReturnService:
             "refund_instruction": f"Pay {amount} cash to the customer at the shop.",
         }
 
+    @staticmethod
+    def _normalize_return_method(value: str | None, *, complete: bool) -> str:
+        raw = str(value or "").strip().lower()
+        allowed = {
+            ReturnMethod.IN_STORE,
+            ReturnMethod.DROPOFF,
+            ReturnMethod.REVERSE_PICKUP,
+            ReturnMethod.INSTANT_PICKUP,
+        }
+        if raw in allowed:
+            return raw
+        # Staff immediate completes default to in-store; pending online defaults to dropoff
+        # only when an explicit method is required by the caller.
+        return ReturnMethod.IN_STORE if complete else ReturnMethod.DROPOFF
+
     @transaction.atomic
     def create_return(
         self,
@@ -105,7 +189,10 @@ class ReturnService:
         restock: bool = True,
         complete: bool = True,
         require_delivered: bool = False,
+        return_method: str | None = None,
     ) -> ShopReturn:
+        if order.status == OrderStatus.RETURNED:
+            raise ValidationError({"order": "All items on this order have already been returned."})
         allowed_statuses = {OrderStatus.COMPLETED, OrderStatus.READY, OrderStatus.CONFIRMED}
         if require_delivered:
             allowed_statuses = {OrderStatus.COMPLETED}
@@ -119,6 +206,7 @@ class ReturnService:
                     )
                 }
             )
+        self._assert_within_return_window(business=business, order=order)
         if not lines:
             raise ValidationError({"lines": "At least one return line is required."})
 
@@ -168,6 +256,25 @@ class ReturnService:
             already_returned[line_id] = already_returned.get(line_id, Decimal("0")) + qty
 
         plan = self.refund_plan(order=order, refund_total=refund_total.quantize(Decimal("0.01")))
+        method = self._normalize_return_method(return_method, complete=complete)
+        if not complete and method == ReturnMethod.IN_STORE:
+            raise ValidationError(
+                {
+                    "return_method": (
+                        "Online returns must use drop-off or request pickup until goods are received."
+                    )
+                }
+            )
+        # Instant pickup is ops-arranged only (customer never creates it).
+        if not complete and method == ReturnMethod.INSTANT_PICKUP:
+            raise ValidationError(
+                {
+                    "return_method": (
+                        "Choose drop-off or request pickup. The shop will arrange the rider."
+                    )
+                }
+            )
+        metadata: dict[str, Any] = dict(plan)
         shop_return = ShopReturn.objects.create(
             tenant=tenant,
             business=business,
@@ -175,19 +282,456 @@ class ReturnService:
             customer=order.customer,
             return_number=self._next_number(business=business),
             status=ReturnStatus.PENDING,
+            return_method=method,
             reason=reason or "",
             restock=restock,
             refund_total=refund_total.quantize(Decimal("0.01")),
             currency=order.currency,
             line_items=serialized,
-            metadata=plan,
+            metadata=metadata,
         )
         if complete:
+            # Goods already at the counter (POS / staff): receive + complete in one step.
+            shop_return.received_at = timezone.now()
+            shop_return.save(update_fields=["received_at", "updated_at", "version"])
             shop_return = self.complete_return(
                 tenant=tenant, business=business, shop_return=shop_return
             )
         else:
-            self._notify_online_return(shop_return, completed=False)
+            self._notify_online_return(shop_return, event="requested")
+        return shop_return
+
+    @staticmethod
+    def _normalize_charge_bearer(charge_bearer: str) -> str:
+        bearer = str(charge_bearer or "merchant").strip().lower()
+        return bearer if bearer in {"merchant", "customer"} else "merchant"
+
+    @staticmethod
+    def _pickup_fee_amounts(
+        *,
+        shop_return: ShopReturn,
+        quoted_fee: Decimal,
+        charge_bearer: str,
+    ) -> tuple[Decimal, Decimal, Decimal, str]:
+        bearer = ReturnService._normalize_charge_bearer(charge_bearer)
+        fee = max(Decimal("0.00"), quoted_fee.quantize(Decimal("0.01")))
+        metadata = shop_return.metadata if isinstance(shop_return.metadata, dict) else {}
+        original = Decimal(
+            str(metadata.get("original_refund_total") or shop_return.refund_total or "0")
+        ).quantize(Decimal("0.01"))
+        if bearer == "customer":
+            net = max(Decimal("0.00"), (original - fee).quantize(Decimal("0.01")))
+        else:
+            net = original
+        return fee, original, net, bearer
+
+    @staticmethod
+    def _apply_pickup_charge(
+        *,
+        shop_return: ShopReturn,
+        quoted_fee: Decimal,
+        charge_bearer: str,
+        charge_status: str = "accepted",
+        pending_mode: str = "",
+        pending_notes: str = "",
+        pending_tracking: str = "",
+    ) -> ShopReturn:
+        """Persist who pays the pickup fee; customer bear deducts from refund when accepted."""
+        fee, original, net, bearer = ReturnService._pickup_fee_amounts(
+            shop_return=shop_return,
+            quoted_fee=quoted_fee,
+            charge_bearer=charge_bearer,
+        )
+        metadata = dict(shop_return.metadata or {})
+        if "original_refund_total" not in metadata:
+            metadata["original_refund_total"] = str(original)
+        pickup_charge: dict[str, Any] = {
+            "fee": str(fee),
+            "quoted_fee": str(fee),
+            "charge_bearer": bearer,
+            "net_refund": str(net),
+            "original_refund": str(original),
+            "status": str(charge_status or "accepted"),
+        }
+        if pending_mode:
+            pickup_charge["pending_mode"] = str(pending_mode)
+        if pending_notes:
+            pickup_charge["pending_notes"] = str(pending_notes)
+        if pending_tracking:
+            pickup_charge["pending_tracking"] = str(pending_tracking)[:128]
+        # Proposed customer charges keep the full refund until the customer accepts.
+        if bearer == "customer" and pickup_charge["status"] == "proposed":
+            shop_return.refund_total = original
+            plan = ReturnService.refund_plan(order=shop_return.order, refund_total=original)
+        else:
+            shop_return.refund_total = net
+            plan = ReturnService.refund_plan(order=shop_return.order, refund_total=net)
+        shop_return.metadata = {
+            **metadata,
+            **plan,
+            "pickup_charge": pickup_charge,
+            "original_refund_total": str(original),
+        }
+        return shop_return
+
+    @transaction.atomic
+    def arrange_pickup(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+        notes: str = "",
+        tracking_number: str = "",
+        mode: str = "",
+        charge_bearer: str = "merchant",
+        fee: Decimal | str | float | None = None,
+    ) -> ShopReturn:
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        if shop_return.status in {
+            ReturnStatus.COMPLETED,
+            ReturnStatus.REJECTED,
+            ReturnStatus.AWAITING_CUSTOMER,
+        }:
+            raise ValidationError({"status": "This return can no longer be updated."})
+        if shop_return.return_method not in {
+            ReturnMethod.REVERSE_PICKUP,
+            ReturnMethod.INSTANT_PICKUP,
+            ReturnMethod.DROPOFF,
+        }:
+            raise ValidationError(
+                {"return_method": "Pickup can only be arranged for online returns awaiting goods."}
+            )
+        mode_norm = str(mode or "").strip().lower() or (
+            "instant"
+            if shop_return.return_method == ReturnMethod.INSTANT_PICKUP
+            else "manual"
+        )
+        bearer = self._normalize_charge_bearer(charge_bearer)
+        note = str(notes or "").strip()
+        tracking = str(tracking_number or "").strip()[:128]
+
+        if mode_norm == "instant":
+            from apps.shopie.services.delivery.service import DeliveryService
+
+            delivery = DeliveryService()
+            quote = delivery.quote_return_pickup(
+                tenant=tenant, business=business, order=shop_return.order
+            )
+            if not quote.get("available"):
+                raise ValidationError(
+                    {
+                        "delivery": (
+                            "Instant pickup is not available for this return right now."
+                        )
+                    }
+                )
+            quoted_fee = Decimal(str(quote.get("quoted_fee") or quote.get("merchant_fee") or "0"))
+            metadata = dict(shop_return.metadata or {})
+            metadata["delivery"] = quote
+            shop_return.metadata = metadata
+            shop_return.return_method = ReturnMethod.INSTANT_PICKUP
+
+            if bearer == "customer":
+                # Propose fee; dispatch only after the customer accepts.
+                shop_return = self._apply_pickup_charge(
+                    shop_return=shop_return,
+                    quoted_fee=quoted_fee,
+                    charge_bearer="customer",
+                    charge_status="proposed",
+                    pending_mode="instant",
+                    pending_notes=note,
+                    pending_tracking="",
+                )
+                shop_return.status = ReturnStatus.AWAITING_CUSTOMER
+                if note:
+                    shop_return.pickup_notes = note
+                shop_return.save(
+                    update_fields=[
+                        "metadata",
+                        "return_method",
+                        "refund_total",
+                        "status",
+                        "pickup_notes",
+                        "updated_at",
+                        "version",
+                    ]
+                )
+                self._notify_online_return(shop_return, event="fee_proposed")
+                return shop_return
+
+            shop_return = self._apply_pickup_charge(
+                shop_return=shop_return,
+                quoted_fee=quoted_fee,
+                charge_bearer="merchant",
+            )
+            shop_return.save(
+                update_fields=[
+                    "metadata",
+                    "return_method",
+                    "refund_total",
+                    "updated_at",
+                    "version",
+                ]
+            )
+            shop_return = delivery.dispatch_return_pickup(shop_return=shop_return)
+            if note:
+                shop_return.pickup_notes = note
+                shop_return.save(update_fields=["pickup_notes", "updated_at", "version"])
+            self._notify_online_return(shop_return, event="pickup_arranged")
+            return shop_return
+
+        # Manual / courier arrange
+        if shop_return.return_method == ReturnMethod.DROPOFF:
+            # Ops may still arrange a courier pickup for a drop-off request.
+            shop_return.return_method = ReturnMethod.REVERSE_PICKUP
+
+        if bearer == "customer":
+            try:
+                quoted_fee = (
+                    Decimal(str(fee))
+                    if fee is not None and str(fee).strip() != ""
+                    else Decimal("0.00")
+                )
+            except Exception as exc:
+                raise ValidationError({"fee": "Enter a valid pickup fee."}) from exc
+            if quoted_fee < 0:
+                raise ValidationError({"fee": "Pickup fee cannot be negative."})
+            shop_return = self._apply_pickup_charge(
+                shop_return=shop_return,
+                quoted_fee=quoted_fee,
+                charge_bearer="customer",
+                charge_status="proposed",
+                pending_mode="manual",
+                pending_notes=note,
+                pending_tracking=tracking,
+            )
+            shop_return.status = ReturnStatus.AWAITING_CUSTOMER
+            if note:
+                shop_return.pickup_notes = note
+            if tracking:
+                shop_return.pickup_tracking_number = tracking
+            shop_return.save(
+                update_fields=[
+                    "return_method",
+                    "metadata",
+                    "refund_total",
+                    "status",
+                    "pickup_notes",
+                    "pickup_tracking_number",
+                    "updated_at",
+                    "version",
+                ]
+            )
+            self._notify_online_return(shop_return, event="fee_proposed")
+            return shop_return
+
+        shop_return.pickup_arranged_at = timezone.now()
+        shop_return.pickup_notes = note
+        shop_return.pickup_tracking_number = tracking
+        shop_return.status = ReturnStatus.APPROVED
+        shop_return.save(
+            update_fields=[
+                "return_method",
+                "pickup_arranged_at",
+                "pickup_notes",
+                "pickup_tracking_number",
+                "status",
+                "updated_at",
+                "version",
+            ]
+        )
+        self._notify_online_return(shop_return, event="pickup_arranged")
+        return shop_return
+
+    @transaction.atomic
+    def accept_pickup_charge(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+    ) -> ShopReturn:
+        """Customer accepts a proposed pickup fee; then dispatch/approve pickup."""
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        if shop_return.status != ReturnStatus.AWAITING_CUSTOMER:
+            raise ValidationError({"status": "This return is not waiting for your decision."})
+        metadata = dict(shop_return.metadata or {})
+        charge = metadata.get("pickup_charge")
+        if not isinstance(charge, dict):
+            raise ValidationError({"pickup_charge": "No pickup fee was proposed."})
+        if str(charge.get("status") or "") != "proposed":
+            raise ValidationError({"pickup_charge": "This pickup fee was already decided."})
+        if str(charge.get("charge_bearer") or "") != "customer":
+            raise ValidationError({"pickup_charge": "No customer pickup fee to accept."})
+
+        fee = Decimal(str(charge.get("fee") or "0"))
+        pending_mode = str(charge.get("pending_mode") or "manual").strip().lower() or "manual"
+        pending_notes = str(charge.get("pending_notes") or shop_return.pickup_notes or "").strip()
+        pending_tracking = str(
+            charge.get("pending_tracking") or shop_return.pickup_tracking_number or ""
+        ).strip()[:128]
+
+        shop_return = self._apply_pickup_charge(
+            shop_return=shop_return,
+            quoted_fee=fee,
+            charge_bearer="customer",
+            charge_status="accepted",
+            pending_mode=pending_mode,
+            pending_notes=pending_notes,
+            pending_tracking=pending_tracking,
+        )
+
+        if pending_mode == "instant":
+            from apps.shopie.services.delivery.service import DeliveryService
+
+            shop_return.return_method = ReturnMethod.INSTANT_PICKUP
+            shop_return.save(
+                update_fields=[
+                    "metadata",
+                    "refund_total",
+                    "return_method",
+                    "updated_at",
+                    "version",
+                ]
+            )
+            shop_return = DeliveryService().dispatch_return_pickup(shop_return=shop_return)
+            if pending_notes:
+                shop_return.pickup_notes = pending_notes
+                shop_return.save(update_fields=["pickup_notes", "updated_at", "version"])
+            self._notify_online_return(shop_return, event="pickup_arranged")
+            return shop_return
+
+        if shop_return.return_method == ReturnMethod.DROPOFF:
+            shop_return.return_method = ReturnMethod.REVERSE_PICKUP
+        shop_return.pickup_arranged_at = timezone.now()
+        shop_return.pickup_notes = pending_notes
+        shop_return.pickup_tracking_number = pending_tracking
+        shop_return.status = ReturnStatus.APPROVED
+        shop_return.save(
+            update_fields=[
+                "metadata",
+                "refund_total",
+                "return_method",
+                "pickup_arranged_at",
+                "pickup_notes",
+                "pickup_tracking_number",
+                "status",
+                "updated_at",
+                "version",
+            ]
+        )
+        self._notify_online_return(shop_return, event="pickup_arranged")
+        return shop_return
+
+    @transaction.atomic
+    def decline_pickup_charge(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+    ) -> ShopReturn:
+        """Customer declines a proposed pickup fee and cancels the return."""
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        if shop_return.status != ReturnStatus.AWAITING_CUSTOMER:
+            raise ValidationError({"status": "This return is not waiting for your decision."})
+        metadata = dict(shop_return.metadata or {})
+        charge = dict(metadata.get("pickup_charge") or {})
+        if charge:
+            charge["status"] = "declined"
+            metadata["pickup_charge"] = charge
+            shop_return.metadata = metadata
+            shop_return.save(update_fields=["metadata", "updated_at", "version"])
+        return self.reject_return(
+            tenant=tenant,
+            business=business,
+            shop_return=shop_return,
+            reason="Customer declined the pickup fee",
+        )
+
+    def quote_pickup(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+    ) -> dict[str, Any]:
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        from apps.shopie.services.delivery.service import DeliveryService
+
+        quote = DeliveryService().quote_return_pickup(
+            tenant=tenant, business=business, order=shop_return.order
+        )
+        original = Decimal(str(shop_return.refund_total or "0")).quantize(Decimal("0.01"))
+        meta = shop_return.metadata if isinstance(shop_return.metadata, dict) else {}
+        if meta.get("original_refund_total"):
+            original = Decimal(str(meta["original_refund_total"])).quantize(Decimal("0.01"))
+        fee = Decimal("0.00")
+        if quote.get("available"):
+            fee = Decimal(str(quote.get("quoted_fee") or "0")).quantize(Decimal("0.01"))
+        return {
+            **quote,
+            "return_id": str(shop_return.id),
+            "refund_total": str(original),
+            "customer_net_refund_if_charged": str(
+                max(Decimal("0.00"), (original - fee).quantize(Decimal("0.01")))
+            ),
+            "currency": shop_return.currency or shop_return.order.currency or "INR",
+        }
+
+    @transaction.atomic
+    def receive_return(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+        restock: bool | None = None,
+    ) -> ShopReturn:
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        if shop_return.status == ReturnStatus.COMPLETED:
+            return shop_return
+        if shop_return.status == ReturnStatus.REJECTED:
+            raise ValidationError({"status": "Rejected returns cannot be received."})
+        if shop_return.status == ReturnStatus.AWAITING_CUSTOMER:
+            raise ValidationError(
+                {"status": "Wait for the customer to accept or cancel the pickup fee."}
+            )
+        if restock is not None:
+            shop_return.restock = bool(restock)
+            shop_return.save(update_fields=["restock", "updated_at", "version"])
+        shop_return.received_at = timezone.now()
+        shop_return.save(update_fields=["received_at", "updated_at", "version"])
+        return self.complete_return(tenant=tenant, business=business, shop_return=shop_return)
+
+    @transaction.atomic
+    def reject_return(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        shop_return: ShopReturn,
+        reason: str = "",
+    ) -> ShopReturn:
+        if shop_return.business_id != business.id or shop_return.tenant_id != tenant.id:
+            raise ValidationError({"return": "Return not found."})
+        if shop_return.status == ReturnStatus.COMPLETED:
+            raise ValidationError({"status": "Completed returns cannot be rejected."})
+        if shop_return.status == ReturnStatus.REJECTED:
+            return shop_return
+        note = str(reason or "").strip()
+        if note:
+            existing = (shop_return.reason or "").strip()
+            shop_return.reason = f"{existing}\nRejected: {note}".strip() if existing else f"Rejected: {note}"
+        shop_return.status = ReturnStatus.REJECTED
+        shop_return.save(update_fields=["status", "reason", "updated_at", "version"])
+        self._notify_online_return(shop_return, event="rejected")
         return shop_return
 
     @transaction.atomic
@@ -295,13 +839,53 @@ class ReturnService:
             order=order,
             shop_return=shop_return,
         )
-        self._notify_online_return(shop_return, completed=True)
+        from apps.shopie.services.profit_facts import ShopProfitFactService
+
+        ShopProfitFactService().record_return_facts(shop_return=shop_return)
+        self._mark_order_returned_if_fully_returned(order=order)
+        self._notify_online_return(shop_return, event="completed")
         return shop_return
 
-    def _notify_online_return(self, shop_return: ShopReturn, *, completed: bool) -> None:
+    def _mark_order_returned_if_fully_returned(self, *, order: ShopOrder) -> ShopOrder:
+        """Set order status to returned when every line quantity has been returned."""
+        order.refresh_from_db()
+        if order.status == OrderStatus.RETURNED:
+            return order
+        if not self.is_order_fully_returned(order):
+            return order
+        order.status = OrderStatus.RETURNED
+        metadata = dict(order.metadata or {})
+        returns_meta = (
+            dict(metadata.get("returns") or {})
+            if isinstance(metadata.get("returns"), dict)
+            else {}
+        )
+        returns_meta["fully_returned"] = True
+        returns_meta["fully_returned_at"] = timezone.now().isoformat()
+        metadata["returns"] = returns_meta
+        order.metadata = metadata
+        order.save(update_fields=["status", "metadata", "updated_at", "version"])
+        if order.fulfillment_mode in {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP}:
+            try:
+                from apps.shopie.services.tracking import TrackingHistoryService
+
+                TrackingHistoryService().record_order_status(
+                    order=order,
+                    status=OrderStatus.RETURNED,
+                    occurred_at=order.updated_at,
+                )
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    "Failed to record returned tracking for order %s", order.order_number
+                )
+        return order
+
+    def _notify_online_return(self, shop_return: ShopReturn, *, event: str) -> None:
         from apps.shopie.services.order_notify import notify_online_return
 
-        notify_online_return(shop_return=shop_return, completed=completed)
+        notify_online_return(shop_return=shop_return, event=event)
 
     def _post_books_credit_note_for_return(
         self,
@@ -682,12 +1266,7 @@ class ReturnService:
             if customer is None:
                 return
 
-            returned = self.returned_qty_by_line(order)
-            lines = list(ShopOrderLine.objects.filter(order=order))
-            fully_returned = bool(lines) and all(
-                returned.get(str(line.id), Decimal("0")) >= Decimal(str(line.quantity or "0"))
-                for line in lines
-            )
+            fully_returned = self.is_order_fully_returned(order)
 
             loyalty = LoyaltyService()
             revoked = loyalty.clawback_earn_for_spend(

@@ -63,6 +63,9 @@ const ShopMasterKindPage = lazy(() =>
 const ShopProductsAddManyPage = lazy(() =>
   import('./features/shop/ShopProductsAddManyPage').then((m) => ({ default: m.ShopProductsAddManyPage })),
 );
+const ShopLoyaltyReportPage = lazy(() =>
+  import('./features/shop/ShopLoyaltyReportPage').then((m) => ({ default: m.ShopLoyaltyReportPage })),
+);
 const ShopOrdersPage = lazy(() => import('./features/shop/ShopOrdersPage').then((m) => ({ default: m.ShopOrdersPage })));
 const ShopOrderDetailPage = lazy(() => import('./features/shop/ShopOrderDetailPage').then((m) => ({ default: m.ShopOrderDetailPage })));
 const ShopReturnsPage = lazy(() => import('./features/shop/ShopReturnsPage').then((m) => ({ default: m.ShopReturnsPage })));
@@ -88,6 +91,9 @@ const ShopBooksDashboardPage = lazy(() =>
 );
 const ShopSaleListPage = lazy(() => import('./features/shop/ShopSaleListPage').then((m) => ({ default: m.ShopSaleListPage })));
 const ShopSaleFormPage = lazy(() => import('./features/shop/ShopSaleFormPage').then((m) => ({ default: m.ShopSaleFormPage })));
+const ShopBooksVoucherDetailPage = lazy(() =>
+  import('./features/shop/ShopBooksVoucherDetailPage').then((m) => ({ default: m.ShopBooksVoucherDetailPage })),
+);
 const ShopPurchaseListPage = lazy(() =>
   import('./features/shop/ShopPurchaseListPage').then((m) => ({ default: m.ShopPurchaseListPage })),
 );
@@ -108,6 +114,7 @@ const ShopDeliveryChallansPage = lazy(() =>
 );
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
+const BIProfitPage = lazy(() => import('./features/bi/BIProfitPage').then((m) => ({ default: m.BIProfitPage })));
 const BIGrowthPage = lazy(() => import('./features/bi/BIGrowthPage').then((m) => ({ default: m.BIGrowthPage })));
 const BIRevenuePage = lazy(() => import('./features/bi/BIRevenuePage').then((m) => ({ default: m.BIRevenuePage })));
 const BIReportsPage = lazy(() => import('./features/bi/BIReportsPage').then((m) => ({ default: m.BIReportsPage })));
@@ -302,6 +309,8 @@ function App() {
                     <Route path="/shop/pos" element={<ShopPosPage />} />
                     <Route path="/shop/products" element={<ShopProductsPage />} />
                     <Route path="/shop/products/add-many" element={<ShopProductsAddManyPage />} />
+                    <Route path="/shop/products/profit" element={<Navigate to="/bi/profit" replace />} />
+                    <Route path="/shop/loyalty" element={<ShopLoyaltyReportPage />} />
                     <Route path="/shop/master" element={<ShopMasterFilesPage />} />
                     <Route path="/shop/master/:kind" element={<ShopMasterKindPage />} />
                     <Route path="/shop/orders" element={<ShopOrdersPage />} />
@@ -309,10 +318,13 @@ function App() {
                     <Route path="/shop/billing" element={<ShopBillingPage />} />
                     <Route path="/shop/returns" element={<ShopReturnsPage />} />
                     <Route path="/shop/books" element={<ShopBooksDashboardPage />} />
-                    <Route path="/shop/books/sale" element={<ShopSaleListPage />} />
+                    <Route path="/shop/books/vouchers/:voucherId" element={<ShopBooksVoucherDetailPage />} />
                     <Route path="/shop/books/sale/new" element={<ShopSaleFormPage />} />
-                    <Route path="/shop/books/purchase" element={<ShopPurchaseListPage />} />
+                    <Route path="/shop/books/sale/:voucherId" element={<ShopBooksVoucherDetailPage />} />
+                    <Route path="/shop/books/sale" element={<ShopSaleListPage />} />
                     <Route path="/shop/books/purchase/new" element={<ShopPurchaseFormPage />} />
+                    <Route path="/shop/books/purchase/:voucherId" element={<ShopBooksVoucherDetailPage />} />
+                    <Route path="/shop/books/purchase" element={<ShopPurchaseListPage />} />
                     <Route path="/shop/books/expense" element={<ShopExpensePage />} />
                     <Route path="/shop/books/cash" element={<ShopCashBankPage />} />
                     <Route path="/shop/books/parties" element={<ShopPartiesPage />} />
@@ -333,6 +345,7 @@ function App() {
                   <Route path="/bi" element={<BILayout />}>
                     <Route index element={<Navigate to="/bi/overview" replace />} />
                     <Route path="overview" element={<BIOverviewPage />} />
+                    <Route path="profit" element={<BIProfitPage />} />
                     <Route path="growth" element={<BIGrowthPage />} />
                     <Route path="revenue" element={<BIRevenuePage />} />
                     <Route path="forecast" element={<BIForecastPage />} />

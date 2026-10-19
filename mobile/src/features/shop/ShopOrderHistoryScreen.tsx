@@ -42,6 +42,7 @@ import {
   type ShopOrderStatusFilter,
 } from './shopHelpers';
 import { DeliveryProgressStepper } from './DeliveryProgressStepper';
+import { lineMerchandiseGross } from './shopOrderBill';
 import type { ShopOrder, ShopOrderLine } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -279,7 +280,8 @@ export function ShopOrderHistoryScreen() {
                 {line.product_name}
               </Text>
               <Text style={styles.lineMeta}>
-                Qty {formatShopQty(line.quantity)} · {formatShopMoney(line.line_total, item.currency)}
+                Qty {formatShopQty(line.quantity)} ·{' '}
+                {formatShopMoney(lineMerchandiseGross(line), item.currency)}
               </Text>
             </View>
           </View>

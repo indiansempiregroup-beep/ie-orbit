@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,24 +11,45 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DateField } from '../../components/DateField';
+import { FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { SearchBar } from '../../components/SearchBar';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { DesktopPage } from '../../components/DesktopPage';
 import { GroupedList } from '../../components/ui/GroupedList';
-import { Button } from '../../components/ui/Button';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
-import { getApiErrorMessage } from '../../utils/format';
 import { openShopDocumentHtmlView, type ShopDocTarget } from '../../utils/shopDocumentShare';
+import { BooksInvoiceDrawer } from './BooksInvoiceDrawer';
 import { DocumentActionsSheet } from './DocumentActionsSheet';
 import { formatVoucherDateTime } from './shopBooksHelpers';
-import type { ShopBooksReportSlug, ShopBooksVoucher } from '@ie-orbit/sdk';
+import { SaleInsightChips } from './SaleInsightChips';
+import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
+
+type SaleSource = 'pos' | 'online' | 'booking';
+
+const SALE_SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'all', label: 'All sources' },
+  { value: 'pos', label: 'POS' },
+  { value: 'online', label: 'Online Orders' },
+  { value: 'booking', label: 'Bookings' },
+];
+
+const SALE_SOURCE_LABELS: Record<SaleSource, string> = {
+  pos: 'POS',
+  online: 'Online',
+  booking: 'Booking',
+};
+
+function parseSaleSource(value: unknown): SaleSource | null {
+  const key = String(value ?? '').trim().toLowerCase();
+  if (key === 'pos' || key === 'online' || key === 'booking') return key;
+  return null;
+}
 
 type ReportOption = {
   value: ShopBooksReportSlug;
@@ -115,6 +135,11 @@ type ReportRecord = {
   igst?: number;
   gstin?: string;
   placeOfSupply?: string;
+  /** POS / online / booking when the voucher came from a shop or booking sale. */
+  saleSource: SaleSource | null;
+  pointsEarned: number;
+  pointsRedeemed: number;
+  grossProfit: string | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +178,11 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
     igst: row.igst == null ? undefined : num(row.igst),
     gstin: row.party_gstin == null ? undefined : String(row.party_gstin),
     placeOfSupply: row.place_of_supply == null ? undefined : String(row.place_of_supply),
+    saleSource: parseSaleSource(row.sale_source),
+    pointsEarned: Math.max(0, Math.floor(num(row.points_earned))),
+    pointsRedeemed: Math.max(0, Math.floor(num(row.points_redeemed))),
+    grossProfit:
+      row.gross_profit == null || row.gross_profit === '' ? null : String(row.gross_profit),
   };
 }
 
@@ -185,6 +215,11 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     igst: num(row.igst),
     gstin: String(row.customer_gstin ?? ''),
     placeOfSupply: String(row.place_of_supply ?? ''),
+    saleSource: parseSaleSource(row.sale_source),
+    pointsEarned: Math.max(0, Math.floor(num(row.points_earned))),
+    pointsRedeemed: Math.max(0, Math.floor(num(row.points_redeemed))),
+    grossProfit:
+      row.gross_profit == null || row.gross_profit === '' ? null : String(row.gross_profit),
   };
 }
 
@@ -213,6 +248,7 @@ function recordCsvRow(record: ReportRecord) {
     date: record.date,
     number: record.number,
     type: record.typeLabel,
+    source: record.saleSource ? SALE_SOURCE_LABELS[record.saleSource] : '',
     party: record.party,
     status: record.status,
     total: record.total,
@@ -389,11 +425,10 @@ export function ShopBooksReportsScreen() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [sort, setSort] = useState<SortKey>('date_desc');
   const [visibleCount, setVisibleCount] = useState(20);
-  const [detailRecord, setDetailRecord] = useState<ReportRecord | null>(null);
-  const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [booksInvoiceId, setBooksInvoiceId] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const activeOption = REPORT_OPTIONS.find((option) => option.value === slug) ?? REPORT_OPTIONS[0];
@@ -472,41 +507,16 @@ export function ShopBooksReportsScreen() {
     if (client && businessId) void runReport();
   }, [client, businessId, slug]); // Date changes are applied explicitly with "View report".
 
-  const openRecord = useCallback(
-    async (record: ReportRecord) => {
-      if (!record.id || !client) return;
-      setDetailRecord(record);
-      setDetailVoucher(null);
-      setDetailLoading(true);
-      try {
-        const response = await client.shop.getVoucher(record.id);
-        setDetailVoucher(response.data);
-      } catch (err) {
-        toast.push(getApiErrorMessage(err, 'Unable to open this record'), 'error');
-        setDetailRecord(null);
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [client, toast],
-  );
-
-  const closeRecord = useCallback(() => {
-    setDetailRecord(null);
-    setDetailVoucher(null);
-    setDetailLoading(false);
-  }, []);
-
   const openDocActions = useCallback(
-    (record: ReportRecord, voucher?: ShopBooksVoucher | null) => {
+    (record: ReportRecord) => {
       if (!businessId || !record.id || !record.docKind) return;
       setDocActions({
         kind: record.docKind,
         id: record.id,
         number: record.number,
         businessId,
-        phone: voucher?.customer_phone || '',
-        email: voucher?.customer_email || '',
+        phone: '',
+        email: '',
       });
     },
     [businessId],
@@ -562,12 +572,18 @@ export function ShopBooksReportsScreen() {
     [records],
   );
 
+  const showSourceFilter = useMemo(
+    () => records.some((record) => record.saleSource != null),
+    [records],
+  );
+
   const filteredRecords = useMemo(() => {
     const term = search.trim().toLowerCase();
     const filtered = records.filter((record) => {
       if (typeFilter !== 'all' && record.type !== typeFilter) return false;
       if (statusFilter !== 'all' && record.status !== statusFilter) return false;
       if (paymentFilter !== 'all' && paymentState(record) !== paymentFilter) return false;
+      if (sourceFilter !== 'all' && record.saleSource !== sourceFilter) return false;
       if (!term) return true;
       return (
         record.number.toLowerCase().includes(term) ||
@@ -581,27 +597,47 @@ export function ShopBooksReportsScreen() {
       const compared = a.date.localeCompare(b.date);
       return sort === 'date_asc' ? compared : -compared;
     });
-  }, [records, search, typeFilter, statusFilter, paymentFilter, sort]);
+  }, [records, search, typeFilter, statusFilter, paymentFilter, sourceFilter, sort]);
 
-  const filteredTotal = useMemo(
+  const filteredTotals = useMemo(
     () =>
       filteredRecords.reduce(
-        (sum, record) => {
-          if (record.status === 'void') return sum;
+        (acc, record) => {
+          if (record.status === 'void') return acc;
           const adjustment =
             (slug === 'sales' && record.type === 'credit_note') ||
             (slug === 'purchase' && record.type === 'debit_note');
-          return sum + record.total * (adjustment ? -1 : 1);
+          const sign = adjustment ? -1 : 1;
+          const paid = record.paid == null ? 0 : record.paid;
+          return {
+            count: acc.count + 1,
+            taxable: acc.taxable + (record.taxable ?? 0) * sign,
+            cgst: acc.cgst + (record.cgst ?? 0) * sign,
+            sgst: acc.sgst + (record.sgst ?? 0) * sign,
+            igst: acc.igst + (record.igst ?? 0) * sign,
+            taxTotal: acc.taxTotal + ((record.cgst ?? 0) + (record.sgst ?? 0) + (record.igst ?? 0)) * sign,
+            total: acc.total + record.total * sign,
+            settled: acc.settled + Math.min(paid, record.total) * sign,
+          };
         },
-        0,
+        { count: 0, taxable: 0, cgst: 0, sgst: 0, igst: 0, taxTotal: 0, total: 0, settled: 0 },
       ),
     [filteredRecords, slug],
   );
+
+  const filteredTotal = filteredTotals.total;
+
+  /** Sales/Purchase/Daybook/GSTR-1 headlines follow the same filters as the record list. */
+  const headlineFromFilters =
+    slug === 'daybook' ||
+    slug === 'gstr1' ||
+    ((slug === 'sales' || slug === 'purchase') && ledger != null);
 
   const activeFilterCount =
     (typeFilter !== 'all' ? 1 : 0) +
     (statusFilter !== 'all' ? 1 : 0) +
     (paymentFilter !== 'all' ? 1 : 0) +
+    (sourceFilter !== 'all' ? 1 : 0) +
     (search.trim() ? 1 : 0);
 
   function resetFilters() {
@@ -609,6 +645,7 @@ export function ShopBooksReportsScreen() {
     setTypeFilter('all');
     setStatusFilter('all');
     setPaymentFilter('all');
+    setSourceFilter('all');
     setSort('date_desc');
     setVisibleCount(20);
   }
@@ -705,6 +742,13 @@ export function ShopBooksReportsScreen() {
     if (data == null) return null;
 
     if ((slug === 'sales' || slug === 'purchase') && isRecord(data)) {
+      const total = headlineFromFilters ? filteredTotals.total : num(data.total);
+      const count = headlineFromFilters ? filteredTotals.count : Number(data.count ?? 0);
+      const taxable = headlineFromFilters ? filteredTotals.taxable : num(data.taxable_value);
+      const taxTotal = headlineFromFilters ? filteredTotals.taxTotal : num(data.tax_total);
+      const cgst = headlineFromFilters ? filteredTotals.cgst : num(data.cgst);
+      const sgst = headlineFromFilters ? filteredTotals.sgst : num(data.sgst);
+      const igst = headlineFromFilters ? filteredTotals.igst : num(data.igst);
       return (
         <>
           <View style={styles.heroMetric}>
@@ -713,44 +757,43 @@ export function ShopBooksReportsScreen() {
             </View>
             <View style={styles.heroCopy}>
               <Text style={styles.heroLabel}>{slug === 'sales' ? 'Total sales' : 'Total purchases'}</Text>
-              <Text style={styles.heroValue} adjustsFontSizeToFit numberOfLines={1}>{money(data.total)}</Text>
-              <Text style={styles.heroMeta}>{String(data.count ?? 0)} posted voucher{Number(data.count ?? 0) === 1 ? '' : 's'}</Text>
+              <Text style={styles.heroValue} adjustsFontSizeToFit numberOfLines={1}>{money(total)}</Text>
+              <Text style={styles.heroMeta}>{String(count)} posted voucher{count === 1 ? '' : 's'}</Text>
             </View>
           </View>
           <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-            <MetricTile label="Taxable value" value={money(data.taxable_value)} />
-            <MetricTile label="Total GST" value={money(data.tax_total)} />
-            <MetricTile label="CGST" value={money(data.cgst)} />
-            <MetricTile label="SGST" value={money(data.sgst)} />
-            <MetricTile label="IGST" value={money(data.igst)} />
+            <MetricTile label="Taxable value" value={money(taxable)} />
+            <MetricTile label="Total GST" value={money(taxTotal)} />
+            <MetricTile label="CGST" value={money(cgst)} />
+            <MetricTile label="SGST" value={money(sgst)} />
+            <MetricTile label="IGST" value={money(igst)} />
           </View>
         </>
       );
     }
 
     if (slug === 'daybook' && Array.isArray(data)) {
-      const total = rows.reduce((sum, row) => sum + Number(row.total ?? 0), 0);
-      const received = rows.reduce((sum, row) => sum + Number(row.amount_paid ?? 0), 0);
       return (
         <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-          <MetricTile label="Entries" value={String(rows.length)} />
-          <MetricTile label="Gross value" value={money(total)} />
-          <MetricTile label="Settled amount" value={money(received)} />
-          <MetricTile label="Outstanding" value={money(Math.max(total - received, 0))} />
+          <MetricTile label="Entries" value={String(filteredRecords.length)} />
+          <MetricTile label="Gross value" value={money(filteredTotals.total)} />
+          <MetricTile label="Settled amount" value={money(filteredTotals.settled)} />
+          <MetricTile
+            label="Outstanding"
+            value={money(Math.max(filteredTotals.total - filteredTotals.settled, 0))}
+          />
         </View>
       );
     }
 
     if (slug === 'gstr1' && Array.isArray(data)) {
-      const taxable = rows.reduce((sum, row) => sum + Number(row.taxable_value ?? 0), 0);
-      const total = rows.reduce((sum, row) => sum + Number(row.total ?? 0), 0);
-      const b2b = rows.filter((row) => row.invoice_type === 'B2B').length;
+      const b2b = filteredRecords.filter((record) => record.type === 'B2B').length;
       return (
         <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-          <MetricTile label="Invoices" value={String(rows.length)} />
+          <MetricTile label="Invoices" value={String(filteredRecords.length)} />
           <MetricTile label="B2B invoices" value={String(b2b)} />
-          <MetricTile label="Taxable value" value={money(taxable)} />
-          <MetricTile label="Invoice value" value={money(total)} />
+          <MetricTile label="Taxable value" value={money(filteredTotals.taxable)} />
+          <MetricTile label="Invoice value" value={money(filteredTotals.total)} />
         </View>
       );
     }
@@ -826,72 +869,12 @@ export function ShopBooksReportsScreen() {
             <Text style={styles.recordsMeta}>
               {filteredRecords.length} of {records.length}
               {slug === 'gstr3b' || slug === 'pnl' ? '' : ` · ${money(filteredTotal)}`}
+              {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}` : ''}
             </Text>
           </View>
-          <Pressable
-            style={[styles.filterToggle, filtersOpen && styles.filterToggleActive]}
-            onPress={() => setFiltersOpen((open) => !open)}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle record filters"
-          >
-            <Feather name="sliders" size={15} color={filtersOpen ? colors.primaryForeground : colors.primary} />
-            <Text style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
-              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
-            </Text>
-          </Pressable>
         </View>
 
-        {filtersOpen ? (
-          <View style={styles.filterPanel}>
-            <SearchBar value={search} onChangeText={setSearch} placeholder="Search number, party or GSTIN" />
-
-            {typeOptions.length > 1 ? (
-              <FilterRow
-                label="Type"
-                value={typeFilter}
-                options={[{ value: 'all', label: 'All types' }, ...typeOptions]}
-                onChange={setTypeFilter}
-              />
-            ) : null}
-
-            {statusOptions.length > 1 ? (
-              <FilterRow
-                label="Status"
-                value={statusFilter}
-                options={[{ value: 'all', label: 'All statuses' }, ...statusOptions]}
-                onChange={setStatusFilter}
-              />
-            ) : null}
-
-            {showPaymentFilter ? (
-              <FilterRow
-                label="Payment"
-                value={paymentFilter}
-                options={[
-                  { value: 'all', label: 'Any' },
-                  { value: 'paid', label: 'Paid' },
-                  { value: 'partial', label: 'Partly paid' },
-                  { value: 'unpaid', label: 'Unpaid' },
-                ]}
-                onChange={setPaymentFilter}
-              />
-            ) : null}
-
-            <FilterRow
-              label="Sort by"
-              value={sort}
-              options={SORT_OPTIONS}
-              onChange={(value) => setSort(value as SortKey)}
-            />
-
-            {activeFilterCount ? (
-              <Pressable style={styles.clearFilters} onPress={resetFilters}>
-                <Feather name="x-circle" size={14} color={colors.destructive} />
-                <Text style={styles.clearFiltersText}>Clear filters</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search number, party or GSTIN" />
 
         {hasVoid ? (
           <Text style={styles.recordsNote}>Void entries are listed here but excluded from report totals.</Text>
@@ -903,7 +886,7 @@ export function ShopBooksReportsScreen() {
               key={record.key}
               record={record}
               money={money}
-              onPress={record.id ? () => void openRecord(record) : undefined}
+              onPress={record.id ? () => setBooksInvoiceId(record.id) : undefined}
               onView={
                 record.id && record.docKind && businessId
                   ? () => viewDocument(record)
@@ -1035,6 +1018,21 @@ export function ShopBooksReportsScreen() {
             <View style={styles.resultActions}>
               {loading ? <Text style={styles.updating}>Updating…</Text> : null}
               <Pressable
+                style={[styles.filterToggle, filtersOpen && styles.filterToggleActive]}
+                onPress={() => setFiltersOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open record filters"
+              >
+                <Feather
+                  name="sliders"
+                  size={15}
+                  color={filtersOpen ? colors.primaryForeground : colors.primary}
+                />
+                <Text style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
+                  Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+                </Text>
+              </Pressable>
+              <Pressable
                 style={styles.shareBtn}
                 onPress={() => void shareCsv()}
                 accessibilityRole="button"
@@ -1051,16 +1049,66 @@ export function ShopBooksReportsScreen() {
         {renderRecords()}
       </RefreshableScrollView>
 
-      <ReportRecordDetailModal
-        visible={Boolean(detailRecord)}
-        loading={detailLoading}
-        record={detailRecord}
-        voucher={detailVoucher}
-        money={money}
-        onClose={closeRecord}
-        onShare={() => {
-          if (detailRecord) openDocActions(detailRecord, detailVoucher);
-        }}
+      <FilterSheet
+        visible={filtersOpen}
+        title="Record filters"
+        onClose={() => setFiltersOpen(false)}
+        onApply={() => setFiltersOpen(false)}
+        onReset={resetFilters}
+      >
+        {showSourceFilter ? (
+          <FilterChoiceGroup
+            label="Source"
+            value={sourceFilter}
+            options={SALE_SOURCE_OPTIONS}
+            onChange={setSourceFilter}
+          />
+        ) : null}
+
+        {typeOptions.length > 1 ? (
+          <FilterChoiceGroup
+            label="Type"
+            value={typeFilter}
+            options={[{ value: 'all', label: 'All types' }, ...typeOptions]}
+            onChange={setTypeFilter}
+          />
+        ) : null}
+
+        {statusOptions.length > 1 ? (
+          <FilterChoiceGroup
+            label="Status"
+            value={statusFilter}
+            options={[{ value: 'all', label: 'All statuses' }, ...statusOptions]}
+            onChange={setStatusFilter}
+          />
+        ) : null}
+
+        {showPaymentFilter ? (
+          <FilterChoiceGroup
+            label="Payment"
+            value={paymentFilter}
+            options={[
+              { value: 'all', label: 'Any' },
+              { value: 'paid', label: 'Paid' },
+              { value: 'partial', label: 'Partly paid' },
+              { value: 'unpaid', label: 'Unpaid' },
+            ]}
+            onChange={setPaymentFilter}
+          />
+        ) : null}
+
+        <FilterChoiceGroup
+          label="Sort by"
+          value={sort}
+          options={SORT_OPTIONS}
+          onChange={(value) => setSort(value as SortKey)}
+        />
+      </FilterSheet>
+
+      <BooksInvoiceDrawer
+        voucherId={booksInvoiceId}
+        visible={Boolean(booksInvoiceId)}
+        onClose={() => setBooksInvoiceId(null)}
       />
 
       <DocumentActionsSheet
@@ -1074,43 +1122,6 @@ export function ShopBooksReportsScreen() {
         }
       />
     </DesktopPage>
-  );
-}
-
-function FilterRow({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: Array<{ value: string; label: string }>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <View style={styles.filterRow}>
-      <Text style={styles.filterRowLabel}>{label}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.hScroll}
-        contentContainerStyle={styles.chipRow}
-      >
-        {options.map((option) => {
-          const active = option.value === value;
-          return (
-            <Pressable
-              key={option.value}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onChange(option.value)}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
   );
 }
 
@@ -1138,6 +1149,27 @@ function RecordCard({
         <View style={styles.entryIdentity}>
           <View style={styles.invoiceTitleRow}>
             <Text style={[styles.entryNumber, isVoid && styles.strikeText]}>{record.number}</Text>
+            {record.saleSource ? (
+              <View
+                style={[
+                  styles.sourceBadge,
+                  record.saleSource === 'pos' && styles.sourceBadgePos,
+                  record.saleSource === 'online' && styles.sourceBadgeOnline,
+                  record.saleSource === 'booking' && styles.sourceBadgeBooking,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sourceBadgeText,
+                    record.saleSource === 'pos' && styles.sourceBadgeTextPos,
+                    record.saleSource === 'online' && styles.sourceBadgeTextOnline,
+                    record.saleSource === 'booking' && styles.sourceBadgeTextBooking,
+                  ]}
+                >
+                  {SALE_SOURCE_LABELS[record.saleSource]}
+                </Text>
+              </View>
+            ) : null}
             <View style={[styles.typeBadge, record.type === 'B2B' && styles.b2bBadge]}>
               <Text style={[styles.typeBadgeText, record.type === 'B2B' && styles.b2bBadgeText]}>
                 {record.typeLabel}
@@ -1171,6 +1203,24 @@ function RecordCard({
         <Text style={[styles.statusText, isVoid && styles.dangerText]}>{labelFor(record.status || 'posted')}</Text>
         {onPress ? <Feather name="chevron-right" size={16} color={colors.mutedForeground} /> : null}
       </View>
+
+      {record.type === 'sale' ||
+      record.type === 'credit_note' ||
+      record.type === 'B2B' ||
+      record.type === 'B2C' ||
+      record.pointsEarned > 0 ||
+      record.pointsRedeemed > 0 ||
+      record.grossProfit != null ? (
+        <SaleInsightChips
+          source={{
+            points_earned: record.pointsEarned,
+            points_redeemed: record.pointsRedeemed,
+            gross_profit: record.grossProfit,
+            hideProfit: record.saleSource === 'booking',
+          }}
+          hideWhenEmpty
+        />
+      ) : null}
 
       {hasGst ? (
         <>
@@ -1233,121 +1283,6 @@ function RecordCard({
         </View>
       ) : null}
     </View>
-  );
-}
-
-function ReportRecordDetailModal({
-  visible,
-  loading,
-  record,
-  voucher,
-  money,
-  onClose,
-  onShare,
-}: {
-  visible: boolean;
-  loading: boolean;
-  record: ReportRecord | null;
-  voucher: ShopBooksVoucher | null;
-  money: (value: unknown) => string;
-  onClose: () => void;
-  onShare: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  if (!record) return null;
-
-  const lines = Array.isArray(voucher?.line_items) ? voucher.line_items : [];
-  const party =
-    voucher?.customer_name ||
-    voucher?.supplier_name ||
-    voucher?.cash_account_name ||
-    record.party;
-  const canShare = Boolean(record.docKind && record.id);
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={detailStyles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
-        <View style={[detailStyles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}>
-          <View style={detailStyles.handle} />
-          <View style={detailStyles.header}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={detailStyles.kicker}>{record.typeLabel}</Text>
-              <Text style={detailStyles.title}>{record.number}</Text>
-              <Text style={detailStyles.meta}>
-                {[formatDate(record.date, record.createdAt || voucher?.created_at), party]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
-            </View>
-            <Pressable style={detailStyles.closeBtn} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
-              <Feather name="x" size={18} color={colors.foreground} />
-            </Pressable>
-          </View>
-
-          {loading ? (
-            <View style={detailStyles.loadingBox}>
-              <ActivityIndicator color={colors.primary} />
-              <Text style={detailStyles.meta}>Loading record…</Text>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={detailStyles.body} keyboardShouldPersistTaps="handled">
-              <View style={detailStyles.amountRow}>
-                <Text style={detailStyles.amountLabel}>Total</Text>
-                <Text style={detailStyles.amountValue}>{money(voucher?.total ?? record.total)}</Text>
-              </View>
-              {voucher ? (
-                <>
-                  <View style={detailStyles.amountRow}>
-                    <Text style={detailStyles.amountLabel}>Tax</Text>
-                    <Text style={detailStyles.amountValue}>{money(voucher.tax_total)}</Text>
-                  </View>
-                  <View style={detailStyles.amountRow}>
-                    <Text style={detailStyles.amountLabel}>Paid</Text>
-                    <Text style={detailStyles.amountValue}>{money(voucher.amount_paid)}</Text>
-                  </View>
-                  <Text style={detailStyles.section}>Line items</Text>
-                  {lines.length ? (
-                    lines.map((raw, index) => {
-                      const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                      const name = String(line.name || line.product_name || `Item ${index + 1}`);
-                      const qty = Number(line.qty ?? line.quantity ?? 0);
-                      const total = Number(line.total ?? 0);
-                      return (
-                        <View key={`${name}-${index}`} style={detailStyles.lineRow}>
-                          <Text style={detailStyles.lineName} numberOfLines={2}>
-                            {name}
-                            {qty ? ` × ${qty}` : ''}
-                          </Text>
-                          <Text style={detailStyles.lineTotal}>{money(total)}</Text>
-                        </View>
-                      );
-                    })
-                  ) : (
-                    <Text style={detailStyles.meta}>No line items on this voucher.</Text>
-                  )}
-                  {voucher.notes ? (
-                    <>
-                      <Text style={detailStyles.section}>Notes</Text>
-                      <Text style={detailStyles.meta}>{voucher.notes}</Text>
-                    </>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={detailStyles.meta}>Record details are unavailable.</Text>
-              )}
-            </ScrollView>
-          )}
-
-          <View style={detailStyles.footer}>
-            {canShare ? (
-              <Button label="View / Print / Share" fullWidth onPress={onShare} />
-            ) : null}
-            <Button label="Close" variant="ghost" fullWidth onPress={onClose} />
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -1516,31 +1451,6 @@ const styles = StyleSheet.create({
   filterToggleActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   filterToggleText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
   filterToggleTextActive: { color: colors.primaryForeground },
-  filterPanel: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  filterRow: { gap: spacing.sm },
-  filterRowLabel: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.mutedForeground },
-  chipRow: { gap: spacing.sm, paddingRight: spacing.sm, alignItems: 'center' },
-  chip: {
-    height: 32,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.background,
-  },
-  chipActive: { backgroundColor: colors.tint, borderColor: colors.primary },
-  chipText: { ...typography.caption, color: colors.mutedForeground },
-  chipTextActive: { color: colors.primary, fontFamily: fonts.bodySemi },
-  clearFilters: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
-  clearFiltersText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.destructive },
   recordsNote: { ...typography.caption, color: colors.mutedForeground },
   moreBtn: {
     flexDirection: 'row',
@@ -1574,6 +1484,14 @@ const styles = StyleSheet.create({
   typeBadgeText: { ...typography.tiny, color: colors.primary },
   b2bBadge: { backgroundColor: colors.successSoft },
   b2bBadgeText: { color: colors.success },
+  sourceBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.sm, backgroundColor: '#E2E8F0' },
+  sourceBadgeText: { ...typography.tiny, fontFamily: fonts.bodySemi, color: '#475569' },
+  sourceBadgePos: { backgroundColor: '#E0F2FE' },
+  sourceBadgeTextPos: { color: '#0369A1' },
+  sourceBadgeOnline: { backgroundColor: '#EDE9FE' },
+  sourceBadgeTextOnline: { color: '#6D28D9' },
+  sourceBadgeBooking: { backgroundColor: '#FEF3C7' },
+  sourceBadgeTextBooking: { color: '#B45309' },
   entryParty: { ...typography.caption, color: colors.foreground, flex: 1 },
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
   statusDotVoid: { backgroundColor: colors.destructive },
@@ -1592,7 +1510,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   entryActionText: { ...typography.caption, fontFamily: fonts.bodySemi, color: colors.primary },
-  invoiceTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  invoiceTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   customerName: { ...typography.body, fontFamily: fonts.bodyMedium, color: colors.foreground },
   gstMetaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
   gstMeta: { ...typography.caption, color: colors.mutedForeground },
@@ -1675,51 +1593,4 @@ const styles = StyleSheet.create({
   stateText: { ...typography.body, color: colors.mutedForeground, textAlign: 'center', lineHeight: 20 },
   retryBtn: { marginTop: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.tint },
   retryText: { ...typography.label, color: colors.primary },
-});
-
-const detailStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    maxHeight: '88%',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.md,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.xs,
-  },
-  header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  kicker: { ...typography.caption, color: colors.mutedForeground, textTransform: 'uppercase' },
-  title: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.foreground },
-  meta: { ...typography.caption, color: colors.mutedForeground, lineHeight: 18 },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background,
-  },
-  loadingBox: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xxl },
-  body: { gap: spacing.sm, paddingBottom: spacing.md },
-  amountRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  amountLabel: { ...typography.body, color: colors.mutedForeground },
-  amountValue: { ...typography.label, color: colors.foreground },
-  section: { ...typography.label, color: colors.foreground, marginTop: spacing.sm },
-  lineRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  lineName: { ...typography.body, color: colors.foreground, flex: 1 },
-  lineTotal: { ...typography.label, color: colors.foreground },
-  footer: { gap: spacing.sm },
 });

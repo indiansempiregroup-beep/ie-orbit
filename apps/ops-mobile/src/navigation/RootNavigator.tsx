@@ -50,6 +50,7 @@ import { WhatsAppNotificationTemplatesScreen } from '../features/settings/WhatsA
 import { WhatsAppNotificationTemplateDetailScreen } from '../features/settings/WhatsAppNotificationTemplateDetailScreen';
 import { WhatsAppNotificationMappingsScreen } from '../features/settings/WhatsAppNotificationMappingsScreen';
 import { ShopProductsScreen } from '../features/shop/ShopProductsScreen';
+import { ShopProductProfitScreen } from '../features/shop/ShopProductProfitScreen';
 import { ShopProductAddScreen } from '../features/shop/ShopProductAddScreen';
 import { ShopProductsAddManyScreen } from '../features/shop/ShopProductsAddManyScreen';
 import { ShopMasterFilesScreen, ShopMasterKindScreen } from '../features/shop/ShopMasterFilesScreen';
@@ -57,6 +58,7 @@ import { ShopOrdersScreen } from '../features/shop/ShopOrdersScreen';
 import { ShopOrderDetailScreen } from '../features/shop/ShopOrderDetailScreen';
 import { ShopPosScreen } from '../features/shop/ShopPosScreen';
 import { ShopReturnsScreen } from '../features/shop/ShopReturnsScreen';
+import { ShopReturnDetailScreen } from '../features/shop/ShopReturnDetailScreen';
 import { ShopDeliveryZonesScreen } from '../features/shop/ShopDeliveryZonesScreen';
 import { ShopDeliveryZoneFormScreen } from '../features/shop/ShopDeliveryZoneFormScreen';
 import { ShopDeliverySettingsScreen } from '../features/shop/ShopDeliverySettingsScreen';
@@ -280,12 +282,14 @@ export function RootNavigator() {
             {stackScreen('WhatsAppNotificationMappings', WhatsAppNotificationMappingsScreen, 'WhatsApp mappings')}
             {stackScreen('ProductSettings', LazyProductSettings, t('settings.productsBilling'))}
             {stackScreen('ShopProducts', ShopProductsScreen, t('nav.shopProducts'))}
+            {stackScreen('ShopProductProfit', ShopProductProfitScreen, 'Product profit')}
             {stackScreen('ShopProductAdd', ShopProductAddScreen, 'Add product')}
             {stackScreen('ShopProductsAddMany', ShopProductsAddManyScreen, 'Add many products')}
             {stackScreen('ShopMasterFiles', ShopMasterFilesScreen, 'Master Files')}
             {stackScreen('ShopMasterKind', ShopMasterKindScreen, 'Master')}
             {stackScreen('ShopOrders', ShopOrdersScreen, t('nav.shopOrders'))}
             {stackScreen('ShopOrderDetail', ShopOrderDetailScreen, 'Order detail')}
+            {stackScreen('ShopReturnDetail', ShopReturnDetailScreen, 'Return detail')}
             {stackScreen('ShopPos', ShopPosScreen, t('nav.pos'))}
             {stackScreen('BarcodeScanner', LazyBarcodeScanner, t('nav.scanBarcode'))}
             <Stack.Screen

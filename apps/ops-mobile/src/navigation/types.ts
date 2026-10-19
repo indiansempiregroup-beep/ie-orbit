@@ -71,11 +71,13 @@ export type RootStackParamList = {
   ProductSettings: undefined;
   ShopProducts: undefined;
   ShopProductAdd: { enrichCode?: string; productId?: string; returnTo?: 'pos' } | undefined;
+  ShopProductProfit: undefined;
   ShopProductsAddMany: { enrichCode?: string; enrichRowId?: string } | undefined;
   ShopMasterFiles: undefined;
   ShopMasterKind: { kind: string; title?: string };
   ShopOrders: undefined;
   ShopOrderDetail: { orderId: string };
+  ShopReturnDetail: { returnId: string };
   ShopPos:
     | {
         mode?:
@@ -109,8 +111,8 @@ export type RootStackParamList = {
   ShopPetForm: { petId?: string; selectCustomerId?: string } | undefined;
   ShopPetDetail: { petId: string; openNotify?: boolean };
   ShopBooks: undefined;
-  ShopBooksSale: undefined;
-  ShopBooksPurchase: undefined;
+  ShopBooksSale: { voucherId?: string } | undefined;
+  ShopBooksPurchase: { voucherId?: string } | undefined;
   ShopBooksExpense: undefined;
   ShopBooksCash: undefined;
   ShopBooksParties: undefined;
@@ -133,7 +135,7 @@ export type RootStackParamList = {
   Automations: undefined;
   Branches: undefined;
   BranchForm: { branchId?: string } | undefined;
-  BI: { tab?: 'overview' | 'growth' | 'revenue' | 'forecast' | 'reports' };
+  BI: { tab?: 'overview' | 'profit' | 'growth' | 'revenue' | 'forecast' | 'reports' };
   Reports: undefined;
   Team: undefined;
   Profile: undefined;

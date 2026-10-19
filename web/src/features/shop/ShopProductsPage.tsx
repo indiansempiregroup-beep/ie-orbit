@@ -42,6 +42,7 @@ const emptyForm = {
   description: '',
   details_html: '',
   price: '0',
+  purchase_price: '0',
   tax_rate: '0',
   gst_rate: '0',
   hsn_sac: '',
@@ -77,6 +78,7 @@ const IDENTITY_DEFAULTS: Pick<
   | 'gst_rate'
   | 'tax_rate'
   | 'price'
+  | 'purchase_price'
 > = {
   sku: '',
   name: '',
@@ -93,6 +95,7 @@ const IDENTITY_DEFAULTS: Pick<
   gst_rate: '0',
   tax_rate: '0',
   price: '0',
+  purchase_price: '0',
 };
 
 function wipeIdentity(current: FormState, code: string): FormState {
@@ -180,6 +183,7 @@ function formFromProduct(product: ShopProduct): FormState {
     description: product.description || '',
     details_html: product.details_html || '',
     price: String(product.price ?? '0'),
+    purchase_price: String(product.purchase_price ?? '0'),
     tax_rate: String(product.tax_rate ?? '0'),
     gst_rate: String(product.gst_rate ?? product.tax_rate ?? '0'),
     hsn_sac: product.hsn_sac || '',
@@ -649,6 +653,7 @@ export function ShopProductsPage() {
       description: form.description,
       details_html: form.details_html,
       price: form.price,
+      purchase_price: form.purchase_price,
       tax_rate: form.tax_rate,
       gst_rate: form.gst_rate,
       hsn_sac: form.hsn_sac,
@@ -746,6 +751,11 @@ export function ShopProductsPage() {
           ]}
           action={
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Link to="/bi/profit">
+                <Button type="button" variant="neutral">
+                  BI Profit
+                </Button>
+              </Link>
               <Link to="/shop/products/add-many">
                 <Button type="button" variant="neutral">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -878,6 +888,13 @@ export function ShopProductsPage() {
                       : ''}{' '}
                     · {product.brand || 'No brand'} · Stock {product.stock_on_hand} ·{' '}
                     {formatMoney(Number(product.price ?? 0), product.currency)}
+                    {Number(product.avg_cost ?? product.purchase_price ?? 0) > 0
+                      ? ` · margin ${formatMoney(
+                          Number(product.price ?? 0) -
+                            Number(product.avg_cost ?? product.purchase_price ?? 0),
+                          product.currency,
+                        )}`
+                      : ''}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
                     SKU {product.sku || '—'} · HSN {product.hsn_sac || '—'} · GST{' '}
@@ -1338,7 +1355,8 @@ export function ShopProductsPage() {
                 ['name', 'Product name', true],
                 ['brand', 'Brand', false],
                 ['sku', 'SKU', false],
-                ['price', 'Price', false],
+                ['price', 'Selling price', false],
+                ['purchase_price', 'Purchase price', false],
                 ['tax_rate', 'Tax %', false],
                 ['gst_rate', 'GST % (Books)', false],
                 ['hsn_sac', 'HSN/SAC code', false],
@@ -1355,6 +1373,20 @@ export function ShopProductsPage() {
                   required={required}
                   style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                 />
+                {key === 'purchase_price' &&
+                Number(form.price) > 0 &&
+                Number(form.purchase_price) >= 0 ? (
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                    Est. margin{' '}
+                    {formatMoney(Number(form.price) - Number(form.purchase_price), form.currency)}
+                    {Number(form.price) > 0
+                      ? ` (${(
+                          ((Number(form.price) - Number(form.purchase_price)) / Number(form.price)) *
+                          100
+                        ).toFixed(1)}%)`
+                      : ''}
+                  </span>
+                ) : null}
               </label>
             ))}
             <label style={{ display: 'grid', gap: 6 }}>

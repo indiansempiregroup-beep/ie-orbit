@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
+from django.db.models import Sum
 from rest_framework import serializers
 
 from apps.common.api.fields import CoordinateField
@@ -46,6 +48,53 @@ from apps.shopie.models import (
 )
 
 
+def _money_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    try:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"))
+    except Exception:
+        return None
+    return f"{amount:.2f}"
+
+
+def _loyalty_points_from_metadata(metadata: Any) -> tuple[int, int]:
+    """Return (points_earned, points_redeemed) from order/voucher metadata."""
+    meta = metadata if isinstance(metadata, dict) else {}
+    loyalty = meta.get("loyalty") if isinstance(meta.get("loyalty"), dict) else {}
+    billing = meta.get("billing") if isinstance(meta.get("billing"), dict) else {}
+    earned = int(
+        loyalty.get("points_earned")
+        or billing.get("points_earned")
+        or 0
+    )
+    redeemed = int(
+        loyalty.get("points_redeemed")
+        or billing.get("reward_points")
+        or 0
+    )
+    return max(0, earned), max(0, redeemed)
+
+
+def _is_booking_metadata(metadata: Any) -> bool:
+    meta = metadata if isinstance(metadata, dict) else {}
+    return bool(meta.get("source_booking_id")) or str(meta.get("source") or "").strip().lower() == "booking"
+
+
+def _order_gross_profit(order: ShopOrder | None) -> str | None:
+    if order is None:
+        return None
+    # Prefer queryset annotation when present (including explicit None = no facts).
+    if "annotated_gross_profit" in getattr(order, "__dict__", {}):
+        return _money_str(order.__dict__.get("annotated_gross_profit"))
+    from apps.shopie.models import ShopSaleProfitFact
+
+    total = ShopSaleProfitFact.objects.filter(order_id=order.id).aggregate(total=Sum("gross_profit"))[
+        "total"
+    ]
+    return _money_str(total)
+
+
 class ShopProductBarcodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ShopProductBarcode
@@ -71,6 +120,8 @@ class ShopProductSerializer(serializers.ModelSerializer):
             "details_html",
             "status",
             "price",
+            "purchase_price",
+            "avg_cost",
             "tax_rate",
             "hsn_sac",
             "gst_rate",
@@ -117,6 +168,17 @@ class ShopProductSerializer(serializers.ModelSerializer):
         return int(getattr(obj, "rating_count", 0) or 0)
 
 
+class ShopProductPublicSerializer(ShopProductSerializer):
+    """Customer-facing product payload — never includes purchase cost fields."""
+
+    class Meta(ShopProductSerializer.Meta):
+        fields = [
+            f
+            for f in ShopProductSerializer.Meta.fields
+            if f not in {"purchase_price", "avg_cost"}
+        ]
+
+
 class ShopProductReviewSerializer(serializers.ModelSerializer):
     reviewer_name = serializers.SerializerMethodField()
 
@@ -140,6 +202,7 @@ class ShopProductWriteSerializer(serializers.Serializer):
     details_html = serializers.CharField(required=False, allow_blank=True)
     status = serializers.ChoiceField(choices=ProductStatus.choices, required=False)
     price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    purchase_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
     hsn_sac = serializers.CharField(required=False, allow_blank=True, max_length=16)
     gst_rate = serializers.DecimalField(max_digits=5, decimal_places=2, required=False)
@@ -311,6 +374,7 @@ class ShopOrderLineSerializer(serializers.ModelSerializer):
             "barcode_scanned",
             "quantity",
             "unit_price",
+            "purchase_price_snapshot",
             "tax_rate",
             "discount_type",
             "discount_value",
@@ -353,6 +417,9 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     delivery_phone = serializers.SerializerMethodField()
     payment_method = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
+    points_earned = serializers.SerializerMethodField()
+    points_redeemed = serializers.SerializerMethodField()
+    gross_profit = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopOrder
@@ -375,6 +442,9 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
             "metadata",
             "payment_method",
             "payment_status",
+            "points_earned",
+            "points_redeemed",
+            "gross_profit",
             "lines",
             "created_at",
             "updated_at",
@@ -404,6 +474,15 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
 
     def get_delivery_phone(self, obj: ShopOrder) -> str:
         return _order_delivery_phone(obj)
+
+    def get_points_earned(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[0]
+
+    def get_points_redeemed(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[1]
+
+    def get_gross_profit(self, obj: ShopOrder) -> str | None:
+        return _order_gross_profit(obj)
 
 
 class ShopOrderSerializer(serializers.ModelSerializer):
@@ -436,6 +515,12 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     customer_gstin = serializers.SerializerMethodField()
     invoice_type = serializers.SerializerMethodField()
     seller_gstin = serializers.SerializerMethodField()
+    points_earned = serializers.SerializerMethodField()
+    points_redeemed = serializers.SerializerMethodField()
+    gross_profit = serializers.SerializerMethodField()
+    return_days = serializers.SerializerMethodField()
+    return_eligible_until = serializers.SerializerMethodField()
+    return_window_open = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopOrder
@@ -481,6 +566,12 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "coupon_discount",
             "books_voucher_id",
             "books_voucher_number",
+            "points_earned",
+            "points_redeemed",
+            "gross_profit",
+            "return_days",
+            "return_eligible_until",
+            "return_window_open",
             "lines",
             "created_at",
             "updated_at",
@@ -688,6 +779,47 @@ class ShopOrderSerializer(serializers.ModelSerializer):
         business = getattr(obj, "business", None)
         return str(getattr(business, "gst_tax_number", "") or "").strip().upper()
 
+    def get_points_earned(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[0]
+
+    def get_points_redeemed(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[1]
+
+    def get_gross_profit(self, obj: ShopOrder) -> str | None:
+        return _order_gross_profit(obj)
+
+    def _return_days_cached(self, obj: ShopOrder) -> int:
+        cache = self.context.setdefault("_return_days_by_business", {})
+        key = str(obj.business_id)
+        if key not in cache:
+            from apps.shopie.services.returns import ReturnService
+
+            cache[key] = ReturnService.return_days_for_business(business=obj.business)
+        return int(cache[key])
+
+    def get_return_days(self, obj: ShopOrder) -> int:
+        return self._return_days_cached(obj)
+
+    def get_return_eligible_until(self, obj: ShopOrder) -> str | None:
+        from apps.shopie.services.returns import ReturnService
+
+        if self._return_days_cached(obj) <= 0:
+            return None
+        deadline = ReturnService.return_eligible_until(business=obj.business, order=obj)
+        return deadline.isoformat() if deadline is not None else None
+
+    def get_return_window_open(self, obj: ShopOrder) -> bool:
+        from django.utils import timezone
+
+        from apps.shopie.services.returns import ReturnService
+
+        if self._return_days_cached(obj) <= 0:
+            return True
+        deadline = ReturnService.return_eligible_until(business=obj.business, order=obj)
+        if deadline is None:
+            return True
+        return timezone.now() <= deadline
+
 
 class MobileShopOrderSerializer(ShopOrderSerializer):
     """Customer-facing order payload.
@@ -822,10 +954,15 @@ class ShopReturnSerializer(serializers.ModelSerializer):
             "customer",
             "return_number",
             "status",
+            "return_method",
             "reason",
             "restock",
             "refund_total",
             "currency",
+            "received_at",
+            "pickup_arranged_at",
+            "pickup_notes",
+            "pickup_tracking_number",
             "credit_invoice",
             "line_items",
             "metadata",
@@ -851,7 +988,42 @@ class ShopReturnCreateSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True)
     restock = serializers.BooleanField(required=False, default=True)
     complete = serializers.BooleanField(required=False, default=True)
+    return_method = serializers.ChoiceField(
+        choices=["in_store", "dropoff", "reverse_pickup", "instant_pickup"],
+        required=False,
+        allow_blank=True,
+    )
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class ShopReturnArrangePickupSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+    tracking_number = serializers.CharField(required=False, allow_blank=True, max_length=128)
+    # instant = book rider; manual = notes/tracking only
+    mode = serializers.ChoiceField(
+        choices=["instant", "manual"],
+        required=False,
+        allow_blank=True,
+    )
+    # merchant = shop pays fee; customer = deduct fee from refund (after customer accepts)
+    charge_bearer = serializers.ChoiceField(
+        choices=["merchant", "customer"],
+        required=False,
+        default="merchant",
+    )
+    # Optional courier fee when mode=manual and charge_bearer=customer
+    fee = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
+
+class ShopReturnReceiveSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    restock = serializers.BooleanField(required=False)
+
+
+class ShopReturnRejectSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    reason = serializers.CharField(required=False, allow_blank=True)
 
 
 class ShopDeliveryZoneSerializer(serializers.ModelSerializer):
@@ -1002,6 +1174,7 @@ class ShopSettingsSerializer(serializers.ModelSerializer):
             "default_fulfillment_mode",
             "same_day_delivery_enabled",
             "instant_delivery_enabled",
+            "return_days",
             "metadata",
         ]
 
@@ -1017,6 +1190,7 @@ class ShopSettingsPatchSerializer(serializers.Serializer):
         choices=FulfillmentMode.choices, required=False
     )
     same_day_delivery_enabled = serializers.BooleanField(required=False)
+    return_days = serializers.IntegerField(required=False, min_value=0, max_value=3650)
     metadata = serializers.DictField(required=False)
 
 
@@ -1026,11 +1200,23 @@ class ShopOrderStatusSerializer(serializers.Serializer):
 
 class ShopOrderShipSerializer(serializers.Serializer):
     carrier = serializers.CharField(max_length=32)
-    tracking_number = serializers.CharField(max_length=120)
+    tracking_number = serializers.CharField(required=False, allow_blank=True, max_length=120)
     carrier_label = serializers.CharField(required=False, allow_blank=True, max_length=120)
     tracking_url = serializers.URLField(required=False, allow_blank=True, max_length=1000)
     estimated_delivery_at = serializers.DateField(required=False, allow_null=True)
     notify_customer = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, attrs: dict) -> dict:
+        from apps.shopie.services.carriers import is_self_delivery_carrier
+
+        carrier = str(attrs.get("carrier") or "").strip().lower()
+        tracking = str(attrs.get("tracking_number") or "").strip()
+        if not tracking and not is_self_delivery_carrier(carrier):
+            raise serializers.ValidationError(
+                {"tracking_number": "AWB or tracking number is required."}
+            )
+        attrs["tracking_number"] = tracking
+        return attrs
 
 
 class ShopOrderShipmentPatchSerializer(serializers.Serializer):
@@ -1232,6 +1418,9 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
     supplier_name = serializers.SerializerMethodField()
     cash_account_name = serializers.SerializerMethodField()
     contra_account_name = serializers.SerializerMethodField()
+    points_earned = serializers.SerializerMethodField()
+    points_redeemed = serializers.SerializerMethodField()
+    gross_profit = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopBooksVoucher
@@ -1269,6 +1458,9 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
             "linked_order",
             "linked_invoice",
             "metadata",
+            "points_earned",
+            "points_redeemed",
+            "gross_profit",
             "created_at",
             "updated_at",
         ]
@@ -1304,6 +1496,29 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
 
     def get_contra_account_name(self, obj: ShopBooksVoucher) -> str:
         return str(obj.contra_account.name) if obj.contra_account_id else ""
+
+    def get_points_earned(self, obj: ShopBooksVoucher) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[0]
+
+    def get_points_redeemed(self, obj: ShopBooksVoucher) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[1]
+
+    def get_gross_profit(self, obj: ShopBooksVoucher) -> str | None:
+        if _is_booking_metadata(obj.metadata):
+            return None
+        if "annotated_gross_profit" in getattr(obj, "__dict__", {}):
+            return _money_str(obj.__dict__.get("annotated_gross_profit"))
+        linked = getattr(obj, "linked_order", None)
+        if linked is not None:
+            return _order_gross_profit(linked)
+        if obj.linked_order_id:
+            from apps.shopie.models import ShopSaleProfitFact
+
+            total = ShopSaleProfitFact.objects.filter(order_id=obj.linked_order_id).aggregate(
+                total=Sum("gross_profit")
+            )["total"]
+            return _money_str(total)
+        return None
 
 
 class ShopSaleVoucherCreateSerializer(serializers.Serializer):

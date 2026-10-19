@@ -43,8 +43,10 @@ import {
   canCancelShopOrder,
   canDispatchShopOrder,
   nextShopOrderAction,
+  canMarkDeliveryCompleted,
   shopOrderBadgeStyle,
 } from './posPayment';
+import { orderReturnWindow } from './shopBooksHelpers';
 import { DeliveryTrackingMap } from './DeliveryTrackingMap';
 import { DeliveryMapLegend } from './DeliveryMapLegend';
 import {
@@ -52,9 +54,11 @@ import {
   formatDeliveryStatus,
   groupDeliveryEvents,
 } from './deliveryTracking';
-import { shopOrderBillBreakdown } from '../../utils/shopOrderBill';
+import { lineMerchandiseGross, shopOrderBillBreakdown } from '../../utils/shopOrderBill';
 import { loyaltyBillHighlight, readLoyaltyPrefs } from '../../utils/loyalty';
+import { SaleInsightChips } from './SaleInsightChips';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { ArrangeReturnPickupSheet } from './ArrangeReturnPickupSheet';
 import { orderCallPhone, orderDeliveryPhone } from '../../utils/shopOrderDisplay';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
@@ -62,6 +66,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ShopOrderDetail'>;
 const RETURNABLE_STATUSES = new Set(['confirmed', 'ready', 'completed']);
 
 const SHIP_CARRIERS = [
+  { value: 'self', label: 'Deliver myself' },
   { value: 'delhivery', label: 'Delhivery' },
   { value: 'bluedart', label: 'Blue Dart' },
   { value: 'dtdc', label: 'DTDC' },
@@ -86,6 +91,27 @@ function returnedQtyByLine(returns: ShopReturn[]): Record<string, number> {
     }
   }
   return totals;
+}
+
+/** Latest return timestamp per order line (ISO), for “Returned …” hints. */
+function latestReturnAtByLine(returns: ShopReturn[]): Record<string, string> {
+  const latest: Record<string, string> = {};
+  for (const shopReturn of returns) {
+    if (!['pending', 'approved', 'completed'].includes(String(shopReturn.status || ''))) continue;
+    const at = String(shopReturn.created_at || '');
+    if (!at) continue;
+    const atMs = Date.parse(at);
+    if (!Number.isFinite(atMs)) continue;
+    const lines = Array.isArray(shopReturn.line_items) ? shopReturn.line_items : [];
+    for (const raw of lines) {
+      if (!raw || typeof raw !== 'object') continue;
+      const lineId = String((raw as { order_line_id?: string }).order_line_id || '');
+      if (!lineId) continue;
+      const prev = latest[lineId];
+      if (!prev || Date.parse(prev) < atMs) latest[lineId] = at;
+    }
+  }
+  return latest;
 }
 
 function proportionalRefund(line: ShopOrderLine, qty: number): number {
@@ -120,10 +146,12 @@ export function ShopOrderDetailScreen() {
   const [deliveryLive, setDeliveryLive] = useState<ShopDeliveryLive | null>(null);
   const [shiprocketConfigured, setShiprocketConfigured] = useState(false);
   const [shipOpen, setShipOpen] = useState(false);
-  const [shipCarrier, setShipCarrier] = useState('delhivery');
+  const [shipCarrier, setShipCarrier] = useState('self');
   const [shipAwb, setShipAwb] = useState('');
   const [shipEta, setShipEta] = useState('');
   const [shipNotify, setShipNotify] = useState(true);
+  const [arrangeReturnTarget, setArrangeReturnTarget] = useState<ShopReturn | null>(null);
+  const isSelfDeliveryShip = shipCarrier === 'self';
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
 
@@ -135,7 +163,8 @@ export function ShopOrderDetailScreen() {
     ]);
     setOrder(orderRes.data);
     setReturns(returnsRes.data ?? []);
-    if (String(orderRes.data.fulfillment_mode || '').toLowerCase() === 'delivery') {
+    const fulfillment = String(orderRes.data.fulfillment_mode || '').toLowerCase();
+    if (fulfillment === 'delivery' || fulfillment === 'pickup') {
       try {
         const live = await client.shop.getOrderDeliveryLive(orderId, true);
         setDeliveryLive(live.data);
@@ -212,6 +241,7 @@ export function ShopOrderDetailScreen() {
   }, [navigation, order?.order_number, order?.fulfillment_mode]);
 
   const alreadyReturned = useMemo(() => returnedQtyByLine(returns), [returns]);
+  const returnedAtByLine = useMemo(() => latestReturnAtByLine(returns), [returns]);
 
   const returnableLines = useMemo(() => {
     if (!order) return [];
@@ -225,7 +255,16 @@ export function ShopOrderDetailScreen() {
       .filter((row) => row.remaining > 0);
   }, [alreadyReturned, order]);
 
-  const canReturn = Boolean(order && RETURNABLE_STATUSES.has(order.status) && returnableLines.length);
+  const returnWindow = orderReturnWindow(order);
+  const returnWindowOpen = returnWindow ? returnWindow.open : order?.return_window_open !== false;
+  // Only expose the calendar date after delivery / POS confirm (same gate as the badge).
+  const returnByLabel = returnWindow?.untilLabel || '';
+  const canReturn = Boolean(
+    order &&
+      RETURNABLE_STATUSES.has(order.status) &&
+      returnWindowOpen &&
+      returnableLines.length,
+  );
 
   const selectedRefund = useMemo(() => {
     return returnableLines.reduce((sum, row) => {
@@ -357,7 +396,8 @@ export function ShopOrderDetailScreen() {
   async function submitShipOrder() {
     if (!client || !order) return;
     const awb = shipAwb.trim();
-    if (!awb) {
+    const selfDelivery = shipCarrier === 'self';
+    if (!selfDelivery && !awb) {
       setError('AWB or tracking number is required.');
       return;
     }
@@ -374,7 +414,12 @@ export function ShopOrderDetailScreen() {
       setShipOpen(false);
       setShipAwb('');
       setShipEta('');
-      toast.push('Shipment saved — customer can track it now.', 'success');
+      toast.push(
+        selfDelivery
+          ? 'Marked out for delivery — you are delivering this order.'
+          : 'Shipment saved — customer can track it now.',
+        'success',
+      );
     } catch (err) {
       const text = getApiErrorMessage(err, "Couldn't save shipment details. Try again.");
       setError(text);
@@ -444,6 +489,7 @@ export function ShopOrderDetailScreen() {
         reason: reason.trim(),
         restock,
         complete: true,
+        return_method: 'in_store',
         lines,
       });
       const pos = getShopOrderPosMeta(order);
@@ -560,14 +606,13 @@ export function ShopOrderDetailScreen() {
   const isDeliveryOrder = String(order.fulfillment_mode || '').toLowerCase() === 'delivery';
   const isStandardDelivery = isDeliveryOrder && !isInstantDelivery;
   const canStandardShip = isStandardDelivery && order.status === 'ready';
-  const canStandardMarkDelivered =
-    isStandardDelivery && ['out_for_delivery', 'delivery_failed'].includes(String(order.status || '').toLowerCase());
+  const canMarkDelivered = canMarkDeliveryCompleted(order.status, order.fulfillment_mode);
   const canInstantDispatch = isDeliveryOrder && isInstantDelivery && canDispatchShopOrder(order);
   const canCancel =
     canCancelShopOrder(order.status) && !(isInstantDelivery && deliveryLive?.available && !deliveryLive.terminal);
   const showFulfillmentCard =
     isOnlineOrder &&
-    (nextAction || canCancel || canStandardShip || canStandardMarkDelivered || canInstantDispatch);
+    (nextAction || canCancel || canStandardShip || canMarkDelivered || canInstantDispatch);
   const borrowPreview = isBorrow ? Math.min(selectedRefund, Math.max(0, amountDue)) : 0;
   const cashCreditPreview = Math.max(0, selectedRefund - borrowPreview);
   const deliveryGroups = deliveryLive?.available ? groupDeliveryEvents(deliveryLive) : [];
@@ -607,9 +652,15 @@ export function ShopOrderDetailScreen() {
     canCancel ||
     canInstantDispatch ||
     canStandardShip ||
-    canStandardMarkDelivered ||
-    Boolean(nextAction && !canStandardShip && !canInstantDispatch) ||
-    Boolean(isInstantDelivery && order.status === 'delivery_failed' && nextAction);
+    canMarkDelivered ||
+    Boolean(nextAction && !canStandardShip && !canInstantDispatch && !canMarkDelivered) ||
+    Boolean(isInstantDelivery && order.status === 'delivery_failed' && nextAction && !canMarkDelivered);
+
+  const hasFulfillmentAction =
+    canInstantDispatch ||
+    canStandardShip ||
+    canMarkDelivered ||
+    Boolean(nextAction && !canStandardShip && !canInstantDispatch && !canMarkDelivered);
 
   const footer = !showFooter ? undefined : (
     <View style={styles.footer}>
@@ -627,96 +678,86 @@ export function ShopOrderDetailScreen() {
             label="Confirm paid"
             icon="check-circle"
             loading={busy}
-            style={styles.footerPrimary}
+            style={hasFulfillmentAction || canCancel ? styles.footerBtn : styles.footerPrimary}
             onPress={() => runPaymentAction('confirm', 'Payment confirmed')}
           />
         </>
-      ) : cashPaymentDue ? (
+      ) : null}
+      {cashPaymentDue && !awaitingUpi ? (
         <Button
           label="Cash received"
           icon="dollar-sign"
           loading={busy}
-          style={styles.footerPrimary}
+          style={hasFulfillmentAction || canCancel ? styles.footerBtn : styles.footerPrimary}
           onPress={() => runPaymentAction('confirm', 'Cash payment recorded')}
         />
-      ) : (
-        <>
-          {canCancel ? (
-            <Button
-              label="Cancel"
-              variant="soft"
-              icon="x"
-              disabled={busy}
-              style={styles.footerBtn}
-              onPress={() => void confirmCancelOrder()}
-            />
-          ) : null}
-          {canInstantDispatch ? (
-            <Button
-              label={
-                busy
-                  ? 'Requesting…'
-                  : order.status === 'delivery_failed'
-                    ? 'Retry rider'
-                    : 'Dispatch'
-              }
-              icon="truck"
-              loading={busy}
-              style={styles.footerPrimary}
-              onPress={() => void dispatchOrder()}
-            />
-          ) : null}
-          {canStandardShip && shiprocketConfigured ? (
-            <Button
-              label={busy ? 'Booking…' : 'Shiprocket'}
-              icon="package"
-              loading={busy}
-              style={styles.footerBtn}
-              onPress={() => void bookWithShiprocket()}
-            />
-          ) : null}
-          {canStandardShip ? (
-            <Button
-              label="Mark shipped"
-              icon="send"
-              disabled={busy}
-              style={shiprocketConfigured ? styles.footerBtn : styles.footerPrimary}
-              onPress={() => {
-                setShipOpen(true);
-                setError(null);
-              }}
-            />
-          ) : null}
-          {canStandardMarkDelivered ? (
-            <Button
-              label={busy ? 'Updating…' : 'Mark delivered'}
-              icon="check-circle"
-              loading={busy}
-              style={styles.footerPrimary}
-              onPress={() => void markStandardDelivered()}
-            />
-          ) : null}
-          {nextAction && !canStandardShip && !canInstantDispatch && !canStandardMarkDelivered ? (
-            <Button
-              label={busy ? 'Updating…' : nextAction.label}
-              icon="arrow-right"
-              loading={busy}
-              style={styles.footerPrimary}
-              onPress={() => void confirmAdvance(nextAction)}
-            />
-          ) : null}
-          {isInstantDelivery && order.status === 'delivery_failed' && nextAction && !canInstantDispatch ? (
-            <Button
-              label={nextAction.label}
-              variant="soft"
-              icon="refresh-cw"
-              disabled={busy}
-              style={styles.footerBtn}
-              onPress={() => void confirmAdvance(nextAction)}
-            />
-          ) : null}
-        </>
-      )}
+      ) : null}
+      {canCancel ? (
+        <Button
+          label="Cancel"
+          variant="soft"
+          icon="x"
+          disabled={busy}
+          style={styles.footerBtn}
+          onPress={() => void confirmCancelOrder()}
+        />
+      ) : null}
+      {canInstantDispatch ? (
+        <Button
+          label={
+            busy
+              ? 'Requesting…'
+              : order.status === 'delivery_failed'
+                ? 'Retry rider'
+                : 'Dispatch'
+          }
+          icon="truck"
+          loading={busy}
+          style={styles.footerPrimary}
+          onPress={() => void dispatchOrder()}
+        />
+      ) : null}
+      {canStandardShip && shiprocketConfigured ? (
+        <Button
+          label={busy ? 'Booking…' : 'Shiprocket'}
+          icon="package"
+          loading={busy}
+          style={styles.footerBtn}
+          onPress={() => void bookWithShiprocket()}
+        />
+      ) : null}
+      {canStandardShip ? (
+        <Button
+          label="Mark shipped"
+          icon="send"
+          disabled={busy}
+          style={shiprocketConfigured ? styles.footerBtn : styles.footerPrimary}
+          onPress={() => {
+            setShipOpen(true);
+            setError(null);
+          }}
+        />
+      ) : null}
+      {canMarkDelivered ? (
+        <Button
+          label={busy ? 'Updating…' : 'Mark delivered'}
+          icon="check-circle"
+          loading={busy}
+          style={
+            canStandardShip || canInstantDispatch ? styles.footerBtn : styles.footerPrimary
+          }
+          onPress={() => void markStandardDelivered()}
+        />
+      ) : null}
+      {nextAction && !canStandardShip && !canInstantDispatch && !canMarkDelivered ? (
+        <Button
+          label={busy ? 'Updating…' : nextAction.label}
+          icon="arrow-right"
+          loading={busy}
+          style={styles.footerPrimary}
+          onPress={() => void confirmAdvance(nextAction)}
+        />
+      ) : null}
     </View>
   );
 
@@ -746,6 +787,29 @@ export function ShopOrderDetailScreen() {
               : formatShopOrderFulfillment(order.fulfillment_mode)}
             {order.created_at ? ` · ${formatDateTime(order.created_at)}` : ''}
           </Text>
+          {returnWindow ? (
+            <View
+              style={[
+                styles.returnWindowBadge,
+                !returnWindow.open && styles.returnWindowBadgeEnded,
+              ]}
+            >
+              <Feather
+                name="rotate-ccw"
+                size={12}
+                color={returnWindow.open ? '#1d4ed8' : '#92400e'}
+              />
+              <Text
+                style={[
+                  styles.returnWindowText,
+                  !returnWindow.open && styles.returnWindowTextEnded,
+                ]}
+              >
+                {isOnlineOrder ? 'Online · ' : 'POS · '}
+                {returnWindow.summary}
+              </Text>
+            </View>
+          ) : null}
           {order.customer_id ? (
             <CustomerDetailLinkCard
               customerId={order.customer_id}
@@ -793,7 +857,11 @@ export function ShopOrderDetailScreen() {
               <View style={[styles.deliveryLiveDot, { backgroundColor: deliveryLive.terminal ? colors.success : colors.primary }]} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.deliveryEyebrow}>
-                  {deliveryLive.delivery_method === 'instant' ? 'DELIVERY PARTNER' : 'STANDARD DELIVERY'}
+                  {deliveryLive.delivery_method === 'pickup'
+                    ? 'ORDER STATUS'
+                    : deliveryLive.delivery_method === 'instant'
+                      ? 'DELIVERY PARTNER'
+                      : 'STANDARD DELIVERY'}
                 </Text>
                 <Text style={styles.deliveryState}>
                   {deliveryLive.headline || formatDeliveryStatus(deliveryLive.partner_status)}
@@ -815,12 +883,17 @@ export function ShopOrderDetailScreen() {
                 </View>
               ) : null}
             </View>
-            <Text style={[styles.updatedText, deliveryLive.stale && styles.staleText]}>
-              {deliveryLive.stale ? 'Location may be stale' : 'Tracking up to date'}
-              {deliveryLive.last_updated ? ` · ${formatDateTime(deliveryLive.last_updated)}` : ''}
-            </Text>
+            {deliveryLive.delivery_method !== 'pickup' ? (
+              <Text style={[styles.updatedText, deliveryLive.stale && styles.staleText]}>
+                {deliveryLive.stale ? 'Location may be stale' : 'Tracking up to date'}
+                {deliveryLive.last_updated ? ` · ${formatDateTime(deliveryLive.last_updated)}` : ''}
+              </Text>
+            ) : deliveryLive.last_updated ? (
+              <Text style={styles.updatedText}>Updated · {formatDateTime(deliveryLive.last_updated)}</Text>
+            ) : null}
             {failureReason ? <Text style={styles.failureReason}>{failureReason}</Text> : null}
-            {liveRider?.name || liveRider?.phone ? (
+            {deliveryLive.delivery_method === 'instant' &&
+            (liveRider?.name || liveRider?.phone) ? (
               <View style={styles.riderCard}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.addressLabel}>Rider</Text>
@@ -849,9 +922,17 @@ export function ShopOrderDetailScreen() {
                 <Text style={styles.trackingLinkText}>Open partner tracking</Text>
               </Pressable>
             ) : null}
-            <DeliveryTrackingMap delivery={deliveryLive} />
-            <DeliveryMapLegend delivery={deliveryLive} />
-            {deliveryGroups.length ? <Text style={styles.historyTitle}>Delivery history</Text> : null}
+            {deliveryLive.delivery_method !== 'pickup' ? (
+              <>
+                <DeliveryTrackingMap delivery={deliveryLive} />
+                <DeliveryMapLegend delivery={deliveryLive} />
+              </>
+            ) : null}
+            {deliveryGroups.length ? (
+              <Text style={styles.historyTitle}>
+                {deliveryLive.delivery_method === 'pickup' ? 'Order history' : 'Delivery history'}
+              </Text>
+            ) : null}
             {deliveryGroups.map((group) => (
               <View key={group.attemptNumber ?? 'order'} style={styles.attemptGroup}>
                 <Text style={styles.attemptTitle}>
@@ -898,15 +979,20 @@ export function ShopOrderDetailScreen() {
             {nextAction ? <Text style={styles.meta}>{nextAction.hint}</Text> : null}
             {canStandardShip ? (
               <Text style={styles.meta}>
-                Pack the order, then add courier tracking or book with Shiprocket. The customer gets a
-                tracking link and push notification.
+                Pack the order, then add courier tracking or book with Shiprocket. Or mark delivered if
+                you handed it over yourself.
               </Text>
             ) : null}
             {canInstantDispatch ? (
               <Text style={styles.meta}>
                 {order.status === 'delivery_failed'
-                  ? 'Retry delivery from the actions below to request another rider.'
-                  : 'Request a rider from the actions below when the order is packed.'}
+                  ? 'Retry delivery from the actions below to request another rider, or mark delivered if the customer already received it.'
+                  : 'Request a rider when packed, or mark delivered if you delivered it yourself.'}
+              </Text>
+            ) : null}
+            {canMarkDelivered && !canStandardShip && !canInstantDispatch ? (
+              <Text style={styles.meta}>
+                Mark delivered when the customer has received the order.
               </Text>
             ) : null}
             {canCancel ? (
@@ -919,7 +1005,8 @@ export function ShopOrderDetailScreen() {
           <View style={styles.headerCard}>
             <Text style={styles.section}>Cash payment pending</Text>
             <Text style={styles.meta}>
-              Mark cash received from the bottom actions when the customer pays on delivery or at pickup.
+              Collect cash when the customer arrives. You can still confirm, prepare, and complete the
+              order from the bottom actions.
             </Text>
           </View>
         ) : null}
@@ -965,24 +1052,26 @@ export function ShopOrderDetailScreen() {
           </View>
         ) : (
           (order.lines ?? []).map((line) => {
-            const disc = Number(line.discount_amount || 0);
             const returned = alreadyReturned[line.id] || 0;
+            const returnedAt = returnedAtByLine[line.id];
             return (
               <View key={line.id} style={styles.lineCard}>
                 <View style={styles.lineHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.name}>{line.product_name}</Text>
                     <Text style={styles.meta}>
-                      {formatMoney(line.unit_price)} · tax {formatMoney(line.tax_rate)}%
-                      {disc > 0 ? ` · disc. -${formatMoney(disc)}` : ''}
+                      {formatQty(Number(line.quantity || 0))} × {formatMoney(line.unit_price)}
+                      {Number(line.tax_rate) ? ` · tax ${formatMoney(line.tax_rate)}%` : ''}
                     </Text>
                     {returned > 0 ? (
-                      <Text style={styles.returnedHint}>Returned {formatQty(returned)}</Text>
+                      <Text style={styles.returnedHint}>
+                        Returned {formatQty(returned)}
+                        {returnedAt ? ` · ${formatDateTime(returnedAt)}` : ''}
+                      </Text>
                     ) : null}
                   </View>
-                  <Text style={styles.lineTotal}>{formatMoney(line.line_total)}</Text>
+                  <Text style={styles.lineTotal}>{formatMoney(lineMerchandiseGross(line))}</Text>
                 </View>
-                <Text style={styles.qty}>Qty {formatQty(Number(line.quantity || 0))}</Text>
               </View>
             );
           })
@@ -1077,6 +1166,9 @@ export function ShopOrderDetailScreen() {
           <View style={styles.totalRow}>
             <Text style={styles.payableLabel}>Total</Text>
             <Text style={styles.payableValue}>{formatMoney(bill.total)}</Text>
+          </View>
+          <View style={{ marginTop: spacing.sm }}>
+            <SaleInsightChips source={order} currency={order.currency} />
           </View>
           {loyaltyHighlight ? (
             <View
@@ -1182,16 +1274,27 @@ export function ShopOrderDetailScreen() {
 
           {!canReturn ? (
             <Text style={styles.meta}>
-              {RETURNABLE_STATUSES.has(order.status)
-                ? 'All items on this bill have already been returned.'
-                : 'Returns are available after the bill is confirmed.'}
+              {String(order.status).toLowerCase() === 'returned'
+                ? 'All items on this order have been returned.'
+                : RETURNABLE_STATUSES.has(order.status) && returnableLines.length && !returnWindowOpen
+                  ? returnByLabel
+                    ? `Return window ended on ${returnByLabel}.`
+                    : 'Return window for this order has ended.'
+                  : RETURNABLE_STATUSES.has(order.status)
+                    ? 'All items on this bill have already been returned.'
+                    : 'Returns are available after the bill is confirmed.'}
             </Text>
+          ) : null}
+
+          {canReturn && !returnMode && returnByLabel ? (
+            <Text style={styles.meta}>Returns accepted until {returnByLabel}.</Text>
           ) : null}
 
           {returnMode ? (
             <View style={styles.returnForm}>
               <Text style={styles.meta}>
                 Choose quantities to return. Stock is added back when restock is on.
+                {returnByLabel ? ` Returns accepted until ${returnByLabel}.` : ''}
                 {isBorrow
                   ? ' For borrow bills, unpaid due is reduced first; any paid portion becomes a credit note.'
                   : ' A credit note is created for the refund amount.'}
@@ -1291,15 +1394,103 @@ export function ShopOrderDetailScreen() {
           {returns.length ? (
             <View style={styles.priorReturns}>
               <Text style={styles.meta}>Previous returns</Text>
-              {returns.map((item) => (
-                <View key={item.id} style={styles.priorRow}>
-                  <Text style={styles.name}>{item.return_number}</Text>
-                  <Text style={styles.meta}>
-                    {item.status} · {formatMoney(item.refund_total)}
-                    {item.restock ? ' · restocked' : ' · no restock'}
-                  </Text>
-                </View>
-              ))}
+              {returns.map((item) => {
+                const open =
+                  item.status === 'pending' ||
+                  item.status === 'awaiting_customer' ||
+                  item.status === 'approved';
+                const canArrange =
+                  open &&
+                  item.status === 'pending' &&
+                  (item.return_method === 'reverse_pickup' ||
+                    item.return_method === 'instant_pickup' ||
+                    item.return_method === 'dropoff');
+                return (
+                  <View key={item.id} style={styles.priorRow}>
+                    <Pressable onPress={() => navigation.navigate('ShopReturnDetail', { returnId: item.id })}>
+                      <Text style={styles.name}>{item.return_number}</Text>
+                      <Text style={styles.meta}>
+                        {item.created_at ? `${formatDateTime(item.created_at)} · ` : ''}
+                        {item.status}
+                        {item.return_method ? ` · ${item.return_method.replace(/_/g, ' ')}` : ''}
+                        {' · '}
+                        {formatMoney(item.refund_total)}
+                        {item.status === 'completed'
+                          ? item.restock
+                            ? ' · restocked'
+                            : ' · no restock'
+                          : ''}
+                        {' · Open return'}
+                      </Text>
+                    </Pressable>
+                    {open ? (
+                      <View style={styles.returnActions}>
+                        {canArrange ? (
+                          <Pressable
+                            style={styles.secondaryBtn}
+                            disabled={busy}
+                            onPress={() => setArrangeReturnTarget(item)}
+                          >
+                            <Text style={styles.secondaryBtnText}>Arrange pickup</Text>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          style={styles.primaryBtn}
+                          disabled={busy}
+                          onPress={() =>
+                            void (async () => {
+                              if (!client || !businessId) return;
+                              setBusy(true);
+                              try {
+                                await client.shop.receiveReturn(item.id, {
+                                  business_id: businessId,
+                                });
+                                toast.push('Return received.', 'success');
+                                await load();
+                              } catch (err) {
+                                toast.push(
+                                  getApiErrorMessage(err, "Couldn't mark received."),
+                                  'error',
+                                );
+                              } finally {
+                                setBusy(false);
+                              }
+                            })()
+                          }
+                        >
+                          <Text style={styles.primaryBtnText}>Mark received</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.secondaryBtn}
+                          disabled={busy}
+                          onPress={() =>
+                            void (async () => {
+                              if (!client || !businessId) return;
+                              setBusy(true);
+                              try {
+                                await client.shop.rejectReturn(item.id, {
+                                  business_id: businessId,
+                                });
+                                toast.push('Return rejected.', 'success');
+                                await load();
+                              } catch (err) {
+                                toast.push(
+                                  getApiErrorMessage(err, "Couldn't reject return."),
+                                  'error',
+                                );
+                              } finally {
+                                setBusy(false);
+                              }
+                            })()
+                          }
+                        >
+                          <Text style={styles.secondaryBtnText}>Reject</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
           ) : !returnMode ? (
             <Text style={styles.meta}>No returns yet on this bill.</Text>
@@ -1312,6 +1503,19 @@ export function ShopOrderDetailScreen() {
           visible
           title="Payment screenshot"
           onClose={() => setProofLightboxOpen(false)}
+        />
+      ) : null}
+
+      {businessId ? (
+        <ArrangeReturnPickupSheet
+          visible={Boolean(arrangeReturnTarget)}
+          shopReturn={arrangeReturnTarget}
+          businessId={businessId}
+          onClose={() => setArrangeReturnTarget(null)}
+          onDone={() => {
+            setArrangeReturnTarget(null);
+            void load();
+          }}
         />
       ) : null}
 
@@ -1339,7 +1543,9 @@ export function ShopOrderDetailScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.shipTitle}>Ship order</Text>
                 <Text style={styles.shipSubtitle}>
-                  Add courier tracking so the customer can follow the package
+                  {isSelfDeliveryShip
+                    ? 'Deliver this order yourself — no courier AWB needed'
+                    : 'Add courier tracking so the customer can follow the package'}
                 </Text>
               </View>
               <Pressable
@@ -1359,21 +1565,26 @@ export function ShopOrderDetailScreen() {
               contentContainerStyle={styles.shipBody}
             >
               <SelectField
-                label="Carrier"
+                label="How are you sending it?"
                 required
                 value={shipCarrier}
                 options={SHIP_CARRIERS}
-                onChange={setShipCarrier}
+                onChange={(value) => {
+                  setShipCarrier(value);
+                  setError(null);
+                }}
                 searchable={false}
               />
-              <Input
-                label="AWB / tracking number"
-                required
-                value={shipAwb}
-                onChangeText={setShipAwb}
-                placeholder="1234567890123"
-                autoCapitalize="characters"
-              />
+              {!isSelfDeliveryShip ? (
+                <Input
+                  label="AWB / tracking number"
+                  required
+                  value={shipAwb}
+                  onChangeText={setShipAwb}
+                  placeholder="1234567890123"
+                  autoCapitalize="characters"
+                />
+              ) : null}
               <Input
                 label="Estimated delivery (optional)"
                 value={shipEta}
@@ -1383,7 +1594,11 @@ export function ShopOrderDetailScreen() {
               <View style={styles.shipNotifyCard}>
                 <View style={{ flex: 1, paddingRight: spacing.md }}>
                   <Text style={styles.switchLabel}>Notify customer</Text>
-                  <Text style={styles.meta}>Send push and email with the tracking link</Text>
+                  <Text style={styles.meta}>
+                    {isSelfDeliveryShip
+                      ? 'Send push and email that the shop is delivering'
+                      : 'Send push and email with the tracking link'}
+                  </Text>
                 </View>
                 <Switch value={shipNotify} onValueChange={setShipNotify} trackColor={{ true: colors.primary }} />
               </View>
@@ -1400,10 +1615,16 @@ export function ShopOrderDetailScreen() {
                 onPress={() => setShipOpen(false)}
               />
               <Button
-                label={busy ? 'Saving…' : 'Mark shipped'}
-                icon="send"
+                label={
+                  busy
+                    ? 'Saving…'
+                    : isSelfDeliveryShip
+                      ? 'Start delivery'
+                      : 'Mark shipped'
+                }
+                icon={isSelfDeliveryShip ? 'truck' : 'send'}
                 loading={busy}
-                disabled={!shipAwb.trim()}
+                disabled={!isSelfDeliveryShip && !shipAwb.trim()}
                 style={styles.footerPrimary}
                 onPress={() => void submitShipOrder()}
               />
@@ -1431,6 +1652,24 @@ const styles = StyleSheet.create({
   },
   orderNumber: { fontFamily: fonts.display, fontSize: 24, color: colors.foreground, flex: 1 },
   headerTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  returnWindowBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#DBEAFE',
+  },
+  returnWindowBadgeEnded: { backgroundColor: '#FEF3C7' },
+  returnWindowText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontFamily: fonts.bodySemi,
+  },
+  returnWindowTextEnded: { color: '#92400e' },
   deliveryLiveHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   deliveryLiveDot: { width: 10, height: 10, borderRadius: 5, marginTop: 14 },
   deliveryEyebrow: {

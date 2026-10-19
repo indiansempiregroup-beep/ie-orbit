@@ -17,7 +17,11 @@ from apps.shopie.models import (
     ShopShipment,
     TrackingEventSource,
 )
-from apps.shopie.services.carriers import carrier_label, tracking_url_for
+from apps.shopie.services.carriers import (
+    carrier_label,
+    is_self_delivery_carrier,
+    tracking_url_for,
+)
 from apps.shopie.services.orders import OrderService
 from apps.shopie.services.tracking import TrackingHistoryService
 from apps.tenancy.models import Tenant
@@ -75,10 +79,11 @@ class ShipmentService:
             raise ValidationError(
                 {"status": "Pack the order before shipping (status must be ready)."}
             )
-        awb = str(tracking_number or "").strip()
-        if not awb:
-            raise ValidationError({"tracking_number": "AWB or tracking number is required."})
         carrier_id = str(carrier or "other").strip().lower() or "other"
+        self_delivery = is_self_delivery_carrier(carrier_id)
+        awb = str(tracking_number or "").strip()
+        if not awb and not self_delivery:
+            raise ValidationError({"tracking_number": "AWB or tracking number is required."})
         label = carrier_label(carrier_id, carrier_label_override)
         url = tracking_url_for(
             carrier=carrier_id,
@@ -95,7 +100,9 @@ class ShipmentService:
                 "carrier_label": label,
                 "tracking_number": awb,
                 "tracking_url": url,
-                "status": ShipmentStatus.SHIPPED,
+                "status": (
+                    ShipmentStatus.OUT_FOR_DELIVERY if self_delivery else ShipmentStatus.SHIPPED
+                ),
                 "shipped_at": now,
                 "estimated_delivery_at": estimated_delivery_at,
             },
@@ -104,12 +111,18 @@ class ShipmentService:
         order.metadata = metadata
         order.save(update_fields=["metadata", "updated_at"])
 
+        event_status = "out_for_delivery" if self_delivery else "shipped"
+        event_label = (
+            "Shop is delivering this order"
+            if self_delivery
+            else f"Shipped with {label}"
+        )
         TrackingHistoryService().record_status(
             order=order,
-            status="shipped",
-            label=f"Shipped with {label}",
+            status=event_status,
+            label=event_label,
             source=TrackingEventSource.SHIPMENT,
-            source_key=f"shipment:{shipment.id}:shipped",
+            source_key=f"shipment:{shipment.id}:{event_status}",
             occurred_at=now,
             metadata={"tracking_number": awb, "carrier": carrier_id},
         )

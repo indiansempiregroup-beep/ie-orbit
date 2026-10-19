@@ -1,16 +1,23 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import type { ShopDeliveryLive } from '@ie-orbit/sdk';
+import type { ShopDeliveryLive, ShopReturnPickupLive } from '@ie-orbit/sdk';
 import { colors, typography } from '../../theme/tokens';
+import { openInGoogleMaps } from '../../utils/openInGoogleMaps';
 import { deliveryMapPoints } from './deliveryMapPoints';
 
-type Props = { live: ShopDeliveryLive; primary: string };
+type Props = { live: ShopDeliveryLive | ShopReturnPickupLive; primary: string };
 
 export function DeliveryTrackerMap({ live, primary }: Props) {
   const mapRef = useRef<MapView | null>(null);
   const { pickup, rider, drop, trail, points, center } = deliveryMapPoints(live);
   const signature = points.map((point) => `${point.latitude},${point.longitude}`).join('|');
+  const isReturnPickup = String(live.delivery_method || '').toLowerCase() === 'instant_pickup';
+  const pickupTitle = isReturnPickup ? 'Your address' : 'Shop';
+  const dropTitle = isReturnPickup ? 'Shop' : 'Your address';
+  const pickupLabel = live.pickup?.address || pickupTitle;
+  const dropLabel = live.drop?.address || (isReturnPickup ? 'Shop' : 'Delivery address');
+  const riderName = live.rider?.name || 'Rider';
 
   useEffect(() => {
     if (!mapRef.current || !points.length) return;
@@ -45,18 +52,31 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
       {pickup ? (
         <Marker
           coordinate={pickup}
-          title="Shop"
-          description={live.pickup?.address || ''}
-          pinColor={colors.warning}
+          title={pickupTitle}
+          description={pickupLabel}
+          pinColor={isReturnPickup ? colors.success : colors.warning}
+          onCalloutPress={() => void openInGoogleMaps(pickup.latitude, pickup.longitude, pickupLabel)}
+          onPress={() => void openInGoogleMaps(pickup.latitude, pickup.longitude, pickupLabel)}
         />
       ) : null}
-      {rider ? <Marker coordinate={rider} title={live.rider?.name || 'Rider'} pinColor={primary} /> : null}
+      {rider ? (
+        <Marker
+          coordinate={rider}
+          title={riderName}
+          pinColor={primary}
+          zIndex={10}
+          onCalloutPress={() => void openInGoogleMaps(rider.latitude, rider.longitude, riderName)}
+          onPress={() => void openInGoogleMaps(rider.latitude, rider.longitude, riderName)}
+        />
+      ) : null}
       {drop ? (
         <Marker
           coordinate={drop}
-          title="Your address"
-          description={live.drop?.address || ''}
-          pinColor={colors.success}
+          title={dropTitle}
+          description={dropLabel}
+          pinColor={isReturnPickup ? colors.warning : colors.success}
+          onCalloutPress={() => void openInGoogleMaps(drop.latitude, drop.longitude, dropLabel)}
+          onPress={() => void openInGoogleMaps(drop.latitude, drop.longitude, dropLabel)}
         />
       ) : null}
       {trail.length > 1 ? <Polyline coordinates={trail} strokeColor={primary} strokeWidth={4} /> : null}

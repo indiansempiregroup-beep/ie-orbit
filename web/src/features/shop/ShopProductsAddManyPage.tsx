@@ -40,6 +40,7 @@ const COLUMN_LABELS: Record<BulkGridColumn, string> = {
   pack_size: 'Pack size',
   category: 'Category',
   price: 'Price',
+  purchase_price: 'Purchase price',
   gst_rate: 'GST %',
   hsn_sac: 'HSN',
   stock_on_hand: 'Stock',

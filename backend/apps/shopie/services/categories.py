@@ -4,13 +4,21 @@ import re
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Max, Q
 from django.utils.text import slugify
 
 from apps.shopie.models import ProductCategory, ShopProductCategory
 
+# Keep "Other" after any auto-created custom categories.
+OTHER_SORT_ORDER = 9000
+
 # Builtin seed order matches ProductCategory / SHOP_PRODUCT_CATEGORIES.
 BUILTIN_CATEGORIES: tuple[tuple[str, str, int], ...] = tuple(
-    (choice.value, choice.label, index)
+    (
+        choice.value,
+        choice.label,
+        OTHER_SORT_ORDER if choice.value == ProductCategory.OTHER else index,
+    )
     for index, choice in enumerate(ProductCategory)
 )
 
@@ -42,13 +50,58 @@ class CategoryService:
             )
             if was_created:
                 created += 1
+        # Bump legacy Other so custom categories continue to sort before it.
+        other_rows = ShopProductCategory.objects.filter(
+            deleted_at__isnull=True
+        ).filter(Q(slug__iexact="other") | Q(label__iexact="other"))
+        for row in other_rows:
+            if int(row.sort_order or 0) >= OTHER_SORT_ORDER:
+                continue
+            row.sort_order = OTHER_SORT_ORDER
+            row.save(update_fields=["sort_order", "updated_at"])
         return created
+
+    @staticmethod
+    def _is_other(*, slug: str = "", label: str = "") -> bool:
+        return (slug or "").strip().lower() == "other" or (label or "").strip().lower() == "other"
+
+    @classmethod
+    def _other_last_sort_key(cls, row: ShopProductCategory) -> tuple[int, int, str]:
+        return (
+            1 if cls._is_other(slug=row.slug, label=row.label) else 0,
+            int(row.sort_order or 0),
+            (row.label or "").casefold(),
+        )
+
+    def _next_custom_sort_order(self) -> int:
+        qs = ShopProductCategory.objects.filter(deleted_at__isnull=True)
+        other_ceiling = (
+            qs.filter(Q(slug__iexact="other") | Q(label__iexact="other"))
+            .aggregate(m=Max("sort_order"))
+            .get("m")
+        )
+        ceiling = int(other_ceiling) if other_ceiling is not None else OTHER_SORT_ORDER
+        max_non_other = (
+            qs.exclude(Q(slug__iexact="other") | Q(label__iexact="other"))
+            .aggregate(m=Max("sort_order"))
+            .get("m")
+        )
+        next_order = int(max_non_other or 100) + 10
+        if next_order >= ceiling:
+            next_order = max(ceiling - 1, 0)
+        return next_order
 
     def list_categories(self) -> list[dict[str, Any]]:
         self.seed_builtins()
+        rows = list(
+            ShopProductCategory.objects.filter(is_active=True, deleted_at__isnull=True).order_by(
+                "sort_order", "label"
+            )
+        )
+        rows.sort(key=self._other_last_sort_key)
         return [
             {"slug": row.slug, "label": row.label, "is_builtin": row.is_builtin}
-            for row in ShopProductCategory.objects.filter(is_active=True, deleted_at__isnull=True)
+            for row in rows
         ]
 
     def label_for(self, slug: str | None) -> str:
@@ -115,12 +168,17 @@ class CategoryService:
                 candidate_slug = f"cat_{abs(hash(text)) % 10_000_000}"
 
         display = text if label else text.replace("_", " ").strip().title()
+        sort_order = (
+            OTHER_SORT_ORDER
+            if self._is_other(slug=candidate_slug, label=display)
+            else self._next_custom_sort_order()
+        )
         row, _ = ShopProductCategory.objects.get_or_create(
             slug=candidate_slug,
             defaults={
                 "label": display[:120],
                 "is_builtin": False,
-                "sort_order": 200,
+                "sort_order": sort_order,
             },
         )
         return row

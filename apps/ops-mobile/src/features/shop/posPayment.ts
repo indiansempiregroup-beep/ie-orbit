@@ -57,12 +57,14 @@ export const SHOP_ORDER_STATUS_OPTIONS = [
   { value: 'out_for_delivery', label: 'Out for delivery' },
   { value: 'delivery_failed', label: 'Delivery failed' },
   { value: 'completed', label: 'Completed' },
+  { value: 'returned', label: 'Returned' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
 export function shopOrderStatusStyle(status?: string | null): { bg: string; text: string; label: string } {
   const value = String(status || '').toLowerCase();
   if (value === 'completed') return { bg: '#D1FAE5', text: '#047857', label: 'Completed' };
+  if (value === 'returned') return { bg: '#EDE9FE', text: '#6D28D9', label: 'Returned' };
   if (value === 'ready') return { bg: '#DBEAFE', text: '#1D4ED8', label: 'Ready' };
   if (value === 'out_for_delivery') {
     return { bg: '#CFFAFE', text: '#0E7490', label: 'Out for delivery' };
@@ -113,7 +115,7 @@ export function shopOrderBadgeStyle(order: ShopOrder): { bg: string; text: strin
   const fallback = shopOrderStatusStyle(order.status);
   const delivery = getShopOrderDeliveryMeta(order);
   if (!delivery.booking_id) return fallback;
-  if (['cancelled', 'delivery_failed'].includes(String(order.status || '').toLowerCase())) {
+  if (['cancelled', 'delivery_failed', 'returned'].includes(String(order.status || '').toLowerCase())) {
     return fallback;
   }
   return shopDeliveryPartnerStatusStyle(delivery.partner_status) ?? fallback;
@@ -144,6 +146,8 @@ export function nextShopOrderAction(
     };
   }
   if (value === 'ready') {
+    // Delivery stays on Ready until shipped / rider pickup — primary actions are
+    // ship/dispatch. Mark delivered is offered separately as a self-deliver path.
     if (instant || delivery) return null;
     return {
       status: 'completed',
@@ -173,6 +177,12 @@ export function nextShopOrderAction(
     };
   }
   return null;
+}
+
+/** Merchant can close a delivery when handed over (incl. self-deliver from Ready). */
+export function canMarkDeliveryCompleted(status?: string | null, fulfillment?: string | null): boolean {
+  if (String(fulfillment || '').toLowerCase() !== 'delivery') return false;
+  return ['ready', 'out_for_delivery', 'delivery_failed'].includes(String(status || '').toLowerCase());
 }
 
 export function canCancelShopOrder(status?: string | null): boolean {

@@ -1,9 +1,14 @@
 import type {
   ShopDeliveryAttempt,
   ShopDeliveryLive,
+  ShopDeliveryPlace,
   ShopOrder,
+  ShopReturnPickupLive,
   ShopTrackingEvent,
 } from '@ie-orbit/sdk';
+
+/** Order delivery live or return pickup live — enough for map geometry + labels. */
+export type OpsDeliveryMapLive = ShopDeliveryLive | ShopReturnPickupLive;
 
 export type DeliveryPoint = {
   latitude: number;
@@ -17,10 +22,21 @@ export type DeliveryAttemptGroup = {
 };
 
 export function asDeliveryPoint(
-  value?: { latitude?: number | null; longitude?: number | null } | null,
+  value?: { latitude?: number | string | null; longitude?: number | string | null } | null,
 ): DeliveryPoint | null {
-  const latitude = Number(value?.latitude);
-  const longitude = Number(value?.longitude);
+  // Number(null) === 0, so reject null/blank before coercing or a fake rider pin
+  // appears at (0, 0) when the API sends { latitude: null, longitude: null }.
+  if (
+    value == null ||
+    value.latitude == null ||
+    value.longitude == null ||
+    value.latitude === '' ||
+    value.longitude === ''
+  ) {
+    return null;
+  }
+  const latitude = Number(value.latitude);
+  const longitude = Number(value.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   return { latitude, longitude };
@@ -42,13 +58,32 @@ export type DeliveryMapGeometry = {
 };
 
 /** Fixed pickup/drop plus the rider breadcrumb, deduplicated for framing. */
-export function deliveryMapGeometry(live: ShopDeliveryLive): DeliveryMapGeometry {
+export function deliveryMapGeometry(live: OpsDeliveryMapLive): DeliveryMapGeometry {
   const pickup = asDeliveryPoint(live.pickup);
   const drop = asDeliveryPoint(live.drop);
-  const trail = (live.location_trail ?? [])
-    .map(asDeliveryPoint)
-    .filter((point): point is DeliveryPoint => point != null);
-  const rider = asDeliveryPoint(live.rider_location) ?? trail[trail.length - 1] ?? null;
+  const method = String(live.delivery_method || '').toLowerCase();
+  const isInstant = method === 'instant' || method === 'instant_pickup';
+  // Rider GPS is only meaningful for instant partner trips — not standard/courier.
+  const trail = isInstant
+    ? ((live as ShopDeliveryLive).location_trail ?? (live as ShopReturnPickupLive).location_trail ?? [])
+        .map(asDeliveryPoint)
+        .filter((point): point is DeliveryPoint => point != null)
+    : [];
+  let rider = isInstant
+    ? asDeliveryPoint(live.rider_location) ?? trail[trail.length - 1] ?? null
+    : null;
+  // Nudge when rider GPS coincides with pickup so the pin isn't buried.
+  if (rider && pickup && drop) {
+    const sameAsPickup =
+      Math.abs(rider.latitude - pickup.latitude) < 1e-5 &&
+      Math.abs(rider.longitude - pickup.longitude) < 1e-5;
+    if (sameAsPickup) {
+      rider = {
+        latitude: pickup.latitude + (drop.latitude - pickup.latitude) * 0.08,
+        longitude: pickup.longitude + (drop.longitude - pickup.longitude) * 0.08,
+      };
+    }
+  }
   const points = [pickup, ...trail, rider, drop].filter(
     (point): point is DeliveryPoint => point != null,
   );
@@ -60,12 +95,18 @@ export function deliveryMapPointSignature(points: DeliveryPoint[]): string {
 }
 
 export function deliveryPlaceLabel(
-  place?: { address?: string; contact?: { name?: string } } | null,
+  place?: ShopDeliveryPlace | { address?: string; city?: string; contact?: { name?: string } } | null,
 ): string {
   const name = String(place?.contact?.name || '').trim();
   const address = String(place?.address || '').trim();
-  if (name && address) return `${name} · ${address}`;
-  return name || address || 'Address unavailable';
+  const city = String(place?.city || '').trim();
+  const line = address || city;
+  if (name && line) return `${name} · ${line}`;
+  return name || line || 'Address unavailable';
+}
+
+export function isReturnPickupLive(live: OpsDeliveryMapLive): boolean {
+  return String(live.delivery_method || '').toLowerCase() === 'instant_pickup';
 }
 
 export function deliveryMethodForOrder(order: ShopOrder): string {

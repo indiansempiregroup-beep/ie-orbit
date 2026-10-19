@@ -11,6 +11,7 @@ export const BULK_GRID_COLUMNS = [
   'pack_size',
   'category',
   'price',
+  'purchase_price',
   'gst_rate',
   'hsn_sac',
   'stock_on_hand',
@@ -37,6 +38,7 @@ export type BulkProductRow = {
   pack_size: string;
   category: string;
   price: string;
+  purchase_price: string;
   gst_rate: string;
   hsn_sac: string;
   stock_on_hand: string;
@@ -65,6 +67,10 @@ const COLUMN_ALIASES: Record<string, BulkGridColumn> = {
   price: 'price',
   mrp: 'price',
   selling_price: 'price',
+  purchase_price: 'purchase_price',
+  cost: 'purchase_price',
+  cost_price: 'purchase_price',
+  buy_price: 'purchase_price',
   gst_rate: 'gst_rate',
   gst: 'gst_rate',
   tax: 'gst_rate',
@@ -107,6 +113,7 @@ export function emptyBulkRow(id: string, defaults: BulkProductDefaults): BulkPro
     pack_size: '',
     category: defaults.category,
     price: '',
+    purchase_price: '',
     gst_rate: defaults.gst_rate,
     hsn_sac: defaults.hsn_sac,
     stock_on_hand: '',
@@ -125,6 +132,7 @@ export function rowHasContent(row: BulkProductRow): boolean {
       row.brand.trim() ||
       row.pack_size.trim() ||
       row.price.trim() ||
+      row.purchase_price.trim() ||
       row.stock_on_hand.trim() ||
       row.image_url.trim(),
   );
@@ -219,6 +227,7 @@ export function rowToWriteInput(
     pack_size: row.pack_size.trim(),
     category: category || undefined,
     price: row.price.trim() || '0',
+    purchase_price: row.purchase_price.trim() || '0',
     gst_rate: gst,
     tax_rate: gst,
     hsn_sac: row.hsn_sac.trim() || defaults.hsn_sac,
@@ -330,7 +339,7 @@ export function mergePartialRow(
 }
 
 export function csvTemplate(): string {
-  return `${BULK_GRID_COLUMNS.join(',')}\nRice 5kg,8901234567890,RICE-5,India Gate,5kg,food_grocery,249,5,1006,20,active\n`;
+  return `${BULK_GRID_COLUMNS.join(',')}\nRice 5kg,8901234567890,RICE-5,India Gate,5kg,food_grocery,249,180,5,1006,20,active\n`;
 }
 
 export function downloadCsvTemplate() {

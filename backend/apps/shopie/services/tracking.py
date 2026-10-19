@@ -28,6 +28,7 @@ CANONICAL_LABELS = {
     "confirmed": "Order confirmed",
     "packing": "Packing your order",
     "packed": "Packed and ready",
+    "ready": "Ready for pickup",
     "shipped": "Shipped",
     "in_transit": "In transit",
     "finding_rider": "Finding a rider",
@@ -36,10 +37,15 @@ CANONICAL_LABELS = {
     "out_for_delivery": "Out for delivery",
     "nearby": "Delivery is nearby",
     "delivered": "Delivered",
+    "completed": "Picked up",
+    "returned": "Returned",
+    "cancelled": "Cancelled",
     "delivery_failed": "Delivery failed",
     "delivery_cancelled": "Delivery cancelled",
     "retrying": "Requesting another rider",
 }
+
+ONLINE_FULFILLMENT_MODES = {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP}
 
 PARTNER_TO_CANONICAL = {
     "packing": "packing",
@@ -56,24 +62,23 @@ PARTNER_TO_CANONICAL = {
 
 def canonical_order_status(order: ShopOrder, status: str) -> str:
     value = str(status or "").lower()
+    pickup = order.fulfillment_mode == FulfillmentMode.PICKUP
     if value == OrderStatus.PENDING:
         return "order_placed"
     if value == OrderStatus.CONFIRMED:
         return "confirmed"
     if value == OrderStatus.READY:
-        return "packed"
+        return "ready" if pickup else "packed"
     if value == OrderStatus.OUT_FOR_DELIVERY:
         return "out_for_delivery"
     if value == OrderStatus.COMPLETED:
-        return "delivered" if order.fulfillment_mode == FulfillmentMode.DELIVERY else "completed"
+        return "completed" if pickup else "delivered"
+    if value == OrderStatus.RETURNED:
+        return "returned"
     if value == OrderStatus.DELIVERY_FAILED:
         return "delivery_failed"
     if value == OrderStatus.CANCELLED:
-        return (
-            "delivery_cancelled"
-            if order.fulfillment_mode == FulfillmentMode.DELIVERY
-            else "cancelled"
-        )
+        return "cancelled" if pickup else "delivery_cancelled"
     return value
 
 
@@ -117,22 +122,59 @@ class TrackingHistoryService:
         if not booking_id:
             return None
         return (
-            ShopDeliveryAttempt.objects.select_related("order", "business", "tenant")
+            ShopDeliveryAttempt.objects.select_related(
+                "order", "shop_return", "business", "tenant"
+            )
             .filter(booking_id=booking_id)
             .order_by("-created_at")
+            .first()
+        )
+
+    def active_attempt_for_return(self, *, shop_return) -> ShopDeliveryAttempt | None:
+        return (
+            ShopDeliveryAttempt.objects.filter(
+                shop_return=shop_return,
+                status=DeliveryAttemptStatus.ACTIVE,
+            )
+            .order_by("-attempt_number")
             .first()
         )
 
     def open_attempt(
         self,
         *,
-        order: ShopOrder,
+        order: ShopOrder | None = None,
+        shop_return=None,
         provider: str,
         booking_id: str,
         tracking_url: str = "",
         rider: dict[str, Any] | None = None,
         occurred_at: datetime | None = None,
     ) -> ShopDeliveryAttempt:
+        if shop_return is not None:
+            current = self.active_attempt_for_return(shop_return=shop_return)
+            if current and current.booking_id == booking_id:
+                return current
+            number = (
+                ShopDeliveryAttempt.objects.filter(shop_return=shop_return).aggregate(
+                    value=Max("attempt_number")
+                )["value"]
+                or 0
+            ) + 1
+            return ShopDeliveryAttempt.objects.create(
+                tenant=shop_return.tenant,
+                business=shop_return.business,
+                order=None,
+                shop_return=shop_return,
+                attempt_number=number,
+                provider=provider,
+                booking_id=booking_id,
+                tracking_url=tracking_url,
+                rider=rider or {},
+                started_at=occurred_at or timezone.now(),
+            )
+        if order is None:
+            raise ValueError("order or shop_return is required")
         current = self.active_attempt(order=order)
         if current and current.booking_id == booking_id:
             return current
@@ -214,6 +256,20 @@ class TrackingHistoryService:
             "reason": reason,
             "metadata": metadata or {},
         }
+        # Collapse duplicate status markers for the same attempt (order-level or
+        # rider attempt). Ship + order transitions often write the same step twice.
+        existing_same = (
+            ShopOrderTrackingEvent.objects.filter(
+                order=order,
+                attempt=attempt,
+                kind=TrackingEventKind.STATUS,
+                status=canonical,
+            )
+            .order_by("occurred_at", "created_at")
+            .first()
+        )
+        if existing_same is not None:
+            return existing_same
         if source_key:
             event, _ = ShopOrderTrackingEvent.objects.get_or_create(
                 order=order,
@@ -221,17 +277,6 @@ class TrackingHistoryService:
                 defaults=defaults,
             )
             return event
-        latest = (
-            ShopOrderTrackingEvent.objects.filter(
-                order=order,
-                attempt=attempt,
-                kind=TrackingEventKind.STATUS,
-            )
-            .order_by("-occurred_at", "-created_at")
-            .first()
-        )
-        if latest and latest.status == canonical:
-            return latest
         return ShopOrderTrackingEvent.objects.create(order=order, source_key="", **defaults)
 
     def record_order_status(
@@ -241,7 +286,7 @@ class TrackingHistoryService:
         status: str,
         occurred_at: datetime | None = None,
     ) -> ShopOrderTrackingEvent | None:
-        if order.fulfillment_mode != FulfillmentMode.DELIVERY:
+        if order.fulfillment_mode not in ONLINE_FULFILLMENT_MODES:
             return None
         canonical = canonical_order_status(order, status)
         return self.record_status(
@@ -251,6 +296,96 @@ class TrackingHistoryService:
             occurred_at=occurred_at,
             source_key=f"order-status:{canonical}:{(occurred_at or timezone.now()).isoformat()}",
         )
+
+    def ensure_baseline_history(self, *, order: ShopOrder) -> None:
+        """Fill missing online-order status steps for older orders (and gap-fill partial trails)."""
+        if order.fulfillment_mode not in ONLINE_FULFILLMENT_MODES:
+            return
+
+        existing = set(
+            ShopOrderTrackingEvent.objects.filter(
+                order=order,
+                kind=TrackingEventKind.STATUS,
+            ).values_list("status", flat=True)
+        )
+        created = order.created_at or timezone.now()
+        updated = order.updated_at or created
+        confirmed_at = self._inferred_confirmed_at(order=order) or created
+        if confirmed_at < created:
+            confirmed_at = created
+        if confirmed_at > updated:
+            confirmed_at = updated
+
+        # Required path up to the current status. Skip optional READY when the
+        # order jumped confirmed → completed (allowed by transition rules).
+        status = order.status
+        needed: list[tuple[str, datetime]] = [(OrderStatus.PENDING, created)]
+        if status == OrderStatus.PENDING:
+            pass
+        elif status == OrderStatus.CANCELLED:
+            needed.append((OrderStatus.CANCELLED, updated))
+        elif status == OrderStatus.CONFIRMED:
+            needed.append((OrderStatus.CONFIRMED, confirmed_at))
+        elif status == OrderStatus.READY:
+            needed.extend(
+                [
+                    (OrderStatus.CONFIRMED, confirmed_at),
+                    (OrderStatus.READY, updated),
+                ]
+            )
+        elif status == OrderStatus.OUT_FOR_DELIVERY:
+            needed.extend(
+                [
+                    (OrderStatus.CONFIRMED, confirmed_at),
+                    (OrderStatus.READY, confirmed_at),
+                    (OrderStatus.OUT_FOR_DELIVERY, updated),
+                ]
+            )
+        elif status == OrderStatus.DELIVERY_FAILED:
+            needed.extend(
+                [
+                    (OrderStatus.CONFIRMED, confirmed_at),
+                    (OrderStatus.READY, confirmed_at),
+                    (OrderStatus.DELIVERY_FAILED, updated),
+                ]
+            )
+        elif status == OrderStatus.COMPLETED:
+            needed.extend(
+                [
+                    (OrderStatus.CONFIRMED, confirmed_at),
+                    (OrderStatus.COMPLETED, updated),
+                ]
+            )
+        else:
+            needed.append((status, updated))
+
+        for order_status, occurred_at in needed:
+            canonical = canonical_order_status(order, order_status)
+            if canonical in existing:
+                continue
+            self.record_status(
+                order=order,
+                status=canonical,
+                source=TrackingEventSource.ORDER,
+                occurred_at=occurred_at,
+                source_key=f"order-status-backfill:{canonical}",
+            )
+            existing.add(canonical)
+
+    def _inferred_confirmed_at(self, *, order: ShopOrder) -> datetime | None:
+        meta = order.metadata if isinstance(order.metadata, dict) else {}
+        pos = meta.get("pos") if isinstance(meta.get("pos"), dict) else {}
+        raw = pos.get("confirmed_at") or meta.get("confirmed_at")
+        if not raw:
+            return None
+        from django.utils.dateparse import parse_datetime
+
+        parsed = parse_datetime(str(raw))
+        if parsed is None:
+            return None
+        if timezone.is_naive(parsed):
+            return timezone.make_aware(parsed, timezone.get_current_timezone())
+        return parsed
 
     def record_location(
         self,
@@ -326,7 +461,7 @@ class TrackingHistoryService:
             .prefetch_related("events")
             .order_by("attempt_number")
         )
-        events = list(
+        raw_events = list(
             ShopOrderTrackingEvent.objects.filter(
                 order=order,
                 kind=TrackingEventKind.STATUS,
@@ -334,6 +469,14 @@ class TrackingHistoryService:
             .select_related("attempt")
             .order_by("occurred_at", "created_at")
         )
+        events: list[ShopOrderTrackingEvent] = []
+        seen_status_keys: set[tuple[str, str | None]] = set()
+        for event in raw_events:
+            key = (event.status, str(event.attempt_id) if event.attempt_id else None)
+            if key in seen_status_keys:
+                continue
+            seen_status_keys.add(key)
+            events.append(event)
         latest_attempt = attempts[-1] if attempts else None
         trail_events = (
             ShopOrderTrackingEvent.objects.filter(

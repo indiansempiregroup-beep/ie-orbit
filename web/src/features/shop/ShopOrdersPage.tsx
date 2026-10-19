@@ -11,6 +11,7 @@ import {
   shopOrderDeliverySummary,
   shopOrderStatusLabel,
 } from './shopOrderStatus';
+import { SaleInsightChips } from './SaleInsightChips';
 
 export function ShopOrdersPage() {
   const [search, setSearch] = useState('');
@@ -70,6 +71,7 @@ export function ShopOrdersPage() {
                 { value: 'out_for_delivery', label: 'Out for delivery' },
                 { value: 'delivery_failed', label: 'Delivery failed' },
                 { value: 'completed', label: 'Completed' },
+                { value: 'returned', label: 'Returned' },
                 { value: 'cancelled', label: 'Cancelled' },
               ],
             },
@@ -142,6 +144,9 @@ export function ShopOrdersPage() {
                     <div style={{ fontSize: 13 }}>
                       {(order.lines ?? []).map((line) => `${line.product_name} × ${line.quantity}`).join(', ')}
                     </div>
+                    <div style={{ marginTop: 8 }}>
+                      <SaleInsightChips source={order} currency={order.currency} hideWhenEmpty />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {due && order.customer_id ? (
@@ -183,8 +188,8 @@ export function ShopOrdersPage() {
                         Mark out for delivery
                       </Button>
                     ) : null}
-                    {order.status === 'out_for_delivery' ||
-                    (order.status === 'delivery_failed' && deliveryMethod !== 'instant') ? (
+                    {order.fulfillment_mode === 'delivery' &&
+                    ['ready', 'out_for_delivery', 'delivery_failed'].includes(order.status) ? (
                       <Button
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}

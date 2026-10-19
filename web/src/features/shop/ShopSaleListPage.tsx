@@ -5,9 +5,10 @@ export function ShopSaleListPage() {
   return (
     <ShopVoucherList
       voucherType="sale"
+      source="pos"
       newPath="/shop/books/sale/new"
       title="New sale"
-      emptyLabel="No sales recorded yet. Create your first GST sale voucher."
+      emptyLabel="No POS sales recorded yet. Open the Sale counter to bill a customer."
     />
   );
 }

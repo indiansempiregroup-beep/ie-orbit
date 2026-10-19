@@ -45,6 +45,7 @@ class OrderStatus(models.TextChoices):
     OUT_FOR_DELIVERY = "out_for_delivery", "Out for Delivery"
     DELIVERY_FAILED = "delivery_failed", "Delivery Failed"
     COMPLETED = "completed", "Completed"
+    RETURNED = "returned", "Returned"
     CANCELLED = "cancelled", "Cancelled"
 
 
@@ -118,11 +119,33 @@ class StockMovementType(models.TextChoices):
     DAMAGE = "damage", "Damage"
 
 
+class ProfitFactKind(models.TextChoices):
+    SALE = "sale", "Sale"
+    CANCEL = "cancel", "Cancel"
+    RETURN = "return", "Return"
+
+
+class ProfitChannel(models.TextChoices):
+    POS = "pos", "POS"
+    ONLINE_PICKUP = "online_pickup", "Online pickup"
+    ONLINE_DELIVERY = "online_delivery", "Online delivery"
+
+
 class ReturnStatus(models.TextChoices):
     PENDING = "pending", "Pending"
+    AWAITING_CUSTOMER = "awaiting_customer", "Awaiting customer"
     APPROVED = "approved", "Approved"
     COMPLETED = "completed", "Completed"
     REJECTED = "rejected", "Rejected"
+
+
+class ReturnMethod(models.TextChoices):
+    """How goods get back to the shop."""
+
+    IN_STORE = "in_store", "In store"
+    DROPOFF = "dropoff", "Customer drop-off"
+    REVERSE_PICKUP = "reverse_pickup", "Reverse pickup"
+    INSTANT_PICKUP = "instant_pickup", "Instant pickup"
 
 
 class VerticalPack(models.TextChoices):
@@ -220,6 +243,9 @@ class ShopProduct(TenantModel):
         db_index=True,
     )
     price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    purchase_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Weighted average cost of on-hand stock. Last buy stays on purchase_price.
+    avg_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=3, blank=True)
     stock_on_hand = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
@@ -432,6 +458,9 @@ class ShopOrderLine(TenantModel):
     barcode_scanned = models.CharField(max_length=128, blank=True)
     quantity = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("1"))
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    purchase_price_snapshot = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.00"))
     discount_type = models.CharField(max_length=16, blank=True, default="")
     discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
@@ -443,6 +472,80 @@ class ShopOrderLine(TenantModel):
     class Meta(TenantModel.Meta):
         db_table = "shop_order_lines"
         ordering = ["created_at"]
+
+
+class ShopSaleProfitFact(TenantModel):
+    """Append-only sold-profit ledger for BI (sale + cancel/return reverses)."""
+
+    objects = TenantAwareManager()
+    active_objects = TenantAwareManager()
+
+    business = models.ForeignKey(
+        "businesses.Business",
+        on_delete=models.CASCADE,
+        related_name="shop_sale_profit_facts",
+    )
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.CASCADE,
+        related_name="profit_facts",
+    )
+    order_line = models.ForeignKey(
+        ShopOrderLine,
+        on_delete=models.CASCADE,
+        related_name="profit_facts",
+    )
+    product = models.ForeignKey(
+        ShopProduct,
+        on_delete=models.PROTECT,
+        related_name="profit_facts",
+    )
+    fact_kind = models.CharField(max_length=16, choices=ProfitFactKind.choices, db_index=True)
+    source_id = models.UUIDField(db_index=True)
+    sold_at = models.DateTimeField(db_index=True)
+    channel = models.CharField(max_length=32, choices=ProfitChannel.choices, db_index=True)
+    order_number = models.CharField(max_length=32, blank=True)
+    product_name = models.CharField(max_length=200, blank=True)
+    sku = models.CharField(max_length=64, blank=True)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, default=Decimal("0"))
+    unit_sell_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    unit_purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    line_discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    bill_discount_share = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    gross_sell = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Shelf sell after discounts (price field basis; GST not stripped for inclusive).
+    net_revenue = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # Output GST on the line (portion of inclusive price, or added for exclusive).
+    tax_collected = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    # What the customer paid for the line (line_total).
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    cogs = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    gross_profit = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    currency = models.CharField(max_length=3, blank=True)
+
+    class Meta(TenantModel.Meta):
+        db_table = "shop_sale_profit_facts"
+        ordering = ["-sold_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "order_line", "fact_kind", "source_id"],
+                name="uq_shop_sale_profit_fact_line_kind_source",
+            ),
+        ]
+        indexes = [
+            *TenantModel.Meta.indexes,
+            models.Index(fields=["tenant", "business", "sold_at"]),
+            models.Index(fields=["tenant", "business", "product", "sold_at"]),
+            models.Index(fields=["tenant", "business", "channel", "sold_at"]),
+            models.Index(fields=["tenant", "business", "fact_kind", "sold_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.fact_kind}:{self.order_number}:{self.product_name}"
 
 
 class ShopStockMovement(TenantModel):
@@ -628,6 +731,13 @@ class ShopBusinessSettings(TenantModel):
             "(Porter / Shiprocket Quick). Turn off to require prepaid payment."
         ),
     )
+    return_days = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Days after purchase/delivery within which POS and online returns are "
+            "accepted. 0 means no time limit."
+        ),
+    )
     delivery_integration = models.JSONField(
         default=_default_delivery_integration,
         blank=True,
@@ -700,6 +810,15 @@ class ShopDeliveryAttempt(TenantModel):
         ShopOrder,
         on_delete=models.CASCADE,
         related_name="delivery_attempts",
+        null=True,
+        blank=True,
+    )
+    shop_return = models.ForeignKey(
+        "ShopReturn",
+        on_delete=models.CASCADE,
+        related_name="delivery_attempts",
+        null=True,
+        blank=True,
     )
     attempt_number = models.PositiveSmallIntegerField()
     provider = models.CharField(max_length=32, blank=True, db_index=True)
@@ -722,8 +841,14 @@ class ShopDeliveryAttempt(TenantModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["order", "attempt_number"],
+                condition=models.Q(order__isnull=False),
                 name="uq_shop_delivery_attempt_order_number",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["shop_return", "attempt_number"],
+                condition=models.Q(shop_return__isnull=False),
+                name="uq_shop_delivery_attempt_return_number",
+            ),
         ]
         indexes = [
             *TenantModel.Meta.indexes,
@@ -953,10 +1078,20 @@ class ShopReturn(TenantModel):
         default=ReturnStatus.PENDING,
         db_index=True,
     )
+    return_method = models.CharField(
+        max_length=32,
+        choices=ReturnMethod.choices,
+        default=ReturnMethod.IN_STORE,
+        db_index=True,
+    )
     reason = models.TextField(blank=True)
     restock = models.BooleanField(default=True)
     refund_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     currency = models.CharField(max_length=3, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    pickup_arranged_at = models.DateTimeField(null=True, blank=True)
+    pickup_notes = models.TextField(blank=True)
+    pickup_tracking_number = models.CharField(max_length=128, blank=True)
     credit_invoice = models.ForeignKey(
         ShopInvoice,
         on_delete=models.SET_NULL,

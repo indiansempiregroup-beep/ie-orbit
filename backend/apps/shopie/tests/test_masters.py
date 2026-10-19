@@ -157,6 +157,41 @@ def test_master_create_keeps_custom_category_label(shop_business: Business):
 
 
 @pytest.mark.django_db
+def test_master_other_stays_last_after_custom_create(shop_business: Business):
+    """Custom rows from Other free-text must appear before the Other option."""
+    service = MasterService()
+    tenant = shop_business.tenant
+    service.create(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.CATEGORY,
+        label="Dry dog food",
+    )
+    service.create(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.EXPENSE_CATEGORY,
+        label="Packing tape",
+    )
+    categories = service.list_records(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.CATEGORY,
+    )
+    expenses = service.list_records(
+        tenant=tenant,
+        business=shop_business,
+        kind=ShopMasterKind.EXPENSE_CATEGORY,
+    )
+    assert categories[-1]["slug"] == "other"
+    assert categories[-1]["label"].lower() == "other"
+    assert any(item["label"] == "Dry dog food" for item in categories[:-1])
+    assert expenses[-1]["slug"] == "other"
+    assert expenses[-1]["label"].lower() == "other"
+    assert any(item["label"] == "Packing tape" for item in expenses[:-1])
+
+
+@pytest.mark.django_db
 def test_master_ensure_category_is_business_scoped(shop_business: Business):
     service = MasterService()
     tenant = shop_business.tenant

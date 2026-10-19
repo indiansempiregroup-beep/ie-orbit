@@ -14,6 +14,8 @@ customer_export = CustomerViewSet.as_view({"post": "export_foundation"})
 customer_borrow_balance = CustomerViewSet.as_view({"get": "borrow_balance"})
 customer_borrow_ledger = CustomerViewSet.as_view({"get": "borrow_ledger"})
 customer_borrow_payment = CustomerViewSet.as_view({"post": "borrow_payment"})
+customer_loyalty_balance = CustomerViewSet.as_view({"get": "loyalty_balance"})
+customer_loyalty_report = CustomerViewSet.as_view({"get": "loyalty_report"})
 customer_tag_list = CustomerTagViewSet.as_view({"get": "list", "post": "create"})
 
 urlpatterns = [
@@ -22,6 +24,7 @@ urlpatterns = [
     path("customers/import", customer_import, name="customer-import-foundation"),
     path("customers/export", customer_export, name="customer-export-foundation"),
     path("customers/tags", customer_tag_list, name="customer-tag-list-create"),
+    path("customers/loyalty/report", customer_loyalty_report, name="customer-loyalty-report"),
     path("customers/<uuid:pk>", customer_detail, name="customer-detail"),
     path("customers/<uuid:pk>/restore", customer_restore, name="customer-restore"),
     path("customers/<uuid:pk>/merge", customer_merge, name="customer-merge"),
@@ -31,5 +34,10 @@ urlpatterns = [
         "customers/<uuid:pk>/borrow/payments",
         customer_borrow_payment,
         name="customer-borrow-payment",
+    ),
+    path(
+        "customers/<uuid:pk>/loyalty",
+        customer_loyalty_balance,
+        name="customer-loyalty-balance",
     ),
 ]

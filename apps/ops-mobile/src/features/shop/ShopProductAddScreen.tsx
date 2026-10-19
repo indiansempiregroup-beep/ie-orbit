@@ -66,6 +66,7 @@ const emptyForm = {
   description: '',
   details_html: '',
   price: '0',
+  purchase_price: '0',
   tax_rate: '0',
   tax_inclusive: 'included' as 'included' | 'excluded',
   currency: 'INR',
@@ -97,6 +98,7 @@ const IDENTITY_KEYS: FormKey[] = [
   'barcode',
   'barcode_type',
   'price',
+  'purchase_price',
   'tax_rate',
   'tax_inclusive',
 ];
@@ -122,13 +124,16 @@ function wipeIdentity(
     category_other: '',
     ...(options?.keepPriceStock
       ? {}
-      : { price: '0', tax_rate: '0', tax_inclusive: 'included' as const }),
+      : { price: '0', purchase_price: '0', tax_rate: '0', tax_inclusive: 'included' as const }),
   };
 }
 
 function clearIdentityTouched(touched: Set<FormKey>, options?: { keepPriceStock?: boolean }) {
   for (const key of IDENTITY_KEYS) {
-    if (options?.keepPriceStock && (key === 'price' || key === 'tax_rate' || key === 'tax_inclusive')) {
+    if (
+      options?.keepPriceStock &&
+      (key === 'price' || key === 'purchase_price' || key === 'tax_rate' || key === 'tax_inclusive')
+    ) {
       continue;
     }
     touched.delete(key);
@@ -240,6 +245,7 @@ function formFromProduct(product: ShopProduct): FormState {
     description: product.description || '',
     details_html: product.details_html || '',
     price: String(product.price ?? '0'),
+    purchase_price: String(product.purchase_price ?? '0'),
     tax_rate: String(product.tax_rate ?? product.gst_rate ?? '0'),
     tax_inclusive: taxInclusive ? 'included' : 'excluded',
     currency: product.currency || 'INR',
@@ -806,7 +812,12 @@ export function ShopProductAddScreen() {
         categorySlug = created.data.slug;
         setCategoryOptions((current) => {
           if (current.some((item) => item.slug === categorySlug)) return current;
-          return [...current.filter((item) => item.slug !== 'other'), created.data];
+          const withoutOther = current.filter((item) => item.slug !== 'other');
+          const otherOption = current.find((item) => item.slug === 'other');
+          // Keep Other last after a custom category is promoted into the master list.
+          return otherOption
+            ? [...withoutOther, created.data, otherOption]
+            : [...withoutOther, created.data];
         });
       } catch (err) {
         setBusy(false);
@@ -823,6 +834,7 @@ export function ShopProductAddScreen() {
       description: form.description,
       details_html: form.details_html,
       price: form.price,
+      purchase_price: form.purchase_price,
       tax_rate: form.tax_rate,
       gst_rate: form.tax_rate,
       currency: form.currency,
@@ -1137,13 +1149,23 @@ export function ShopProductAddScreen() {
       <FormSection title="Price & tax">
         <FieldRow>
           <Input
-            label="Price"
+            label="Selling price"
             required
             value={form.price}
             onChangeText={(value) => setField('price', value)}
             keyboardType="decimal-pad"
             error={fieldErrors.price}
           />
+          <Input
+            label="Purchase price"
+            optional
+            value={form.purchase_price}
+            onChangeText={(value) => setField('purchase_price', value)}
+            keyboardType="decimal-pad"
+            hint="Owner cost for profit insights. Not shown to customers."
+          />
+        </FieldRow>
+        <FieldRow>
           <Input
             label="GST %"
             optional

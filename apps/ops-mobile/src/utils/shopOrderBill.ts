@@ -22,12 +22,17 @@ const PAYMENT_LABELS: Record<string, string> = {
   borrow: 'Credit',
   razorpay: 'Online (Razorpay)',
   cashfree: 'Online (Cashfree)',
+  pay_at_venue: 'Pay at venue',
+  pay_later: 'Pay later',
 };
 
 function paymentLabelFor(method: string): string {
   const key = method.trim().toLowerCase();
   if (!key) return '';
-  return PAYMENT_LABELS[key] || key.toUpperCase();
+  if (PAYMENT_LABELS[key]) return PAYMENT_LABELS[key];
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export type ShopOrderBillBreakdown = {
@@ -92,6 +97,19 @@ export function splitGstDisplay(
 
 export function lineMerchandiseGross(line: ShopOrderLine): number {
   return money(num(line.quantity) * num(line.unit_price));
+}
+
+/**
+ * Shelf amount for an invoice line (qty × rate).
+ * Bill / coupon / loyalty / product discounts stay in the summary — do not use
+ * stored `total`, which may already have those folded in.
+ */
+export function voucherLineGrossAmount(line: Record<string, unknown>): number {
+  const gross = money(num(line.gross));
+  if (gross > 0) return gross;
+  const qty = num(line.qty ?? line.quantity);
+  const rate = num(line.rate ?? line.unit_price);
+  return money(qty * rate);
 }
 
 /**

@@ -18,13 +18,20 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { EmptyState, ScreenHeader } from '../../components/ProfileMenuScreen';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { formatShopMoney, formatShopOrderPlaced, formatShopQty } from './shopHelpers';
+import {
+  formatShopDateTime,
+  formatShopMoney,
+  formatShopQty,
+  shopReturnMethodLabel,
+  shopReturnStatusLabel,
+} from './shopHelpers';
 import type { ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 const STATUS_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'pending', label: 'Pending' },
+  { id: 'approved', label: 'Pickup arranged' },
   { id: 'completed', label: 'Completed' },
   { id: 'rejected', label: 'Rejected' },
 ] as const;
@@ -33,15 +40,21 @@ type StatusFilter = (typeof STATUS_FILTERS)[number]['id'];
 
 type ReturnLine = { name?: string; quantity?: string | number };
 
-function returnTone(status?: string) {
-  const value = String(status || '').toLowerCase();
-  if (value === 'completed' || value === 'approved') {
-    return { bg: '#ECFDF5', text: '#047857', dot: '#047857', label: 'Completed' };
+function returnTone(item: ShopReturn) {
+  const value = String(item.status || '').toLowerCase();
+  if (value === 'completed') {
+    return { bg: '#ECFDF5', text: '#047857', dot: '#047857', label: shopReturnStatusLabel(item) };
   }
   if (value === 'rejected') {
-    return { bg: '#FEF2F2', text: '#B91C1C', dot: '#B91C1C', label: 'Rejected' };
+    return { bg: '#FEF2F2', text: '#B91C1C', dot: '#B91C1C', label: shopReturnStatusLabel(item) };
   }
-  return { bg: '#FFFBEB', text: '#B45309', dot: '#B45309', label: 'Pending' };
+  if (value === 'awaiting_customer') {
+    return { bg: '#FFF7ED', text: '#C2410C', dot: '#EA580C', label: shopReturnStatusLabel(item) };
+  }
+  if (value === 'approved' || item.pickup_arranged_at) {
+    return { bg: '#EFF6FF', text: '#1D4ED8', dot: '#1D4ED8', label: shopReturnStatusLabel(item) };
+  }
+  return { bg: '#FFFBEB', text: '#B45309', dot: '#B45309', label: shopReturnStatusLabel(item) };
 }
 
 function returnLines(item: ShopReturn): ReturnLine[] {
@@ -163,9 +176,10 @@ export function MyReturnsScreen() {
           />
         }
         renderItem={({ item }) => {
-          const tone = returnTone(item.status);
+          const tone = returnTone(item);
           const preview = itemPreview(item);
           const count = itemCount(item);
+          const method = shopReturnMethodLabel(item.return_method);
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -173,7 +187,15 @@ export function MyReturnsScreen() {
             >
               <View style={[styles.iconWrap, { backgroundColor: tone.bg }]}>
                 <Feather
-                  name={tone.label === 'Completed' ? 'check-circle' : tone.label === 'Rejected' ? 'x-circle' : 'rotate-ccw'}
+                  name={
+                    tone.label === 'Completed'
+                      ? 'check-circle'
+                      : tone.label === 'Declined'
+                        ? 'x-circle'
+                        : tone.label === 'Pickup arranged'
+                          ? 'truck'
+                          : 'rotate-ccw'
+                  }
                   size={18}
                   color={tone.text}
                 />
@@ -186,7 +208,8 @@ export function MyReturnsScreen() {
                   <Text style={styles.total}>{formatShopMoney(item.refund_total, item.currency)}</Text>
                 </View>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {formatShopOrderPlaced(item.created_at)}
+                  {formatShopDateTime(item.created_at)}
+                  {method ? ` · ${method}` : ''}
                   {count ? ` · ${count} item${count === 1 ? '' : 's'}` : ''}
                 </Text>
                 {preview ? (

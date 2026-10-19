@@ -20,6 +20,7 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   out_for_delivery: 'Out for delivery',
   delivery_failed: 'Delivery failed',
   completed: 'Completed',
+  returned: 'Returned',
   cancelled: 'Cancelled',
 };
 
@@ -45,7 +46,9 @@ export function shopOrderStatusLabel(order: ShopOrder): string {
   const status = String(order.status || '').toLowerCase();
   const fallback = ORDER_STATUS_LABELS[status] ?? status;
   const delivery = getShopOrderDeliveryMeta(order);
-  if (!delivery.booking_id || ['cancelled', 'delivery_failed'].includes(status)) return fallback;
+  if (!delivery.booking_id || ['cancelled', 'delivery_failed', 'returned'].includes(status)) {
+    return fallback;
+  }
   const partner = String(delivery.partner_status || '').toLowerCase();
   return PARTNER_STATUS_LABELS[partner] ?? fallback;
 }

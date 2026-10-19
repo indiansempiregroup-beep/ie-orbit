@@ -464,6 +464,14 @@ export function ShopProductsAddManyScreen() {
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
+            value={row.purchase_price}
+            onChangeText={(value) => updateRow(row.id, { purchase_price: value })}
+            placeholder="Purchase"
+            keyboardType="decimal-pad"
+            style={[styles.input, { flex: 1 }]}
+            placeholderTextColor={colors.mutedForeground}
+          />
+          <TextInput
             value={row.gst_rate}
             onChangeText={(value) => updateRow(row.id, { gst_rate: value })}
             placeholder="GST %"
@@ -561,6 +569,7 @@ export function ShopProductsAddManyScreen() {
         <TextInput value={row.brand} onChangeText={(value) => updateRow(row.id, { brand: value })} style={styles.gridInput} placeholder="Brand" />
         <TextInput value={row.pack_size} onChangeText={(value) => updateRow(row.id, { pack_size: value })} style={styles.gridInput} placeholder="Pack" />
         <TextInput value={row.price} onChangeText={(value) => updateRow(row.id, { price: value })} style={styles.gridInput} placeholder="Price" keyboardType="decimal-pad" />
+        <TextInput value={row.purchase_price} onChangeText={(value) => updateRow(row.id, { purchase_price: value })} style={styles.gridInput} placeholder="Purchase" keyboardType="decimal-pad" />
         <TextInput value={row.gst_rate} onChangeText={(value) => updateRow(row.id, { gst_rate: value })} style={styles.gridInput} placeholder="GST" keyboardType="decimal-pad" />
         <TextInput value={row.hsn_sac} onChangeText={(value) => updateRow(row.id, { hsn_sac: value })} style={styles.gridInput} placeholder="HSN" />
         <TextInput value={row.stock_on_hand} onChangeText={(value) => updateRow(row.id, { stock_on_hand: value })} style={styles.gridInput} placeholder="Stock" keyboardType="decimal-pad" />

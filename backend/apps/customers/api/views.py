@@ -26,6 +26,7 @@ from apps.customers.api.serializers import (
 from apps.customers.models import Customer, CustomerTag
 from apps.customers.repositories import CustomerRepository
 from apps.customers.services import BorrowService, CustomerSearchService, CustomerService
+from apps.customers.services.loyalty import LoyaltyService
 
 
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
@@ -43,6 +44,7 @@ class CustomerViewSet(viewsets.ViewSet):
     service = CustomerService(repository=repository)
     search_service = CustomerSearchService(repository=repository)
     borrow = BorrowService()
+    loyalty = LoyaltyService()
 
     @extend_schema(
         tags=["Customers"],
@@ -147,6 +149,53 @@ class CustomerViewSet(viewsets.ViewSet):
             for row in rows[:100]
         ]
         return success_response(data, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(tags=["Customers"], responses={200: OpenApiResponse(description="Loyalty balance.")})
+    def loyalty_balance(self, request: Request, pk: str | None = None) -> Response:
+        customer = self.get_object(request=request, customer_id=pk)
+        payload = self.loyalty.get_balance(
+            tenant=request.current_tenant,
+            business=customer.business,
+            customer=customer,
+        )
+        return success_response(payload, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(
+        tags=["Customers"],
+        responses={200: OpenApiResponse(description="Business loyalty ledger report.")},
+    )
+    def loyalty_report(self, request: Request) -> Response:
+        business_id = request.query_params.get("business") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError({"business": "This field is required."})
+        from apps.businesses.models import Business
+
+        business = get_object_or_404(
+            Business.objects.filter(tenant=request.current_tenant), id=business_id
+        )
+        limit_raw = request.query_params.get("limit") or "200"
+        try:
+            limit = int(limit_raw)
+        except (TypeError, ValueError):
+            limit = 200
+        offset_raw = request.query_params.get("offset") or "0"
+        try:
+            offset = int(offset_raw)
+        except (TypeError, ValueError):
+            offset = 0
+        payload = self.loyalty.business_ledger_report(
+            tenant=request.current_tenant,
+            business=business,
+            date_from=request.query_params.get("date_from") or None,
+            date_to=request.query_params.get("date_to") or None,
+            customer_id=request.query_params.get("customer") or None,
+            direction=request.query_params.get("direction") or None,
+            entry_type=request.query_params.get("entry_type") or None,
+            q=request.query_params.get("q") or None,
+            limit=limit,
+            offset=offset,
+        )
+        return success_response(payload, request_id=getattr(request, "request_id", None))
 
     @extend_schema(
         tags=["Customers"],

@@ -398,6 +398,7 @@ const FEATURE_BY_CODE = new Map(PLAN_FEATURE_CATALOG.map((item) => [item.code, i
 
 export const BI_FEATURE_OPTIONS = [
   { value: 'overview', label: 'Overview' },
+  { value: 'profit', label: 'Profit' },
   { value: 'growth', label: 'Growth' },
   { value: 'revenue', label: 'Revenue' },
   { value: 'forecast', label: 'Forecast' },

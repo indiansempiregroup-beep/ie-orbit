@@ -131,6 +131,8 @@
     "notifications": "सूचनाएँ",
     "pos": "बिक्री",
     "shopProducts": "उत्पाद",
+    "shopProductProfit": "उत्पाद लाभ",
+    "shopLoyalty": "रिवॉर्ड पॉइंट्स",
     "shopMasterFiles": "मास्टर फ़ाइलें",
     "shopOrders": "ऑनलाइन ऑर्डर",
     "shopBilling": "बिलिंग",
@@ -210,6 +212,7 @@
   "bi": {
     "title": "बिज़नेस इंटेलिजेंस",
     "overview": "अवलोकन",
+    "profit": "लाभ",
     "growth": "वृद्धि",
     "revenue": "राजस्व",
     "forecast": "पूर्वानुमान",

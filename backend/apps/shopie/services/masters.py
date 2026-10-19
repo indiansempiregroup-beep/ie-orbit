@@ -5,12 +5,16 @@ from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Max, Q
 from django.utils.text import slugify
 
 from apps.businesses.models import Business
 from apps.shopie.models import ProductCategory, ProductStatus, ShopMasterKind, ShopMasterRecord, ShopProduct
 from apps.shopie.services.categories import BUILTIN_CATEGORIES, CategoryService
 from apps.tenancy.models import Tenant
+
+# Keep "Other" after any custom master rows (customs use sort_order < this).
+OTHER_SORT_ORDER = 9000
 
 DEFAULT_UNITS: tuple[tuple[str, str, int], ...] = (
     ("pcs", "Pcs", 10),
@@ -71,13 +75,56 @@ class MasterService:
         slug = re.sub(r"-+", "-", slug)
         return slug.replace("-", "_")[:64]
 
+    @staticmethod
+    def is_other(*, slug: str = "", label: str = "") -> bool:
+        return (slug or "").strip().lower() == "other" or (label or "").strip().lower() == "other"
+
+    @classmethod
+    def other_last_sort_key(cls, row: ShopMasterRecord) -> tuple[int, int, str]:
+        """Sort key that always keeps the Other option after every other master row."""
+        return (
+            1 if cls.is_other(slug=row.slug, label=row.label) else 0,
+            int(row.sort_order or 0),
+            (row.label or "").casefold(),
+        )
+
+    def _next_custom_sort_order(self, *, tenant: Tenant, business: Business, kind: str) -> int:
+        """Place new customs before Other so lists stay Other-last by sort_order too."""
+        qs = ShopMasterRecord.all_objects.filter(
+            tenant=tenant,
+            business=business,
+            kind=kind,
+            deleted_at__isnull=True,
+        )
+        other_ceiling = (
+            qs.filter(Q(slug__iexact="other") | Q(label__iexact="other"))
+            .aggregate(m=Max("sort_order"))
+            .get("m")
+        )
+        ceiling = int(other_ceiling) if other_ceiling is not None else OTHER_SORT_ORDER
+        max_non_other = (
+            qs.exclude(Q(slug__iexact="other") | Q(label__iexact="other"))
+            .aggregate(m=Max("sort_order"))
+            .get("m")
+        )
+        next_order = int(max_non_other or 100) + 10
+        if next_order >= ceiling:
+            next_order = max(ceiling - 1, 0)
+        return next_order
+
     def seed_defaults(self, *, tenant: Tenant, business: Business) -> None:
         self._seed_kind(
             tenant=tenant,
             business=business,
             kind=ShopMasterKind.CATEGORY,
             rows=[
-                (slug, label, "", sort_order, True)
+                (
+                    slug,
+                    label,
+                    "",
+                    OTHER_SORT_ORDER if slug == ProductCategory.OTHER else sort_order,
+                    True,
+                )
                 for slug, label, sort_order in BUILTIN_CATEGORIES
             ],
         )
@@ -92,7 +139,13 @@ class MasterService:
             business=business,
             kind=ShopMasterKind.EXPENSE_CATEGORY,
             rows=[
-                (self.normalize_slug(label), label, "", 100 + index, True)
+                (
+                    self.normalize_slug(label),
+                    label,
+                    "",
+                    OTHER_SORT_ORDER if label == "Other" else 100 + index,
+                    True,
+                )
                 for index, label in enumerate(DEFAULT_EXPENSE_CATEGORIES)
             ],
         )
@@ -101,7 +154,13 @@ class MasterService:
             business=business,
             kind=ShopMasterKind.INCOME_CATEGORY,
             rows=[
-                (self.normalize_slug(label), label, "", 100 + index, True)
+                (
+                    self.normalize_slug(label),
+                    label,
+                    "",
+                    OTHER_SORT_ORDER if label == "Other" else 100 + index,
+                    True,
+                )
                 for index, label in enumerate(DEFAULT_INCOME_CATEGORIES)
             ],
         )
@@ -123,6 +182,20 @@ class MasterService:
                 for index, label in enumerate(DEFAULT_PET_SPECIES)
             ],
         )
+        self._ensure_other_sort_orders(tenant=tenant, business=business)
+
+    def _ensure_other_sort_orders(self, *, tenant: Tenant, business: Business) -> None:
+        """Bump legacy Other rows so new customs can sort before them."""
+        rows = ShopMasterRecord.all_objects.filter(
+            tenant=tenant,
+            business=business,
+            deleted_at__isnull=True,
+        ).filter(Q(slug__iexact="other") | Q(label__iexact="other"))
+        for row in rows:
+            if int(row.sort_order or 0) >= OTHER_SORT_ORDER:
+                continue
+            row.sort_order = OTHER_SORT_ORDER
+            row.save(update_fields=["sort_order", "updated_at"])
 
     def _seed_kind(
         self,
@@ -175,7 +248,9 @@ class MasterService:
         )
         if not include_inactive:
             qs = qs.filter(is_active=True)
-        return [self.serialize(row) for row in qs.order_by("sort_order", "label")]
+        rows = list(qs.order_by("sort_order", "label"))
+        rows.sort(key=self.other_last_sort_key)
+        return [self.serialize(row) for row in rows]
 
     def serialize(self, row: ShopMasterRecord) -> dict[str, Any]:
         return {
@@ -224,20 +299,26 @@ class MasterService:
         for category in used_categories:
             self.ensure(tenant=tenant, business=business, kind=ShopMasterKind.CATEGORY, slug=category, label=category)
 
-        category_rows = ShopMasterRecord.all_objects.filter(
-            tenant=tenant,
-            business=business,
-            kind=ShopMasterKind.CATEGORY,
-            is_active=True,
-            deleted_at__isnull=True,
-        ).order_by("sort_order", "label")
-        brand_rows = ShopMasterRecord.all_objects.filter(
-            tenant=tenant,
-            business=business,
-            kind=ShopMasterKind.BRAND,
-            is_active=True,
-            deleted_at__isnull=True,
-        ).order_by("sort_order", "label")
+        category_rows = list(
+            ShopMasterRecord.all_objects.filter(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.CATEGORY,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).order_by("sort_order", "label")
+        )
+        category_rows.sort(key=self.other_last_sort_key)
+        brand_rows = list(
+            ShopMasterRecord.all_objects.filter(
+                tenant=tenant,
+                business=business,
+                kind=ShopMasterKind.BRAND,
+                is_active=True,
+                deleted_at__isnull=True,
+            ).order_by("sort_order", "label")
+        )
+        brand_rows.sort(key=self.other_last_sort_key)
 
         brands_lower = {brand.lower() for brand in used_brands}
 
@@ -349,6 +430,11 @@ class MasterService:
         if existing:
             return self._revive(existing, label=display, value=value or "")
 
+        sort_order = (
+            OTHER_SORT_ORDER
+            if self.is_other(slug=candidate_slug, label=display)
+            else self._next_custom_sort_order(tenant=tenant, business=business, kind=kind)
+        )
         return ShopMasterRecord.all_objects.create(
             tenant=tenant,
             business=business,
@@ -357,7 +443,7 @@ class MasterService:
             label=display[:120],
             value=(value or "")[:64],
             is_builtin=False,
-            sort_order=200,
+            sort_order=sort_order,
             is_active=True,
         )
 

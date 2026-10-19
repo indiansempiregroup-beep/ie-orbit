@@ -167,7 +167,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               key: 'products',
               label: t('nav.shopProducts'),
               icon: 'shopping-bag',
-              match: ['ShopProducts', 'ShopProductAdd', 'ShopProductsAddMany'],
+              match: ['ShopProducts', 'ShopProductAdd', 'ShopProductsAddMany', 'ShopProductProfit'],
               onPress: () => go('ShopProducts'),
             },
             {
@@ -188,7 +188,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               key: 'returns',
               label: t('nav.shopReturns'),
               icon: 'rotate-ccw',
-              match: ['ShopReturns'],
+              match: ['ShopReturns', 'ShopReturnDetail'],
               onPress: () => go('ShopReturns'),
             },
             {

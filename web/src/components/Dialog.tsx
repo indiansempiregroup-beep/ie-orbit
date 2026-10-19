@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SubmitOverlay } from './SubmitOverlay';
 
@@ -20,20 +20,26 @@ function getFocusable(container: HTMLElement) {
   ).filter((el) => !el.hasAttribute('disabled'));
 }
 
+function ensureDialogRoot(): HTMLElement {
+  let el = document.getElementById('ie-dialog-root') as HTMLDivElement | null;
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ie-dialog-root';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
 export function Dialog({ open, onClose, title, children, labelledBy, busy = false, busyMessage }: DialogProps) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const lastActive = useRef<HTMLElement | null>(null);
+  const [portalEl, setPortalEl] = useState<HTMLElement | null>(() =>
+    typeof document !== 'undefined' ? ensureDialogRoot() : null,
+  );
 
-  if (open && !rootRef.current) {
-    let el = document.getElementById('ie-dialog-root') as HTMLDivElement | null;
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'ie-dialog-root';
-      document.body.appendChild(el);
-    }
-    rootRef.current = el;
-  }
+  useEffect(() => {
+    setPortalEl(ensureDialogRoot());
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -91,7 +97,7 @@ export function Dialog({ open, onClose, title, children, labelledBy, busy = fals
     [busy, onClose],
   );
 
-  if (!open || !rootRef.current) return null;
+  if (!open || !portalEl) return null;
 
   const content = (
     <div
@@ -143,7 +149,7 @@ export function Dialog({ open, onClose, title, children, labelledBy, busy = fals
     </div>
   );
 
-  return createPortal(content, rootRef.current);
+  return createPortal(content, portalEl);
 }
 
 export default Dialog;

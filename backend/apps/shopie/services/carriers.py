@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 CARRIER_CHOICES: list[dict[str, str]] = [
+    {"id": "self", "label": "Deliver myself"},
     {"id": "delhivery", "label": "Delhivery"},
     {"id": "bluedart", "label": "Blue Dart"},
     {"id": "dtdc", "label": "DTDC"},
@@ -10,6 +11,12 @@ CARRIER_CHOICES: list[dict[str, str]] = [
     {"id": "xpressbees", "label": "XpressBees"},
     {"id": "other", "label": "Other"},
 ]
+
+SELF_DELIVERY_CARRIER = "self"
+
+
+def is_self_delivery_carrier(carrier: str | None) -> bool:
+    return str(carrier or "").strip().lower() == SELF_DELIVERY_CARRIER
 
 _TRACKING_URL_TEMPLATES: dict[str, str] = {
     "delhivery": "https://www.delhivery.com/track/package/{awb}",

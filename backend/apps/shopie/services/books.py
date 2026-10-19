@@ -7,13 +7,14 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import QuerySet, Sum
+from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 
 from apps.businesses.models import Business
 from apps.customers.models import Customer
 from apps.shopie.models import (
     CashAccountType,
+    FulfillmentMode,
     LedgerDirection,
     LedgerEntryType,
     OrderStatus,
@@ -1115,10 +1116,12 @@ class BooksService:
         date_to: date | None = None,
         customer_id: UUID | None = None,
         supplier_id: UUID | None = None,
+        source: str | None = None,
     ) -> QuerySet[ShopBooksVoucher]:
         qs = (
             ShopBooksVoucher.objects.filter(tenant=tenant, business=business)
-            .select_related("customer", "supplier", "cash_account", "contra_account")
+            .select_related("customer", "supplier", "cash_account", "contra_account", "linked_order")
+            .annotate(annotated_gross_profit=Sum("linked_order__profit_facts__gross_profit"))
             .order_by("-voucher_date", "-created_at")
         )
         if voucher_type:
@@ -1133,6 +1136,13 @@ class BooksService:
             qs = qs.filter(customer_id=customer_id)
         if supplier_id:
             qs = qs.filter(supplier_id=supplier_id)
+        # Books → Sale invoice is the POS/counter register (not bookings or online orders).
+        if str(source or "").strip().lower() == "pos":
+            qs = qs.filter(
+                Q(metadata__fulfillment_mode="pos")
+                | Q(metadata__channel="pos")
+                | Q(linked_order__fulfillment_mode=FulfillmentMode.POS)
+            )
         return qs
 
     def _apply_sale_loyalty(
@@ -1530,6 +1540,7 @@ class BooksService:
         voucher_meta: dict[str, Any] = {
             "source_order_id": str(order.id),
             "source": "sale",
+            "fulfillment_mode": str(order.fulfillment_mode or "").strip().lower(),
             "customer_name": customer_name,
             "gst": dict(supply),
             "payment": {
@@ -2011,6 +2022,34 @@ class BooksService:
             qs_filter["voucher_date__lte"] = date_to
         return qs_filter
 
+    @staticmethod
+    def voucher_sale_source(voucher: ShopBooksVoucher) -> str:
+        """Classify a voucher as pos / online / booking for Books reports filters."""
+        meta = voucher.metadata if isinstance(voucher.metadata, dict) else {}
+        if meta.get("source_booking_id") or str(meta.get("source") or "").strip().lower() == "booking":
+            return "booking"
+        linked = getattr(voucher, "linked_order", None)
+        mode = str(
+            meta.get("fulfillment_mode")
+            or getattr(linked, "fulfillment_mode", None)
+            or meta.get("channel")
+            or ""
+        ).strip().lower()
+        if mode == FulfillmentMode.POS or mode == "pos":
+            return "pos"
+        if mode in {
+            FulfillmentMode.PICKUP,
+            FulfillmentMode.DELIVERY,
+            "pickup",
+            "delivery",
+            "online_pickup",
+            "online_delivery",
+        }:
+            return "online"
+        if voucher.linked_order_id:
+            return "online"
+        return ""
+
     def _net_summary(
         self,
         *,
@@ -2112,7 +2151,7 @@ class BooksService:
                 voucher_type__in=[VoucherType.SALE, VoucherType.CREDIT_NOTE],
                 **filters,
             )
-            .select_related("customer")
+            .select_related("customer", "linked_order")
             .order_by("voucher_date")
         )
         if limit is not None:
@@ -2151,6 +2190,7 @@ class BooksService:
                     "sgst": str(voucher.sgst_total),
                     "igst": str(voucher.igst_total),
                     "total": str(voucher.total),
+                    "sale_source": self.voucher_sale_source(voucher),
                 }
             )
         return rows
@@ -2212,7 +2252,10 @@ class BooksService:
         qs = (
             ShopBooksVoucher.objects.filter(tenant=tenant, business=business, **filters)
             .exclude(status=VoucherStatus.DRAFT)
-            .select_related("customer", "supplier", "cash_account", "contra_account")
+            .select_related(
+                "customer", "supplier", "cash_account", "contra_account", "linked_order"
+            )
+            .annotate(annotated_gross_profit=Sum("linked_order__profit_facts__gross_profit"))
             .order_by("voucher_date", "created_at")
         )
         if limit is not None:
@@ -2229,12 +2272,29 @@ class BooksService:
                 party_gstin = getattr(voucher.supplier, "gstin", "") or ""
             metadata = voucher.metadata if isinstance(voucher.metadata, dict) else {}
             gstin = str(metadata.get("customer_gstin") or party_gstin or "").strip().upper()
+            loyalty = metadata.get("loyalty") if isinstance(metadata.get("loyalty"), dict) else {}
+            billing = metadata.get("billing") if isinstance(metadata.get("billing"), dict) else {}
+            points_earned = max(
+                0, int(loyalty.get("points_earned") or billing.get("points_earned") or 0)
+            )
+            points_redeemed = max(
+                0, int(loyalty.get("points_redeemed") or billing.get("reward_points") or 0)
+            )
+            sale_source = self.voucher_sale_source(voucher)
+            if sale_source == "booking":
+                gross_profit = None
+            else:
+                annotated = getattr(voucher, "annotated_gross_profit", None)
+                gross_profit = (
+                    None if annotated is None else str(_q(annotated))
+                )
             rows.append(
                 {
                     "id": str(voucher.id),
                     "voucher_type": voucher.voucher_type,
                     "voucher_number": voucher.voucher_number,
                     "voucher_date": voucher.voucher_date.isoformat(),
+                    "created_at": voucher.created_at.isoformat() if voucher.created_at else None,
                     "status": voucher.status,
                     "party": party,
                     "party_gstin": gstin,
@@ -2248,6 +2308,10 @@ class BooksService:
                     "place_of_supply": voucher.place_of_supply,
                     "is_interstate": voucher.is_interstate,
                     "cash_account": voucher.cash_account.name if voucher.cash_account_id else None,
+                    "sale_source": sale_source,
+                    "points_earned": points_earned,
+                    "points_redeemed": points_redeemed,
+                    "gross_profit": gross_profit,
                 }
             )
         return rows

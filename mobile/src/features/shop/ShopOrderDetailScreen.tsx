@@ -33,18 +33,22 @@ import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateTime } from '../../utils/format';
 import { resolveMediaUrl, resolveShopPaymentProofUrl } from '../../utils/mediaUrl';
 import { DeliveryTrackerMap } from './DeliveryTrackerMap';
-import { DeliveryProgressStepper } from './DeliveryProgressStepper';
 import * as Clipboard from 'expo-clipboard';
 import {
   formatShopDateLabel,
+  formatShopDateTime,
   formatShopMoney,
   formatShopOrderPlaced,
   formatShopQty,
+  formatShopReturnByDate,
   formatShopTimeLabel,
+  shopReturnMethodLabel,
+  shopReturnStatusLabel,
   shopFulfillmentLabel,
   shopOrderCanCancel,
   shopOrderCanReturn,
   shopOrderHeadline,
+  shopOrderReturnWindowOpen,
   shopOrderStatusColors,
   shopOrderTimeline,
   shopPaymentMethodLabel,
@@ -54,7 +58,7 @@ import {
   shopOrderIsCashOnHandover,
   shopRefundPlan,
 } from './shopHelpers';
-import { shopOrderBillBreakdown } from './shopOrderBill';
+import { lineMerchandiseGross, shopOrderBillBreakdown } from './shopOrderBill';
 import { GatewayCheckoutModal } from './GatewayCheckoutModal';
 import {
   startCashfreeCheckout,
@@ -93,6 +97,26 @@ function returnedQtyByLine(returns: ShopReturn[]): Record<string, number> {
   return totals;
 }
 
+function latestReturnAtByLine(returns: ShopReturn[]): Record<string, string> {
+  const latest: Record<string, string> = {};
+  for (const shopReturn of returns) {
+    if (!['pending', 'approved', 'completed'].includes(String(shopReturn.status || ''))) continue;
+    const at = String(shopReturn.created_at || '');
+    if (!at) continue;
+    const atMs = Date.parse(at);
+    if (!Number.isFinite(atMs)) continue;
+    const lines = Array.isArray(shopReturn.line_items) ? shopReturn.line_items : [];
+    for (const raw of lines) {
+      if (!raw || typeof raw !== 'object') continue;
+      const lineId = String((raw as { order_line_id?: string }).order_line_id || '');
+      if (!lineId) continue;
+      const prev = latest[lineId];
+      if (!prev || Date.parse(prev) < atMs) latest[lineId] = at;
+    }
+  }
+  return latest;
+}
+
 function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }) {
   const resolved = resolveMediaUrl(uri);
   if (resolved) {
@@ -106,13 +130,22 @@ function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }
 }
 
 function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: string }) {
+  const isPickup = live.delivery_method === 'pickup';
   const isCourier =
-    live.delivery_method === 'standard' && Boolean(live.shipment?.tracking_number || live.tracking_url);
-  const events = [...(live.events ?? [])].sort((a, b) => {
-    const left = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
-    const right = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
-    return left - right;
-  });
+    !isPickup &&
+    live.delivery_method === 'standard' &&
+    Boolean(live.shipment?.tracking_number || live.tracking_url);
+  const events = [...(live.events ?? [])]
+    .sort((a, b) => {
+      const left = a.occurred_at ? new Date(a.occurred_at).getTime() : 0;
+      const right = b.occurred_at ? new Date(b.occurred_at).getTime() : 0;
+      return left - right;
+    })
+    .filter((event, index, rows) => {
+      // Guard against legacy duplicate status rows (order + shipment both wrote "delivered").
+      const key = `${event.status}|${event.attempt_number ?? 'order'}`;
+      return rows.findIndex((row) => `${row.status}|${row.attempt_number ?? 'order'}` === key) === index;
+    });
   const orderEvents = events.filter((event) => event.attempt_number == null);
   const attemptNumbers = Array.from(
     new Set([
@@ -129,18 +162,30 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
   const trackingUrl = live.tracking_url || activeAttempt?.tracking_url;
   const shipment = live.shipment;
   const failureReason = live.subtitle || activeAttempt?.reason;
-  const headline = String(live.headline || 'Delivery update').replace(/\s*·\s*\d+\s*min(?:utes?)?$/i, '');
+  const headline = String(live.headline || (isPickup ? 'Order update' : 'Delivery update')).replace(
+    /\s*·\s*\d+\s*min(?:utes?)?$/i,
+    '',
+  );
   const promiseLabel = live.delivery_promise?.label;
   const delivered =
     live.terminal ||
     ['delivered', 'completed'].includes(String(live.partner_status || '').toLowerCase()) ||
     ['delivered', 'completed'].includes(String(live.order_status || '').toLowerCase());
   const trackingTitle = delivered
-    ? headline || 'Delivered'
+    ? headline || (isPickup ? 'Picked up' : 'Delivered')
     : isCourier && promiseLabel
       ? promiseLabel
       : headline;
-  const showMap = live.show_map !== false && !isCourier && Boolean(live.dispatched);
+  const hasDropPin =
+    live.drop?.latitude != null &&
+    live.drop?.longitude != null &&
+    Number.isFinite(Number(live.drop.latitude)) &&
+    Number.isFinite(Number(live.drop.longitude));
+  // Instant: live rider map. Standard/courier: still show shop + customer delivery pins.
+  const showMap =
+    !isPickup &&
+    live.show_map !== false &&
+    (Boolean(live.dispatched) || hasDropPin);
 
   const renderEvents = (rows: typeof events) => (
     <View style={styles.deliveryEvents}>
@@ -174,19 +219,29 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
         <View style={[styles.liveDot, { backgroundColor: live.terminal ? colors.success : primary }]} />
         <View style={{ flex: 1 }}>
           <Text style={styles.trackingEyebrow}>
-            {live.terminal ? 'DELIVERY STATUS' : isCourier ? 'SHIPMENT STATUS' : 'LIVE DELIVERY'}
+            {isPickup
+              ? 'ORDER STATUS'
+              : live.terminal
+                ? 'DELIVERY STATUS'
+                : isCourier
+                  ? 'SHIPMENT STATUS'
+                  : 'LIVE DELIVERY'}
           </Text>
           <Text style={styles.trackingTitle}>{trackingTitle}</Text>
           {isCourier && shipment?.carrier_label && !delivered ? (
             <Text style={styles.trackingSubtitle}>Shipped with {shipment.carrier_label}</Text>
           ) : null}
           {failureReason ? <Text style={styles.trackingSubtitle}>{failureReason}</Text> : null}
-          <Text style={[styles.updatedText, live.stale && styles.staleText]}>
-            {live.stale
-              ? `Location may be outdated${live.last_updated ? ` · Updated ${formatDateTime(live.last_updated)}` : ''}`
-              : live.last_updated
+          <Text style={[styles.updatedText, !isPickup && live.stale && styles.staleText]}>
+            {isPickup
+              ? live.last_updated
                 ? `Updated ${formatDateTime(live.last_updated)}`
-                : 'Waiting for an update'}
+                : 'Waiting for an update'
+              : live.stale
+                ? `Location may be outdated${live.last_updated ? ` · Updated ${formatDateTime(live.last_updated)}` : ''}`
+                : live.last_updated
+                  ? `Updated ${formatDateTime(live.last_updated)}`
+                  : 'Waiting for an update'}
           </Text>
         </View>
       </View>
@@ -204,7 +259,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
           </Pressable>
         </View>
       ) : null}
-      {!live.terminal && !isCourier ? (
+      {!isPickup && !live.terminal && !isCourier ? (
         <View style={[styles.etaBox, { backgroundColor: `${primary}12` }]}>
           <Feather name="clock" size={20} color={primary} />
           <View>
@@ -251,10 +306,10 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
       ) : null}
       {orderEvents.length || attemptNumbers.length ? (
         <View style={styles.historySection}>
-          <Text style={styles.historyTitle}>Delivery journey</Text>
+          <Text style={styles.historyTitle}>{isPickup ? 'Order history' : 'Delivery journey'}</Text>
           {orderEvents.length ? (
             <View style={styles.attemptSection}>
-              <Text style={styles.attemptTitle}>Order updates</Text>
+              <Text style={styles.attemptTitle}>{isPickup ? 'Updates' : 'Order updates'}</Text>
               {renderEvents(orderEvents)}
             </View>
           ) : null}
@@ -294,6 +349,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const [returnMode, setReturnMode] = useState(false);
   const [qtyByLine, setQtyByLine] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
+  const [returnMethod, setReturnMethod] = useState<'dropoff' | 'reverse_pickup'>('dropoff');
   const [utr, setUtr] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
@@ -324,7 +380,8 @@ export function ShopOrderDetailScreen({ route }: Props) {
         business_code: businessCode,
       });
       setOrder(response.data);
-      if (String(response.data.fulfillment_mode).toLowerCase() === 'delivery') {
+      const fulfillment = String(response.data.fulfillment_mode).toLowerCase();
+      if (fulfillment === 'delivery' || fulfillment === 'pickup') {
         setDeliveryError(null);
         try {
           const tracking = await mobileClient.mobile.getShopOrderDeliveryLive(route.params.orderId, {
@@ -334,7 +391,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
           });
           setDeliveryLive(tracking.data);
         } catch (err) {
-          setDeliveryError(err instanceof Error ? err.message : 'Unable to load live delivery updates.');
+          setDeliveryError(
+            err instanceof Error
+              ? err.message
+              : fulfillment === 'pickup'
+                ? 'Unable to load order history.'
+                : 'Unable to load live delivery updates.',
+          );
         }
       } else {
         setDeliveryLive(null);
@@ -721,6 +784,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
     .replace(autoNote, '')
     .trim();
   const alreadyReturned = returnedQtyByLine(returns);
+  const returnedAtByLine = latestReturnAtByLine(returns);
   const returnableLines = (order.lines ?? [])
     .map((line: ShopOrderLine) => {
       const sold = Number(line.quantity || 0);
@@ -731,9 +795,15 @@ export function ShopOrderDetailScreen({ route }: Props) {
     .filter((row) => row.remaining > 0);
   const canCancel = shopOrderCanCancel(order.status);
   const delivered = shopOrderCanReturn(order.status, order.fulfillment_mode);
+  const returnWindowOpen = shopOrderReturnWindowOpen(order);
+  const returnByLabel = order.return_eligible_until
+    ? formatShopReturnByDate(order.return_eligible_until)
+    : '';
+  const returnDays = Number(order.return_days ?? 0);
   const canReturn =
     RETURNABLE_FULFILLMENT.has(String(order.fulfillment_mode).toLowerCase()) &&
     delivered &&
+    returnWindowOpen &&
     returnableLines.length > 0;
   const selectedRefund = returnableLines.reduce((sum, row) => {
     const qty = Math.min(Math.max(0, qtyByLine[row.line.id] || 0), row.remaining);
@@ -764,13 +834,19 @@ export function ShopOrderDetailScreen({ route }: Props) {
         business_code: businessCode,
         order_id: currentOrder.id,
         reason: reason.trim(),
+        return_method: returnMethod,
         lines,
       });
       setReturnMode(false);
       setQtyByLine({});
       setReason('');
+      setReturnMethod('dropoff');
+      const how =
+        returnMethod === 'dropoff'
+          ? 'Drop the items at the shop. Refund is issued after they confirm receipt.'
+          : 'The shop will arrange pickup (courier or rider). Refund is issued after they receive the items.';
       setMessage(
-        `Return ${response.data.return_number} submitted. Refund ${formatShopMoney(response.data.refund_total, response.data.currency || currentOrder.currency)} will be given as recorded below.`,
+        `Return ${response.data.return_number} submitted (${formatShopMoney(response.data.refund_total, response.data.currency || currentOrder.currency)}). ${how}`,
       );
       toast.push(`Return ${response.data.return_number} submitted.`, 'success');
       await load();
@@ -851,9 +927,6 @@ export function ShopOrderDetailScreen({ route }: Props) {
         </View>
 
         {deliveryLive?.available ? <DeliveryTracker live={deliveryLive} primary={primary} /> : null}
-        {order && String(order.fulfillment_mode).toLowerCase() === 'delivery' ? (
-          <DeliveryProgressStepper order={order} primary={primary} />
-        ) : null}
 
         {String(order.fulfillment_mode).toLowerCase() === 'delivery' && deliveryError ? (
           <View style={styles.deliveryError}>
@@ -906,7 +979,8 @@ export function ShopOrderDetailScreen({ route }: Props) {
         <View style={styles.card}>
           <Text style={styles.section}>Items</Text>
           {(order.lines ?? []).map((line) => {
-            const disc = Number(line.discount_amount || 0);
+            const returned = alreadyReturned[line.id] || 0;
+            const returnedAt = returnedAtByLine[line.id];
             return (
             <Pressable
               key={line.id}
@@ -920,9 +994,16 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </Text>
                 <Text style={styles.itemMeta}>
                   Qty {formatShopQty(line.quantity)} · {formatShopMoney(line.unit_price, order.currency)} each
-                  {disc > 0 ? ` · disc. −${formatShopMoney(disc, order.currency)}` : ''}
                 </Text>
-                <Text style={styles.itemTotal}>{formatShopMoney(line.line_total, order.currency)}</Text>
+                {returned > 0 ? (
+                  <Text style={[styles.itemMeta, { color: colors.warning }]}>
+                    Returned {formatShopQty(returned)}
+                    {returnedAt ? ` · ${formatShopDateTime(returnedAt)}` : ''}
+                  </Text>
+                ) : null}
+                <Text style={styles.itemTotal}>
+                  {formatShopMoney(lineMerchandiseGross(line), order.currency)}
+                </Text>
               </View>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -1438,6 +1519,20 @@ export function ShopOrderDetailScreen({ route }: Props) {
             <Text style={styles.policyText}>
               Returns open after this order is {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'delivered' : 'picked up'}.
               Until then the shop is preparing it, so items cannot be cancelled or returned from the app.
+              {returnDays > 0
+                ? ` After that, returns are accepted for ${returnDays} day${returnDays === 1 ? '' : 's'}.`
+                : ''}
+            </Text>
+          </View>
+        ) : null}
+
+        {!isPos && delivered && !returnWindowOpen && returnableLines.length > 0 && !returns.length ? (
+          <View style={styles.card}>
+            <Text style={styles.section}>Returns</Text>
+            <Text style={styles.policyText}>
+              {returnByLabel
+                ? `The return window for this order ended on ${returnByLabel}.`
+                : 'The return window for this order has ended.'}
             </Text>
           </View>
         ) : null}
@@ -1454,15 +1549,49 @@ export function ShopOrderDetailScreen({ route }: Props) {
             </View>
             {canReturn && !returnMode ? (
               <Text style={styles.policyText}>
-                Choose items to send back. We'll show the refund amount and how the shop will pay it before you submit.
+                {returnByLabel
+                  ? `Returns are accepted until ${returnByLabel}. Drop items at the shop or request a pickup — refund is issued after the shop receives them.`
+                  : 'Drop items at the shop or request a pickup. Refund is issued after the shop receives the items.'}
               </Text>
+            ) : null}
+            {returnMode && returnByLabel ? (
+              <Text style={styles.meta}>Returns accepted until {returnByLabel}</Text>
             ) : null}
             {returnMode ? (
               <View style={{ gap: 12 }}>
                 <Text style={styles.meta}>
-                  Choose quantities to send back. Sellable items go back to inventory, and the refund below is what the
-                  shop should give you.
+                  Choose quantities and how you will return the items. Refund is issued only after the shop marks them
+                  received.
                 </Text>
+                <Text style={styles.itemName}>How will you return?</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {(
+                    [
+                      { id: 'dropoff' as const, label: 'Drop off at shop' },
+                      { id: 'reverse_pickup' as const, label: 'Request pickup' },
+                    ] as const
+                  ).map((option) => {
+                    const selected = returnMethod === option.id;
+                    return (
+                      <Pressable
+                        key={option.id}
+                        onPress={() => setReturnMethod(option.id)}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: selected ? primary : colors.border,
+                          backgroundColor: selected ? `${primary}18` : colors.card,
+                        }}
+                      >
+                        <Text style={{ fontWeight: '700', color: selected ? primary : colors.foreground }}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
                 {returnableLines.map((row) => {
                   const qty = qtyByLine[row.line.id] || 0;
                   return (
@@ -1539,9 +1668,17 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.itemName}>{item.return_number}</Text>
                     <Text style={styles.itemMeta}>
-                      {item.status} · {formatShopMoney(item.refund_total, item.currency || order.currency)}
+                      {item.created_at ? `${formatShopDateTime(item.created_at)} · ` : ''}
+                      {shopReturnStatusLabel(item)}
+                      {shopReturnMethodLabel(item.return_method)
+                        ? ` · ${shopReturnMethodLabel(item.return_method)}`
+                        : ''}
+                      {' · '}
+                      {formatShopMoney(item.refund_total, item.currency || order.currency)}
                     </Text>
-                    {item.refund_instruction ? <Text style={styles.itemMeta}>{item.refund_instruction}</Text> : null}
+                    {String(item.status || '').toLowerCase() === 'completed' && item.refund_instruction ? (
+                      <Text style={styles.itemMeta}>{item.refund_instruction}</Text>
+                    ) : null}
                   </View>
                   <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
                 </Pressable>

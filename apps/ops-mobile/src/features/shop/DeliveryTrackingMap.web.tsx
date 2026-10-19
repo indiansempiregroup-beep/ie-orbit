@@ -1,6 +1,5 @@
 import React, { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { colors } from '../../theme/tokens';
 import {
   dotIcon,
@@ -9,16 +8,19 @@ import {
   MISSING_KEY_MESSAGE,
   type LatLngLiteral,
 } from '../../utils/googleMapsWeb';
+import { openInGoogleMaps } from '../../utils/openInGoogleMaps';
 import {
   DELIVERY_MAP_COLORS,
   deliveryMapGeometry,
   deliveryMapPointSignature,
   deliveryPlaceLabel,
+  isReturnPickupLive,
   type DeliveryPoint,
+  type OpsDeliveryMapLive,
 } from './deliveryTracking';
 
 type Props = {
-  delivery: ShopDeliveryLive;
+  delivery: OpsDeliveryMapLive;
 };
 
 const asLatLng = (point: DeliveryPoint): LatLngLiteral => ({ lat: point.latitude, lng: point.longitude });
@@ -36,6 +38,9 @@ export function DeliveryTrackingMap({ delivery }: Props) {
 
   // Rebuild markers whenever the rider moves; the coordinate list is the signature.
   const signature = deliveryMapPointSignature(points);
+  const returnPickup = isReturnPickupLive(delivery);
+  const pickupTitle = returnPickup ? 'Customer' : 'Pickup';
+  const dropTitle = returnPickup ? 'Shop' : 'Drop-off';
   const pickupLabel = deliveryPlaceLabel(delivery.pickup);
   const dropLabel = deliveryPlaceLabel(delivery.drop);
   const riderName = delivery.rider?.name || 'Rider';
@@ -62,34 +67,40 @@ export function DeliveryTrackingMap({ delivery }: Props) {
         });
 
         if (pickup) {
-          overlays.push(
-            new maps.Marker({
-              map,
-              position: asLatLng(pickup),
-              title: `Pickup · ${pickupLabel}`,
-              icon: dotIcon(maps, DELIVERY_MAP_COLORS.pickup),
-            }),
-          );
+          const marker = new maps.Marker({
+            map,
+            position: asLatLng(pickup),
+            title: `${pickupTitle} · ${pickupLabel}`,
+            icon: dotIcon(maps, DELIVERY_MAP_COLORS.pickup),
+          });
+          marker.addListener('click', () => {
+            void openInGoogleMaps(pickup.latitude, pickup.longitude, pickupLabel);
+          });
+          overlays.push(marker);
         }
         if (rider) {
-          overlays.push(
-            new maps.Marker({
-              map,
-              position: asLatLng(rider),
-              title: riderName,
-              icon: dotIcon(maps, DELIVERY_MAP_COLORS.rider),
-            }),
-          );
+          const marker = new maps.Marker({
+            map,
+            position: asLatLng(rider),
+            title: riderName,
+            icon: dotIcon(maps, DELIVERY_MAP_COLORS.rider),
+          });
+          marker.addListener('click', () => {
+            void openInGoogleMaps(rider.latitude, rider.longitude, riderName);
+          });
+          overlays.push(marker);
         }
         if (drop) {
-          overlays.push(
-            new maps.Marker({
-              map,
-              position: asLatLng(drop),
-              title: `Drop-off · ${dropLabel}`,
-              icon: dotIcon(maps, DELIVERY_MAP_COLORS.drop),
-            }),
-          );
+          const marker = new maps.Marker({
+            map,
+            position: asLatLng(drop),
+            title: `${dropTitle} · ${dropLabel}`,
+            icon: dotIcon(maps, DELIVERY_MAP_COLORS.drop),
+          });
+          marker.addListener('click', () => {
+            void openInGoogleMaps(drop.latitude, drop.longitude, dropLabel);
+          });
+          overlays.push(marker);
         }
         if (trail.length > 1) {
           overlays.push(
