@@ -8,6 +8,8 @@ type Props = {
   onPageSizeChange: (pageSize: number) => void;
   pageSizeOptions?: number[];
   label?: string;
+  /** Keep the range, rows dropdown, and page controls on a single row. */
+  singleLine?: boolean;
 };
 
 function buildPageList(current: number, totalPages: number): Array<number | '…'> {
@@ -64,6 +66,7 @@ export function TablePagination({
   onPageSizeChange,
   pageSizeOptions = [10, 25, 50, 100],
   label = 'entries',
+  singleLine = false,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize)));
   const currentPage = Math.min(totalPages, Math.floor(Math.max(0, offset) / Math.max(1, pageSize)) + 1);
@@ -85,10 +88,10 @@ export function TablePagination({
         borderTop: '1px solid var(--border)',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap',
+        flexWrap: singleLine ? 'nowrap' : 'wrap',
       }}
     >
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: singleLine ? 'nowrap' : 'wrap', minWidth: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
           {from}–{to} of {total} {label}
         </span>

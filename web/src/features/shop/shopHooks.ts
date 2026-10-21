@@ -32,15 +32,13 @@ export function useShopProducts(search = '', status = '', category = '') {
   return useQuery({
     queryKey: ['shop-products', businessId, search, status, category],
     enabled: Boolean(businessId),
-    queryFn: async () => {
-      const response = await client.shop.listProducts({
+    queryFn: () =>
+      client.shop.listAllProducts({
         business_id: businessId,
         search: search || undefined,
         status: status || undefined,
         category: category || undefined,
-      });
-      return response.data;
-    },
+      }),
   });
 }
 

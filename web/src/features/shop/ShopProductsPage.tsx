@@ -16,6 +16,7 @@ import { useShopGodowns, useShopProductMutations, useShopProducts } from './shop
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { ShopFilterBar } from './ShopFilterBar';
+import { TablePagination } from '../bi/components/TablePagination';
 import { uploadProductImage } from './uploadProductImage';
 import { ProductImageCropModal, type ProductImageCropResult } from './ProductImageCropModal';
 import { hasBiFeature } from '../../config/planFeatures';
@@ -229,9 +230,12 @@ export function ShopProductsPage() {
   const deepProductId = searchParams.get('product');
   const openedDeepProduct = useRef<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
   const [stockFilter, setStockFilter] = useState('');
+  const [pageSize, setPageSize] = useState(10);
+  const [offset, setOffset] = useState(0);
   const [barcodeLookup, setBarcodeLookup] = useState('');
   const [nameLookup, setNameLookup] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -253,7 +257,11 @@ export function ShopProductsPage() {
   const canSeeProfit = hasBiFeature(billingQuery.data, 'profit', 'shopie');
   const scanInputRef = useRef<HTMLInputElement | null>(null);
   const packPhotoRef = useRef<HTMLInputElement | null>(null);
-  const products = useShopProducts(search, status, category);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  const products = useShopProducts(debouncedSearch, status, category);
   const godownsQuery = useShopGodowns();
   const godowns = godownsQuery.data ?? [];
   const categoriesQuery = useQuery({
@@ -307,17 +315,31 @@ export function ShopProductsPage() {
     });
   }, [products.data, stockFilter]);
 
-  const filteredIds = useMemo(() => filtered.map((product) => product.id), [filtered]);
-  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+  const pageOffset = useMemo(() => {
+    if (!filtered.length) return 0;
+    const maxOffset = Math.floor((filtered.length - 1) / pageSize) * pageSize;
+    return Math.min(offset, maxOffset);
+  }, [filtered.length, offset, pageSize]);
+  const pageRows = useMemo(
+    () => filtered.slice(pageOffset, pageOffset + pageSize),
+    [filtered, pageOffset, pageSize],
+  );
+
+  useEffect(() => {
+    setOffset(0);
+  }, [debouncedSearch, status, category, stockFilter, pageSize]);
+
+  const pageIds = useMemo(() => pageRows.map((product) => product.id), [pageRows]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
-  function toggleSelectFiltered() {
+  function toggleSelectPage() {
     setSelectedIds((current) => {
-      if (allFilteredSelected) return current.filter((id) => !filteredIds.includes(id));
-      return Array.from(new Set([...current, ...filteredIds]));
+      if (allPageSelected) return current.filter((id) => !pageIds.includes(id));
+      return Array.from(new Set([...current, ...pageIds]));
     });
   }
 
@@ -854,8 +876,8 @@ export function ShopProductsPage() {
         {filtered.length ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-              <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectFiltered} />
-              Select all ({filtered.length})
+              <input type="checkbox" checked={allPageSelected} onChange={toggleSelectPage} />
+              Select page ({pageRows.length})
             </label>
             {selectedIds.length ? (
               <Button type="button" variant="neutral" onClick={() => setBulkOpen(true)}>
@@ -864,8 +886,18 @@ export function ShopProductsPage() {
             ) : null}
           </div>
         ) : null}
+        <TablePagination
+          total={filtered.length}
+          offset={pageOffset}
+          pageSize={pageSize}
+          pageSizeOptions={[10, 25, 50, 100]}
+          singleLine
+          label="products"
+          onPageChange={setOffset}
+          onPageSizeChange={setPageSize}
+        />
         <div style={{ display: 'grid', gap: 8 }}>
-          {filtered.map((product) => (
+          {pageRows.map((product) => (
             <div
               key={product.id}
               style={{
@@ -997,6 +1029,16 @@ export function ShopProductsPage() {
             </div>
           ) : null}
         </div>
+        <TablePagination
+          total={filtered.length}
+          offset={pageOffset}
+          pageSize={pageSize}
+          pageSizeOptions={[10, 25, 50, 100]}
+          singleLine
+          label="products"
+          onPageChange={setOffset}
+          onPageSizeChange={setPageSize}
+        />
       </Card>
 
       <Dialog

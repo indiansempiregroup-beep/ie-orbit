@@ -5591,7 +5591,34 @@ class ApiClient {
       status?: string;
       category?: string;
       page_size?: number;
+      cursor?: string;
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
+    listAllProducts: async (query: {
+      business_id: string;
+      search?: string;
+      status?: string;
+      category?: string;
+    }) => {
+      const rows: ShopProduct[] = [];
+      const seen = new Set<string>();
+      let cursor: string | undefined;
+      for (let page = 0; page < 200; page += 1) {
+        const response = await this.request<ShopProduct[]>('/shop/products', {
+          method: 'GET',
+          query: { ...query, page_size: 100, cursor },
+        });
+        const batch = response.data ?? [];
+        for (const row of batch) {
+          if (!row?.id || seen.has(row.id)) continue;
+          seen.add(row.id);
+          rows.push(row);
+        }
+        const next = response.meta?.pagination?.next_cursor || undefined;
+        if (!next || next === cursor || batch.length === 0) break;
+        cursor = next;
+      }
+      return rows;
+    },
     createProduct: (body: ShopProductWriteInput) =>
       this.request<ShopProduct>('/shop/products', { method: 'POST', body }),
     productProfitInsights: (query: {

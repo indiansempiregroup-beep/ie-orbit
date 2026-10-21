@@ -58,6 +58,7 @@ const BULK_STATUS_OPTIONS = [
 ];
 
 const BULK_HINT_KEY = 'shop.bulkHint.dismissed';
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 const CATEGORY_OPTIONS = [
   { value: '', label: 'All categories' },
@@ -93,6 +94,9 @@ export function ShopProductsScreen() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [showBulkHint, setShowBulkHint] = useState(false);
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!canWrite) return;
@@ -161,19 +165,18 @@ export function ShopProductsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listProducts({
+      const rows = await client.shop.listAllProducts({
         business_id: businessId,
-        search: search || undefined,
         status: status || undefined,
         category: category || undefined,
       });
-      setItems(response.data);
+      setItems(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, search, status, category]);
+  }, [businessId, client, status, category]);
 
   useFocusEffect(
     useCallback(() => {
@@ -204,17 +207,30 @@ export function ShopProductsScreen() {
     return list;
   }, [items, search, sortBy]);
 
-  const filteredIds = useMemo(() => filtered.map((item) => item.id), [filtered]);
-  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+  useEffect(() => {
+    setPage(0);
+  }, [search, status, category, sortBy, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = useMemo(
+    () => filtered.slice(safePage * pageSize, safePage * pageSize + pageSize),
+    [filtered, pageSize, safePage],
+  );
+  const pageStart = filtered.length === 0 ? 0 : safePage * pageSize + 1;
+  const pageEnd = Math.min(filtered.length, safePage * pageSize + pageRows.length);
+
+  const pageIds = useMemo(() => pageRows.map((item) => item.id), [pageRows]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
-  function toggleSelectFiltered() {
+  function toggleSelectPage() {
     setSelectedIds((current) => {
-      if (allFilteredSelected) return current.filter((id) => !filteredIds.includes(id));
-      return Array.from(new Set([...current, ...filteredIds]));
+      if (allPageSelected) return current.filter((id) => !pageIds.includes(id));
+      return Array.from(new Set([...current, ...pageIds]));
     });
   }
 
@@ -350,13 +366,13 @@ export function ShopProductsScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {canWrite && filtered.length ? (
           <View style={styles.selectRow}>
-            <Pressable onPress={toggleSelectFiltered} style={styles.selectAll}>
+            <Pressable onPress={toggleSelectPage} style={styles.selectAll}>
               <Feather
-                name={allFilteredSelected ? 'check-square' : 'square'}
+                name={allPageSelected ? 'check-square' : 'square'}
                 size={20}
-                color={allFilteredSelected ? colors.primary : colors.mutedForeground}
+                color={allPageSelected ? colors.primary : colors.mutedForeground}
               />
-              <Text style={styles.selectAllText}>Select all ({filtered.length})</Text>
+              <Text style={styles.selectAllText}>Select page ({pageRows.length})</Text>
             </Pressable>
             {selectedIds.length ? (
               <Pressable
@@ -374,11 +390,12 @@ export function ShopProductsScreen() {
           </View>
         ) : null}
         <FlatList
-          {...groupedListProps(filtered.length)}
-          data={filtered}
+          {...groupedListProps(pageRows.length, { flex: 1 })}
+          data={pageRows}
           keyExtractor={(item) => item.id}
+          initialNumToRender={pageSize}
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
-          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
             const selected = selectedIds.includes(item.id);
             const categoryLabel =
@@ -430,6 +447,68 @@ export function ShopProductsScreen() {
             ) : null
           }
         />
+        {filtered.length ? (
+          <View style={[styles.pager, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+            <Text style={styles.pagerMeta} numberOfLines={1}>
+              {pageStart}–{pageEnd} of {filtered.length}
+            </Text>
+            <View style={styles.pagerSelectWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Rows per page"
+                onPress={() => setSizeMenuOpen((open) => !open)}
+                style={styles.pagerSelect}
+              >
+                <Text style={styles.pagerBtnText}>{pageSize}</Text>
+                <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
+              </Pressable>
+              {sizeMenuOpen ? (
+                <View style={styles.pagerMenu}>
+                  {PAGE_SIZE_OPTIONS.map((size) => {
+                    const selected = pageSize === size;
+                    return (
+                      <Pressable
+                        key={size}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        onPress={() => {
+                          setPageSize(size);
+                          setSizeMenuOpen(false);
+                        }}
+                        style={[styles.pagerMenuItem, selected && styles.pagerMenuItemOn]}
+                      >
+                        <Text style={[styles.pagerBtnText, selected && styles.pagerMenuItemTextOn]}>{size}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.pagerNav}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous page"
+                disabled={safePage <= 0}
+                onPress={() => setPage(safePage - 1)}
+                style={[styles.pagerBtn, safePage <= 0 && styles.pagerBtnDisabled]}
+              >
+                <Feather name="chevron-left" size={16} color={colors.foreground} />
+              </Pressable>
+              <Text style={styles.pagerMeta}>
+                {safePage + 1}/{pageCount}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next page"
+                disabled={safePage >= pageCount - 1}
+                onPress={() => setPage(safePage + 1)}
+                style={[styles.pagerBtn, safePage >= pageCount - 1 && styles.pagerBtnDisabled]}
+              >
+                <Feather name="chevron-right" size={16} color={colors.foreground} />
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
         <Modal
           visible={bulkOpen && selectedIds.length > 0}
           transparent
@@ -655,4 +734,50 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.bodySemi, fontSize: 15, color: colors.foreground },
   meta: { marginTop: 4, color: colors.mutedForeground, fontSize: 13 },
   error: { color: colors.destructive, marginBottom: spacing.sm },
+  pager: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+  },
+  pagerMeta: { color: colors.mutedForeground, fontSize: 13, flexShrink: 1 },
+  pagerSelectWrap: { position: 'relative', zIndex: 2 },
+  pagerSelect: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pagerMenu: {
+    position: 'absolute',
+    right: 0,
+    bottom: 36,
+    minWidth: 72,
+    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  pagerMenuItem: { paddingHorizontal: 12, paddingVertical: 8 },
+  pagerMenuItemOn: { backgroundColor: colors.tint },
+  pagerMenuItemTextOn: { color: colors.primary },
+  pagerNav: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
+  pagerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pagerBtnDisabled: { opacity: 0.4 },
+  pagerBtnText: { color: colors.foreground, fontFamily: fonts.bodySemi, fontSize: 13 },
 });

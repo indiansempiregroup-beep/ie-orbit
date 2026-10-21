@@ -16,6 +16,7 @@ import {
   AdminSection,
   AdminTable,
 } from './AdminChrome';
+import { TablePagination } from '../bi/components/TablePagination';
 
 function formatMoney(price: string, currency: string) {
   const amount = Number(price);
@@ -35,6 +36,8 @@ export function PlatformProductCatalogPage() {
   const client = useApiClient();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [pageSize, setPageSize] = useState(50);
+  const [offset, setOffset] = useState(0);
   const [barcode, setBarcode] = useState('');
   const [selected, setSelected] = useState<PlatformProductCatalogItem | null>(null);
   const [importSource, setImportSource] = useState<'both' | 'openmrp' | 'off'>('both');
@@ -44,13 +47,13 @@ export function PlatformProductCatalogPage() {
   const debouncedSearch = useDebounce(search, 300);
 
   const listQuery = useQuery({
-    queryKey: ['platform', 'product-catalog', debouncedSearch],
+    queryKey: ['platform', 'product-catalog', debouncedSearch, pageSize, offset],
     queryFn: async () =>
       (
         await client.platform.productCatalog({
           q: debouncedSearch || undefined,
-          limit: 50,
-          offset: 0,
+          limit: pageSize,
+          offset,
         })
       ).data,
     retry: false,
@@ -142,7 +145,14 @@ export function PlatformProductCatalogPage() {
       <div className="admin-split">
         <AdminSection title="Browse & search">
           <div className="admin-form-grid" style={{ marginBottom: 12 }}>
-            <AdminSearch value={search} onChange={setSearch} placeholder="Search name, brand, barcode, category" />
+            <AdminSearch
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setOffset(0);
+              }}
+              placeholder="Search name, brand, barcode, category"
+            />
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 placeholder="Enter / scan barcode"
@@ -189,12 +199,20 @@ export function PlatformProductCatalogPage() {
               </tr>
             ))}
           </AdminTable>
-          {products.length === 0 ? <AdminEmpty>No catalog products yet. Run a seed import or look up a barcode.</AdminEmpty> : null}
-          {listQuery.data ? (
-            <p style={{ marginTop: 8, color: '#6b7280', fontSize: 13 }}>
-              Showing {products.length} of {listQuery.data.total}
-            </p>
+          {products.length === 0 && !listQuery.isLoading ? (
+            <AdminEmpty>No catalog products yet. Run a seed import or look up a barcode.</AdminEmpty>
           ) : null}
+          <TablePagination
+            total={listQuery.data?.total ?? 0}
+            offset={listQuery.data?.offset ?? offset}
+            pageSize={pageSize}
+            label="products"
+            onPageChange={setOffset}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setOffset(0);
+            }}
+          />
         </AdminSection>
 
         <div style={{ display: 'grid', gap: 16 }}>
