@@ -26,7 +26,7 @@ function asList<T>(data: unknown): T[] {
   return [];
 }
 
-export function useBookings(date?: string) {
+export function useBookings(date?: string, staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -43,7 +43,10 @@ export function useBookings(date?: string) {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const response = await client.bookings.list(date ? { date } : undefined);
+      const response = await client.bookings.list({
+        ...(date ? { date } : {}),
+        ...(staffId ? { staff: staffId } : {}),
+      });
       if (requestId !== requestIdRef.current) return;
       setBookings(asList<Booking>(response.data));
     } catch (err) {
@@ -54,7 +57,7 @@ export function useBookings(date?: string) {
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [client, ready, date]);
+  }, [client, ready, date, staffId]);
 
   useEffect(() => {
     void reload({ silent: false });
@@ -275,7 +278,7 @@ export function useReviews(customerId?: string) {
   return { reviews, loading, error, reload };
 }
 
-export function useDashboardSummary() {
+export function useDashboardSummary(staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -285,14 +288,14 @@ export function useDashboardSummary() {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.analytics.dashboard.summary();
+      const response = await client.analytics.dashboard.summary(staffId ? { staff_id: staffId } : undefined);
       setSummary(response.data ?? null);
     } catch {
       setSummary(null);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, staffId]);
 
   useEffect(() => {
     void reload();

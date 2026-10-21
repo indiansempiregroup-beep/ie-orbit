@@ -110,6 +110,13 @@ def _resolve_device_workspace(
     return tenant, business
 
 
+def _ensure_white_label_flag(profile: WhiteLabelProfile) -> None:
+    from apps.platform_admin.feature_flags import WHITE_LABEL_FLAG, tenant_feature_enabled
+
+    if not tenant_feature_enabled(tenant=profile.tenant, key=WHITE_LABEL_FLAG, default=True):
+        raise ValueError("White-label apps are turned off for this workspace.")
+
+
 def _resolve_white_label_profile(
     *,
     flavor_key: str | None = None,
@@ -125,6 +132,7 @@ def _resolve_white_label_profile(
         )
         if profile is None:
             raise ValueError("White-label profile not found.")
+        _ensure_white_label_flag(profile)
         return profile
     if app_slug:
         profile = (
@@ -134,10 +142,13 @@ def _resolve_white_label_profile(
         )
         if profile is None:
             raise ValueError("White-label profile not found.")
+        _ensure_white_label_flag(profile)
         return profile
     if tenant_slug and business_code:
         tenant, business = _resolve_tenant_business(tenant_slug=tenant_slug, business_code=business_code)
-        return ensure_white_label_profile(business=business)
+        profile = ensure_white_label_profile(business=business)
+        _ensure_white_label_flag(profile)
+        return profile
     raise ValueError("Provide flavor_key, app_slug, or tenant_slug with business_code.")
 
 
@@ -150,7 +161,7 @@ UPCOMING_BOOKING_STATUSES = {
 }
 
 
-def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
+def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant, enrich_loyalty: bool = True) -> dict:
     line_items = list(booking.line_items.order_by("sort_order", "start_at"))
     service_ids = [str(item.service_id) for item in line_items] or [str(booking.service_id)]
     services = {
@@ -220,11 +231,41 @@ def _serialize_mobile_booking(*, booking: Booking, tenant: Tenant) -> dict:
         BookingStatus.NO_SHOW,
         BookingStatus.REJECTED,
     }
+    points_earned = max(0, points_to_earn) if completed else int(loyalty_meta.get("points_earned") or 0)
+    points_reversed = int(loyalty_meta.get("points_reversed") or loyalty_meta.get("points_revoked") or 0)
+    remaining_earned = max(0, points_earned - points_reversed) if points_reversed else points_earned
+    reversal_reason = str(loyalty_meta.get("reversal_reason") or "")
+    if enrich_loyalty:
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            summary = LoyaltyService().document_points_summary(
+                tenant=tenant, booking_id=booking.id
+            )
+            if (
+                int(summary.get("points_earned") or 0)
+                or int(summary.get("points_reversed") or 0)
+                or int(summary.get("points_redeemed") or 0)
+            ):
+                points_earned = int(summary.get("points_earned") or 0)
+                points_reversed = int(summary.get("points_reversed") or 0)
+                remaining_earned = int(summary.get("remaining_earned") or 0)
+                reversal_reason = str(summary.get("reversal_reason") or reversal_reason)
+                refunded_redeem = int(summary.get("points_redeem_refunded") or 0)
+                if not loyalty_meta.get("refunded"):
+                    points_redeemed = max(
+                        0, int(summary.get("points_redeemed") or 0) - refunded_redeem
+                    )
+        except Exception:
+            pass
     loyalty_payload = {
         "points_to_earn": max(0, points_to_earn),
-        "points_earned": max(0, points_to_earn) if completed else 0,
+        "points_earned": max(0, points_earned),
         "points_pending": max(0, points_to_earn) if not completed and not cancelled_like else 0,
         "points_redeemed": max(0, points_redeemed),
+        "points_reversed": max(0, points_reversed),
+        "remaining_earned": max(0, remaining_earned),
+        "reversal_reason": reversal_reason,
         "discount_amount": str(discount_amount) if discount_amount not in (None, "") else None,
         "currency": loyalty_meta.get("currency") or getattr(booking.business, "currency", None) or "INR",
     }
@@ -912,7 +953,10 @@ class MobileBookingListView(APIView):
         elif upcoming is False:
             bookings = bookings.filter(start_at__lt=timezone.now()).order_by("-created_at")
 
-        rows = [_serialize_mobile_booking(booking=booking, tenant=tenant) for booking in bookings]
+        rows = [
+            _serialize_mobile_booking(booking=booking, tenant=tenant, enrich_loyalty=False)
+            for booking in bookings
+        ]
         return success_response(rows, request_id=getattr(request, "request_id", None))
 
 

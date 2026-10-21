@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { formatMoney } from '../../lib/currency';
 import { formatVoucherWhen } from '../../lib/datetime';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
+import { PurchasePayForm } from './PurchasePayForm';
 import { voucherLineGrossAmount } from './saleInvoiceSource';
 import { useShopVoucher, useShopVoucherMutations } from './shopHooks';
 
@@ -20,6 +21,7 @@ type LineItem = {
   unit_price?: string | number;
   gross?: string | number;
   total?: string | number;
+  product_id?: string | null;
 };
 
 function listPathFor(voucher: ShopBooksVoucher): string {
@@ -40,7 +42,13 @@ export function ShopBooksVoucherDetailPage() {
 
   const voucher = voucherQuery.data;
   const isSale = String(voucher?.voucher_type || '').toLowerCase() === 'sale';
+  const isPurchase = String(voucher?.voucher_type || '').toLowerCase() === 'purchase';
   const backPath = voucher ? listPathFor(voucher) : '/shop/books';
+  const paidAmount = Number(voucher?.amount_paid ?? 0);
+  const totalAmount = Number(voucher?.total ?? 0);
+  const dueAmount = Math.max(0, totalAmount - paidAmount);
+  const voided = String(voucher?.status || '').toLowerCase() === 'void';
+  const paid = !voided && dueAmount <= 0.009;
 
   async function handleVoid() {
     if (!voucher) return;
@@ -59,7 +67,7 @@ export function ShopBooksVoucherDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <div>
           <Link to={backPath} style={{ fontSize: 13 }}>
-            ← Back to {isSale ? 'sale invoices' : 'books'}
+            ← Back to {isSale ? 'sale invoices' : isPurchase ? 'purchases' : 'books'}
           </Link>
           <h1 style={{ margin: '8px 0 0', fontSize: 22 }}>
             {voucher?.voucher_number || (voucherQuery.isLoading ? 'Loading…' : 'Books invoice')}
@@ -105,21 +113,39 @@ export function ShopBooksVoucherDetailPage() {
           <div style={{ display: 'grid', gap: 14 }}>
             <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
               {formatVoucherWhen(voucher.voucher_date, voucher.created_at) || voucher.voucher_date} ·{' '}
-              {voucher.customer_name || voucher.supplier_name || 'Cash'} · {voucher.status}
-              {voucher.voucher_type ? ` · ${voucher.voucher_type}` : ''}
+              {voucher.customer_name || voucher.supplier_name || 'Cash'} ·{' '}
+              {voided ? 'Void' : paid ? 'Paid' : `To pay ${formatMoney(dueAmount, currency)}`}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 14 }}>
+              <span>
+                Paid <strong>{formatMoney(paidAmount, currency)}</strong>
+              </span>
+              <span>
+                {isPurchase ? 'To pay' : 'Due'} <strong>{formatMoney(dueAmount, currency)}</strong>
+              </span>
             </div>
 
             <div style={{ display: 'grid', gap: 6 }}>
-              {((voucher.line_items as LineItem[] | undefined) ?? []).map((line, index) => (
-                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span>
+              {((voucher.line_items as LineItem[] | undefined) ?? []).map((line, index) => {
+                const productId = String(line.product_id || '').trim();
+                const label = (
+                  <>
                     {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
-                  </span>
-                  <strong>
-                    {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
-                  </strong>
-                </div>
-              ))}
+                  </>
+                );
+                return (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    {productId ? (
+                      <Link to={`/shop/products?product=${encodeURIComponent(productId)}`}>{label}</Link>
+                    ) : (
+                      <span>{label}</span>
+                    )}
+                    <strong>
+                      {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
+                    </strong>
+                  </div>
+                );
+              })}
               {!voucher.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
             </div>
 
@@ -152,6 +178,8 @@ export function ShopBooksVoucherDetailPage() {
 
             {voucher.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {voucher.notes}</p> : null}
 
+            {isPurchase ? <PurchasePayForm voucher={voucher} /> : null}
+
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {voucher.status !== 'void' ? (
                 <Button
@@ -160,7 +188,7 @@ export function ShopBooksVoucherDetailPage() {
                   onClick={() => void handleVoid()}
                   disabled={voidVoucher.isPending}
                 >
-                  {voidVoucher.isPending ? 'Voiding…' : 'Void voucher'}
+                  {voidVoucher.isPending ? 'Voiding…' : 'Void bill'}
                 </Button>
               ) : null}
               <Button type="button" variant="ghost" onClick={() => navigate(backPath)}>

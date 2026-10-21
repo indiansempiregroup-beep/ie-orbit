@@ -1,4 +1,4 @@
-import type { Customer, ShopBooksVoucher, ShopOrder, ShopSupplier } from '@ie-orbit/sdk';
+import type { Customer, ShopBooksVoucher, ShopOrder, ShopPartyLedgerEntry, ShopSupplier } from '@ie-orbit/sdk';
 import { formatDate, formatTime } from '../../utils/format';
 
 export { formatMoney } from './posPayment';
@@ -298,6 +298,68 @@ export function supplierLabel(supplier: ShopSupplier): string {
 
 export function voucherPartyLabel(voucher: ShopBooksVoucher): string {
   return voucher.customer_name || voucher.supplier_name || voucher.contra_account_name || '—';
+}
+
+export function voucherLineProductId(line: Record<string, unknown>): string {
+  const id = String(line.product_id || line.product || '').trim();
+  if (!id || id === 'undefined' || id === 'null') return '';
+  return id;
+}
+
+export type VoucherPaymentRecord = {
+  amount: number;
+  cashAccountName: string;
+  at?: string;
+  notes?: string;
+};
+
+export function voucherPaymentHistory(voucher: ShopBooksVoucher): VoucherPaymentRecord[] {
+  const meta = voucherMeta(voucher);
+  const raw = Array.isArray(meta.payments) ? meta.payments : [];
+  return raw
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const item = row as Record<string, unknown>;
+      const amount = voucherAmount(item.amount as string | number);
+      if (amount <= 0) return null;
+      return {
+        amount,
+        cashAccountName: String(item.cash_account_name || 'Cash'),
+        at: typeof item.at === 'string' ? item.at : undefined,
+        notes: typeof item.notes === 'string' && item.notes.trim() ? item.notes.trim() : undefined,
+      };
+    })
+    .filter((row): row is VoucherPaymentRecord => Boolean(row));
+}
+
+export function purchaseSourceLabel(voucher: ShopBooksVoucher): string {
+  const meta = voucherMeta(voucher);
+  const scan =
+    meta.invoice_scan && typeof meta.invoice_scan === 'object'
+      ? (meta.invoice_scan as Record<string, unknown>)
+      : null;
+  if (!scan) return 'Purchase bill';
+  const number = String(scan.invoice_number || '').trim();
+  return number ? `Scanned · ${number}` : 'Scanned invoice';
+}
+
+export function ledgerEntryLabel(entry: Pick<ShopPartyLedgerEntry, 'entry_type'> & { voucher_type?: string | null }): string {
+  const type = String(entry.entry_type || '').toLowerCase();
+  if (type === 'purchase') return 'Purchase bill';
+  if (type === 'payment_out') return 'Payment';
+  if (type === 'debit_note') return 'Debit note';
+  if (type === 'adjustment') return 'Adjustment';
+  if (String(entry.voucher_type || '').toLowerCase() === 'purchase') return 'Purchase bill';
+  return entry.entry_type || 'Entry';
+}
+
+export function canOpenPurchaseFromLedger(
+  entry: Pick<ShopPartyLedgerEntry, 'voucher' | 'entry_type'> & { voucher_type?: string | null },
+): boolean {
+  if (!entry.voucher) return false;
+  const voucherType = String(entry.voucher_type || '').toLowerCase();
+  if (voucherType === 'purchase') return true;
+  return String(entry.entry_type || '').toLowerCase() === 'purchase';
 }
 
 export function todayIso(): string {

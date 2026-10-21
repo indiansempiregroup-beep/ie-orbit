@@ -192,6 +192,15 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     detail: 'Enter supplier bills so stock and payables stay in one place.',
   },
   {
+    code: 'shopie_invoice_scan',
+    group: 'Books',
+    products: ['shopie'],
+    label: 'Scan vendor invoice',
+    adminLabel: 'Scan vendor invoice (AI)',
+    detail:
+      'Photograph a supplier bill, review the extracted lines, then post a purchase that adds stock. Uses the prepaid AI wallet.',
+  },
+  {
     code: 'shopie_books_cash',
     group: 'Books',
     products: ['shopie'],
@@ -372,6 +381,13 @@ export const PLAN_FEATURE_CATALOG: PlanFeatureDef[] = [
     detail: 'Collect customer payments on your Cashfree account at checkout.',
   },
   {
+    code: 'stripe_payments',
+    group: 'Marketing',
+    products: BOTH,
+    label: 'Stripe customer payments',
+    detail: 'Collect card payments on a Stripe account. International workspaces only.',
+  },
+  {
     code: 'notifications_whatsapp',
     group: 'Marketing',
     products: BOTH,
@@ -404,6 +420,68 @@ export const BI_FEATURE_OPTIONS = [
   { value: 'forecast', label: 'Forecast' },
   { value: 'reports', label: 'Reports' },
 ];
+
+export const BI_FEATURE_DATA_PRODUCTS: Record<string, PlanProductCode[]> = {
+  overview: ['appointie', 'shopie'],
+  profit: ['appointie', 'shopie'],
+  growth: ['appointie', 'shopie'],
+  revenue: ['appointie', 'shopie'],
+  forecast: ['appointie', 'shopie'],
+  reports: ['appointie', 'shopie'],
+};
+
+export type BiBillingSnapshot = {
+  entitled_bi_features?: string[] | null;
+  bi_features?: string[] | null;
+  bi_features_by_product?: Record<string, string[]> | null;
+  product_code?: string | null;
+};
+
+export function biFeatureOptionsForProduct(productCode: string) {
+  return BI_FEATURE_OPTIONS.filter((item) =>
+    (BI_FEATURE_DATA_PRODUCTS[item.value] ?? []).includes(productCode as PlanProductCode),
+  );
+}
+
+export function entitledBiFeatures(billing?: BiBillingSnapshot | null): string[] {
+  if (!billing) return [];
+  if (billing.entitled_bi_features != null) return billing.entitled_bi_features;
+  return billing.bi_features ?? [];
+}
+
+export function biFeaturesByProduct(billing?: BiBillingSnapshot | null): Record<string, string[]> {
+  if (!billing) return {};
+  if (billing.bi_features_by_product && Object.keys(billing.bi_features_by_product).length) {
+    return billing.bi_features_by_product;
+  }
+  const features = entitledBiFeatures(billing);
+  const product = billing.product_code || 'appointie';
+  return features.length ? { [product]: features } : {};
+}
+
+export function productsWithBiFeature(
+  billing: BiBillingSnapshot | null | undefined,
+  feature: string,
+  subscribedIds?: string[],
+): string[] {
+  const byProduct = biFeaturesByProduct(billing);
+  const dataProducts = BI_FEATURE_DATA_PRODUCTS[feature] ?? ['appointie', 'shopie'];
+  const subscribed = new Set(
+    subscribedIds?.length ? subscribedIds : Object.keys(byProduct),
+  );
+  return dataProducts.filter(
+    (product) => subscribed.has(product) && (byProduct[product] ?? []).includes(feature),
+  );
+}
+
+export function hasBiFeature(
+  billing: BiBillingSnapshot | null | undefined,
+  feature: string,
+  product?: string,
+): boolean {
+  if (product) return productsWithBiFeature(billing, feature).includes(product);
+  return productsWithBiFeature(billing, feature).length > 0;
+}
 
 export function adminFeatureGroups(): Array<{
   title: string;

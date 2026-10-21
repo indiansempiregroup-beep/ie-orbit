@@ -18,7 +18,12 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
@@ -72,7 +77,10 @@ function NoteDetailModal({
   onVoid: (voucher: ShopBooksVoucher) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { lift, maxHeight } = useSheetKeyboardLayout(0.88);
+  const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.88,
+    visible && voucher?.id,
+  );
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
@@ -130,14 +138,19 @@ function NoteDetailModal({
       <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
         <View style={detailStyles.backdrop}>
           <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
-          <View
-            style={[
-              detailStyles.sheet,
-              { paddingBottom: Math.max(insets.bottom, spacing.lg), marginBottom: lift, maxHeight },
-            ]}
-          >
-            <View style={detailStyles.hero}>
-              <View style={detailStyles.handle} />
+            <ExpandableSheetView
+              onLayout={onSheetLayout}
+              style={[
+                detailStyles.sheet,
+                {
+                  paddingBottom: Math.max(insets.bottom, spacing.lg),
+                  marginBottom: lift,
+                },
+                sheetMotionStyle,
+              ]}
+            >
+              <View style={detailStyles.hero}>
+                <SheetHandle {...handleProps} />
               <View style={detailStyles.heroTop}>
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text style={detailStyles.heroKicker}>
@@ -159,7 +172,7 @@ function NoteDetailModal({
             </View>
 
             <ScrollView
-              style={detailStyles.scroll}
+              style={[detailStyles.scroll, driven && sheetBodyStyle]}
               contentContainerStyle={detailStyles.stack}
               keyboardShouldPersistTaps="handled"
             >
@@ -332,7 +345,7 @@ function NoteDetailModal({
               ) : null}
               <Button label="Close" variant="outline" fullWidth onPress={onClose} />
             </View>
-          </View>
+          </ExpandableSheetView>
         </View>
       </Modal>
     </>
@@ -584,13 +597,6 @@ const detailStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   meta: { color: colors.mutedForeground, fontSize: 13, marginTop: 2 },
   scroll: { flexGrow: 0, flexShrink: 1 },

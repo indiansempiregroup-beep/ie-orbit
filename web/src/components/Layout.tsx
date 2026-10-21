@@ -1,6 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LogOut, Zap } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
@@ -9,6 +9,8 @@ import { SoftLockBanner } from './SoftLockBanner';
 import { AssistantPanel } from '../features/assistant/AssistantPanel';
 import { useAuth } from '../hooks/useAuth';
 import { useProductNavigation } from '../hooks/useProductNavigation';
+import { useRoleMenus } from '../hooks/useRoleMenus';
+import { menuKeyForPath } from '../utils/roleMenus';
 import { formatUserRole } from '../utils/roles';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useWorkspaceLogo } from '../hooks/useWorkspaceLogo';
@@ -21,9 +23,11 @@ const ASSISTANT_FEATURES = ['shopie_ai_assistant', 'appointie_ai_assistant'] as 
 export function Layout() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth();
   const workspace = useWorkspace();
   const { primaryNav } = useProductNavigation();
+  const { isEnabled, enabledMenus } = useRoleMenus();
   const workspaceLogo = useWorkspaceLogo();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
@@ -34,8 +38,16 @@ export function Layout() {
       ...((billingQuery.data?.entitled_features as string[] | undefined) ?? []),
       ...((billingQuery.data?.features as string[] | undefined) ?? []),
     ];
-    return ASSISTANT_FEATURES.some((code) => features.includes(code));
-  }, [billingQuery.data?.entitled_features, billingQuery.data?.features]);
+    return ASSISTANT_FEATURES.some((code) => features.includes(code)) && isEnabled('assistant');
+  }, [billingQuery.data?.entitled_features, billingQuery.data?.features, isEnabled]);
+
+  useEffect(() => {
+    if (!enabledMenus) return;
+    const key = menuKeyForPath(location.pathname);
+    if (!key?.startsWith('books') || isEnabled(key)) return;
+    const fallback = key !== 'books' && isEnabled('books') ? '/shop/books' : '/dashboard';
+    if (location.pathname !== fallback) navigate(fallback, { replace: true });
+  }, [enabledMenus, isEnabled, location.pathname, navigate]);
 
   const workspaceSnapshot = useMemo(
     () =>

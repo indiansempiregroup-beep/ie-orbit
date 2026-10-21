@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,6 +20,7 @@ import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
 import { DateField } from '../../components/DateField';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Input } from '../../components/ui/Input';
@@ -38,6 +39,8 @@ import type {
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { useAuth } from '../../contexts/AuthContext';
+import { confirmAction } from '../../utils/confirmAction';
+import { isProductTaxInclusive } from './posPricing';
 import { getApiErrorMessage } from '../../utils/format';
 import {
   customerLabel,
@@ -50,6 +53,7 @@ import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
+import { BooksDocumentDetailModal } from './BooksDocumentDetailModal';
 
 type DocLine = {
   key: string;
@@ -58,6 +62,7 @@ type DocLine = {
   qty: string;
   rate: string;
   gst: string;
+  taxInclusive: boolean;
 };
 
 const DOC_META: Record<
@@ -98,6 +103,7 @@ function emptyLine(): DocLine {
     qty: '1',
     rate: '0',
     gst: '0',
+    taxInclusive: false,
   };
 }
 
@@ -121,11 +127,40 @@ function canConvert(doc: ShopBooksDocument) {
   return canDispatch(doc);
 }
 
+function canEdit(doc: ShopBooksDocument) {
+  const status = docStatus(doc);
+  return status !== 'converted' && status !== 'cancelled' && status !== 'void' && status !== 'dispatched' && !doc.converted_voucher;
+}
+
+function linesFromDocument(doc: ShopBooksDocument): DocLine[] {
+  const items = Array.isArray(doc.line_items) ? doc.line_items : [];
+  const mapped = items
+    .map((raw) => {
+      const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      return {
+        key: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        productId: String(line.product_id || line.product || ''),
+        name: String(line.name || ''),
+        qty: String(line.quantity ?? line.qty ?? '1'),
+        rate: String(line.unit_price ?? line.rate ?? '0'),
+        gst: String(line.tax_rate ?? line.gst_rate ?? '0'),
+        taxInclusive: line.tax_inclusive === true,
+      };
+    })
+    .filter((line) => line.productId || line.name);
+  return mapped.length ? mapped : [emptyLine()];
+}
+
+function isConvertedVoucher(result: unknown): result is { id: string; voucher_number?: string } {
+  return Boolean(result && typeof result === 'object' && 'voucher_number' in result);
+}
+
 export function ShopBooksDocumentsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksDocuments'>>();
   const docType = route.params.docType;
+  const openDocumentId = route.params.documentId;
   const meta = DOC_META[docType];
   const client = useOpsClient();
   const toast = useToast();
@@ -149,14 +184,39 @@ export function ShopBooksDocumentsScreen() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'dispatched' | 'invoiced'>('all');
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const [detailDoc, setDetailDoc] = useState<ShopBooksDocument | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
+    setEditingId(null);
     setPartyId('');
     setDocumentDate(todayIso());
     setLines([emptyLine()]);
     setNotes('');
   }, []);
+
+  const openEdit = useCallback(
+    (doc: ShopBooksDocument) => {
+      if (!canEdit(doc)) {
+        toast.push('This document can no longer be edited', 'error');
+        return;
+      }
+      if (docType === 'sale_order' || docType === 'purchase_order' || docType === 'delivery_challan') {
+        setDetailDoc(null);
+        navigation.navigate('ShopPos', { mode: docType, documentId: doc.id });
+        return;
+      }
+      setEditingId(doc.id);
+      setPartyId(meta.usesSupplier ? doc.supplier || '' : doc.customer || '');
+      setDocumentDate(doc.document_date || todayIso());
+      setNotes(doc.notes || '');
+      setLines(linesFromDocument(doc));
+      setDetailDoc(null);
+      setShowForm(true);
+    },
+    [docType, meta.usesSupplier, navigation, toast],
+  );
 
   const opensInPos =
     docType === 'sale_order' || docType === 'purchase_order' || docType === 'delivery_challan';
@@ -178,7 +238,7 @@ export function ShopBooksDocumentsScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: meta.title,
+      title: showForm ? (editingId ? `Edit ${meta.singular}` : `New ${meta.singular}`) : meta.title,
       headerRight: () => (
         <Pressable
           onPress={() => (showForm ? closeForm() : openCreate())}
@@ -191,7 +251,7 @@ export function ShopBooksDocumentsScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, openCreate, meta.title, meta.singular]);
+  }, [navigation, showForm, editingId, closeForm, openCreate, meta.title, meta.singular]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -226,6 +286,24 @@ export function ShopBooksDocumentsScreen() {
       void load();
     }, [load]),
   );
+
+  useEffect(() => {
+    if (!openDocumentId || !client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await client.shop.getDocument(openDocumentId);
+        if (!cancelled && response.data) setDetailDoc(response.data);
+      } catch (err) {
+        if (!cancelled) {
+          toast.push(getApiErrorMessage(err, `Couldn't open this ${meta.singular}.`), 'error');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openDocumentId, client, toast, meta.singular]);
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
@@ -296,6 +374,7 @@ export function ShopBooksDocumentsScreen() {
       name: product?.name ?? '',
       rate: product ? String(product.price) : '0',
       gst: product ? String(product.gst_rate ?? product.tax_rate ?? 0) : '0',
+      taxInclusive: product ? isProductTaxInclusive(product) : false,
     });
   }
 
@@ -314,16 +393,30 @@ export function ShopBooksDocumentsScreen() {
         const qty = Number(line.qty) || 0;
         const rate = Number(line.rate) || 0;
         const gst = Number(line.gst) || 0;
-        const base = qty * rate;
-        const tax = base * (gst / 100);
-        acc.subtotal += base;
-        acc.tax += tax;
-        acc.total += base + tax;
+        const gross = qty * rate;
+        if (line.taxInclusive && gst > 0) {
+          const taxable = (gross * 100) / (100 + gst);
+          acc.subtotal += taxable;
+          acc.tax += gross - taxable;
+          acc.total += gross;
+        } else {
+          const tax = gross * (gst / 100);
+          acc.subtotal += gross;
+          acc.tax += tax;
+          acc.total += gross + tax;
+        }
         return acc;
       },
       { subtotal: 0, tax: 0, total: 0 },
     );
   }, [lines]);
+
+  function closeDetail() {
+    setDetailDoc(null);
+    if (route.params?.documentId) {
+      navigation.setParams({ documentId: undefined });
+    }
+  }
 
   async function submit() {
     if (!client || !businessId) return;
@@ -332,8 +425,29 @@ export function ShopBooksDocumentsScreen() {
       toast.push('Add at least one product line', 'error');
       return;
     }
+    const linesPayload = validLines.map((line) => ({
+      product_id: line.productId,
+      quantity: line.qty,
+      unit_price: line.rate,
+      tax_rate: line.gst,
+      tax_inclusive: line.taxInclusive,
+    }));
     setBusy(true);
     try {
+      if (editingId) {
+        const response = await client.shop.updateDocument(editingId, {
+          customer_id: meta.usesSupplier ? undefined : partyId || null,
+          supplier_id: meta.usesSupplier ? partyId || null : undefined,
+          document_date: documentDate || todayIso(),
+          notes: notes.trim(),
+          lines: linesPayload,
+        });
+        toast.push(`${response.data.document_number} updated`, 'success');
+        closeForm();
+        setDetailDoc(response.data);
+        await load();
+        return;
+      }
       const response = await client.shop.createDocument({
         business_id: businessId,
         doc_type: docType,
@@ -341,18 +455,22 @@ export function ShopBooksDocumentsScreen() {
         supplier_id: meta.usesSupplier ? partyId || null : null,
         document_date: documentDate || todayIso(),
         notes: notes.trim() || undefined,
-        lines: validLines.map((line) => ({
-          product_id: line.productId,
-          quantity: line.qty,
-          unit_price: line.rate,
-          tax_rate: line.gst,
-        })),
+        lines: linesPayload,
       });
       toast.push(`${response.data.document_number} created`, 'success');
       closeForm();
+      setDetailDoc(response.data);
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : `Couldn't create this ${meta.singular}. Try again.`, 'error');
+      toast.push(
+        getApiErrorMessage(
+          err,
+          editingId
+            ? `Couldn't update this ${meta.singular}. Try again.`
+            : `Couldn't create this ${meta.singular}. Try again.`,
+        ),
+        'error',
+      );
     } finally {
       setBusy(false);
     }
@@ -360,27 +478,48 @@ export function ShopBooksDocumentsScreen() {
 
   async function onConvert(doc: ShopBooksDocument, action?: 'dispatch' | 'to_invoice') {
     if (!client) return;
+    const isDispatch = docType === 'delivery_challan' && action !== 'to_invoice';
+    const ok = await confirmAction({
+      title: isDispatch
+        ? 'Dispatch challan'
+        : docType === 'delivery_challan'
+          ? 'Create invoice'
+          : meta.convertLabel,
+      message: isDispatch
+        ? `Mark ${doc.document_number} as dispatched and reduce stock?`
+        : docType === 'delivery_challan'
+          ? `Create a sale invoice from ${doc.document_number}?`
+          : `Convert ${doc.document_number}? This creates the ${docType === 'purchase_order' ? 'purchase bill' : 'sale invoice'}.`,
+      confirmLabel: isDispatch ? 'Dispatch' : docType === 'delivery_challan' ? 'Create invoice' : 'Convert',
+    });
+    if (!ok) return;
     setConvertingId(doc.id);
     try {
-      const result = await client.shop.convertDocument(
-        doc.id,
-        action ? { action } : {},
-      );
-      if (docType === 'delivery_challan' && action === 'to_invoice') {
-        const voucherNumber =
-          result && typeof result === 'object' && 'voucher_number' in result
-            ? String((result as { voucher_number?: string }).voucher_number || '')
-            : '';
-        toast.push(voucherNumber ? `Invoice ${voucherNumber} created` : 'Invoiced from challan', 'success');
-      } else {
+      const result = await client.shop.convertDocument(doc.id, action ? { action } : {});
+      const voucher = isConvertedVoucher(result.data) ? result.data : null;
+      if (voucher) {
         toast.push(
-          docType === 'delivery_challan' ? 'Dispatched · stock updated' : `Converted · ${meta.convertLabel}`,
+          voucher.voucher_number
+            ? `Converted to ${voucher.voucher_number}`
+            : `${doc.document_number} converted`,
           'success',
         );
+        closeDetail();
+        await load();
+        if (docType === 'purchase_order') {
+          navigation.navigate('ShopBooksPurchase', { voucherId: voucher.id });
+        } else {
+          navigation.navigate('ShopBooksSale', { voucherId: voucher.id });
+        }
+        return;
+      }
+      toast.push(isDispatch ? 'Dispatched · stock updated' : `${doc.document_number} updated`, 'success');
+      if (result.data && 'document_number' in result.data) {
+        setDetailDoc(result.data as ShopBooksDocument);
       }
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't convert this document. Try again.", 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't convert this document. Try again."), 'error');
     } finally {
       setConvertingId(null);
     }
@@ -391,7 +530,13 @@ export function ShopBooksDocumentsScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : `Create ${meta.singular} · ${formatMoney(totals.total)}`}
+            label={
+              busy
+                ? 'Saving…'
+                : editingId
+                  ? `Save ${meta.singular} · ${formatMoney(totals.total)}`
+                  : `Create ${meta.singular} · ${formatMoney(totals.total)}`
+            }
             loading={busy}
             fullWidth
             size="lg"
@@ -399,7 +544,13 @@ export function ShopBooksDocumentsScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>New {meta.singular}</Text>
+        <FormHero
+          subtitle={
+            editingId
+              ? 'Update the party, lines, date, or notes. Converted and dispatched records stay locked.'
+              : `Create a ${meta.singular} and convert it when ready.`
+          }
+        />
 
         <SelectField
           label={meta.usesSupplier ? 'Supplier' : 'Customer'}
@@ -618,10 +769,11 @@ export function ShopBooksDocumentsScreen() {
                 title={party}
                 amount={formatMoney(item.total)}
                 meta={`${item.document_number}${item.document_date || item.created_at ? ` · ${formatVoucherDateTime(item.document_date, item.created_at)}` : ''}`}
-                badge={item.status}
+                badge={converted ? (isChallan ? 'Invoiced' : 'Converted') : item.status}
                 badgeKind={converted ? 'paid' : open ? 'due' : dispatched ? 'neutral' : 'neutral'}
                 icon={isChallan ? 'truck' : 'file-text'}
                 iconTone={converted ? 'green' : dispatched ? 'cyan' : 'navy'}
+                onPress={() => setDetailDoc(item)}
                 actionLabel={primaryAction?.label}
                 onAction={primaryAction && !converting ? primaryAction.onPress : undefined}
                 extraActions={challanExtras}
@@ -651,6 +803,22 @@ export function ShopBooksDocumentsScreen() {
           }
         />
       </View>
+      <BooksDocumentDetailModal
+        document={detailDoc}
+        docType={docType}
+        visible={Boolean(detailDoc)}
+        converting={Boolean(detailDoc && convertingId === detailDoc.id)}
+        onClose={closeDetail}
+        onEdit={openEdit}
+        onDispatch={(doc) => void onConvert(doc, 'dispatch')}
+        onConvert={(doc) =>
+          void onConvert(doc, docType === 'delivery_challan' ? 'to_invoice' : undefined)
+        }
+        onUpdated={(doc) => {
+          setDetailDoc(doc);
+          setDocuments((current) => current.map((item) => (item.id === doc.id ? doc : item)));
+        }}
+      />
       <DocumentActionsSheet
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}

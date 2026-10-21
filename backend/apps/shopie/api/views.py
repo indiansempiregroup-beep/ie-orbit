@@ -17,19 +17,27 @@ from apps.billing.services.cashfree_client import CashfreeClient
 from apps.billing.services.checkout import CheckoutService
 from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.constants import (
+    BI_FEATURE_PROFIT,
     FEATURE_SHOPIE_BOOKS_QUOTATIONS,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_PRODUCTS,
+    PRODUCT_SHOPIE,
 )
 from apps.businesses.models import Business
+from apps.businesses.services.entitlements import EntitlementService
 from apps.common.api.responses import success_response
 from apps.common.pagination.helpers import paginated_list_response
+from apps.common.utils.workspace_access import (
+    is_workspace_manager_or_above,
+    manager_staff_id_from_request,
+)
 from apps.customers.models import Customer
 from apps.shopie.api.access import (
     CATALOG_FEATURES,
     INVOICE_FEATURES,
     POS_SCAN_FEATURES,
     STOCK_FEATURES,
+    require_ai_wallet_business,
     require_any_shopie_feature,
 )
 from apps.shopie.api.access import (
@@ -57,6 +65,7 @@ from apps.shopie.api.serializers import (
     ShopProductWriteSerializer,
     ShopQuotationCreateSerializer,
     ShopQuotationSerializer,
+    ShopQuotationUpdateSerializer,
     ShopStockMovementSerializer,
     SmartLookupSettingsSerializer,
     SmartLookupTopUpSerializer,
@@ -168,7 +177,18 @@ class ShopProductProfitInsightsView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, features=CATALOG_FEATURES)
+        EntitlementService().ensure_bi_feature(
+            business=business,
+            feature=BI_FEATURE_PROFIT,
+            product_code=PRODUCT_SHOPIE,
+        )
         include_catalog_raw = str(request.query_params.get("include_catalog") or "true").lower()
+        staff_id = manager_staff_id_from_request(request)
+        actor_user_id = None
+        if not is_workspace_manager_or_above(
+            user=request.user, tenant=request.current_tenant
+        ):
+            actor_user_id = getattr(request.user, "id", None)
         data = self.catalog.product_profit_insights(
             tenant=request.current_tenant,
             business=business,
@@ -182,6 +202,8 @@ class ShopProductProfitInsightsView(APIView):
             limit=request.query_params.get("limit") or None,
             offset=request.query_params.get("offset") or None,
             include_catalog=include_catalog_raw not in {"0", "false", "no"},
+            staff_id=staff_id,
+            actor_user_id=actor_user_id,
         )
         return success_response(data)
 
@@ -478,7 +500,7 @@ class ShopSmartLookupView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id, features=CATALOG_FEATURES)
+        business = require_ai_wallet_business(request, business_id)
         return success_response(self.smart.dashboard(tenant=request.current_tenant, business=business))
 
     @extend_schema(request=SmartLookupSettingsSerializer)
@@ -508,7 +530,7 @@ class ShopSmartLookupTopUpView(APIView):
         serializer = SmartLookupTopUpSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        business = _business(request, data["business_id"], features=CATALOG_FEATURES)
+        business = require_ai_wallet_business(request, data["business_id"])
         session = self.checkout.create_smart_lookup_upi_session(
             tenant=request.current_tenant,
             business=business,
@@ -528,7 +550,7 @@ class ShopSmartLookupHistoryView(APIView):
         business_id = request.query_params.get("business_id")
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
-        business = _business(request, business_id, features=CATALOG_FEATURES)
+        business = require_ai_wallet_business(request, business_id)
         try:
             page = int(request.query_params.get("page") or 1)
         except (TypeError, ValueError):
@@ -778,6 +800,7 @@ class ShopOrderListCreateView(APIView):
                 coupon_code=data.get("coupon_code") or "",
                 points_to_redeem=int(data.get("points_to_redeem") or 0),
                 metadata_extra=metadata_extra or None,
+                created_by_user_id=getattr(request.user, "id", None),
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
@@ -1206,3 +1229,53 @@ class ShopQuotationListCreateView(APIView):
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
         return success_response(ShopQuotationSerializer(quote).data, status_code=status.HTTP_201_CREATED)
+
+
+class ShopQuotationDetailView(APIView):
+    permission_classes = [ShopAccessPermission]
+    orders = OrderService()
+
+    def _get(self, request: Request, quotation_id) -> ShopQuotation:
+        quotation = (
+            ShopQuotation.objects.filter(tenant=request.current_tenant, id=quotation_id)
+            .select_related("customer")
+            .first()
+        )
+        if not quotation:
+            raise NotFound("Quotation not found.")
+        require_any_shopie_feature(quotation.business, (FEATURE_SHOPIE_BOOKS_QUOTATIONS,))
+        return quotation
+
+    @extend_schema(responses=ShopQuotationSerializer)
+    def get(self, request: Request, quotation_id) -> Response:
+        return success_response(ShopQuotationSerializer(self._get(request, quotation_id)).data)
+
+    @extend_schema(request=ShopQuotationUpdateSerializer, responses=ShopQuotationSerializer)
+    def patch(self, request: Request, quotation_id) -> Response:
+        quotation = self._get(request, quotation_id)
+        serializer = ShopQuotationUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        customer = None
+        has_customer = "customer_id" in data
+        if data.get("customer_id"):
+            customer = get_object_or_404(
+                Customer,
+                tenant=request.current_tenant,
+                business=quotation.business,
+                id=data["customer_id"],
+            )
+        try:
+            quote = self.orders.update_quotation(
+                tenant=request.current_tenant,
+                business=quotation.business,
+                quotation=quotation,
+                **({"customer": customer} if has_customer else {}),
+                notes=data.get("notes") if "notes" in data else None,
+                **({"valid_until": data["valid_until"]} if "valid_until" in data else {}),
+                status=data.get("status"),
+                lines=data.get("lines"),
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopQuotationSerializer(quote).data)

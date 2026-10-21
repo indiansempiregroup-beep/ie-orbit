@@ -69,7 +69,7 @@ def test_trial_uses_pro_limits(business: Business) -> None:
     entitlements = EntitlementService().resolve(business=business)
     assert entitlements.effective_max_staff == 5
     assert entitlements.effective_max_branches == 2
-    assert "forecast" in entitlements.bi_features
+    assert "overview" in entitlements.bi_features
     assert "reward_points" in entitlements.features
     assert "appointie_bookings" in entitlements.features
     assert FEATURE_AD_FREE in entitlements.features
@@ -125,6 +125,54 @@ def test_platform_admin_can_disable_google_ads(business: Business) -> None:
         enabled=False,
     )
     assert EntitlementService().billing_snapshot(business=business)["show_google_ads"] is False
+
+
+@pytest.mark.django_db
+def test_platform_product_flag_clears_that_products_features(business: Business) -> None:
+    from apps.platform_admin.models import PlatformFeatureFlag
+
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-pro",
+        defaults={"name": "Orbit Mart Pro", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    service = EntitlementService()
+    assert service.resolve(business=business, product_code="shopie").features
+    PlatformFeatureFlag.objects.create(tenant=business.tenant, key="shopie", enabled=False)
+    assert service.resolve(business=business, product_code="shopie").features == ()
+    assert service.resolve(business=business, product_code="appointie").features
+
+
+@pytest.mark.django_db
+def test_platform_bi_full_flag_keeps_overview_and_profit(business: Business) -> None:
+    from apps.businesses.constants import BI_FEATURE_GROWTH, BI_FEATURE_OVERVIEW, BI_FEATURE_PROFIT
+    from apps.platform_admin.models import PlatformFeatureFlag
+
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-pro",
+        defaults={"name": "Orbit Mart Pro", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    service = EntitlementService()
+    before = service.resolve(business=business, product_code="shopie")
+    assert BI_FEATURE_GROWTH in before.bi_features
+    PlatformFeatureFlag.objects.create(tenant=business.tenant, key="bi_full", enabled=False)
+    after = service.resolve(business=business, product_code="shopie")
+    assert BI_FEATURE_OVERVIEW in after.bi_features
+    assert BI_FEATURE_PROFIT in after.bi_features
+    assert BI_FEATURE_GROWTH not in after.bi_features
 
 
 @pytest.mark.django_db
@@ -420,6 +468,161 @@ def test_trial_uses_pro_extra_addon_caps(business: Business) -> None:
         extra_staff=2,
         extra_offices=1,
     )
+
+
+def _set_package_bi_features(code: str, product_code: str, bi_features: list[str]) -> None:
+    from apps.platform_admin.models import PlatformPlanPackage
+
+    package = PlatformPlanPackage.objects.filter(code=code).first()
+    if package is None:
+        PlatformPlanPackage.objects.create(
+            product_code=product_code,
+            code=code,
+            name=code,
+            bi_features=bi_features,
+            features=["shopie_products"] if product_code == "shopie" else ["appointie_bookings"],
+        )
+        return
+    package.bi_features = bi_features
+    package.save(update_fields=["bi_features"])
+
+
+@pytest.mark.django_db
+def test_disabled_profit_on_shopie_package_is_hidden(business: Business) -> None:
+    from apps.businesses.constants import BI_FEATURE_OVERVIEW, BI_FEATURE_PROFIT
+
+    _set_package_bi_features("shopie-starter", "shopie", [BI_FEATURE_OVERVIEW])
+    _set_package_bi_features(
+        "appointie-starter",
+        "appointie",
+        [BI_FEATURE_OVERVIEW, BI_FEATURE_PROFIT, "growth"],
+    )
+    shopie_plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-starter",
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
+    )
+    appointie_plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
+    )
+    business.selected_product = "shopie"
+    business.save(update_fields=["selected_product"])
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=shopie_plan,
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=appointie_plan,
+    )
+    service = EntitlementService()
+    snapshot = service.billing_snapshot(business=business, product_code="shopie")
+    assert BI_FEATURE_PROFIT in snapshot["entitled_bi_features"]
+    assert snapshot["bi_features_by_product"]["shopie"] == [BI_FEATURE_OVERVIEW]
+    assert BI_FEATURE_PROFIT in snapshot["bi_features_by_product"]["appointie"]
+    assert service.products_with_bi_feature(business=business, feature=BI_FEATURE_PROFIT) == [
+        "appointie"
+    ]
+    service.ensure_bi_feature(business=business, feature=BI_FEATURE_PROFIT, product_code="appointie")
+    with pytest.raises(PermissionDenied):
+        service.ensure_bi_feature(business=business, feature=BI_FEATURE_PROFIT, product_code="shopie")
+
+
+@pytest.mark.django_db
+def test_trial_hides_profit_when_assigned_package_disables_it(business: Business) -> None:
+    from apps.businesses.constants import BI_FEATURE_OVERVIEW, BI_FEATURE_PROFIT
+
+    _set_package_bi_features("shopie-starter", "shopie", [BI_FEATURE_OVERVIEW])
+    _set_package_bi_features(
+        "shopie-pro",
+        "shopie",
+        [BI_FEATURE_OVERVIEW, BI_FEATURE_PROFIT, "growth"],
+    )
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-starter",
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
+    )
+    business.selected_product = "shopie"
+    business.save(update_fields=["selected_product"])
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.TRIALING,
+        plan=plan,
+        trial_ends_at=timezone.now() + timedelta(days=10),
+    )
+    service = EntitlementService()
+    entitlements = service.resolve(business=business, product_code="shopie")
+    assert BI_FEATURE_PROFIT not in entitlements.bi_features
+    assert "growth" not in entitlements.bi_features
+    with pytest.raises(PermissionDenied):
+        service.ensure_bi_feature(business=business, feature=BI_FEATURE_PROFIT, product_code="shopie")
+
+
+@pytest.mark.django_db
+def test_shopie_growth_checkbox_unlocks_shopie_not_appointie(business: Business) -> None:
+    from apps.businesses.constants import BI_FEATURE_GROWTH, BI_FEATURE_OVERVIEW
+
+    _set_package_bi_features("shopie-starter", "shopie", [BI_FEATURE_OVERVIEW, BI_FEATURE_GROWTH])
+    _set_package_bi_features("appointie-starter", "appointie", [BI_FEATURE_OVERVIEW])
+    shopie_plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-starter",
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
+    )
+    appointie_plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="appointie-starter",
+        defaults={"name": "Orbit Appoint Starter", "is_public": True},
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=shopie_plan,
+    )
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="appointie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=appointie_plan,
+    )
+    service = EntitlementService()
+    assert service.products_with_bi_feature(business=business, feature=BI_FEATURE_GROWTH) == ["shopie"]
+    service.ensure_bi_feature(business=business, feature=BI_FEATURE_GROWTH, product_code="shopie")
+    with pytest.raises(PermissionDenied):
+        service.ensure_bi_feature(business=business, feature=BI_FEATURE_GROWTH, product_code="appointie")
+
+
+@pytest.mark.django_db
+def test_empty_bi_features_does_not_restore_profit(business: Business) -> None:
+    from apps.businesses.constants import BI_FEATURE_PROFIT
+
+    _set_package_bi_features("shopie-starter", "shopie", [])
+    plan, _ = SubscriptionPlan.objects.get_or_create(
+        code="shopie-starter",
+        defaults={"name": "Orbit Mart Starter", "is_public": True},
+    )
+    business.selected_product = "shopie"
+    business.save(update_fields=["selected_product"])
+    BusinessProductSubscription.objects.create(
+        tenant=business.tenant,
+        business=business,
+        product_code="shopie",
+        status=BusinessProductSubscriptionStatus.ACTIVE,
+        plan=plan,
+    )
+    service = EntitlementService()
+    entitlements = service.resolve(business=business, product_code="shopie")
+    assert BI_FEATURE_PROFIT not in entitlements.bi_features
+    assert BI_FEATURE_PROFIT not in service.entitled_bi_features(business=business)
 
 
 def test_extra_addon_cap_helper_grandfathers_current() -> None:

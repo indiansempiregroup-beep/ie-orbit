@@ -290,9 +290,22 @@ export type Booking = {
   line_items?: BookingLineItem[];
   books_voucher_id?: string | null;
   books_voucher_number?: string | null;
+  loyalty?: BookingLoyalty | null;
   created_at?: string;
   updated_at?: string;
   is_active?: boolean;
+};
+
+export type BookingLoyalty = {
+  points_earned?: number;
+  points_reversed?: number;
+  points_redeemed?: number;
+  points_redeem_refunded?: number;
+  remaining_earned?: number;
+  discount_amount?: string | number | null;
+  reversal_reason?: string;
+  earn_reversed?: boolean;
+  refunded?: boolean;
 };
 
 export type BookingCreateInput = {
@@ -485,6 +498,8 @@ export type BusinessBillingSnapshot = {
   bi_features: string[];
   features?: string[];
   entitled_features?: string[];
+  entitled_bi_features?: string[];
+  bi_features_by_product?: Record<string, string[]>;
   show_google_ads?: boolean;
   pricing: {
     currency: string;
@@ -971,6 +986,9 @@ export type MobileBookingLoyalty = {
   points_earned?: number;
   points_pending?: number;
   points_redeemed?: number;
+  points_reversed?: number;
+  remaining_earned?: number;
+  reversal_reason?: string;
   discount_amount?: string | number | null;
   currency?: string;
 };
@@ -2181,11 +2199,17 @@ export type DashboardPetsSummary = {
   insights?: BIInsight[];
 };
 
+export type DashboardViewer = {
+  is_bookable: boolean;
+  booking_staff: boolean;
+};
+
 export type DashboardSummary = {
   products: string[];
   pets_pack_enabled: boolean;
   currency?: string | null;
   today_count: number;
+  viewer?: DashboardViewer;
   appointie?: DashboardAppointieSummary;
   shopie?: DashboardShopieSummary;
   pets?: DashboardPetsSummary;
@@ -2205,6 +2229,121 @@ export type BIShopieOverview = {
   trend: Array<{ day: string; orders: number; gmv: number }>;
   insights?: BIInsight[];
   period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIAppointieProfit = {
+  product: 'appointie';
+  currency?: string | null;
+  period?: { start_date?: string | null; end_date?: string | null };
+  estimated_revenue: number;
+  completed_revenue?: number;
+  open_revenue?: number;
+  lost_cancelled?: number;
+  lost_no_shows?: number;
+  lost_total?: number;
+  avg_booking_value?: number;
+  bookings?: number;
+  completed?: number;
+  cancelled?: number;
+  no_shows?: number;
+  completion_rate?: number;
+  cancellation_rate?: number;
+  no_show_rate?: number;
+  avg_bookings_per_day?: number;
+  busiest_day?: string | null;
+  busiest_hour?: string | null;
+  comparison?: AnalyticsPeriodComparison | null;
+  by_service?: BIRevenueReport['by_service'];
+  by_staff?: BIOperationsReport['by_staff'];
+  by_weekday?: Array<BIOperationsReport['by_weekday'][number] & { revenue?: number }>;
+  trends?: BITrendsReport['rows'];
+  series?: Array<{ date: string; estimated_revenue: number; completed_revenue: number; bookings: number }>;
+  insights?: BIInsight[];
+};
+
+export type BIProfitResponse = {
+  products: string[];
+  appointie?: BIAppointieProfit | null;
+};
+
+export type BIShopieRevenue = {
+  gmv: number;
+  avg_order_value: number;
+  orders: number;
+  cancelled_orders: number;
+  currency?: string | null;
+  by_channel: Array<{ channel: string; label: string; orders: number; gmv: number }>;
+  by_category: Array<{ category: string; label: string; orders: number; gmv: number }>;
+  trend: Array<{ day: string; orders: number; gmv: number }>;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIShopieGrowth = {
+  new_customers: number;
+  returning_customers: number;
+  customers_with_orders: number;
+  repeat_rate: number;
+  avg_orders_per_customer: number;
+  top_customers: Array<{
+    customer_id: string;
+    customer_name: string;
+    orders: number;
+    revenue: number;
+    is_returning?: boolean;
+  }>;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIShopieForecast = {
+  horizon_days: number;
+  projected_orders: number;
+  projected_revenue: number;
+  avg_daily_orders?: number;
+  avg_daily_revenue?: number;
+  currency: string;
+  based_on_days: number;
+  based_on_orders?: number;
+  momentum_pct?: number | null;
+  note?: string;
+};
+
+export type BIShopieReports = {
+  orders: number;
+  cancelled_orders: number;
+  gmv: number;
+  avg_order_value: number;
+  returns: number;
+  return_rate: number;
+  currency?: string | null;
+  trend: Array<{ day: string; orders: number; gmv: number }>;
+  insights?: BIInsight[];
+  growth: BIShopieGrowth;
+  revenue: BIShopieRevenue;
+  period?: { start_date?: string | null; end_date?: string | null };
+};
+
+export type BIRevenueResponse = Partial<BIRevenueReport> & {
+  products?: string[];
+  appointie?: BIRevenueReport | null;
+  shopie?: BIShopieRevenue | null;
+};
+
+export type BIGrowthResponse = Partial<BIGrowthReport> & {
+  products?: string[];
+  appointie?: BIGrowthReport | null;
+  shopie?: BIShopieGrowth | null;
+};
+
+export type BIForecastResponse = Partial<BIForecastReport> & {
+  products?: string[];
+  appointie?: BIForecastReport | null;
+  shopie?: BIShopieForecast | null;
+};
+
+export type BIReportsResponse = Partial<BIReportsBundle> & {
+  products?: string[];
+  appointie?: BIReportsBundle | null;
+  shopie?: BIShopieReports | null;
 };
 
 export type BIOverviewResponse = {
@@ -2271,6 +2410,13 @@ export type AcceptInvitationInput = {
   password?: string;
   first_name?: string;
   last_name?: string;
+};
+
+export type InvitationPreview = {
+  status: 'pending' | 'accepted' | 'expired' | 'revoked' | 'invalid';
+  business_name?: string | null;
+  role?: string | null;
+  email?: string | null;
 };
 
 export type Business = {
@@ -2696,7 +2842,7 @@ export type CustomerLoyaltyLedgerEntry = {
   points_delta: number;
   reason: string;
   entry_type?: string;
-  direction?: 'given' | 'used' | 'other' | string;
+  direction?: 'given' | 'used' | 'reversed' | 'both' | 'other' | string;
   booking_id?: string | null;
   order_id?: string | null;
   voucher_id?: string | null;
@@ -2718,6 +2864,8 @@ export type CustomerLoyaltyLedgerEntry = {
   record_points_earned?: number;
   /** Total points redeemed on the linked sale (may include companion redeem row). */
   record_points_redeemed?: number;
+  /** Points clawed back after a cancel, return, or refund. */
+  record_points_reversed?: number;
   record_label?: string;
   record_kind?: 'order' | 'booking' | 'voucher' | '' | string;
   created_at?: string;
@@ -3026,6 +3174,8 @@ export type ShopOrder = {
   points_earned?: number;
   /** Reward points redeemed on this order (from metadata). */
   points_redeemed?: number;
+  /** Reward points clawed back after a return, cancel, or refund. */
+  points_reversed?: number;
   /** Net sold profit from sale profit facts (null when unknown). */
   gross_profit?: string | null;
   /** Shop return policy in days. 0 = no time limit. */
@@ -3580,6 +3730,7 @@ export type ShopQuotation = {
   id: string;
   business: string;
   customer?: string | null;
+  customer_name?: string;
   customer_phone?: string;
   customer_email?: string;
   quotation_number: string;
@@ -3593,6 +3744,14 @@ export type ShopQuotation = {
   valid_until?: string | null;
   converted_order?: string | null;
   created_at?: string;
+  updated_at?: string;
+};
+
+export type ShopQuotationLineInput = {
+  product_id: string;
+  quantity?: string | number;
+  unit_price?: string | number;
+  tax_rate?: string | number;
 };
 
 export type ShopQuotationCreateInput = {
@@ -3600,12 +3759,15 @@ export type ShopQuotationCreateInput = {
   customer_id?: string | null;
   notes?: string;
   valid_until?: string | null;
-  lines: Array<{
-    product_id: string;
-    quantity?: string | number;
-    unit_price?: string | number;
-    tax_rate?: string | number;
-  }>;
+  lines: ShopQuotationLineInput[];
+};
+
+export type ShopQuotationUpdateInput = {
+  customer_id?: string | null;
+  notes?: string;
+  valid_until?: string | null;
+  status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired' | string;
+  lines?: ShopQuotationLineInput[];
 };
 
 export type ShopBooksDashboard = {
@@ -3862,6 +4024,8 @@ export type ShopBooksVoucher = {
   points_earned?: number;
   /** Reward points redeemed on this sale (from metadata). */
   points_redeemed?: number;
+  /** Reward points clawed back after a return, cancel, or refund. */
+  points_reversed?: number;
   /** Net sold profit when linked to a shop order (null for bookings / unknown). */
   gross_profit?: string | null;
   created_at?: string;
@@ -3895,6 +4059,10 @@ export type ShopDocumentPayload = {
   payment_method?: string;
   payment_label?: string;
   payment_status?: string;
+  points_earned?: number;
+  points_to_earn?: number;
+  points_reversed?: number;
+  reversal_reason?: string;
   notes?: string;
   irn?: string;
   upi_pay_url?: string;
@@ -3948,6 +4116,85 @@ export type MobileShopOrderInvoice = {
 /** Customer-app tax invoice for a completed booking (Books sale, same as shop). */
 export type MobileBookingInvoice = MobileShopOrderInvoice;
 
+export type ShopInvoiceScanLine = {
+  name: string;
+  barcode?: string;
+  sku?: string;
+  hsn_sac?: string;
+  qty: string;
+  rate: string;
+  /** Selling price. Defaults to the purchase rate when the bill has no MRP. */
+  price?: string;
+  discount?: string;
+  gst_rate?: string;
+  line_total?: string;
+  product_id?: string;
+  brand?: string;
+  pack_size?: string;
+  status?: string;
+  category?: string;
+  currency?: string;
+  tax_inclusive?: boolean;
+  stock_on_hand?: string;
+  description?: string;
+  details_html?: string;
+  image_url?: string;
+  image_source?: string;
+  use_image?: boolean;
+  match?: string;
+  create?: boolean;
+  skip?: boolean;
+};
+
+export type ShopInvoiceScanDraft = {
+  image_urls?: string[];
+  usage_id?: string;
+  header: {
+    supplier_name?: string;
+    gstin?: string;
+    phone?: string;
+    invoice_number?: string;
+    invoice_date?: string;
+    place_of_supply?: string;
+    taxable?: string;
+    cgst?: string;
+    sgst?: string;
+    igst?: string;
+    grand_total?: string;
+  };
+  supplier: {
+    supplier_id?: string;
+    name?: string;
+    gstin?: string;
+    phone?: string;
+    match?: string;
+    create?: boolean;
+  };
+  lines: ShopInvoiceScanLine[];
+  line_total?: string;
+  totals_mismatch?: boolean;
+  duplicate?: { found?: boolean; voucher_number?: string; message?: string };
+};
+
+export type ShopInvoiceScanAnalyzeResult = {
+  ok: boolean;
+  source?: string;
+  message?: string;
+  charged_paise?: number;
+  balance_after_paise?: number | null;
+  charge_currency?: string;
+  usage_id?: string;
+  draft?: ShopInvoiceScanDraft | null;
+};
+
+export type ShopInvoiceScanConfirmResult = {
+  voucher_id: string;
+  voucher_number: string;
+  created_product_ids?: string[];
+  supplier_id?: string | null;
+  voucher?: ShopBooksVoucher;
+};
+
 export type ShopBooksVoucherCreateInput = {
   voucher_type: ShopBooksVoucherType | string;
   business_id: string;
@@ -3980,9 +4227,17 @@ export type ShopPartyLedgerEntry = {
   direction: string;
   balance_after: string | number;
   voucher?: string | null;
+  voucher_number?: string | null;
+  voucher_type?: string | null;
   notes?: string;
   metadata?: Record<string, unknown>;
   created_at?: string;
+};
+
+export type ShopVoucherPayInput = {
+  amount: string | number;
+  cash_account_id: string;
+  notes?: string;
 };
 
 export type ShopPartyStatement = {
@@ -4138,6 +4393,17 @@ export type ShopBooksDocument = {
   created_at?: string;
 };
 
+export type ShopBooksDocumentLineInput = {
+  product_id: string;
+  quantity?: string | number;
+  qty?: string | number;
+  unit_price?: string | number;
+  rate?: string | number;
+  tax_rate?: string | number;
+  gst_rate?: string | number;
+  tax_inclusive?: boolean;
+};
+
 export type ShopBooksDocumentCreateInput = {
   business_id: string;
   doc_type: ShopBooksDocumentType | string;
@@ -4145,15 +4411,16 @@ export type ShopBooksDocumentCreateInput = {
   supplier_id?: string | null;
   document_date?: string;
   notes?: string;
-  lines: Array<{
-    product_id: string;
-    quantity?: string | number;
-    qty?: string | number;
-    unit_price?: string | number;
-    rate?: string | number;
-    tax_rate?: string | number;
-    gst_rate?: string | number;
-  }>;
+  lines: ShopBooksDocumentLineInput[];
+};
+
+export type ShopBooksDocumentUpdateInput = {
+  customer_id?: string | null;
+  supplier_id?: string | null;
+  document_date?: string | null;
+  notes?: string;
+  status?: 'draft' | 'confirmed' | 'cancelled' | string;
+  lines?: ShopBooksDocumentLineInput[];
 };
 
 export type ShopGodownStock = {
@@ -4945,6 +5212,10 @@ export type WorkflowDraftResult = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    charged_paise?: number;
+    balance_after_paise?: number | null;
+    currency?: string;
+    message?: string;
   };
   definition: WorkflowDefinition | null;
 };
@@ -5026,6 +5297,163 @@ export type TenantSettingsResponse = {
     limits?: Record<string, unknown>;
   };
 };
+
+export type RoleMenuKey =
+  | 'home'
+  | 'bookings'
+  | 'calendar'
+  | 'alerts'
+  | 'assistant'
+  | 'pos'
+  | 'books'
+  | 'booksSale'
+  | 'booksQuotations'
+  | 'booksNotes'
+  | 'booksPurchase'
+  | 'booksInvoiceScan'
+  | 'booksExpense'
+  | 'booksStock'
+  | 'booksCash'
+  | 'booksParties'
+  | 'booksReports'
+  | 'booksCompliance'
+  | 'booksSaleOrders'
+  | 'booksPurchaseOrders'
+  | 'booksChallans'
+  | 'booksGodowns'
+  | 'booksCheques'
+  | 'booksLoans'
+  | 'booksLoyalty'
+  | 'products'
+  | 'masterFiles'
+  | 'orders'
+  | 'returns'
+  | 'zones'
+  | 'instantDelivery'
+  | 'coupons'
+  | 'pets'
+  | 'wa'
+  | 'gbp'
+  | 'sync'
+  | 'ads'
+  | 'utils'
+  | 'referral'
+  | 'automations'
+  | 'customers'
+  | 'reviews'
+  | 'services'
+  | 'staff'
+  | 'bi'
+  | 'tickets'
+  | 'settings'
+  | 'profile';
+
+export type RoleMenuRoleCode = 'business_owner' | 'manager' | 'staff';
+
+export type RoleMenuCatalogItem = {
+  key: RoleMenuKey | string;
+  label: string;
+  group: string;
+  group_label: string;
+  always_on?: boolean;
+  default_hidden?: boolean;
+  parent?: string;
+};
+
+export type RoleMenusResponse = {
+  catalog: RoleMenuCatalogItem[];
+  roles: RoleMenuRoleCode[];
+  defaults: Record<string, string[]>;
+  enabled: Record<string, string[]>;
+  enabled_menus: string[];
+  hidden_by_default: string[];
+  can_manage?: boolean;
+};
+
+export const DEFAULT_HIDDEN_ROLE_MENUS = [
+  'books',
+  'booksSale',
+  'booksQuotations',
+  'booksNotes',
+  'booksPurchase',
+  'booksInvoiceScan',
+  'booksExpense',
+  'booksStock',
+  'booksCash',
+  'booksParties',
+  'booksReports',
+  'booksCompliance',
+  'booksSaleOrders',
+  'booksPurchaseOrders',
+  'booksChallans',
+  'booksGodowns',
+  'booksCheques',
+  'booksLoans',
+  'booksLoyalty',
+  'coupons',
+  'gbp',
+  'sync',
+  'ads',
+  'referral',
+  'automations',
+  'assistant',
+  'services',
+] as const;
+
+export const ALWAYS_ON_ROLE_MENUS = ['home', 'alerts', 'profile'] as const;
+
+export const STAFF_DEFAULT_HIDDEN_ROLE_MENUS = ['staff', 'bi', 'tickets', 'settings'] as const;
+
+export const ROLE_MENU_KEYS = [
+  'home',
+  'bookings',
+  'calendar',
+  'alerts',
+  'assistant',
+  'pos',
+  'books',
+  'booksSale',
+  'booksQuotations',
+  'booksNotes',
+  'booksPurchase',
+  'booksInvoiceScan',
+  'booksExpense',
+  'booksStock',
+  'booksCash',
+  'booksParties',
+  'booksReports',
+  'booksCompliance',
+  'booksSaleOrders',
+  'booksPurchaseOrders',
+  'booksChallans',
+  'booksGodowns',
+  'booksCheques',
+  'booksLoans',
+  'booksLoyalty',
+  'products',
+  'masterFiles',
+  'orders',
+  'returns',
+  'zones',
+  'instantDelivery',
+  'coupons',
+  'pets',
+  'wa',
+  'gbp',
+  'sync',
+  'utils',
+  'ads',
+  'referral',
+  'automations',
+  'customers',
+  'reviews',
+  'services',
+  'staff',
+  'bi',
+  'tickets',
+  'settings',
+  'profile',
+] as const;
 
 export type TenantCreateInput = {
   slug: string;
@@ -5178,6 +5606,7 @@ class ApiClient {
       limit?: number;
       offset?: number;
       include_catalog?: boolean | string;
+      staff_id?: string;
     }) =>
       this.request<ShopProductProfitInsights>('/shop/products/profit-insights', {
         method: 'GET',
@@ -5497,6 +5926,10 @@ class ApiClient {
       this.request<ShopQuotation[]>('/shop/quotations', { method: 'GET', query }),
     createQuotation: (body: ShopQuotationCreateInput) =>
       this.request<ShopQuotation>('/shop/quotations', { method: 'POST', body }),
+    getQuotation: (quotationId: string) =>
+      this.request<ShopQuotation>(`/shop/quotations/${quotationId}`, { method: 'GET' }),
+    updateQuotation: (quotationId: string, body: ShopQuotationUpdateInput) =>
+      this.request<ShopQuotation>(`/shop/quotations/${quotationId}`, { method: 'PATCH', body }),
     convertQuotationToSale: (quotationId: string, body?: ShopQuotationConvertToSaleInput) =>
       this.request<ShopBooksVoucher>(`/shop/quotations/${quotationId}/convert-to-sale`, {
         method: 'POST',
@@ -5506,6 +5939,10 @@ class ApiClient {
       this.request<ShopBooksDocument[]>('/shop/books/documents', { method: 'GET', query }),
     createDocument: (body: ShopBooksDocumentCreateInput) =>
       this.request<ShopBooksDocument>('/shop/books/documents', { method: 'POST', body }),
+    getDocument: (documentId: string) =>
+      this.request<ShopBooksDocument>(`/shop/books/documents/${documentId}`, { method: 'GET' }),
+    updateDocument: (documentId: string, body: ShopBooksDocumentUpdateInput) =>
+      this.request<ShopBooksDocument>(`/shop/books/documents/${documentId}`, { method: 'PATCH', body }),
     convertDocument: (
       documentId: string,
       body?: {
@@ -5606,13 +6043,28 @@ class ApiClient {
       supplier_id?: string;
       /** When `pos`, only counter/POS sale invoices (excludes booking + online). */
       source?: 'pos' | string;
+      cursor?: string;
+      page_size?: number;
     }) => this.request<ShopBooksVoucher[]>('/shop/books/vouchers', { method: 'GET', query }),
+    analyzePurchaseInvoice: (body: { business_id: string; image_urls: string[] }) =>
+      this.request<ShopInvoiceScanAnalyzeResult>('/shop/books/invoice-scan', { method: 'POST', body }),
+    confirmPurchaseInvoice: (body: {
+      business_id: string;
+      draft: ShopInvoiceScanDraft;
+      create_missing?: boolean;
+      create_supplier?: boolean;
+      amount_paid?: string | number;
+      cash_account_id?: string | null;
+      godown_id?: string | null;
+    }) => this.request<ShopInvoiceScanConfirmResult>('/shop/books/invoice-scan/confirm', { method: 'POST', body }),
     createVoucher: (body: ShopBooksVoucherCreateInput) =>
       this.request<ShopBooksVoucher>('/shop/books/vouchers', { method: 'POST', body }),
     getVoucher: (voucherId: string) =>
       this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}`, { method: 'GET' }),
     voidVoucher: (voucherId: string) =>
       this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}/void`, { method: 'POST' }),
+    payVoucher: (voucherId: string, body: ShopVoucherPayInput) =>
+      this.request<ShopBooksVoucher>(`/shop/books/vouchers/${voucherId}/pay`, { method: 'POST', body }),
     partyStatement: (query: {
       business_id: string;
       kind: 'customer' | 'supplier';
@@ -5913,6 +6365,9 @@ class ApiClient {
     patch: (tenantId: string, body: Partial<TenantCreateInput>) => this.request<TenantSummary>(`/tenants/${tenantId}`, { method: 'PATCH', body }),
     getSettings: () => this.request<TenantSettingsResponse>('/tenant/settings', { method: 'GET' }),
     settings: (body: TenantSettingsPayload) => this.request<unknown>('/tenant/settings', { method: 'PATCH', body }),
+    getRoleMenus: () => this.request<RoleMenusResponse>('/tenant/role-menus', { method: 'GET' }),
+    updateRoleMenus: (body: { enabled: Record<string, string[]> }) =>
+      this.request<RoleMenusResponse>('/tenant/role-menus', { method: 'PUT', body }),
   };
 
   customers = {
@@ -5942,8 +6397,10 @@ class ApiClient {
       direction?: string;
       entry_type?: string;
       q?: string;
+      record_kind?: 'shop' | 'booking' | string;
       limit?: number;
       offset?: number;
+      staff_id?: string;
     }) =>
       this.request<CustomerLoyaltyReport>('/customers/loyalty/report', { method: 'GET', query }),
   };
@@ -6085,20 +6542,22 @@ class ApiClient {
   };
 
   bi = {
-    overview: (query?: { start_date?: string; end_date?: string }) =>
+    overview: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
       this.request<BIOverviewResponse>('/bi/overview', { method: 'GET', query }),
-    revenue: (query?: { start_date?: string; end_date?: string }) =>
-      this.request<BIRevenueReport>('/bi/revenue', { method: 'GET', query }),
-    trends: (query?: { start_date?: string; end_date?: string }) =>
+    profit: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
+      this.request<BIProfitResponse>('/bi/profit', { method: 'GET', query }),
+    revenue: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
+      this.request<BIRevenueResponse>('/bi/revenue', { method: 'GET', query }),
+    trends: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
       this.request<BITrendsReport>('/bi/trends', { method: 'GET', query }),
-    forecast: (query?: { horizon_days?: number }) =>
-      this.request<BIForecastReport>('/bi/forecast', { method: 'GET', query }),
-    growth: (query?: { start_date?: string; end_date?: string }) =>
-      this.request<BIGrowthReport>('/bi/growth', { method: 'GET', query }),
-    operations: (query?: { start_date?: string; end_date?: string }) =>
+    forecast: (query?: { horizon_days?: number; staff_id?: string }) =>
+      this.request<BIForecastResponse>('/bi/forecast', { method: 'GET', query }),
+    growth: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
+      this.request<BIGrowthResponse>('/bi/growth', { method: 'GET', query }),
+    operations: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
       this.request<BIOperationsReport>('/bi/operations', { method: 'GET', query }),
-    reports: (query?: { start_date?: string; end_date?: string }) =>
-      this.request<BIReportsBundle>('/bi/reports', { method: 'GET', query }),
+    reports: (query?: { start_date?: string; end_date?: string; staff_id?: string }) =>
+      this.request<BIReportsResponse>('/bi/reports', { method: 'GET', query }),
   };
 
   platform = {
@@ -7189,6 +7648,12 @@ class ApiClient {
       this.request<StaffInvitation>(`/businesses/${businessId}/invitations`, { method: 'POST', body }),
     revoke: (businessId: string, invitationId: string) =>
       this.request<StaffInvitation>(`/businesses/${businessId}/invitations/${invitationId}`, { method: 'DELETE' }),
+    preview: (token: string) =>
+      this.request<InvitationPreview>('/auth/accept-invitation', {
+        method: 'GET',
+        query: { token },
+        auth: false,
+      }),
     accept: (body: AcceptInvitationInput) =>
       this.request<{ invitation_id: string; user_id: string; staff_id: string; email: string; created_user: boolean }>(
         '/auth/accept-invitation',

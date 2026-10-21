@@ -18,7 +18,7 @@ import { useTabBarLayout } from '../hooks/useTabBarLayout';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { hasShopie } from '../utils/products';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../utils/planFeatures';
-import { usePlanFeatures } from '../hooks/useOpsExtended';
+import { usePlanFeatures, useRoleMenus } from '../hooks/useOpsExtended';
 import type { MainTabParamList } from './types';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { BookingsScreen } from '../features/bookings/BookingsScreen';
@@ -81,9 +81,13 @@ export function MainTabs() {
   const { isDesktop } = useBreakpoint();
   const { activeBusiness } = useWorkspace();
   const { billing, has, hasAny } = usePlanFeatures();
-  const showBooks = hasShopie(activeBusiness?.product_subscriptions) && hasAny(SHOPIE_BOOKS_FEATURES);
-  const showBookings = has(PlanFeature.appointieBookings);
-  const showCalendar = has(PlanFeature.appointieCalendar);
+  const { isEnabled } = useRoleMenus();
+  const showBooks =
+    hasShopie(activeBusiness?.product_subscriptions) &&
+    hasAny(SHOPIE_BOOKS_FEATURES) &&
+    isEnabled('books');
+  const showBookings = has(PlanFeature.appointieBookings) && isEnabled('bookings');
+  const showCalendar = has(PlanFeature.appointieCalendar) && isEnabled('calendar');
 
   const { pillHeight, sideInset, bottomOffset } = useTabBarLayout();
   const [adClosed, setAdClosed] = useState(false);

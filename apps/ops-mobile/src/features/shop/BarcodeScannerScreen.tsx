@@ -75,6 +75,7 @@ export function BarcodeScannerScreen() {
   const forAddProduct = route.params?.target === 'addProduct';
   const forAddMany = route.params?.target === 'addMany';
   const forAddManyRow = route.params?.target === 'addManyRow';
+  const forInvoiceScanLine = route.params?.target === 'invoiceScanLine';
   const addManyRowId = route.params?.rowId;
 
   const suppressCodeRef = useRef<string | null>(null);
@@ -159,6 +160,35 @@ export function BarcodeScannerScreen() {
             return CommonActions.navigate({
               name: 'ShopProductsAddMany',
               params: { enrichCode: code, enrichRowId: addManyRowId },
+            });
+          });
+          return;
+        }
+        if (forInvoiceScanLine && addManyRowId) {
+          navigation.dispatch((state) => {
+            const formIndex = state.routes.findIndex((entry) => entry.name === 'ShopInvoiceScan');
+            if (formIndex >= 0) {
+              const routes = state.routes.slice(0, formIndex + 1).map((entry, index) => {
+                if (index !== formIndex) return entry;
+                const previous = (entry.params ?? {}) as { enrichCode?: string; enrichLineIndex?: number };
+                return {
+                  ...entry,
+                  params: {
+                    ...previous,
+                    enrichCode: code,
+                    enrichLineIndex: Number(addManyRowId),
+                  },
+                };
+              });
+              return CommonActions.reset({
+                ...state,
+                routes,
+                index: formIndex,
+              });
+            }
+            return CommonActions.navigate({
+              name: 'ShopInvoiceScan',
+              params: { enrichCode: code, enrichLineIndex: Number(addManyRowId) },
             });
           });
           return;

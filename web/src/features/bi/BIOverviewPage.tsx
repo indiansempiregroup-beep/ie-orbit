@@ -3,7 +3,8 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatMoney } from '../../lib/currency';
 import { StatCard } from './components/StatCard';
 import { TrendChart } from './components/TrendChart';
-import { useBIOverviewQuery } from './biHooks';
+import { useBIOverviewQuery, useBiProductTab, useBiProductVisibility } from './biHooks';
+import { BiProductTabs } from './components/BiProductTabs';
 import type {
   BIForecastReport,
   BIOverviewResponse,
@@ -248,29 +249,45 @@ function resolveAppointie(data?: BIOverviewResponse | null): BIReportsBundle | n
 
 export function BIOverviewPage() {
   usePageMeta({ title: 'BI Overview — IE Orbit' });
+  const { showAppointie, showShopie } = useBiProductVisibility('overview');
+  const { product, setProduct, showSwitcher } = useBiProductTab(showAppointie, showShopie);
   const overviewQuery = useBIOverviewQuery();
   const data = overviewQuery.data as BIOverviewResponse | undefined;
   const appointie = resolveAppointie(data);
   const shopie = data?.shopie;
   const pets = data?.pets;
   const forecast = data?.forecast ?? data?.appointie?.forecast;
+  const showAppointiePane = product === 'appointie' && showAppointie;
+  const showShopiePane = product === 'shopie' && showShopie;
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>
       <Card>
         <h1 style={{ marginTop: 0 }}>BI Overview</h1>
-        <p style={{ color: 'var(--muted-foreground)', marginBottom: 0 }}>
-          Business intelligence snapshot for the last 30 days
-          {data?.products?.length ? ` — ${data.products.join(' · ')}` : ''}.
+        <p style={{ color: 'var(--muted-foreground)', marginBottom: showSwitcher ? 12 : 0 }}>
+          Snapshot for the last 30 days
+          {showSwitcher
+            ? '. Switch between Orbit Appoint and Orbit Mart.'
+            : showShopie
+              ? ' — Orbit Mart.'
+              : showAppointie
+                ? ' — Orbit Appoint.'
+                : '.'}
         </p>
+        <BiProductTabs
+          showAppointie={showAppointie}
+          showShopie={showShopie}
+          value={product}
+          onChange={setProduct}
+        />
       </Card>
 
       {overviewQuery.isLoading && !data ? <Card>Loading overview…</Card> : null}
 
-      {appointie ? <AppointieBlock data={appointie} /> : null}
-      {shopie ? <ShopieBlock data={shopie} /> : null}
-      {forecast ? <ForecastBlock data={forecast} /> : null}
-      {pets ? <PetsBlock data={pets} /> : null}
+      {showAppointiePane && appointie ? <AppointieBlock data={appointie} /> : null}
+      {showAppointiePane && forecast ? <ForecastBlock data={forecast} /> : null}
+      {showShopiePane && shopie ? <ShopieBlock data={shopie} /> : null}
+      {showShopiePane && pets ? <PetsBlock data={pets} /> : null}
 
       {!overviewQuery.isLoading && !appointie && !shopie && !pets ? (
         <Card>

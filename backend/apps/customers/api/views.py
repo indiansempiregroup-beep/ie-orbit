@@ -9,6 +9,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.common.api.responses import success_response
+from apps.common.utils.workspace_access import (
+    is_workspace_manager_or_above,
+    manager_staff_id_from_request,
+)
 from apps.common.pagination.helpers import paginated_list_response
 from apps.customers.api.permissions import CustomerAccessPermission
 from apps.customers.api.serializers import (
@@ -129,6 +133,11 @@ class CustomerViewSet(viewsets.ViewSet):
     @extend_schema(tags=["Customers"], responses={200: CustomerBorrowLedgerSerializer(many=True)})
     def borrow_ledger(self, request: Request, pk: str | None = None) -> Response:
         customer = self.get_object(request=request, customer_id=pk)
+        self.borrow.reconcile_customer(
+            tenant=request.current_tenant,
+            business=customer.business,
+            customer=customer,
+        )
         rows = self.borrow.list_ledger(
             tenant=request.current_tenant,
             business=customer.business,
@@ -183,6 +192,12 @@ class CustomerViewSet(viewsets.ViewSet):
             offset = int(offset_raw)
         except (TypeError, ValueError):
             offset = 0
+        staff_id = manager_staff_id_from_request(request)
+        actor_user_id = None
+        if not is_workspace_manager_or_above(
+            user=request.user, tenant=request.current_tenant
+        ):
+            actor_user_id = getattr(request.user, "id", None)
         payload = self.loyalty.business_ledger_report(
             tenant=request.current_tenant,
             business=business,
@@ -192,8 +207,11 @@ class CustomerViewSet(viewsets.ViewSet):
             direction=request.query_params.get("direction") or None,
             entry_type=request.query_params.get("entry_type") or None,
             q=request.query_params.get("q") or None,
+            record_kind=request.query_params.get("record_kind") or None,
             limit=limit,
             offset=offset,
+            staff_id=staff_id,
+            actor_user_id=actor_user_id,
         )
         return success_response(payload, request_id=getattr(request, "request_id", None))
 

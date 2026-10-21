@@ -217,13 +217,21 @@ class LoyaltyService:
                 or ""
             )
         meta = entry.metadata if isinstance(entry.metadata, dict) else {}
-        entry_type = str(meta.get("type") or "")
-        direction = "given" if int(entry.points_delta or 0) > 0 else "used" if int(entry.points_delta or 0) < 0 else "other"
+        entry_type = str(meta.get("type") or "").strip().lower()
+        delta = int(entry.points_delta or 0)
+        if entry_type == "earn_reversal":
+            direction = "reversed"
+        elif delta > 0:
+            direction = "given"
+        elif delta < 0:
+            direction = "used"
+        else:
+            direction = "other"
         return {
             "id": str(entry.id),
             "customer_id": str(entry.customer_id) if entry.customer_id else None,
             "customer_name": display_name,
-            "points_delta": int(entry.points_delta or 0),
+            "points_delta": delta,
             "reason": entry.reason or "",
             "entry_type": entry_type,
             "direction": direction,
@@ -241,6 +249,7 @@ class LoyaltyService:
             "redeem_discount_amount": None,
             "record_points_earned": 0,
             "record_points_redeemed": 0,
+            "record_points_reversed": 0,
             "record_label": "",
             "record_kind": "",
             "created_at": entry.created_at,
@@ -482,6 +491,7 @@ class LoyaltyService:
                 activity[key] = {
                     "earned": 0,
                     "redeemed": 0,
+                    "reversed": 0,
                     "discount": Decimal("0.00"),
                 }
             return activity[key]
@@ -497,8 +507,13 @@ class LoyaltyService:
         if not filters:
             for row in entries:
                 delta = int(row.get("points_delta") or 0)
-                row["record_points_earned"] = delta if delta > 0 else 0
-                row["record_points_redeemed"] = abs(delta) if delta < 0 else 0
+                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                meta_type = str(row.get("entry_type") or meta.get("type") or "").strip().lower()
+                row["record_points_earned"] = delta if delta > 0 and meta_type != "redeem_refund" else 0
+                row["record_points_redeemed"] = (
+                    abs(delta) if delta < 0 and meta_type != "earn_reversal" else 0
+                )
+                row["record_points_reversed"] = abs(delta) if meta_type == "earn_reversal" else 0
                 row["redeem_discount_amount"] = None
             return entries
 
@@ -517,11 +532,13 @@ class LoyaltyService:
             delta = int(entry.points_delta or 0)
             meta = entry.metadata if isinstance(entry.metadata, dict) else {}
             meta_type = str(meta.get("type") or "").strip().lower()
-            # Return clawbacks are earn reversals — not customer redemptions.
-            if delta > 0:
+            # Keep original earn and reversal separate — clawbacks are not redemptions.
+            if meta_type == "earn_reversal":
+                bucket["reversed"] += abs(delta)
+            elif meta_type == "redeem_refund":
+                pass
+            elif delta > 0:
                 bucket["earned"] += delta
-            elif meta_type == "earn_reversal":
-                bucket["earned"] -= abs(delta)
             elif delta < 0:
                 bucket["redeemed"] += abs(delta)
             if meta_type == "redeem":
@@ -533,27 +550,30 @@ class LoyaltyService:
         for row in entries:
             key = self._ledger_link_key(row)
             bucket = activity.get(key)
+            delta = int(row.get("points_delta") or 0)
+            meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            meta_type = str(row.get("entry_type") or meta.get("type") or "").strip().lower()
+            if meta_type == "earn_reversal":
+                row["record_points_earned"] = 0
+                row["record_points_redeemed"] = 0
+                row["record_points_reversed"] = abs(delta)
+                row["points_delta"] = delta
+                row["direction"] = "reversed"
+                row["redeem_discount_amount"] = None
+                continue
             if bucket is None:
-                delta = int(row.get("points_delta") or 0)
-                meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-                meta_type = str(meta.get("type") or "").strip().lower()
-                if delta > 0:
+                if delta > 0 and meta_type != "redeem_refund":
                     row["record_points_earned"] = delta
                     row["record_points_redeemed"] = 0
-                elif meta_type == "earn_reversal":
-                    row["record_points_earned"] = 0
-                    row["record_points_redeemed"] = 0
-                    row["points_delta"] = delta
-                    row["direction"] = "given"
-                    row["redeem_discount_amount"] = None
-                    continue
                 else:
                     row["record_points_earned"] = 0
                     row["record_points_redeemed"] = abs(delta) if delta < 0 else 0
+                row["record_points_reversed"] = 0
                 row["redeem_discount_amount"] = None
                 continue
             row["record_points_earned"] = max(0, int(bucket["earned"]))
             row["record_points_redeemed"] = max(0, int(bucket["redeemed"]))
+            row["record_points_reversed"] = max(0, int(bucket.get("reversed") or 0))
             discount = Decimal(str(bucket["discount"] or 0)).quantize(Decimal("0.01"))
             row["redeem_discount_amount"] = f"{discount:.2f}" if discount > 0 else None
 
@@ -582,7 +602,6 @@ class LoyaltyService:
                 row["direction"] = "used"
                 row["points_delta"] = -redeemed
             else:
-                # Fully clawed-back earn (e.g. full return) — keep a quiet given row at 0.
                 row["direction"] = "given"
                 row["points_delta"] = 0
 
@@ -595,6 +614,12 @@ class LoyaltyService:
         grouped: dict[str, dict[str, Any]] = {}
         order_keys: list[str] = []
         for row in entries:
+            entry_type = str(row.get("entry_type") or "").strip().lower()
+            if entry_type in {"earn_reversal", "redeem_refund"}:
+                solo = f"solo:{row.get('id')}"
+                grouped[solo] = row
+                order_keys.append(solo)
+                continue
             key = self._ledger_link_key(row)
             if key.startswith("id:"):
                 grouped[f"solo:{row.get('id')}"] = row
@@ -650,6 +675,79 @@ class LoyaltyService:
             grouped[key] = keep
         return [grouped[key] for key in order_keys if key in grouped]
 
+    def _filter_ledger_by_staff(
+        self,
+        qs,
+        *,
+        tenant: Any,
+        business: Any,
+        staff_id: Any | None = None,
+        actor_user_id: Any | None = None,
+    ):
+        from uuid import UUID
+
+        from django.db.models import Q
+
+        from apps.bookings.models import Booking
+        from apps.shopie.models import ShopOrder
+        from apps.staff.models import Staff
+
+        staff = None
+        user_id = None
+        scoped = False
+        if staff_id:
+            scoped = True
+            try:
+                parsed = UUID(str(staff_id))
+            except (TypeError, ValueError):
+                return qs.none()
+            staff = (
+                Staff.objects.require_tenant(tenant)
+                .filter(id=parsed, business=business)
+                .first()
+            )
+            if staff is None:
+                return qs.none()
+            user_id = staff.user_id
+        elif actor_user_id:
+            scoped = True
+            try:
+                user_id = UUID(str(actor_user_id))
+            except (TypeError, ValueError):
+                return qs.none()
+        if not scoped:
+            return qs
+
+        clause = Q()
+        matched = False
+        staff_ids: list[Any] = []
+        if staff is not None:
+            staff_ids = [staff.id]
+        elif user_id is not None:
+            staff_ids = list(
+                Staff.objects.require_tenant(tenant)
+                .filter(business=business, user_id=user_id)
+                .values_list("id", flat=True)
+            )
+        if staff_ids:
+            clause |= Q(
+                booking_id__in=Booking.objects.require_tenant(tenant)
+                .filter(Q(staff_id__in=staff_ids) | Q(line_items__staff_id__in=staff_ids))
+                .values("id")
+            )
+            matched = True
+        if user_id is not None:
+            clause |= Q(
+                order_id__in=ShopOrder.objects.require_tenant(tenant)
+                .filter(business=business, created_by=user_id)
+                .values("id")
+            )
+            clause |= Q(created_by=user_id)
+            matched = True
+        if not matched:
+            return qs.none()
+        return qs.filter(clause)
+
     def business_ledger_report(
         self,
         *,
@@ -661,8 +759,11 @@ class LoyaltyService:
         direction: str | None = None,
         entry_type: str | None = None,
         q: str | None = None,
+        record_kind: str | None = None,
         limit: int = 200,
         offset: int = 0,
+        staff_id: Any | None = None,
+        actor_user_id: Any | None = None,
     ) -> dict[str, Any]:
         from django.db.models import Q, Sum
         from django.db.models.functions import Coalesce
@@ -688,14 +789,22 @@ class LoyaltyService:
 
         direction_key = (direction or "all").strip().lower()
         if direction_key in {"given", "earn", "earned"}:
-            qs = qs.filter(Q(points_delta__gt=0) | Q(metadata__type="earn_reversal"))
+            qs = qs.filter(points_delta__gt=0)
         elif direction_key in {"used", "redeem", "redeemed"}:
             # Real redemptions only — return clawbacks are earn reversals.
             qs = qs.filter(points_delta__lt=0).exclude(metadata__type="earn_reversal")
+        elif direction_key in {"reversed", "reversal", "clawback"}:
+            qs = qs.filter(metadata__type="earn_reversal")
 
         type_key = (entry_type or "").strip().lower()
         if type_key:
             qs = qs.filter(metadata__type=type_key)
+
+        kind_key = (record_kind or "").strip().lower()
+        if kind_key in {"shop", "shopie", "mart", "order"}:
+            qs = qs.filter(booking_id__isnull=True)
+        elif kind_key in {"booking", "appoint", "appointie"}:
+            qs = qs.filter(booking_id__isnull=False)
 
         search = (q or "").strip()
         if search:
@@ -706,6 +815,13 @@ class LoyaltyService:
                 | Q(customer__phone_number__icontains=search)
                 | Q(customer__display_name__icontains=search)
             )
+        qs = self._filter_ledger_by_staff(
+            qs,
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            actor_user_id=actor_user_id,
+        )
 
         from decimal import Decimal
 
@@ -948,6 +1064,36 @@ class LoyaltyService:
         )
         return int(row.points_delta) if row is not None else 0
 
+    def _emit_points_milestone(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        customer: Customer,
+        before: int,
+        after: int,
+    ) -> None:
+        if after <= before:
+            return
+        from apps.workflow.services.emit_domain import emit_domain_on_commit
+
+        emit_domain_on_commit(
+            tenant=tenant,
+            business=business,
+            event_key="loyalty.milestone",
+            context={
+                "customer": customer,
+                "points_before": int(before),
+                "points_after": int(after),
+                "points": int(after),
+                "party_name": getattr(customer, "display_name", None) or "Customer",
+            },
+            product_code=None,
+            subject_type="customer",
+            subject_id=str(customer.id),
+            idempotency_prefix=f"loyalty.milestone:{customer.id}:{before}:{after}",
+        )
+
     @transaction.atomic
     def award_for_completed_booking(
         self,
@@ -984,8 +1130,12 @@ class LoyaltyService:
         if already:
             return None
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
-        account.points_balance = int(account.points_balance) + points
+        before = int(account.points_balance)
+        account.points_balance = before + points
         account.save(update_fields=["points_balance", "updated_at"])
+        self._emit_points_milestone(
+            tenant=tenant, business=business, customer=customer, before=before, after=account.points_balance
+        )
         reason = f"Completed booking — {service_name}" if service_name else "Completed booking"
         CustomerLoyaltyLedger.objects.create(
             tenant=tenant,
@@ -1040,8 +1190,16 @@ class LoyaltyService:
                 service_names.append(service.display_name or service.name)
 
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
-        account.points_balance = int(account.points_balance) + total_points
+        before = int(account.points_balance)
+        account.points_balance = before + total_points
         account.save(update_fields=["points_balance", "updated_at"])
+        self._emit_points_milestone(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            before=before,
+            after=account.points_balance,
+        )
         if len(service_names) == 1:
             reason = f"Completed booking — {service_names[0]}"
         else:
@@ -1183,18 +1341,93 @@ class LoyaltyService:
         voucher_id: Any = None,
     ) -> int:
         """Earn points still on the ledger after prior reversals for this document."""
-        qs = self._ledger_qs(
-            tenant=tenant, booking_id=booking_id, order_id=order_id, voucher_id=voucher_id
+        summary = self.document_points_summary(
+            tenant=tenant,
+            booking_id=booking_id,
+            order_id=order_id,
+            voucher_id=voucher_id,
         )
-        earned = sum(
-            int(row.points_delta)
-            for row in qs.filter(points_delta__gt=0, metadata__type="earn")
-        )
-        reversed_pts = sum(
-            abs(int(row.points_delta))
-            for row in qs.filter(points_delta__lt=0, metadata__type="earn_reversal")
-        )
-        return max(0, int(earned) - int(reversed_pts))
+        return int(summary["remaining_earned"])
+
+    def document_points_summary(
+        self,
+        *,
+        tenant: Any,
+        booking_id: Any = None,
+        order_id: Any = None,
+        voucher_id: Any = None,
+    ) -> dict[str, Any]:
+        """Gross earn, reversals, and redemptions for a booking, order, or voucher."""
+        from django.db.models import Q
+
+        filters = Q()
+        if booking_id:
+            filters |= Q(booking_id=booking_id)
+        if order_id:
+            filters |= Q(order_id=order_id)
+        if voucher_id:
+            filters |= Q(voucher_id=voucher_id)
+        empty = {
+            "points_earned": 0,
+            "points_reversed": 0,
+            "points_redeemed": 0,
+            "points_redeem_refunded": 0,
+            "remaining_earned": 0,
+            "reversal_reason": "",
+        }
+        if not filters:
+            return empty
+        qs = CustomerLoyaltyLedger.objects.require_tenant(tenant).filter(filters)
+        earned = 0
+        reversed_pts = 0
+        redeemed = 0
+        refunded = 0
+        reversal_reason = ""
+        for row in qs.only("points_delta", "reason", "metadata", "created_at").order_by("created_at"):
+            delta = int(row.points_delta or 0)
+            meta = row.metadata if isinstance(row.metadata, dict) else {}
+            meta_type = str(meta.get("type") or "").strip().lower()
+            if meta_type == "earn" and delta > 0:
+                earned += delta
+            elif meta_type == "earn_reversal":
+                reversed_pts += abs(delta)
+                if (row.reason or "").strip():
+                    reversal_reason = str(row.reason).strip()
+            elif meta_type == "redeem" and delta < 0:
+                redeemed += abs(delta)
+            elif meta_type == "redeem_refund" and delta > 0:
+                refunded += delta
+        return {
+            "points_earned": int(earned),
+            "points_reversed": int(reversed_pts),
+            "points_redeemed": int(redeemed),
+            "points_redeem_refunded": int(refunded),
+            "remaining_earned": max(0, int(earned) - int(reversed_pts)),
+            "reversal_reason": reversal_reason[:160],
+        }
+
+    @staticmethod
+    def merge_reversal_snapshot(
+        loyalty_meta: dict[str, Any] | None,
+        *,
+        reversed_pts: int,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Keep original earn visible and record how many points were clawed back."""
+        snap = dict(loyalty_meta or {})
+        deducted = max(0, int(reversed_pts or 0))
+        if deducted <= 0:
+            return snap
+        remaining = int(snap.get("points_earned") or 0)
+        prior = int(snap.get("points_reversed") or snap.get("points_revoked") or 0)
+        snap["points_revoked"] = prior + deducted
+        snap["points_reversed"] = snap["points_revoked"]
+        if remaining > 0:
+            snap["points_earned"] = max(0, remaining - deducted)
+        if reason.strip():
+            snap["reversal_reason"] = reason.strip()[:160]
+        snap["earn_reversed"] = True
+        return snap
 
     def _reverse_earn(
         self,
@@ -1365,8 +1598,12 @@ class LoyaltyService:
         if already:
             return 0
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
-        account.points_balance = int(account.points_balance) + points
+        before = int(account.points_balance)
+        account.points_balance = before + points
         account.save(update_fields=["points_balance", "updated_at"])
+        self._emit_points_milestone(
+            tenant=tenant, business=business, customer=customer, before=before, after=account.points_balance
+        )
         label = f"Paid order — {order_number}" if order_number else "Paid order"
         CustomerLoyaltyLedger.objects.create(
             tenant=tenant,
@@ -1484,8 +1721,12 @@ class LoyaltyService:
         if already:
             return 0
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
-        account.points_balance = int(account.points_balance) + points
+        before = int(account.points_balance)
+        account.points_balance = before + points
         account.save(update_fields=["points_balance", "updated_at"])
+        self._emit_points_milestone(
+            tenant=tenant, business=business, customer=customer, before=before, after=account.points_balance
+        )
         label = f"Books sale — {voucher_number}" if voucher_number else "Books sale"
         CustomerLoyaltyLedger.objects.create(
             tenant=tenant,
@@ -1544,10 +1785,44 @@ class LoyaltyService:
             booking_id=booking_id,
             reason="Refunded cancelled booking redemption",
         )
-        self._reverse_earn(
+        reversed_pts = self._reverse_earn(
             tenant=tenant,
             business=business,
             customer=customer,
             booking_id=booking_id,
             reason="Reversed cancelled booking earn",
         )
+        self._stamp_booking_reversal(
+            tenant=tenant,
+            booking_id=booking_id,
+            reversed_pts=reversed_pts,
+            reason="Reversed cancelled booking earn",
+        )
+
+    def _stamp_booking_reversal(
+        self,
+        *,
+        tenant: Any,
+        booking_id: Any,
+        reversed_pts: int,
+        reason: str,
+    ) -> None:
+        if not booking_id or int(reversed_pts or 0) <= 0:
+            return
+        try:
+            from apps.bookings.models import Booking
+
+            booking = (
+                Booking.objects.require_tenant(tenant).filter(id=booking_id).first()
+            )
+            if booking is None:
+                return
+            metadata = dict(booking.metadata or {})
+            snap = dict(metadata.get("loyalty") or {}) if isinstance(metadata.get("loyalty"), dict) else {}
+            metadata["loyalty"] = self.merge_reversal_snapshot(
+                snap, reversed_pts=int(reversed_pts), reason=reason
+            )
+            booking.metadata = metadata
+            booking.save(update_fields=["metadata", "updated_at"])
+        except Exception:
+            return

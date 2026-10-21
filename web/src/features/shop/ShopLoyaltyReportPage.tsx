@@ -214,11 +214,18 @@ export function ShopLoyaltyReportPage() {
                         : '';
                 const openInvoice = Boolean(invoiceVoucherId) && !(isOnlineOrder && onlineOrderId);
                 const isBooking = row.record_kind === 'booking' || sourceLabel === 'Booking';
+                const isReversal =
+                  row.direction === 'reversed' || row.entry_type === 'earn_reversal';
                 const earned =
-                  Number(row.record_points_earned) || (row.points_delta > 0 ? row.points_delta : 0);
+                  Number(row.record_points_earned) ||
+                  (!isReversal && row.points_delta > 0 ? row.points_delta : 0);
+                const reversedPts = Math.max(
+                  0,
+                  Number(row.record_points_reversed) || (isReversal ? Math.abs(row.points_delta) : 0),
+                );
                 const redeemedPts =
                   Number(row.record_points_redeemed) ||
-                  (row.points_delta < 0 ? Math.abs(row.points_delta) : 0);
+                  (!isReversal && row.points_delta < 0 ? Math.abs(row.points_delta) : 0);
                 const bothPoints = earned > 0 && redeemedPts > 0;
                 const profitAmount =
                   !isBooking && row.gross_profit != null && row.gross_profit !== ''
@@ -226,11 +233,13 @@ export function ShopLoyaltyReportPage() {
                     : null;
                 const profitPositive = profitAmount != null && profitAmount >= 0;
                 const pointsTone =
-                  bothPoints
-                    ? 'neutral'
-                    : redeemedPts > 0 && earned <= 0
-                      ? 'warning'
-                      : 'positive';
+                  reversedPts > 0 && !earned && !redeemedPts
+                    ? 'negative'
+                    : bothPoints || (earned > 0 && reversedPts > 0)
+                      ? 'neutral'
+                      : redeemedPts > 0 && earned <= 0
+                        ? 'warning'
+                        : 'positive';
                 return (
                   <tr key={row.id}>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
@@ -244,9 +253,11 @@ export function ShopLoyaltyReportPage() {
                       )}
                     </td>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
-                      {bothPoints
-                        ? 'Points given and used'
-                        : row.reason || row.entry_type || '—'}
+                      {isReversal
+                        ? row.reason || 'Points reversed'
+                        : bothPoints
+                          ? 'Points given and used'
+                          : row.reason || row.entry_type || '—'}
                     </td>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
                       {onlineHref && recordText ? (
@@ -293,13 +304,19 @@ export function ShopLoyaltyReportPage() {
                           value={
                             <>
                               {earned > 0 ? <span style={{ color: '#047857' }}>+{earned}</span> : null}
-                              {earned > 0 && redeemedPts > 0 ? (
+                              {earned > 0 && (redeemedPts > 0 || reversedPts > 0) ? (
                                 <span style={{ color: 'var(--muted-foreground)' }}> · </span>
                               ) : null}
                               {redeemedPts > 0 ? (
                                 <span style={{ color: '#b45309' }}>−{redeemedPts}</span>
                               ) : null}
-                              {!earned && !redeemedPts ? '—' : null}
+                              {redeemedPts > 0 && reversedPts > 0 ? (
+                                <span style={{ color: 'var(--muted-foreground)' }}> · </span>
+                              ) : null}
+                              {reversedPts > 0 ? (
+                                <span style={{ color: '#be123c' }}>−{reversedPts} rev</span>
+                              ) : null}
+                              {!earned && !redeemedPts && !reversedPts ? '—' : null}
                             </>
                           }
                         />

@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Truck } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -12,11 +12,15 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentView } from './shopDocumentActions';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { ShopBooksDocumentDialog } from './ShopBooksDocumentDialog';
 import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHooks';
+import type { ShopBooksDocument } from '@ie-orbit/sdk';
 
 export function ShopDeliveryChallansPage() {
   const workspace = useWorkspace();
   const auth = useAuthContext();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const currency = workspace.activeBusiness?.currency;
   const challans = useShopBooksDocuments('delivery_challan');
   const { convert } = useShopBooksDocumentMutations();
@@ -24,8 +28,21 @@ export function ShopDeliveryChallansPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const [selected, setSelected] = useState<ShopBooksDocument | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const rows = challans.data ?? [];
+
+  useEffect(() => {
+    const documentId = searchParams.get('document');
+    if (!documentId || !rows.length) return;
+    const match = rows.find((row) => row.id === documentId);
+    if (match) setSelected(match);
+    const next = new URLSearchParams(searchParams);
+    next.delete('document');
+    setSearchParams(next, { replace: true });
+  }, [rows, searchParams, setSearchParams]);
+
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((row) => {
@@ -49,6 +66,7 @@ export function ShopDeliveryChallansPage() {
   ).length;
 
   async function dispatch(documentId: string, documentNumber: string) {
+    if (!window.confirm(`Dispatch ${documentNumber} and reduce stock?`)) return;
     try {
       await convert.mutateAsync({ documentId, action: 'dispatch' });
       snackbar.push(`${documentNumber} marked as dispatched.`, 'success');
@@ -58,18 +76,21 @@ export function ShopDeliveryChallansPage() {
   }
 
   async function invoice(documentId: string, documentNumber: string) {
+    if (!window.confirm(`Create a sale invoice from ${documentNumber}?`)) return;
     try {
       const result = await convert.mutateAsync({ documentId, action: 'to_invoice' });
-      const voucherNumber =
+      const voucher =
         result && typeof result === 'object' && 'voucher_number' in result
-          ? String((result as { voucher_number?: string }).voucher_number || '')
-          : '';
+          ? (result as { id: string; voucher_number?: string })
+          : null;
       snackbar.push(
-        voucherNumber
-          ? `${documentNumber} invoiced as ${voucherNumber}.`
+        voucher?.voucher_number
+          ? `${documentNumber} invoiced as ${voucher.voucher_number}.`
           : `${documentNumber} converted to invoice.`,
         'success',
       );
+      setSelected(null);
+      if (voucher?.id) navigate(`/shop/books/sale/${voucher.id}`);
     } catch (error) {
       snackbar.push(getApiErrorMessage(error, "Couldn't create an invoice from this challan. Try again."), 'error');
     }
@@ -112,6 +133,7 @@ export function ShopDeliveryChallansPage() {
       </div>
 
       <Card>
+        {message ? <p role="status">{message}</p> : null}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
           <label style={{ position: 'relative', flex: '1 1 260px' }}>
             <Search size={16} aria-hidden="true" style={{ position: 'absolute', left: 12, top: 12, color: 'var(--muted-foreground)' }} />
@@ -171,7 +193,17 @@ export function ShopDeliveryChallansPage() {
             const invoiced = Boolean(row.converted_voucher || status === 'converted');
             const dispatched = status === 'dispatched';
             return (
-              <div key={row.id} className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}>
+              <div
+                key={row.id}
+                className={`invoice-row${isVoid ? ' invoice-row--void' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelected(row)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') setSelected(row);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
                 <div className="invoice-row__main">
                   <strong>{row.customer_name || 'Walk-in / no customer'}</strong>
                   <span>
@@ -237,7 +269,10 @@ export function ShopDeliveryChallansPage() {
                     type="button"
                     variant="ghost"
                     disabled={convert.isPending}
-                    onClick={() => void dispatch(row.id, row.document_number)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void dispatch(row.id, row.document_number);
+                    }}
                   >
                     Dispatch
                   </Button>
@@ -247,7 +282,10 @@ export function ShopDeliveryChallansPage() {
                     type="button"
                     variant="ghost"
                     disabled={convert.isPending}
-                    onClick={() => void invoice(row.id, row.document_number)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void invoice(row.id, row.document_number);
+                    }}
                   >
                     Create invoice
                   </Button>
@@ -257,6 +295,13 @@ export function ShopDeliveryChallansPage() {
           })}
         </div>
       </Card>
+      <ShopBooksDocumentDialog
+        document={selected}
+        docType="delivery_challan"
+        currency={currency}
+        onClose={() => setSelected(null)}
+        onMessage={setMessage}
+      />
     </div>
   );
 }

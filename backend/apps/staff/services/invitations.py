@@ -5,6 +5,8 @@ import uuid
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -19,6 +21,45 @@ from apps.tenancy.models import Tenant
 logger = logging.getLogger("ie_orbit.staff.invitations")
 
 INVITATION_TTL_DAYS = 7
+PENDING_INVITE_LOGIN_MESSAGE = (
+    "Accept your team invitation first. Open the invite email, tap Accept invitation, "
+    "then sign in from the IE Orbit app."
+)
+ALREADY_USED_INVITE_MESSAGE = "This invitation has already been used. Sign in from the IE Orbit app."
+EXPIRED_INVITE_MESSAGE = "This invitation has expired. Ask your owner to send a new invite."
+REVOKED_INVITE_MESSAGE = "This invitation was revoked. Ask your owner to send a new invite."
+INVALID_INVITE_MESSAGE = "This invitation link is invalid."
+
+
+def pending_invitation_for_login(*, channel: str, identifier: str) -> StaffInvitation | None:
+    pending = StaffInvitation.objects.filter(
+        status=InvitationStatus.PENDING,
+        expires_at__gte=timezone.now(),
+    )
+    if channel == "email":
+        email = identifier.strip().lower()
+        if not email:
+            return None
+        return pending.filter(email__iexact=email).order_by("-created_at").first()
+
+    from apps.customers.services.contact import format_contact_phone
+
+    phone = format_contact_phone(identifier, e164=True)
+    raw = identifier.strip()
+    if not phone and not raw:
+        return None
+    phone_filter = Q()
+    if phone:
+        phone_filter |= Q(phone_number=phone)
+    if raw:
+        phone_filter |= Q(phone_number=raw)
+    staff_matches = list(Staff.objects.filter(phone_filter).exclude(email=""))
+    if not staff_matches:
+        return None
+    email_q = Q()
+    for staff in staff_matches:
+        email_q |= Q(email__iexact=staff.email, tenant_id=staff.tenant_id, business_id=staff.business_id)
+    return pending.filter(email_q).order_by("-created_at").first()
 
 
 class StaffInvitationService:
@@ -129,6 +170,23 @@ class StaffInvitationService:
         )
         return invitation
 
+    def preview_invitation(self, *, token: str) -> dict[str, str | None]:
+        try:
+            invitation = StaffInvitation.objects.select_related("business").get(token=token)
+        except (StaffInvitation.DoesNotExist, ValueError, TypeError):
+            return {"status": "invalid", "business_name": None, "role": None, "email": None}
+
+        if invitation.status == InvitationStatus.PENDING and invitation.expires_at < timezone.now():
+            invitation.status = InvitationStatus.EXPIRED
+            invitation.save(update_fields=["status", "updated_at"])
+
+        return {
+            "status": invitation.status,
+            "business_name": invitation.business.display_name if invitation.business_id else None,
+            "role": invitation.platform_role_code,
+            "email": invitation.email,
+        }
+
     def accept_invitation(
         self,
         *,
@@ -137,66 +195,111 @@ class StaffInvitationService:
         first_name: str = "",
         last_name: str = "",
     ) -> dict[str, object]:
-        try:
-            invitation = StaffInvitation.objects.select_related("business", "tenant").get(
-                token=token,
-                status=InvitationStatus.PENDING,
-            )
-        except StaffInvitation.DoesNotExist as exc:
-            raise ValidationError({"token": "Invitation is invalid or no longer active."}) from exc
+        with transaction.atomic():
+            try:
+                invitation = (
+                    StaffInvitation.objects.select_related("business", "tenant")
+                    .select_for_update()
+                    .get(token=token)
+                )
+            except StaffInvitation.DoesNotExist as exc:
+                raise ValidationError({"token": INVALID_INVITE_MESSAGE}) from exc
 
-        if invitation.expires_at < timezone.now():
-            invitation.status = InvitationStatus.EXPIRED
-            invitation.save(update_fields=["status", "updated_at"])
-            raise ValidationError({"token": "Invitation has expired."})
+            if invitation.status == InvitationStatus.ACCEPTED:
+                raise ValidationError({"token": ALREADY_USED_INVITE_MESSAGE})
+            if invitation.status == InvitationStatus.REVOKED:
+                raise ValidationError({"token": REVOKED_INVITE_MESSAGE})
+            if invitation.status == InvitationStatus.EXPIRED or invitation.expires_at < timezone.now():
+                if invitation.status != InvitationStatus.EXPIRED:
+                    invitation.status = InvitationStatus.EXPIRED
+                    invitation.save(update_fields=["status", "updated_at"])
+                raise ValidationError({"token": EXPIRED_INVITE_MESSAGE})
+            if invitation.status != InvitationStatus.PENDING:
+                raise ValidationError({"token": INVALID_INVITE_MESSAGE})
 
-        user = User.objects.filter(email__iexact=invitation.email).first()
-        created_user = False
-        if not user:
-            user = User.objects.create_user(
-                email=invitation.email,
-                password=None,
-                first_name=first_name or invitation.email.split("@")[0],
+            resolved_first, resolved_last = self._resolve_invitee_names(
+                invitation=invitation,
+                first_name=first_name,
                 last_name=last_name,
-                status=UserStatus.ACTIVE,
             )
-            user.mark_email_verified()
-            created_user = True
+            user = User.objects.filter(email__iexact=invitation.email).first()
+            created_user = False
+            if not user:
+                user = User.objects.create_user(
+                    email=invitation.email,
+                    password=None,
+                    first_name=resolved_first,
+                    last_name=resolved_last,
+                    status=UserStatus.ACTIVE,
+                )
+                user.mark_email_verified()
+                created_user = True
 
-        self.role_service.assign_role(
-            user=user,
-            role_code=invitation.platform_role_code,
-            assigned_by=str(invitation.invited_by_id) if invitation.invited_by_id else None,
+            self.role_service.assign_role(
+                user=user,
+                role_code=invitation.platform_role_code,
+                assigned_by=str(invitation.invited_by_id) if invitation.invited_by_id else None,
+            )
+
+            staff = self._ensure_staff_profile(
+                tenant=invitation.tenant,
+                business=invitation.business,
+                user=user,
+                email=invitation.email,
+            )
+
+            invitation.status = InvitationStatus.ACCEPTED
+            invitation.accepted_at = timezone.now()
+            invitation.staff = staff
+            invitation.save(update_fields=["status", "accepted_at", "staff", "updated_at"])
+
+            record_audit(
+                tenant=invitation.tenant,
+                action="staff.invitation.accepted",
+                resource_type="staff_invitation",
+                resource_id=str(invitation.id),
+                actor_id=str(user.id),
+                metadata={"created_user": created_user},
+            )
+
+            return {
+                "invitation_id": str(invitation.id),
+                "user_id": str(user.id),
+                "staff_id": str(staff.id),
+                "email": user.email,
+                "created_user": created_user,
+            }
+
+    def _directory_staff_for_invitation(self, invitation: StaffInvitation) -> Staff | None:
+        normalized_email = (invitation.email or "").strip().lower()
+        if not normalized_email:
+            return None
+        return (
+            Staff.objects.filter(
+                tenant=invitation.tenant,
+                business=invitation.business,
+                email__iexact=normalized_email,
+            )
+            .exclude(email="")
+            .first()
         )
 
-        staff = self._ensure_staff_profile(
-            tenant=invitation.tenant,
-            business=invitation.business,
-            user=user,
-            email=invitation.email,
+    def _resolve_invitee_names(
+        self,
+        *,
+        invitation: StaffInvitation,
+        first_name: str = "",
+        last_name: str = "",
+    ) -> tuple[str, str]:
+        staff = self._directory_staff_for_invitation(invitation)
+        local_part = invitation.email.split("@")[0] if invitation.email else "staff"
+        resolved_first = (
+            (staff.first_name.strip() if staff and staff.first_name else "")
+            or first_name.strip()
+            or local_part
         )
-
-        invitation.status = InvitationStatus.ACCEPTED
-        invitation.accepted_at = timezone.now()
-        invitation.staff = staff
-        invitation.save(update_fields=["status", "accepted_at", "staff", "updated_at"])
-
-        record_audit(
-            tenant=invitation.tenant,
-            action="staff.invitation.accepted",
-            resource_type="staff_invitation",
-            resource_id=str(invitation.id),
-            actor_id=str(user.id),
-            metadata={"created_user": created_user},
-        )
-
-        return {
-            "invitation_id": str(invitation.id),
-            "user_id": str(user.id),
-            "staff_id": str(staff.id),
-            "email": user.email,
-            "created_user": created_user,
-        }
+        resolved_last = (staff.last_name.strip() if staff and staff.last_name else "") or last_name.strip()
+        return resolved_first, resolved_last
 
     def _ensure_staff_profile(
         self,
@@ -261,7 +364,8 @@ class StaffInvitationService:
         business_name = invitation.business.display_name
         body = (
             f"You've been invited to join {business_name} as {invitation.platform_role_code}.\n\n"
-            f"Accept the invitation to get started. This link expires on {invitation.expires_at:%Y-%m-%d}."
+            f"Open this link once to accept. After that, download the IE Orbit app and sign in with a "
+            f"one-time code. This link expires on {invitation.expires_at:%Y-%m-%d}."
         )
         send_branded_email(
             subject=f"You're invited to join {business_name} on IE Orbit",

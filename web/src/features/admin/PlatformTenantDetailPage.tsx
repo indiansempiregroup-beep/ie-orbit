@@ -74,22 +74,22 @@ function isTabKey(value: string | null): value is TabKey {
 const FEATURE_FLAGS: Record<string, { title: string; hint: string; icon: typeof Megaphone }> = {
   appointie: {
     title: 'Orbit Appoint',
-    hint: 'Enable appointments, staff, and booking for this tenant.',
+    hint: 'Off hides Appoint functions and blocks their APIs, even on an active plan.',
     icon: LayoutDashboard,
   },
   shopie: {
     title: 'Orbit Mart',
-    hint: 'Enable catalog, orders, and retail for this tenant.',
+    hint: 'Off hides Mart functions and blocks their APIs, even on an active plan.',
     icon: Building2,
   },
   bi_full: {
     title: 'Full business intelligence',
-    hint: 'Unlock the complete analytics suite.',
+    hint: 'Off keeps analytics at Overview and Profit.',
     icon: Banknote,
   },
   white_label: {
-    title: 'White-label branding',
-    hint: 'Let this tenant ship a branded customer app.',
+    title: 'White-label customer app',
+    hint: 'Off stops the branded customer app from loading.',
     icon: Smartphone,
   },
   google_ads: {
@@ -106,6 +106,36 @@ const FEATURE_FLAGS: Record<string, { title: string; hint: string; icon: typeof 
     title: 'Cashfree customer payments',
     hint: 'Let customers pay invoices with Cashfree.',
     icon: Wallet,
+  },
+  stripe: {
+    title: 'Stripe customer payments',
+    hint: 'Let international customers pay with Stripe. India workspaces still use Razorpay or Cashfree.',
+    icon: CreditCard,
+  },
+  ai_assistant: {
+    title: 'Business Assistant',
+    hint: 'Allow the chat assistant on Orbit Appoint and Orbit Mart when the plan includes it.',
+    icon: Shield,
+  },
+  shopie_invoice_scan: {
+    title: 'Scan vendor invoice',
+    hint: 'Let Orbit Mart photograph a supplier bill and post a purchase from the AI wallet.',
+    icon: Banknote,
+  },
+  shopie_smart_lookup: {
+    title: 'Smart product lookup',
+    hint: 'When barcodes miss the catalog, read a pack photo with AI and fill the product form.',
+    icon: LayoutDashboard,
+  },
+  shopie_product_bg_remove: {
+    title: 'Product photo background remove',
+    hint: 'Strip the background from pack photos for a clean product image.',
+    icon: Smartphone,
+  },
+  appointie_service_bg_remove: {
+    title: 'Service photo background remove',
+    hint: 'Strip the background from service photos for a clean catalog image.',
+    icon: Smartphone,
   },
 };
 
@@ -553,7 +583,10 @@ export function PlatformTenantDetailPage() {
             </div>
           </AdminSection>
 
-          <AdminSection title="Feature flags" description="Toggle Google Ads, Razorpay, and product modules for this tenant.">
+          <AdminSection
+            title="Feature flags"
+            description="Workspace switches. A plan can include a function and this switch can still turn it off for the tenant. Orbit Appoint and Orbit Mart hide that product’s functions. Full BI keeps analytics at Overview and Profit. White-label blocks the customer app."
+          >
             <div className="tenant-flag-grid">
               {flagsQuery.isLoading ? <AdminEmpty>Loading flags…</AdminEmpty> : null}
               {(flagsQuery.data ?? []).map((flag) => {

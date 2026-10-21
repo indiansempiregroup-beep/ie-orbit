@@ -100,6 +100,9 @@ const ShopPurchaseListPage = lazy(() =>
 const ShopPurchaseFormPage = lazy(() =>
   import('./features/shop/ShopPurchaseFormPage').then((m) => ({ default: m.ShopPurchaseFormPage })),
 );
+const ShopInvoiceScanPage = lazy(() =>
+  import('./features/shop/ShopInvoiceScanPage').then((m) => ({ default: m.ShopInvoiceScanPage })),
+);
 const ShopExpensePage = lazy(() => import('./features/shop/ShopExpensePage').then((m) => ({ default: m.ShopExpensePage })));
 const ShopCashBankPage = lazy(() => import('./features/shop/ShopCashBankPage').then((m) => ({ default: m.ShopCashBankPage })));
 const ShopPartiesPage = lazy(() => import('./features/shop/ShopPartiesPage').then((m) => ({ default: m.ShopPartiesPage })));
@@ -111,6 +114,9 @@ const ShopComplianceSettingsPage = lazy(() =>
 );
 const ShopDeliveryChallansPage = lazy(() =>
   import('./features/shop/ShopDeliveryChallansPage').then((m) => ({ default: m.ShopDeliveryChallansPage })),
+);
+const ShopBooksDocumentsPage = lazy(() =>
+  import('./features/shop/ShopBooksDocumentsPage').then((m) => ({ default: m.ShopBooksDocumentsPage })),
 );
 const NotificationsPage = lazy(() => import('./features/notifications/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const BIOverviewPage = lazy(() => import('./features/bi/BIOverviewPage').then((m) => ({ default: m.BIOverviewPage })));
@@ -191,6 +197,7 @@ const ProductSettingsPage = lazy(() => import('./features/settings/ProductSettin
 const PaymentSettingsPage = lazy(() => import('./features/settings/PaymentSettingsPage').then((m) => ({ default: m.PaymentSettingsPage })));
 const SettingsLayout = lazy(() => import('./features/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })));
 const TeamSettingsPage = lazy(() => import('./features/settings/TeamSettingsPage').then((m) => ({ default: m.TeamSettingsPage })));
+const RoleMenusPage = lazy(() => import('./features/settings/RoleMenusPage').then((m) => ({ default: m.RoleMenusPage })));
 const SupportTicketsPage = lazy(() => import('./features/settings/SupportTicketsPage').then((m) => ({ default: m.SupportTicketsPage })));
 const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const ProfileEditPage = lazy(() => import('./features/profile/ProfileEditPage').then((m) => ({ default: m.ProfileEditPage })));
@@ -323,6 +330,7 @@ function App() {
                     <Route path="/shop/books/sale/:voucherId" element={<ShopBooksVoucherDetailPage />} />
                     <Route path="/shop/books/sale" element={<ShopSaleListPage />} />
                     <Route path="/shop/books/purchase/new" element={<ShopPurchaseFormPage />} />
+                    <Route path="/shop/books/purchase/scan" element={<ShopInvoiceScanPage />} />
                     <Route path="/shop/books/purchase/:voucherId" element={<ShopBooksVoucherDetailPage />} />
                     <Route path="/shop/books/purchase" element={<ShopPurchaseListPage />} />
                     <Route path="/shop/books/expense" element={<ShopExpensePage />} />
@@ -330,6 +338,20 @@ function App() {
                     <Route path="/shop/books/parties" element={<ShopPartiesPage />} />
                     <Route path="/shop/books/reports" element={<ShopBooksReportsPage />} />
                     <Route path="/shop/books/compliance" element={<ShopComplianceSettingsPage />} />
+                    <Route
+                      path="/shop/books/sale-orders"
+                      element={<ShopBooksDocumentsPage docType="sale_order" title="Sale orders" newPath="/shop/pos?mode=sale_order" />}
+                    />
+                    <Route
+                      path="/shop/books/purchase-orders"
+                      element={
+                        <ShopBooksDocumentsPage
+                          docType="purchase_order"
+                          title="Purchase orders"
+                          newPath="/shop/pos?mode=purchase_order"
+                        />
+                      }
+                    />
                     <Route path="/shop/books/delivery-challans" element={<ShopDeliveryChallansPage />} />
                     <Route path="/shop/godowns" element={<ShopGodownsPage />} />
                     <Route path="/shop/delivery-zones" element={<ShopDeliveryZonesPage />} />
@@ -363,6 +385,7 @@ function App() {
                     <Route element={<PermissionGuard permission="iam:role:assign" />}>
                       <Route path="team" element={<TeamSettingsPage />} />
                     </Route>
+                    <Route path="role-menus" element={<RoleMenusPage />} />
                     <Route path="business-profile" element={<Navigate to="/settings/business" replace />} />
                   </Route>
                 </Route>

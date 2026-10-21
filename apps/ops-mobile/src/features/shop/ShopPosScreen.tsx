@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -26,7 +26,8 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
-import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from '../../components/SheetHandle';
+import { ExpandableSheetView, useExpandableSheet } from '../../hooks/useExpandableSheet';
 import { DesktopPage } from '../../components/DesktopPage';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { DateField } from '../../components/DateField';
@@ -102,15 +103,41 @@ function resolvePosMode(value?: string | null): PosMode {
   return 'sale';
 }
 
-function modeTitle(mode: PosMode) {
-  if (mode === 'purchase') return 'Purchase';
-  if (mode === 'quotation') return 'New quotation';
+function modeTitle(mode: PosMode, editing = false) {
+  if (mode === 'purchase') return editing ? 'Edit purchase' : 'Purchase';
+  if (mode === 'quotation') return editing ? 'Edit quotation' : 'New quotation';
   if (mode === 'credit_note') return 'Credit note';
   if (mode === 'debit_note') return 'Debit note';
-  if (mode === 'sale_order') return 'New sale order';
-  if (mode === 'purchase_order') return 'New purchase order';
-  if (mode === 'delivery_challan') return 'New delivery challan';
+  if (mode === 'sale_order') return editing ? 'Edit sale order' : 'New sale order';
+  if (mode === 'purchase_order') return editing ? 'Edit purchase order' : 'New purchase order';
+  if (mode === 'delivery_challan') return editing ? 'Edit delivery challan' : 'New delivery challan';
   return 'Sale';
+}
+
+function basketFromLines(rawLines: unknown, catalog: ShopProduct[]): BasketLine[] {
+  const rows = Array.isArray(rawLines) ? rawLines : [];
+  return rows.flatMap((raw) => {
+    const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+    if (!line) return [];
+    const productId = String(line.product_id || line.product || '').trim();
+    if (!productId) return [];
+    const quantity = Number(line.quantity ?? line.qty ?? 0);
+    if (!Number.isFinite(quantity) || quantity <= 0) return [];
+    const catalogProduct = catalog.find((product) => product.id === productId);
+    const rate = line.unit_price ?? line.rate ?? catalogProduct?.price ?? 0;
+    const gst = line.tax_rate ?? line.gst_rate ?? catalogProduct?.gst_rate ?? catalogProduct?.tax_rate ?? 0;
+    const product: ShopProduct = catalogProduct
+      ? { ...catalogProduct, price: String(rate), gst_rate: String(gst), tax_rate: String(gst) }
+      : ({
+          id: productId,
+          name: String(line.name || 'Item'),
+          price: String(rate),
+          gst_rate: String(gst),
+          tax_rate: String(gst),
+          stock_on_hand: 0,
+        } as ShopProduct);
+    return [{ product, quantity, discountType: '' as const, discountValue: 0 }];
+  });
 }
 
 const SCAN_SUGGESTION_LIMIT = 12;
@@ -307,7 +334,6 @@ export function ShopPosScreen() {
   const { isDesktop, width: viewportWidth } = useBreakpoint();
   /** Side-by-side Payment | Bill summary on OPS web / wide desktop. */
   const checkoutSideBySide = isDesktop || viewportWidth >= 720;
-  const { lift, maxHeight, bottomPad, keyboardOpen } = useSheetKeyboardLayout(0.72);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
@@ -327,6 +353,9 @@ export function ShopPosScreen() {
   const isNote = isCreditNote || isDebitNote;
   const isOrder = isSaleOrder || isPurchaseOrder;
   const isDocument = isQuotation || isNote || isOrder || isChallan;
+  const editQuotationId = isQuotation ? route.params?.quotationId : undefined;
+  const editDocumentId = isOrder || isChallan ? route.params?.documentId : undefined;
+  const isEditing = Boolean(editQuotationId || editDocumentId);
   const usesSupplier = isPurchase || isDebitNote || isPurchaseOrder;
   const skipSaleSession = isDocument || isPurchase;
   const initialSession = readPosSession();
@@ -347,6 +376,11 @@ export function ShopPosScreen() {
   const [scan, setScan] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [productPickerOpen, setProductPickerOpen] = useState(false);
+  const { lift, bottomPad, keyboardOpen, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.72,
+    productPickerOpen,
+    { fixedResting: true },
+  );
   const [productCategory, setProductCategory] = useState('');
   const [productStock, setProductStock] = useState('');
   const [productSort, setProductSort] = useState('name_asc');
@@ -387,12 +421,13 @@ export function ShopPosScreen() {
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const catalogLoadedRef = React.useRef(false);
+  const hydratedEditRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: modeTitle(mode),
+      title: modeTitle(mode, isEditing),
     });
-  }, [navigation, mode]);
+  }, [navigation, mode, isEditing]);
 
   const loadCatalog = useCallback(async () => {
     if (!businessId || !client) return;
@@ -421,6 +456,54 @@ export function ShopPosScreen() {
       setLoading(false);
     }
   }, [businessId, client, isPurchase, isNote, usesSupplier]);
+
+  useEffect(() => {
+    const targetId = editQuotationId || editDocumentId;
+    if (!targetId || !client || loading) return;
+    if (hydratedEditRef.current === targetId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        if (editQuotationId) {
+          const response = await client.shop.getQuotation(editQuotationId);
+          if (cancelled || !response.data) return;
+          const quote = response.data;
+          hydratedEditRef.current = editQuotationId;
+          setCustomerId(quote.customer || '');
+          setValidUntil(quote.valid_until || '');
+          setDocumentNotes(quote.notes || '');
+          setBasket(basketFromLines(quote.line_items, products));
+          return;
+        }
+        if (!editDocumentId) return;
+        const response = await client.shop.getDocument(editDocumentId);
+        if (cancelled || !response.data) return;
+        const document = response.data;
+        hydratedEditRef.current = editDocumentId;
+        setCustomerId(document.customer || '');
+        setSupplierId(document.supplier || '');
+        setDocumentNotes(document.notes || '');
+        setBasket(basketFromLines(document.line_items, products));
+      } catch (err) {
+        if (cancelled) return;
+        const text = getApiErrorMessage(err, "Couldn't open this record on the counter.");
+        setMessage(text);
+        toast.push(text, 'error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, editDocumentId, editQuotationId, loading, products, toast]);
+
+  useEffect(() => {
+    if (editQuotationId || editDocumentId || !hydratedEditRef.current) return;
+    hydratedEditRef.current = null;
+    setBasket([]);
+    setValidUntil('');
+    setDocumentNotes('');
+    setSupplierId('');
+  }, [editDocumentId, editQuotationId]);
 
   const updateCustomerId = useCallback(
     (id: string) => {
@@ -997,28 +1080,45 @@ export function ShopPosScreen() {
           : isChallan
             ? 'Delivery challan from Sale counter'
             : 'Sale order from Sale counter';
-        const response = await client.shop.createDocument({
-          business_id: businessId,
-          doc_type: docType,
-          customer_id: isPurchaseOrder ? null : customerId || null,
-          supplier_id: isPurchaseOrder ? supplierId : null,
-          notes: [sourceNote, gstinNote].filter(Boolean).join(' · '),
-          lines: basket.map((line) => ({
-            product_id: line.product.id,
-            quantity: line.quantity,
-            unit_price: line.product.price,
-            tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
-          })),
-        });
+        const documentLines = basket.map((line) => ({
+          product_id: line.product.id,
+          quantity: line.quantity,
+          unit_price: line.product.price,
+          tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          tax_inclusive: isProductTaxInclusive(line.product),
+        }));
+        const documentNotesText = editDocumentId
+          ? documentNotes.trim()
+          : [documentNotes.trim() || sourceNote, gstinNote].filter(Boolean).join(' · ');
+        const response = editDocumentId
+          ? await client.shop.updateDocument(editDocumentId, {
+              customer_id: isPurchaseOrder ? null : customerId || null,
+              supplier_id: isPurchaseOrder ? supplierId || null : null,
+              notes: documentNotesText,
+              lines: documentLines,
+            })
+          : await client.shop.createDocument({
+              business_id: businessId,
+              doc_type: docType,
+              customer_id: isPurchaseOrder ? null : customerId || null,
+              supplier_id: isPurchaseOrder ? supplierId : null,
+              notes: documentNotesText,
+              lines: documentLines,
+            });
         setBasket([]);
         setBillDiscountType('');
         setBillDiscountValue('');
         setSupplierId('');
+        setDocumentNotes('');
         const label = isPurchaseOrder ? 'Purchase order' : isChallan ? 'Delivery challan' : 'Sale order';
         toast.push(
-          `${label} ${response.data.document_number} created · ${formatMoney(totals.payable)}`,
+          `${label} ${response.data.document_number} ${editDocumentId ? 'updated' : 'created'} · ${formatMoney(totals.payable)}`,
           'success',
         );
+        if (editDocumentId) {
+          navigation.navigate('ShopBooksDocuments', { docType, documentId: response.data.id });
+          return;
+        }
         if (isChallan) {
           const selectedCustomer = customers.find((row) => row.id === customerId);
           setDocActions({
@@ -1031,31 +1131,45 @@ export function ShopPosScreen() {
           });
           return;
         }
-        navigation.navigate('ShopBooksDocuments', { docType });
+        navigation.navigate('ShopBooksDocuments', { docType, documentId: response.data.id });
         return;
       }
 
       if (isQuotation) {
-        const response = await client.shop.createQuotation({
-          business_id: businessId,
-          customer_id: customerId || null,
-          valid_until: validUntil.trim() || null,
-          notes: 'Quotation from Sale counter',
-          lines: basket.map((line) => ({
-            product_id: line.product.id,
-            quantity: line.quantity,
-            unit_price: line.product.price,
-            tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
-          })),
-        });
+        const quotationLines = basket.map((line) => ({
+          product_id: line.product.id,
+          quantity: line.quantity,
+          unit_price: line.product.price,
+          tax_rate: Number(line.product.gst_rate ?? line.product.tax_rate ?? 0),
+          tax_inclusive: isProductTaxInclusive(line.product),
+        }));
+        const response = editQuotationId
+          ? await client.shop.updateQuotation(editQuotationId, {
+              customer_id: customerId || null,
+              valid_until: validUntil.trim() || null,
+              notes: documentNotes.trim(),
+              lines: quotationLines,
+            })
+          : await client.shop.createQuotation({
+              business_id: businessId,
+              customer_id: customerId || null,
+              valid_until: validUntil.trim() || null,
+              notes: documentNotes.trim() || 'Quotation from Sale counter',
+              lines: quotationLines,
+            });
         setBasket([]);
         setBillDiscountType('');
         setBillDiscountValue('');
         setValidUntil('');
+        setDocumentNotes('');
         toast.push(
-          `Quotation ${response.data.quotation_number} created · ${formatMoney(totals.payable)}`,
+          `Quotation ${response.data.quotation_number} ${editQuotationId ? 'updated' : 'created'} · ${formatMoney(totals.payable)}`,
           'success',
         );
+        if (editQuotationId) {
+          navigation.navigate('ShopBooksQuotations', { quotationId: response.data.id });
+          return;
+        }
         setDocActions({
           kind: 'quotation',
           id: response.data.id,
@@ -1135,7 +1249,7 @@ export function ShopPosScreen() {
           `Purchase ${response.data.voucher_number} recorded${paidNow ? '' : ' · Due'} · ${formatMoney(totals.payable)}`,
           'success',
         );
-        navigation.navigate('ShopBooksPurchase');
+        navigation.navigate('ShopBooksPurchase', { voucherId: response.data.id });
         return;
       }
 
@@ -1283,13 +1397,13 @@ export function ShopPosScreen() {
                 ? 'Recording purchase…'
                 : 'Creating bill…'
     : isSaleOrder
-      ? `Save sale order · ${formatMoney(totals.payable)}`
+      ? `${isEditing ? 'Update' : 'Save'} sale order · ${formatMoney(totals.payable)}`
       : isPurchaseOrder
-        ? `Save purchase order · ${formatMoney(totals.payable)}`
+        ? `${isEditing ? 'Update' : 'Save'} purchase order · ${formatMoney(totals.payable)}`
         : isChallan
-          ? `Save challan · ${formatMoney(totals.payable)}`
+          ? `${isEditing ? 'Update' : 'Save'} challan · ${formatMoney(totals.payable)}`
           : isQuotation
-            ? `Save quotation · ${formatMoney(totals.payable)}`
+            ? `${isEditing ? 'Update' : 'Save'} quotation · ${formatMoney(totals.payable)}`
             : isCreditNote
               ? `Save credit note · ${formatMoney(totals.payable)}`
               : isDebitNote
@@ -1308,9 +1422,20 @@ export function ShopPosScreen() {
       visible={Boolean(docActions)}
       onClose={() => {
         const kind = docActions?.kind;
+        const createdId = docActions?.id;
         setDocActions(null);
-        if (kind === 'quotation') navigation.navigate('ShopBooksQuotations');
-        else if (kind === 'delivery_challan') navigation.navigate('ShopBooksDocuments', { docType: 'delivery_challan' });
+        if (kind === 'quotation') {
+          navigation.navigate(
+            'ShopBooksQuotations',
+            createdId ? { quotationId: createdId } : undefined,
+          );
+        }
+        else if (kind === 'delivery_challan') {
+          navigation.navigate('ShopBooksDocuments', {
+            docType: 'delivery_challan',
+            documentId: createdId,
+          });
+        }
         else if (kind === 'credit_note' || kind === 'debit_note') navigation.navigate('ShopBooksNotes');
         else if (kind === 'sale') navigation.navigate('ShopBooksSale');
       }}
@@ -1766,6 +1891,17 @@ export function ShopPosScreen() {
               />
             ) : null}
 
+            {isQuotation || isOrder || isChallan ? (
+              <Input
+                label="Notes"
+                optional
+                value={documentNotes}
+                onChangeText={setDocumentNotes}
+                placeholder="Optional note on this record"
+                multiline
+              />
+            ) : null}
+
             {(isOrder || isChallan) && !isNote ? (
               <Text style={styles.hint}>
                 {isPurchaseOrder
@@ -2123,21 +2259,21 @@ export function ShopPosScreen() {
             }}
             accessibilityLabel="Close"
           />
-          <View
+          <ExpandableSheetView
+            onLayout={isDesktop ? undefined : onSheetLayout}
             style={[
               styles.sheet,
               isDesktop && styles.sheetDesktop,
               !isDesktop && {
                 marginBottom: lift,
-                maxHeight,
-                height: maxHeight,
                 paddingBottom: bottomPad,
               },
+              !isDesktop && sheetMotionStyle,
               isDesktop && { paddingBottom: spacing.lg },
             ]}
           >
             <View style={[styles.pickerHero, keyboardOpen && styles.pickerHeroCompact]}>
-              {!isDesktop ? <View style={styles.handle} /> : null}
+              {!isDesktop ? <SheetHandle {...handleProps} /> : null}
               <View style={styles.pickerHeroTop}>
                 <Text style={styles.pickerKicker}>Catalog</Text>
                 <Pressable
@@ -2262,7 +2398,7 @@ export function ShopPosScreen() {
                 onChange={setProductSort}
               />
             </FilterSheet>
-          </View>
+          </ExpandableSheetView>
         </View>
       </Modal>
     </View>
@@ -2834,13 +2970,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.45)',
   },
   sheetHeader: {
     flexDirection: 'row',

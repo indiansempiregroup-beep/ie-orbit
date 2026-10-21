@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 
 from apps.businesses.constants import (
     DOCUMENT_TYPE_FEATURES,
     FEATURE_SHOPIE_BOOKS_SALE,
     FEATURE_SHOPIE_BOOKS_STOCK,
+    FEATURE_SHOPIE_INVOICE_SCAN,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_POS,
     FEATURE_SHOPIE_PRODUCTS,
@@ -23,6 +25,36 @@ STOCK_FEATURES = (FEATURE_SHOPIE_BOOKS_STOCK, FEATURE_SHOPIE_PRODUCTS)
 INVOICE_FEATURES = (FEATURE_SHOPIE_BOOKS_SALE, FEATURE_SHOPIE_ORDERS, FEATURE_SHOPIE_POS)
 
 _entitlements = EntitlementService()
+
+
+def require_ai_wallet_business(request: Request, business_id) -> Business:
+    """Shop catalog, invoice scan, or automations — anything that debits the AI wallet."""
+    from apps.workflow.services.access import has_automations
+
+    business = get_object_or_404(Business, tenant=request.current_tenant, id=business_id)
+    entitlements = EntitlementService()
+    if entitlements.has_feature(
+        business=business,
+        feature=FEATURE_SHOPIE_PRODUCTS,
+        product_code=PRODUCT_SHOPIE,
+    ) or entitlements.has_feature(
+        business=business,
+        feature=FEATURE_SHOPIE_POS,
+        product_code=PRODUCT_SHOPIE,
+    ) or entitlements.has_feature(
+        business=business,
+        feature=FEATURE_SHOPIE_ORDERS,
+        product_code=PRODUCT_SHOPIE,
+    ) or entitlements.has_feature(
+        business=business,
+        feature=FEATURE_SHOPIE_INVOICE_SCAN,
+        product_code=PRODUCT_SHOPIE,
+    ) or has_automations(business=business):
+        return business
+    raise PermissionDenied(
+        "This function is not included in the current plan. "
+        "Ask your platform admin to enable it on the plan package."
+    )
 
 
 def require_business(

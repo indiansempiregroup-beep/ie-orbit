@@ -32,6 +32,15 @@ export function isManagerOrAbove(user: UserProfile | null | undefined): boolean 
   return Boolean(user?.roles?.some((role) => MANAGER_OR_ABOVE.has(role)));
 }
 
+export function isOwner(user: UserProfile | null | undefined): boolean {
+  return Boolean(user?.roles?.some((role) => role === 'business_owner' || PLATFORM_ROLES.has(role)));
+}
+
+/** Staff role without owner/manager/platform privileges. */
+export function isStaffOnly(user: UserProfile | null | undefined): boolean {
+  return Boolean(user?.roles?.includes('staff')) && !isManagerOrAbove(user);
+}
+
 /** Team invitations + IAM role changes — managers and owners. */
 export function canManageTeam(user: UserProfile | null | undefined): boolean {
   return (

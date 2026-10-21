@@ -1,10 +1,12 @@
 from django.urls import path
 
+from apps.shopie.api.invoice_scan_views import ShopInvoiceScanAnalyzeView, ShopInvoiceScanConfirmView
 from apps.shopie.api.books_views import (
     ShopBooksDashboardView,
     ShopBooksReportView,
     ShopBooksVoucherDetailView,
     ShopBooksVoucherListCreateView,
+    ShopBooksVoucherPayView,
     ShopBooksVoucherVoidView,
     ShopCashAccountDetailView,
     ShopCashAccountListCreateView,
@@ -40,6 +42,7 @@ from apps.shopie.api.delivery_views import (
 )
 from apps.shopie.api.extended_books_views import (
     ShopBooksDocumentConvertView,
+    ShopBooksDocumentDetailView,
     ShopBooksDocumentListCreateView,
     ShopChequeBounceView,
     ShopChequeClearView,
@@ -104,6 +107,7 @@ from apps.shopie.api.views import (
     ShopProductListCreateView,
     ShopProductOfficeStockView,
     ShopProductProfitInsightsView,
+    ShopQuotationDetailView,
     ShopQuotationListCreateView,
     ShopCashfreeWebhookView,
     ShopRazorpayWebhookView,
@@ -370,6 +374,11 @@ urlpatterns = [
         name="shop-quotation-convert-to-sale",
     ),
     path(
+        "shop/quotations/<uuid:quotation_id>",
+        ShopQuotationDetailView.as_view(),
+        name="shop-quotation-detail",
+    ),
+    path(
         "shop/books/documents",
         ShopBooksDocumentListCreateView.as_view(),
         name="shop-books-document-list-create",
@@ -378,6 +387,11 @@ urlpatterns = [
         "shop/books/documents/<uuid:document_id>/convert",
         ShopBooksDocumentConvertView.as_view(),
         name="shop-books-document-convert",
+    ),
+    path(
+        "shop/books/documents/<uuid:document_id>",
+        ShopBooksDocumentDetailView.as_view(),
+        name="shop-books-document-detail",
     ),
     path("shop/godowns", ShopGodownListCreateView.as_view(), name="shop-godown-list-create"),
     path(
@@ -434,6 +448,16 @@ urlpatterns = [
         name="shop-books-account-detail",
     ),
     path(
+        "shop/books/invoice-scan",
+        ShopInvoiceScanAnalyzeView.as_view(),
+        name="shop-books-invoice-scan",
+    ),
+    path(
+        "shop/books/invoice-scan/confirm",
+        ShopInvoiceScanConfirmView.as_view(),
+        name="shop-books-invoice-scan-confirm",
+    ),
+    path(
         "shop/books/vouchers",
         ShopBooksVoucherListCreateView.as_view(),
         name="shop-books-voucher-list-create",
@@ -447,6 +471,11 @@ urlpatterns = [
         "shop/books/vouchers/<uuid:voucher_id>/void",
         ShopBooksVoucherVoidView.as_view(),
         name="shop-books-voucher-void",
+    ),
+    path(
+        "shop/books/vouchers/<uuid:voucher_id>/pay",
+        ShopBooksVoucherPayView.as_view(),
+        name="shop-books-voucher-pay",
     ),
     path(
         "shop/books/party-statement",

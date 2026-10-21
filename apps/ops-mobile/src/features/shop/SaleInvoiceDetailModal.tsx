@@ -10,13 +10,21 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksVoucher, ShopOrder, ShopReturn } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
-import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { CustomerDetailLinkCard } from '../../components/CustomerDetailLinkCard';
@@ -38,6 +46,7 @@ import {
   voucherBalanceDue,
   voucherDisplayPaid,
   voucherDisplayTotal,
+  voucherLineProductId,
   voucherPartyLabel,
 } from './shopBooksHelpers';
 import { SaleInsightChips } from './SaleInsightChips';
@@ -58,7 +67,11 @@ export function SaleInvoiceDetailModal({
   onVoid?: (voucher: ShopBooksVoucher) => void;
 }) {
   const insets = useSafeAreaInsets();
-  const { lift, maxHeight } = useSheetKeyboardLayout(0.88);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.88,
+    visible && voucher?.id,
+  );
   const client = useOpsClient();
   const toast = useToast();
   const { businessId, activeBusiness } = useWorkspace();
@@ -274,6 +287,8 @@ export function SaleInvoiceDetailModal({
     enabled: loyaltyPrefs.enabled,
     pointsEarned: bill.pointsEarned,
     pointsToEarn: bill.pointsToEarn,
+    pointsReversed: bill.pointsReversed,
+    reversalReason: bill.reversalReason,
     pointsBalance: saleCustomer ? Number(saleCustomer.loyalty_points ?? 0) : null,
   });
   const lines = Array.isArray(localVoucher.line_items) ? localVoucher.line_items : [];
@@ -298,14 +313,19 @@ export function SaleInvoiceDetailModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={detailStyles.backdrop}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
-        <View
+        <ExpandableSheetView
+          onLayout={onSheetLayout}
           style={[
             detailStyles.sheet,
-            { paddingBottom: Math.max(insets.bottom, spacing.lg), marginBottom: lift, maxHeight },
+            {
+              paddingBottom: Math.max(insets.bottom, spacing.lg),
+              marginBottom: lift,
+            },
+            sheetMotionStyle,
           ]}
         >
           <View style={detailStyles.hero}>
-            <View style={detailStyles.handle} />
+            <SheetHandle {...handleProps} />
             <View style={detailStyles.heroTop}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={detailStyles.heroNumber}>{localVoucher.voucher_number}</Text>
@@ -387,7 +407,7 @@ export function SaleInvoiceDetailModal({
           </View>
 
           <ScrollView
-            style={detailStyles.scroll}
+            style={[detailStyles.scroll, driven && sheetBodyStyle]}
             contentContainerStyle={detailStyles.stack}
             keyboardShouldPersistTaps="handled"
           >
@@ -406,6 +426,7 @@ export function SaleInvoiceDetailModal({
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
                 const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const productId = voucherLineProductId(line);
                 const productKey = String(line.product_id || name)
                   .trim()
                   .toLowerCase();
@@ -420,10 +441,12 @@ export function SaleInvoiceDetailModal({
                 const netQty = Math.max(0, qty - alreadyReturned);
                 const netLineTotal =
                   qty > 0 ? (lineTotal * netQty) / qty : lineTotal;
-                return (
-                  <View key={`${name}-${index}`} style={detailStyles.lineRow}>
+                const body = (
+                  <>
                     <View style={{ flex: 1 }}>
-                      <Text style={detailStyles.lineName}>{name}</Text>
+                      <Text style={[detailStyles.lineName, productId ? detailStyles.lineNameLink : null]}>
+                        {name}
+                      </Text>
                       <Text style={detailStyles.meta}>
                         {qty} × {formatMoney(rate)}
                         {gst ? ` · GST ${gst}%${inclusive ? ' incl.' : ''}` : ''}
@@ -442,7 +465,31 @@ export function SaleInvoiceDetailModal({
                         <Text style={detailStyles.metaStrike}>{formatMoney(lineTotal)}</Text>
                       ) : null}
                     </View>
-                  </View>
+                    {productId ? (
+                      <Feather name="chevron-right" size={16} color={colors.primary} style={{ marginTop: 2 }} />
+                    ) : null}
+                  </>
+                );
+                if (!productId) {
+                  return (
+                    <View key={`${name}-${index}`} style={detailStyles.lineRow}>
+                      {body}
+                    </View>
+                  );
+                }
+                return (
+                  <Pressable
+                    key={`${name}-${index}`}
+                    style={({ pressed }) => [detailStyles.lineRow, pressed && detailStyles.lineRowPressed]}
+                    onPress={() => {
+                      onClose();
+                      navigation.navigate('ShopProductAdd', { productId });
+                    }}
+                    accessibilityRole="link"
+                    accessibilityLabel={`Open ${name}`}
+                  >
+                    {body}
+                  </Pressable>
                 );
               })
             )}
@@ -567,7 +614,7 @@ export function SaleInvoiceDetailModal({
                       detailStyles.loyaltyValue,
                       bill.pointsEarned <= 0 && detailStyles.loyaltyValuePending,
                     ]}
-                    numberOfLines={1}
+                    numberOfLines={bill.pointsReversed > 0 ? 3 : 1}
                   >
                     {loyaltyHighlight}
                   </Text>
@@ -873,7 +920,7 @@ export function SaleInvoiceDetailModal({
               </View>
             )}
           </View>
-        </View>
+        </ExpandableSheetView>
       </View>
       <DocumentActionsSheet
         visible={Boolean(docActions)}
@@ -956,13 +1003,6 @@ const detailStyles = StyleSheet.create({
   heroBadgeText: { fontSize: 11, fontWeight: '700', color: colors.primaryForeground },
   heroBadgeTextMuted: { color: colors.foreground },
   heroBadgeTextSource: { color: '#075985' },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-  },
   payStrip: {
     flexDirection: 'row',
     alignItems: 'stretch',
@@ -1003,6 +1043,8 @@ const detailStyles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   lineName: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground },
+  lineNameLink: { color: colors.primary },
+  lineRowPressed: { backgroundColor: colors.tint },
   lineTotal: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.foreground },
   metaStrike: {
     ...typography.tiny,

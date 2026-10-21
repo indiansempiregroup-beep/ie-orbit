@@ -8,7 +8,7 @@ import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useNotifications } from '../contexts/NotificationsContext';
 import { hasShopie } from '../utils/products';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../utils/planFeatures';
-import { usePlanFeatures } from '../hooks/useOpsExtended';
+import { usePlanFeatures, useRoleMenus } from '../hooks/useOpsExtended';
 import {
   canAccessReports,
   canAccessSettings,
@@ -52,6 +52,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const { has, hasAny } = usePlanFeatures();
+  const { isEnabled } = useRoleMenus();
   const workspaceLabel =
     activeBusiness?.display_name ?? activeBusiness?.business_name ?? brand.appName;
 
@@ -147,6 +148,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
                 'ShopBooks',
                 'ShopBooksSale',
                 'ShopBooksPurchase',
+                'ShopInvoiceScan',
                 'ShopBooksExpense',
                 'ShopBooksCash',
                 'ShopBooksParties',
@@ -326,7 +328,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
               key: 'customers',
               label: t('settings.customers'),
               icon: 'users' as IconName,
-              match: ['Customers', 'CustomerForm', 'CustomerDetail'],
+              match: ['Customers', 'CustomerForm', 'CustomerDetail', 'CustomerRecords'],
               onPress: () => go('Customers'),
             },
           ]
@@ -386,6 +388,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
         icon: 'settings',
         match: [
           'Settings',
+          'RoleMenus',
           'BusinessProfile',
           'BusinessEdit',
           'PaymentSettings',
@@ -426,7 +429,12 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
       ...(automationsVisible && automationsVisible.items.length ? [automationsVisible] : []),
       { title: t('settings.business'), items: businessItems },
       account,
-    ];
+    ]
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => isEnabled(item.key)),
+      }))
+      .filter((group) => group.items.length > 0);
   }, [
     t,
     unreadCount,
@@ -437,6 +445,7 @@ export function DesktopSidebar({ activeRoute }: { activeRoute?: string }) {
     has,
     hasAny,
     logout,
+    isEnabled,
   ]);
 
   return (

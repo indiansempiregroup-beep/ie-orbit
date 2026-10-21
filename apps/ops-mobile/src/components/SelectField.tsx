@@ -12,7 +12,8 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { FieldLabel } from './ui/FieldLabel';
 import { fieldStyles, inputReset } from './ui/fieldStyles';
-import { useSheetKeyboardLayout } from '../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from './SheetHandle';
+import { ExpandableSheetView, useExpandableSheet } from '../hooks/useExpandableSheet';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 
 export type SelectOption = { value: string; label: string };
@@ -43,8 +44,10 @@ export function SelectField({
   error,
   hint,
 }: Props) {
-  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.7);
   const [open, setOpen] = useState(false);
+  const { lift, bottomPad, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(0.7, open, {
+    fixedResting: true,
+  });
   const [query, setQuery] = useState('');
   const selected = options.find((option) => option.value === value);
   const showSearch = searchable ?? options.length > 5;
@@ -81,18 +84,18 @@ export function SelectField({
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
         <View style={styles.overlay}>
           <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Close" />
-          <View
+          <ExpandableSheetView
+            onLayout={onSheetLayout}
             style={[
               styles.sheet,
               {
                 marginBottom: lift,
                 paddingBottom: bottomPad,
-                maxHeight,
-                height: maxHeight,
               },
+              sheetMotionStyle,
             ]}
           >
-            <View style={styles.handle} />
+            <SheetHandle {...handleProps} tone="muted" />
             <View style={styles.sheetHeader}>
               <View style={styles.sheetHeaderCopy}>
                 <Text style={styles.sheetTitle}>{label || 'Select'}</Text>
@@ -164,7 +167,7 @@ export function SelectField({
                 );
               }}
             />
-          </View>
+          </ExpandableSheetView>
         </View>
       </Modal>
     </View>
@@ -187,14 +190,6 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: -8 },
     elevation: 16,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.md,
   },
   sheetHeader: {
     flexDirection: 'row',

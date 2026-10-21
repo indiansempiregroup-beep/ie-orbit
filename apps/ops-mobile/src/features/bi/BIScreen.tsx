@@ -16,10 +16,13 @@ import { ChartGrid } from '../../components/charts/ChartGrid';
 import { DonutChart } from '../../components/charts/DonutChart';
 import { LineAreaChart } from '../../components/charts/LineAreaChart';
 import { fillDailySeries, formatAxisValue } from '../../components/charts/chartUtils';
+import { StaffReportFilter } from '../../components/StaffReportFilter';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import { useStaffMembers } from '../../hooks/useOpsData';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import {
   useBIForecast,
   useBIGrowth,
@@ -28,6 +31,7 @@ import {
   useBIRevenue,
   useBusinessBillingSnapshot,
 } from '../../hooks/useOpsExtended';
+import { productsWithBiFeature } from '../../utils/planFeatures';
 import { getSubscribedProductIds } from '../../utils/products';
 import { colors, fonts, iconTones, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -37,6 +41,13 @@ import { InsightPanel } from './InsightPanel';
 import { LoyaltyMetricTile } from './LoyaltyMetricTile';
 
 type Tab = 'overview' | 'profit' | 'growth' | 'revenue' | 'forecast' | 'reports';
+type ProductKey = 'appointie' | 'shopie';
+
+function resolveProduct(showAppointie: boolean, showShopie: boolean, preferred: ProductKey): ProductKey {
+  if (showAppointie && showShopie) return preferred;
+  if (showShopie && !showAppointie) return 'shopie';
+  return 'appointie';
+}
 
 const TAB_META: Record<
   Tab,
@@ -50,13 +61,45 @@ const TAB_META: Record<
   reports: { label: 'Reports', icon: 'file-text', hint: 'Operations' },
 };
 
-const APPOINTIE_ONLY_TABS: Tab[] = ['growth', 'revenue', 'forecast', 'reports'];
-const SHOPIE_ONLY_TABS: Tab[] = ['profit'];
-
 function biFeatureAllowed(allowed: Set<string>, feature: string) {
-  if (allowed.has(feature)) return true;
-  if (feature === 'profit' && allowed.has('overview')) return true;
-  return false;
+  return allowed.has(feature);
+}
+
+function BiProductSwitch({
+  showAppointie,
+  showShopie,
+  value,
+  onChange,
+}: {
+  showAppointie: boolean;
+  showShopie: boolean;
+  value: ProductKey;
+  onChange: (next: ProductKey) => void;
+}) {
+  if (!(showAppointie && showShopie)) return null;
+  return (
+    <View style={styles.productTrack}>
+      {(
+        [
+          ['appointie', 'Orbit Appoint'],
+          ['shopie', 'Orbit Mart'],
+        ] as const
+      ).map(([key, label]) => {
+        const active = value === key;
+        return (
+          <Pressable
+            key={key}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            style={[styles.productBtn, active && styles.productBtnActive]}
+            onPress={() => onChange(key)}
+          >
+            <Text style={[styles.productBtnText, active && styles.productBtnTextActive]}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 function pct(value?: number | null) {
@@ -100,27 +143,41 @@ export function BIScreen() {
     () => getSubscribedProductIds(activeBusiness?.product_subscriptions),
     [activeBusiness?.product_subscriptions],
   );
-  const hasAppointie = subscribedIds.includes('appointie') || subscribedIds.length === 0;
-  const hasShopie = subscribedIds.includes('shopie');
+  const { staffId, setStaffId, canFilter } = useReportStaffFilter();
+  const { staff } = useStaffMembers();
   const allowed = useMemo(
-    () => new Set(billing?.bi_features?.length ? billing.bi_features : ['overview', 'profit']),
-    [billing?.bi_features],
+    () =>
+      new Set(
+        (Object.keys(TAB_META) as Tab[]).filter(
+          (key) => productsWithBiFeature(billing, key, subscribedIds).length > 0,
+        ),
+      ),
+    [billing, subscribedIds],
   );
   const visibleTabs = useMemo(
-    () =>
-      (Object.keys(TAB_META) as Tab[]).filter((key) => {
-        if (SHOPIE_ONLY_TABS.includes(key) && !hasShopie) return false;
-        if (APPOINTIE_ONLY_TABS.includes(key) && !hasAppointie) return false;
-        return true;
-      }),
-    [hasAppointie, hasShopie],
+    () => (Object.keys(TAB_META) as Tab[]).filter((key) => allowed.has(key)),
+    [allowed],
   );
+  const showAppointieOverview = productsWithBiFeature(billing, 'overview', subscribedIds).includes('appointie');
+  const showShopieOverview = productsWithBiFeature(billing, 'overview', subscribedIds).includes('shopie');
+  const showAppointieProfit = productsWithBiFeature(billing, 'profit', subscribedIds).includes('appointie');
+  const showShopieProfit = productsWithBiFeature(billing, 'profit', subscribedIds).includes('shopie');
+  const showAppointieGrowth = productsWithBiFeature(billing, 'growth', subscribedIds).includes('appointie');
+  const showShopieGrowth = productsWithBiFeature(billing, 'growth', subscribedIds).includes('shopie');
+  const showAppointieRevenue = productsWithBiFeature(billing, 'revenue', subscribedIds).includes('appointie');
+  const showShopieRevenue = productsWithBiFeature(billing, 'revenue', subscribedIds).includes('shopie');
+  const showAppointieForecast = productsWithBiFeature(billing, 'forecast', subscribedIds).includes('appointie');
+  const showShopieForecast = productsWithBiFeature(billing, 'forecast', subscribedIds).includes('shopie');
+  const showAppointieReports = productsWithBiFeature(billing, 'reports', subscribedIds).includes('appointie');
+  const showShopieReports = productsWithBiFeature(billing, 'reports', subscribedIds).includes('shopie');
   const [tab, setTab] = useState<Tab>(route.params?.tab ?? 'overview');
-  const overview = useBIOverview();
-  const growth = useBIGrowth();
-  const revenue = useBIRevenue();
-  const forecast = useBIForecast();
-  const reports = useBIReports();
+  const [product, setProduct] = useState<ProductKey>('appointie');
+  const [profitRefreshTick, setProfitRefreshTick] = useState(0);
+  const overview = useBIOverview(true, staffId);
+  const growth = useBIGrowth(staffId);
+  const revenue = useBIRevenue(staffId);
+  const forecast = useBIForecast(staffId);
+  const reports = useBIReports(staffId);
 
   useEffect(() => {
     if (
@@ -144,6 +201,7 @@ export function BIScreen() {
       forecast.reload(),
       reports.reload(),
     ]);
+    setProfitRefreshTick((tick) => tick + 1);
   };
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const loading =
@@ -158,7 +216,15 @@ export function BIScreen() {
         active={tab}
         allowed={allowed}
         isDesktop={isDesktop}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next);
+          navigation.setParams({ tab: next });
+        }}
+        staffFilter={
+          canFilter ? (
+            <StaffReportFilter staff={staff} staffId={staffId} onChange={setStaffId} />
+          ) : null
+        }
       />
       <RefreshableScrollView
         refreshing={refreshing || loading}
@@ -167,28 +233,81 @@ export function BIScreen() {
       >
         {tabLocked ? (
           <Card style={styles.lockCard}>
-            <Text style={styles.lockTitle}>{TAB_META[tab].label} is on Pro</Text>
+            <Text style={styles.lockTitle}>
+              {tab === 'profit' ? 'Profit is not on this plan' : `${TAB_META[tab].label} is on Pro`}
+            </Text>
             <Text style={styles.lockMeta}>
-              Overview and Profit are included on your current plan. Upgrade to unlock Growth, Revenue,
-              Forecast, and Reports.
+              {tab === 'profit'
+                ? 'Profit analytics is not included in your current plan.'
+                : 'This BI tab is not included in your current plan. Upgrade to unlock Growth, Revenue, Forecast, and Reports.'}
             </Text>
             <Pressable style={styles.lockCta} onPress={() => navigation.navigate('ProductSettings')}>
               <Text style={styles.lockCtaText}>Upgrade plan</Text>
             </Pressable>
           </Card>
         ) : null}
-        {!tabLocked && tab === 'overview' ? <BIOverview data={overview.data} loading={overview.loading} /> : null}
-        {!tabLocked && tab === 'profit' ? <BIProfitTab /> : null}
-        {!tabLocked && tab === 'growth' ? <BIGrowth data={growth.data} loading={growth.loading} /> : null}
-        {!tabLocked && tab === 'revenue' ? <BIRevenue data={revenue.data} loading={revenue.loading} /> : null}
+        {!tabLocked && tab === 'overview' ? (
+          <BIOverview
+            data={overview.data}
+            loading={overview.loading}
+            showAppointie={showAppointieOverview}
+            showShopie={showShopieOverview}
+            product={product}
+            onProductChange={setProduct}
+          />
+        ) : null}
+        {!tabLocked && tab === 'profit' ? (
+          <BIProfitTab
+            staffId={staffId}
+            refreshTick={profitRefreshTick}
+            showAppointie={showAppointieProfit}
+            showShopie={showShopieProfit}
+            product={product}
+            onProductChange={setProduct}
+          />
+        ) : null}
+        {!tabLocked && tab === 'growth' ? (
+          <BIGrowth
+            data={growth.data}
+            loading={growth.loading}
+            showAppointie={showAppointieGrowth}
+            showShopie={showShopieGrowth}
+            product={product}
+            onProductChange={setProduct}
+          />
+        ) : null}
+        {!tabLocked && tab === 'revenue' ? (
+          <BIRevenue
+            data={revenue.data}
+            loading={revenue.loading}
+            showAppointie={showAppointieRevenue}
+            showShopie={showShopieRevenue}
+            product={product}
+            onProductChange={setProduct}
+          />
+        ) : null}
         {!tabLocked && tab === 'forecast' ? (
           <BIForecast
             data={forecast.data}
             loading={forecast.loading}
             recentBookings={appointieFromOverview(overview.data)?.summary?.bookings}
+            recentOrders={overview.data?.shopie?.orders}
+            showAppointie={showAppointieForecast}
+            showShopie={showShopieForecast}
+            product={product}
+            onProductChange={setProduct}
           />
         ) : null}
-        {!tabLocked && tab === 'reports' ? <BIReports data={reports.data} loading={reports.loading} /> : null}
+        {!tabLocked && tab === 'reports' ? (
+          <BIReports
+            data={reports.data}
+            loading={reports.loading}
+            showAppointie={showAppointieReports}
+            showShopie={showShopieReports}
+            product={product}
+            onProductChange={setProduct}
+          />
+        ) : null}
       </RefreshableScrollView>
     </DesktopPage>
   );
@@ -200,12 +319,14 @@ function BITabBar({
   allowed,
   isDesktop,
   onChange,
+  staffFilter,
 }: {
   tabs: Tab[];
   active: Tab;
   allowed: Set<string>;
   isDesktop: boolean;
   onChange: (tab: Tab) => void;
+  staffFilter?: React.ReactNode;
 }) {
   const buttons = tabs.map((key) => {
     const meta = TAB_META[key];
@@ -248,6 +369,7 @@ function BITabBar({
     return (
       <View style={styles.tabBar} accessibilityRole="tablist">
         <View style={styles.tabTrack}>{buttons}</View>
+        {staffFilter ? <View style={styles.tabStaffFilter}>{staffFilter}</View> : null}
       </View>
     );
   }
@@ -261,12 +383,16 @@ function BITabBar({
       >
         {buttons}
       </ScrollView>
+      {staffFilter ? <View style={styles.tabStaffFilter}>{staffFilter}</View> : null}
     </View>
   );
 }
 
 function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function profitPresetRange(preset: '7d' | '30d' | 'mtd'): { from: string; to: string } {
@@ -456,7 +582,22 @@ function LoyaltyPagination({
   );
 }
 
-function BIProfitTab() {
+function BIProfitTab({
+  staffId,
+  refreshTick = 0,
+  showAppointie = false,
+  showShopie = true,
+  product: preferredProduct = 'appointie',
+  onProductChange,
+}: {
+  staffId?: string | null;
+  refreshTick?: number;
+  showAppointie?: boolean;
+  showShopie?: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
+}) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   const client = useOpsClient();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { businessId, activeBusiness } = useWorkspace();
@@ -591,50 +732,114 @@ function BIProfitTab() {
     }>
   >([]);
   const [loyaltyTotal, setLoyaltyTotal] = useState(0);
+  const [appointieProfit, setAppointieProfit] = useState<{
+    estimated_revenue: number;
+    completed_revenue?: number;
+    open_revenue?: number;
+    lost_total?: number;
+    lost_cancelled?: number;
+    lost_no_shows?: number;
+    avg_booking_value?: number;
+    bookings?: number;
+    completed?: number;
+    cancelled?: number;
+    no_shows?: number;
+    completion_rate?: number;
+    busiest_day?: string | null;
+    busiest_hour?: string | null;
+    comparison?: { revenue_change_pct?: number | null; bookings_change_pct?: number | null };
+    by_service?: Array<{ service_id: string; service_name: string; revenue: number; bookings?: number; completed?: number }>;
+    by_staff?: Array<{
+      staff_id: string;
+      staff_name: string;
+      bookings: number;
+      completed?: number;
+      cancelled?: number;
+      no_shows?: number;
+      revenue: number;
+    }>;
+    by_weekday?: Array<{ weekday_name: string; total: number; revenue?: number }>;
+    series?: Array<{ date: string; estimated_revenue: number; completed_revenue: number; bookings: number }>;
+    insights?: Array<{ type: string; title: string; detail: string }>;
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!client || !businessId) return;
     setLoading(true);
     setError(null);
     try {
-      const [profitRes, loyaltyRes] = await Promise.all([
-        client.shop.productProfitInsights({
-          business_id: businessId,
-          date_from: dateFrom,
-          date_to: dateTo,
-          channel: channel === 'all' ? undefined : channel,
-          q: appliedSearch || undefined,
-          sort: 'gross_profit',
-          order: 'desc',
-          limit: 20,
-          include_catalog: true,
-        }),
-        client.customers.loyaltyReport({
-          business: businessId,
-          date_from: dateFrom,
-          date_to: dateTo,
-          direction: loyaltyDirection === 'all' ? undefined : loyaltyDirection,
-          q: loyaltySearch || undefined,
-          limit: loyaltyLimit,
-          offset: loyaltyOffset,
-        }),
-      ]);
-      const profit = profitRes.data;
-      setSummary(profit.summary);
-      setComparison(profit.comparison ?? null);
-      setNarrative((profit.insights ?? []).slice(0, 8));
-      setRupeeComposition(profit.rupee_composition ?? []);
-      setByChannel(profit.by_channel ?? []);
-      setByCategory((profit.by_category ?? []).slice(0, 6));
-      setByWeekday(profit.by_weekday ?? []);
-      setSeries((profit.series ?? []).slice(-30));
-      setTopMargins((profit.top_margins ?? []).slice(0, 8));
-      setTopSold((profit.top_profit_products ?? profit.sales ?? []).slice(0, 12));
-      setLossMakers((profit.loss_makers ?? []).slice(0, 6));
-      setLoyalty(loyaltyRes.data.summary);
-      setLoyaltyEnabled(loyaltyRes.data.enabled !== false);
-      setLoyaltyLedger(loyaltyRes.data.ledger ?? []);
-      setLoyaltyTotal(loyaltyRes.data.ledger_total ?? loyaltyRes.data.summary?.entry_count ?? 0);
+      const jobs: Array<Promise<void>> = [];
+      if (showAppointie) {
+        jobs.push(
+          client.bi
+            .profit({
+              start_date: dateFrom,
+              end_date: dateTo,
+              staff_id: staffId || undefined,
+            })
+            .then((res) => {
+              setAppointieProfit(res.data.appointie ?? null);
+            }),
+        );
+      } else {
+        setAppointieProfit(null);
+      }
+      if (showShopie) {
+        jobs.push(
+          Promise.all([
+            client.shop.productProfitInsights({
+              business_id: businessId,
+              date_from: dateFrom,
+              date_to: dateTo,
+              channel: channel === 'all' ? undefined : channel,
+              q: appliedSearch || undefined,
+              sort: 'gross_profit',
+              order: 'desc',
+              limit: 20,
+              include_catalog: !staffId,
+              staff_id: staffId || undefined,
+            }),
+            client.customers.loyaltyReport({
+              business: businessId,
+              date_from: dateFrom,
+              date_to: dateTo,
+              direction: loyaltyDirection === 'all' ? undefined : loyaltyDirection,
+              q: loyaltySearch || undefined,
+              record_kind: 'shop',
+              limit: loyaltyLimit,
+              offset: loyaltyOffset,
+              staff_id: staffId || undefined,
+            }),
+          ]).then(([profitRes, loyaltyRes]) => {
+            const profit = profitRes.data;
+            setSummary(profit.summary);
+            setComparison(profit.comparison ?? null);
+            setNarrative((profit.insights ?? []).slice(0, 8));
+            setRupeeComposition(profit.rupee_composition ?? []);
+            setByChannel(profit.by_channel ?? []);
+            setByCategory((profit.by_category ?? []).slice(0, 6));
+            setByWeekday(profit.by_weekday ?? []);
+            setSeries((profit.series ?? []).slice(-30));
+            setTopMargins((profit.top_margins ?? []).slice(0, 8));
+            setTopSold((profit.top_profit_products ?? profit.sales ?? []).slice(0, 12));
+            setLossMakers((profit.loss_makers ?? []).slice(0, 6));
+            setLoyalty(loyaltyRes.data.summary);
+            setLoyaltyEnabled(loyaltyRes.data.enabled !== false);
+            setLoyaltyLedger(
+              (loyaltyRes.data.ledger ?? []).filter(
+                (row) => row.record_kind !== 'booking' && row.source_label !== 'Booking',
+              ),
+            );
+            setLoyaltyTotal(loyaltyRes.data.ledger_total ?? loyaltyRes.data.summary?.entry_count ?? 0);
+          }),
+        );
+      } else {
+        setSummary(null);
+        setLoyalty(null);
+        setLoyaltyLedger([]);
+        setLoyaltyTotal(0);
+      }
+      await Promise.all(jobs);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profit insights');
     } finally {
@@ -651,6 +856,10 @@ function BIProfitTab() {
     loyaltyLimit,
     loyaltyOffset,
     loyaltySearch,
+    refreshTick,
+    showAppointie,
+    showShopie,
+    staffId,
   ]);
 
   useEffect(() => {
@@ -662,6 +871,13 @@ function BIProfitTab() {
     setDateFrom(range.from);
     setDateTo(range.to);
   };
+  const activePreset = useMemo(() => {
+    for (const key of ['7d', '30d', 'mtd'] as const) {
+      const range = profitPresetRange(key);
+      if (range.from === dateFrom && range.to === dateTo) return key;
+    }
+    return null;
+  }, [dateFrom, dateTo]);
 
   if (loading && !summary) return <ScreenState loading />;
   if (error) {
@@ -725,22 +941,201 @@ function BIProfitTab() {
       <View>
         <Text style={styles.heroTitle}>Profit</Text>
         <Text style={styles.heroHint}>
-          What you earned, what stock cost, and what ate into profit. Owner-only.
+          {showAppointie && showShopie
+            ? 'Appoint booking earnings and Mart stock margins stay in their own dashboards. Owner-only.'
+            : showShopie
+              ? 'What you earned, what stock cost, and what ate into profit. Owner-only.'
+              : 'Booking earnings from Orbit Appoint. Owner-only.'}
         </Text>
       </View>
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
+      />
 
-      <View style={styles.profitChipRow}>
-        {(
-          [
-            ['7d', '7d'],
-            ['30d', '30d'],
-            ['mtd', 'MTD'],
-          ] as const
-        ).map(([key, label]) => (
-          <Pressable key={key} style={styles.profitChip} onPress={() => applyPreset(key)}>
-            <Text style={styles.profitChipText}>{label}</Text>
-          </Pressable>
-        ))}
+      {showAppointie || showShopie ? (
+        <View style={styles.profitChipRow}>
+          {(
+            [
+              ['7d', '7d'],
+              ['30d', '30d'],
+              ['mtd', 'MTD'],
+            ] as const
+          ).map(([key, label]) => (
+            <Pressable
+              key={key}
+              accessibilityRole="button"
+              style={[styles.profitChip, activePreset === key && styles.profitChipActive]}
+              onPress={() => applyPreset(key)}
+            >
+              <Text style={[styles.profitChipText, activePreset === key && styles.profitChipTextActive]}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {product === 'appointie' && showAppointie && appointieProfit ? (
+        <>
+          <Text style={styles.section}>Orbit Appoint</Text>
+          <Text style={styles.heroHint}>Service booking earnings only — not shop stock margins.</Text>
+          <InsightPanel title="What stands out" insights={appointieProfit.insights ?? []} />
+          <TileGrid gap={spacing.md}>
+            <StatTile
+              label="Estimated"
+              value={money(appointieProfit.estimated_revenue, currency)}
+              hint={
+                appointieProfit.comparison?.revenue_change_pct != null
+                  ? `${appointieProfit.comparison.revenue_change_pct > 0 ? '+' : ''}${appointieProfit.comparison.revenue_change_pct}% vs last`
+                  : 'All bookings this period'
+              }
+              icon="trending-up"
+              iconTone="green"
+            />
+            <StatTile
+              label="Completed"
+              value={money(appointieProfit.completed_revenue, currency)}
+              hint="Visits you finished"
+              icon="check-circle"
+              iconTone="green"
+            />
+            <StatTile
+              label="Still open"
+              value={money(appointieProfit.open_revenue, currency)}
+              hint="Not completed yet"
+              icon="clock"
+              iconTone="blue"
+            />
+            <StatTile
+              label="Lost"
+              value={money(appointieProfit.lost_total, currency)}
+              hint="Cancels and no-shows"
+              icon="slash"
+              iconTone="rose"
+            />
+            <StatTile
+              label="Bookings"
+              value={String(appointieProfit.bookings ?? 0)}
+              hint={`${pct(appointieProfit.completion_rate)} completed`}
+              icon="calendar"
+              iconTone="blue"
+            />
+            <StatTile
+              label="Avg booking"
+              value={money(appointieProfit.avg_booking_value, currency)}
+              icon="tag"
+              iconTone="amber"
+            />
+            <StatTile
+              label="Best day"
+              value={appointieProfit.busiest_day || '—'}
+              hint={appointieProfit.busiest_hour ? `Peak ${appointieProfit.busiest_hour}` : undefined}
+              icon="sun"
+              iconTone="amber"
+            />
+          </TileGrid>
+          <ChartGrid>
+            {(appointieProfit.series ?? []).length > 1 ? (
+              <ChartCard title="Earnings trend" subtitle="Estimated booking earnings">
+                <LineAreaChart
+                  data={fillDailySeries(
+                    (appointieProfit.series ?? []).map((row) => ({
+                      day: row.date,
+                      value: Number(row.estimated_revenue) || 0,
+                    })),
+                  )}
+                  color={iconTones.green.foreground}
+                  formatValue={formatAxisValue}
+                  unit={currency}
+                />
+              </ChartCard>
+            ) : null}
+            {(appointieProfit.by_service ?? []).some((row) => Number(row.revenue) > 0) ? (
+              <ChartCard title="By service" subtitle="Estimated earnings">
+                <DonutChart
+                  data={(appointieProfit.by_service ?? []).slice(0, 6).map((row, index) => ({
+                    label: row.service_name || 'Service',
+                    value: Number(row.revenue) || 0,
+                    color: Object.values(iconTones)[index % Object.values(iconTones).length].foreground,
+                  }))}
+                  centerLabel={currency}
+                  formatValue={formatAxisValue}
+                />
+              </ChartCard>
+            ) : null}
+            {(appointieProfit.by_weekday ?? []).some((row) => Number(row.revenue ?? row.total) > 0) ? (
+              <ChartCard title="Weekday earnings" subtitle="Hover a bar for the amount">
+                <BarChart
+                  data={(appointieProfit.by_weekday ?? []).map((row) => ({
+                    label: (row.weekday_name || '').slice(0, 3),
+                    value: Number(row.revenue ?? row.total) || 0,
+                  }))}
+                  formatValue={formatAxisValue}
+                  unit={currency}
+                />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+          <Card style={styles.panel}>
+            <Text style={styles.panelTitle}>Services that brought in bookings</Text>
+            <Text style={styles.heroHint}>
+              List price of appointments for each service — not shop sales. Includes open and cancelled bookings.
+            </Text>
+            {(appointieProfit.by_service ?? []).slice(0, 6).map((row) => (
+              <View key={row.service_id} style={styles.rowLine}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{row.service_name}</Text>
+                  <Text style={styles.rowMeta}>
+                    {row.bookings ?? 0} booked · {row.completed ?? 0} finished
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.rowValue}>{money(row.revenue, currency)}</Text>
+                  <Text style={styles.rowMeta}>booked value</Text>
+                </View>
+              </View>
+            ))}
+            {!(appointieProfit.by_service ?? []).length ? (
+              <Text style={styles.rowMeta}>No priced bookings in this period yet.</Text>
+            ) : null}
+          </Card>
+          <Card style={styles.panel}>
+            <Text style={styles.panelTitle}>Who finished the visits</Text>
+            <Text style={styles.heroHint}>
+              List price of finished visits assigned to each person — not salary or commission.
+            </Text>
+            {(appointieProfit.by_staff ?? []).slice(0, 6).map((row) => (
+              <View key={row.staff_id} style={styles.rowLine}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{row.staff_name}</Text>
+                  <Text style={styles.rowMeta}>
+                    {row.completed ?? 0} finished · {row.cancelled ?? 0} cancelled
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.rowValue}>{money(row.revenue, currency)}</Text>
+                  <Text style={styles.rowMeta}>
+                    from {row.completed ?? 0} finished visit{row.completed === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              </View>
+            ))}
+            {!(appointieProfit.by_staff ?? []).length ? (
+              <Text style={styles.rowMeta}>No staff booking activity yet.</Text>
+            ) : null}
+          </Card>
+        </>
+      ) : null}
+
+      {product === 'shopie' && showShopie ? <Text style={styles.section}>Orbit Mart</Text> : null}
+      {product === 'shopie' && showShopie ? (
+        <Text style={styles.heroHint}>What you earned, what stock cost, and what ate into profit.</Text>
+      ) : null}
+
+      {product === 'shopie' && showShopie ? <View style={styles.profitChipRow}>
         {(
           [
             ['all', 'All'],
@@ -751,15 +1146,16 @@ function BIProfitTab() {
         ).map(([key, label]) => (
           <Pressable
             key={key}
+            accessibilityRole="button"
             style={[styles.profitChip, channel === key && styles.profitChipActive]}
             onPress={() => setChannel(key)}
           >
             <Text style={[styles.profitChipText, channel === key && styles.profitChipTextActive]}>{label}</Text>
           </Pressable>
         ))}
-      </View>
+      </View> : null}
 
-      <View style={styles.profitSearchRow}>
+      {product === 'shopie' && showShopie ? <View style={styles.profitSearchRow}>
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -772,9 +1168,9 @@ function BIProfitTab() {
         <Pressable style={styles.profitChip} onPress={() => setAppliedSearch(search.trim())}>
           <Text style={styles.profitChipText}>Search</Text>
         </Pressable>
-      </View>
+      </View> : null}
 
-      {summary ? (
+      {product === 'shopie' && showShopie && summary ? (
         <TileGrid gap={spacing.md}>
           <StatTile
             label="Money you kept"
@@ -901,6 +1297,8 @@ function BIProfitTab() {
         </TileGrid>
       ) : null}
 
+      {product === 'shopie' && showShopie ? (
+      <>
       {narrative.length ? (
         <Card style={styles.panel}>
           <Text style={styles.panelTitle}>What to notice</Text>
@@ -1348,6 +1746,8 @@ function BIProfitTab() {
           <Text style={styles.rowMeta}>No reward points activity yet.</Text>
         ) : null}
       </Card>
+      </>
+      ) : null}
 
       <HelpModal
         visible={Boolean(panelHelp)}
@@ -1364,7 +1764,24 @@ function BIProfitTab() {
   );
 }
 
-function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>['data']; loading: boolean }) {
+function BIOverview({
+  data,
+  loading,
+  showAppointie = false,
+  showShopie = false,
+  product: preferredProduct = 'appointie',
+  onProductChange,
+}: {
+  data: ReturnType<typeof useBIOverview>['data'];
+  loading: boolean;
+  showAppointie?: boolean;
+  showShopie?: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
+}) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
+  const showAppointiePane = product === 'appointie' && showAppointie;
+  const showShopiePane = product === 'shopie' && showShopie;
   const appointieBundle = appointieFromOverview(data);
   const shopie = data?.shopie;
   const pets = data?.pets;
@@ -1437,8 +1854,11 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
     ].filter((slice) => slice.value > 0);
   }, [shopie]);
   const highlights = useMemo(
-    () => [...(appointieBundle?.insights ?? []), ...(shopie?.insights ?? []), ...(pets?.insights ?? [])],
-    [appointieBundle?.insights, shopie?.insights, pets?.insights],
+    () =>
+      showAppointiePane
+        ? appointieBundle?.insights ?? []
+        : [...(shopie?.insights ?? []), ...(pets?.insights ?? [])],
+    [appointieBundle?.insights, pets?.insights, shopie?.insights, showAppointiePane],
   );
 
   if (loading && !data) return <ScreenState loading />;
@@ -1448,11 +1868,18 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
       <View>
         <Text style={styles.heroTitle}>Last 30 days</Text>
         <Text style={styles.heroHint}>
-          Hover or tap a chart to see the exact count. {data?.products?.length ? data.products.join(' · ') : ''}
+          Hover or tap a chart to see the exact count
+          {showAppointie && showShopie ? '. Switch between Orbit Appoint and Orbit Mart.' : '.'}
         </Text>
       </View>
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
+      />
 
-      {appointieBundle ? (
+      {showAppointiePane && appointieBundle ? (
         <>
           <TileGrid gap={spacing.md}>
             <StatTile
@@ -1487,9 +1914,9 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         </>
       ) : null}
 
-      {shopie ? (
+      {showShopiePane && shopie ? (
         <>
-          {appointieBundle ? <Text style={styles.section}>Orbit Mart</Text> : null}
+          {showAppointie && showShopie ? <Text style={styles.section}>Orbit Mart</Text> : null}
           <TileGrid gap={spacing.md}>
             <StatTile label="Orders" value={String(shopie.orders)} icon="shopping-bag" iconTone="green" />
             <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
@@ -1516,7 +1943,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         insights={highlights}
       />
 
-      {data?.forecast ? (
+      {showAppointiePane && data?.forecast ? (
         <ChartCard
           title={`Next ${data.forecast.horizon_days ?? 30} days`}
           subtitle={data.forecast.note || 'Projected from the recent booking pace.'}
@@ -1538,7 +1965,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         </ChartCard>
       ) : null}
 
-      {appointieBundle ? (
+      {showAppointiePane && appointieBundle ? (
         <>
           {bookingTrend.some((row) => row.value > 0) ? (
             <ChartCard title="Bookings over time" subtitle="Daily volume · hover a day for the count">
@@ -1571,7 +1998,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         </>
       ) : null}
 
-      {shopie ? (
+      {showShopiePane && shopie ? (
         <>
           {gmvTrend.some((row) => row.value > 0) ? (
             <ChartCard title="Sales (GMV)" subtitle="Daily sales · hover a day for the amount">
@@ -1591,7 +2018,7 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
         </>
       ) : null}
 
-      {pets ? (
+      {showShopiePane && pets ? (
         <ChartCard title="Pets pack" subtitle={`${pets.birthdays_next_7d} birthdays in 7 days`}>
           <DonutChart
             data={[
@@ -1613,15 +2040,41 @@ function BIOverview({ data, loading }: { data: ReturnType<typeof useBIOverview>[
   );
 }
 
-function BIGrowth({ data, loading }: { data: ReturnType<typeof useBIGrowth>['data']; loading: boolean }) {
+function BIGrowth({
+  data,
+  loading,
+  showAppointie,
+  showShopie,
+  product: preferredProduct = 'appointie',
+  onProductChange,
+}: {
+  data: ReturnType<typeof useBIGrowth>['data'];
+  loading: boolean;
+  showAppointie: boolean;
+  showShopie: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
+}) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
-  const mix = [
-    { label: 'New', value: data?.new_customers ?? 0, color: iconTones.cyan.foreground },
-    { label: 'Returning', value: data?.returning_customers ?? 0, color: iconTones.violet.foreground },
+  const appointie = data?.appointie ?? (showAppointie && data?.new_customers != null ? data : null);
+  const shopie = data?.shopie ?? null;
+  const appointieMix = [
+    { label: 'New', value: appointie?.new_customers ?? 0, color: iconTones.cyan.foreground },
+    { label: 'Returning', value: appointie?.returning_customers ?? 0, color: iconTones.violet.foreground },
   ].filter((slice) => slice.value > 0);
-  const customerBars = (data?.top_customers ?? []).slice(0, 7).map((row, index) => ({
+  const appointieBars = (appointie?.top_customers ?? []).slice(0, 7).map((row, index) => ({
     label: row.customer_name.split(' ')[0] || row.customer_name,
     value: row.bookings,
+    highlight: index === 0,
+  }));
+  const shopieMix = [
+    { label: 'New', value: shopie?.new_customers ?? 0, color: iconTones.cyan.foreground },
+    { label: 'Returning', value: shopie?.returning_customers ?? 0, color: iconTones.violet.foreground },
+  ].filter((slice) => slice.value > 0);
+  const shopieBars = (shopie?.top_customers ?? []).slice(0, 7).map((row, index) => ({
+    label: row.customer_name.split(' ')[0] || row.customer_name,
+    value: row.orders,
     highlight: index === 0,
   }));
 
@@ -1629,37 +2082,92 @@ function BIGrowth({ data, loading }: { data: ReturnType<typeof useBIGrowth>['dat
     <View style={styles.stack}>
       <View>
         <Text style={styles.heroTitle}>Customer growth</Text>
-        <Text style={styles.heroHint}>Who is booking — and who comes back.</Text>
+        <Text style={styles.heroHint}>
+          {showAppointie && showShopie
+            ? 'Switch between Orbit Appoint bookings and Orbit Mart shoppers.'
+            : 'Who is coming back this period.'}
+        </Text>
       </View>
-      <TileGrid gap={spacing.md}>
-        <StatTile label="New" value={String(data?.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
-        <StatTile label="Returning" value={String(data?.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
-        <StatTile label="Repeat rate" value={pct(data?.repeat_rate)} icon="repeat" iconTone="green" />
-        <StatTile label="Avg visits" value={String(data?.avg_visits_per_customer ?? 0)} icon="layers" iconTone="blue" />
-      </TileGrid>
-      <ChartGrid>
-        {mix.length ? (
-          <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
-            <DonutChart data={mix} centerLabel="customers" />
-          </ChartCard>
-        ) : null}
-        {customerBars.length ? (
-          <ChartCard title="Most active customers" subtitle="Bookings this period">
-            <BarChart data={customerBars} unit="bookings" />
-          </ChartCard>
-        ) : null}
-      </ChartGrid>
-      {!customerBars.length ? (
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
+      />
+      {product === 'appointie' && showAppointie && appointie ? (
+        <>
+          <Text style={styles.section}>Orbit Appoint</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile label="New" value={String(appointie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
+            <StatTile label="Returning" value={String(appointie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
+            <StatTile label="Repeat rate" value={pct(appointie.repeat_rate)} icon="repeat" iconTone="green" />
+            <StatTile label="Avg visits" value={String(appointie.avg_visits_per_customer ?? 0)} icon="layers" iconTone="blue" />
+          </TileGrid>
+          <ChartGrid>
+            {appointieMix.length ? (
+              <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
+                <DonutChart data={appointieMix} centerLabel="customers" />
+              </ChartCard>
+            ) : null}
+            {appointieBars.length ? (
+              <ChartCard title="Most active customers" subtitle="Bookings this period">
+                <BarChart data={appointieBars} unit="bookings" />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+        </>
+      ) : null}
+      {product === 'shopie' && showShopie && shopie ? (
+        <>
+          <Text style={styles.section}>Orbit Mart</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile label="New" value={String(shopie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
+            <StatTile label="Returning" value={String(shopie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
+            <StatTile label="Repeat rate" value={pct(shopie.repeat_rate)} icon="repeat" iconTone="green" />
+            <StatTile label="Avg orders" value={String(shopie.avg_orders_per_customer ?? 0)} icon="layers" iconTone="blue" />
+          </TileGrid>
+          <ChartGrid>
+            {shopieMix.length ? (
+              <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
+                <DonutChart data={shopieMix} centerLabel="shoppers" />
+              </ChartCard>
+            ) : null}
+            {shopieBars.length ? (
+              <ChartCard title="Most active shoppers" subtitle="Orders this period">
+                <BarChart data={shopieBars} unit="orders" />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+        </>
+      ) : null}
+      {!appointie && !shopie ? (
         <Card>
-          <Text style={styles.empty}>No customer booking activity in this period yet.</Text>
+          <Text style={styles.empty}>No customer activity in this period yet.</Text>
         </Card>
       ) : null}
     </View>
   );
 }
 
-function BIRevenue({ data, loading }: { data: ReturnType<typeof useBIRevenue>['data']; loading: boolean }) {
+function BIRevenue({
+  data,
+  loading,
+  showAppointie,
+  showShopie,
+  product: preferredProduct = 'appointie',
+  onProductChange,
+}: {
+  data: ReturnType<typeof useBIRevenue>['data'];
+  loading: boolean;
+  showAppointie: boolean;
+  showShopie: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
+}) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
+  const appointie = data?.appointie ?? (showAppointie && data?.estimated_revenue != null ? data : null);
+  const shopie = data?.shopie ?? null;
   const palette = [
     iconTones.blue.foreground,
     iconTones.violet.foreground,
@@ -1668,7 +2176,7 @@ function BIRevenue({ data, loading }: { data: ReturnType<typeof useBIRevenue>['d
     iconTones.coral.foreground,
     iconTones.green.foreground,
   ];
-  const mix = (data?.by_service ?? [])
+  const mix = (appointie?.by_service ?? [])
     .filter((row) => Number(row.revenue) > 0)
     .slice(0, 6)
     .map((row, index) => ({
@@ -1676,50 +2184,108 @@ function BIRevenue({ data, loading }: { data: ReturnType<typeof useBIRevenue>['d
       value: Number(row.revenue),
       color: palette[index % palette.length],
     }));
-  const bars = (data?.by_service ?? []).slice(0, 7).map((row, index) => ({
+  const bars = (appointie?.by_service ?? []).slice(0, 7).map((row, index) => ({
     label: (row.service_name || 'Service').slice(0, 10),
     value: Number(row.revenue),
     highlight: index === 0,
+  }));
+  const channelBars = (shopie?.by_channel ?? []).map((row, index) => ({
+    label: row.label,
+    value: Number(row.gmv),
+    highlight: index === 0,
+  }));
+  const categoryMix = (shopie?.by_category ?? []).slice(0, 6).map((row, index) => ({
+    label: row.label,
+    value: Number(row.gmv),
+    color: palette[index % palette.length],
   }));
 
   return (
     <View style={styles.stack}>
       <View>
         <Text style={styles.heroTitle}>Revenue</Text>
-        <Text style={styles.heroHint}>Estimated from service list prices × bookings.</Text>
+        <Text style={styles.heroHint}>
+          {showAppointie && showShopie
+            ? 'Appoint uses booking prices. Mart uses shop GMV.'
+            : showShopie
+              ? 'Shop GMV from Orbit Mart orders.'
+              : 'Estimated from service list prices × bookings.'}
+        </Text>
       </View>
-      <TileGrid gap={spacing.md}>
-        <StatTile
-          label="Estimated"
-          value={money(data?.estimated_revenue, data?.currency)}
-          icon="dollar-sign"
-          iconTone="green"
-        />
-        <StatTile
-          label="Completed"
-          value={money(data?.completed_revenue, data?.currency)}
-          icon="check-circle"
-          iconTone="green"
-        />
-        <StatTile
-          label="Avg booking"
-          value={money(data?.avg_booking_value, data?.currency)}
-          icon="tag"
-          iconTone="amber"
-        />
-      </TileGrid>
-      <ChartGrid>
-        {mix.length ? (
-          <ChartCard title="Mix by service" subtitle="Hover a slice for the amount">
-            <DonutChart data={mix} centerLabel={data?.currency || 'rev'} formatValue={formatAxisValue} />
-          </ChartCard>
-        ) : null}
-        {bars.length ? (
-          <ChartCard title="Top services" subtitle="Estimated revenue">
-            <BarChart data={bars} formatValue={formatAxisValue} unit={data?.currency} />
-          </ChartCard>
-        ) : null}
-      </ChartGrid>
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
+      />
+      {product === 'appointie' && showAppointie && appointie ? (
+        <>
+          <Text style={styles.section}>Orbit Appoint</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile
+              label="Estimated"
+              value={money(appointie.estimated_revenue, appointie.currency)}
+              icon="dollar-sign"
+              iconTone="green"
+            />
+            <StatTile
+              label="Completed"
+              value={money(appointie.completed_revenue, appointie.currency)}
+              icon="check-circle"
+              iconTone="green"
+            />
+            <StatTile
+              label="Avg booking"
+              value={money(appointie.avg_booking_value, appointie.currency)}
+              icon="tag"
+              iconTone="amber"
+            />
+          </TileGrid>
+          <ChartGrid>
+            {mix.length ? (
+              <ChartCard title="Mix by service" subtitle="Hover a slice for the amount">
+                <DonutChart data={mix} centerLabel={appointie.currency || 'rev'} formatValue={formatAxisValue} />
+              </ChartCard>
+            ) : null}
+            {bars.length ? (
+              <ChartCard title="Top services" subtitle="Estimated revenue">
+                <BarChart data={bars} formatValue={formatAxisValue} unit={appointie.currency} />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+        </>
+      ) : null}
+      {product === 'shopie' && showShopie && shopie ? (
+        <>
+          <Text style={styles.section}>Orbit Mart</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
+            <StatTile
+              label="Avg order"
+              value={money(shopie.avg_order_value, shopie.currency)}
+              icon="tag"
+              iconTone="amber"
+            />
+            <StatTile label="Orders" value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
+          </TileGrid>
+          <ChartGrid>
+            {channelBars.length ? (
+              <ChartCard title="By channel" subtitle="Hover a bar for GMV">
+                <BarChart data={channelBars} formatValue={formatAxisValue} unit={shopie.currency ?? undefined} />
+              </ChartCard>
+            ) : null}
+            {categoryMix.length ? (
+              <ChartCard title="By category" subtitle="Hover a slice for GMV">
+                <DonutChart
+                  data={categoryMix}
+                  centerLabel={shopie.currency || 'gmv'}
+                  formatValue={formatAxisValue}
+                />
+              </ChartCard>
+            ) : null}
+          </ChartGrid>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -1728,79 +2294,171 @@ function BIForecast({
   data,
   loading,
   recentBookings,
+  recentOrders,
+  showAppointie,
+  showShopie,
+  product: preferredProduct = 'appointie',
+  onProductChange,
 }: {
   data: ReturnType<typeof useBIForecast>['data'];
   loading: boolean;
   recentBookings?: number;
+  recentOrders?: number;
+  showAppointie: boolean;
+  showShopie: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
 }) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
+  const appointie = data?.appointie ?? (showAppointie && data?.projected_bookings != null ? data : null);
+  const shopie = data?.shopie ?? null;
   const bookingCompare = [
-    { label: 'Last 30d', value: recentBookings ?? data?.based_on_bookings ?? 0 },
-    { label: 'Next 30d', value: data?.projected_bookings ?? 0, highlight: true },
+    { label: 'Last 30d', value: recentBookings ?? appointie?.based_on_bookings ?? 0 },
+    { label: 'Next 30d', value: appointie?.projected_bookings ?? 0, highlight: true },
   ];
-  const revenueCompare = [
-    {
-      label: 'Avg / day',
-      value: Number(data?.avg_daily_revenue ?? 0),
-    },
-    {
-      label: 'Projected',
-      value: Number(data?.projected_revenue ?? 0),
-      highlight: true,
-    },
+  const appointieRevenue = [
+    { label: 'Avg / day', value: Number(appointie?.avg_daily_revenue ?? 0) },
+    { label: 'Projected', value: Number(appointie?.projected_revenue ?? 0), highlight: true },
+  ];
+  const orderCompare = [
+    { label: 'Last 30d', value: recentOrders ?? shopie?.based_on_orders ?? 0 },
+    { label: 'Next 30d', value: shopie?.projected_orders ?? 0, highlight: true },
+  ];
+  const shopieRevenue = [
+    { label: 'Avg / day', value: Number(shopie?.avg_daily_revenue ?? 0) },
+    { label: 'Projected', value: Number(shopie?.projected_revenue ?? 0), highlight: true },
   ];
 
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>{`Next ${data?.horizon_days ?? 30} days`}</Text>
+        <Text style={styles.heroTitle}>{`Next ${appointie?.horizon_days ?? shopie?.horizon_days ?? 30} days`}</Text>
         <Text style={styles.heroHint}>
-          {data?.note ||
-            `Based on the last ${data?.based_on_days ?? 30} days (${data?.based_on_bookings ?? 0} bookings).`}
+          {showAppointie && showShopie
+            ? 'Appoint projects bookings. Mart projects orders and GMV.'
+            : showShopie
+              ? 'Next 30 days from recent shop order pace.'
+              : 'Next 30 days from recent booking pace.'}
         </Text>
       </View>
-      <TileGrid gap={spacing.md}>
-        <StatTile
-          label="Projected bookings"
-          value={String(data?.projected_bookings ?? 0)}
-          icon="calendar"
-          iconTone="blue"
-        />
-        <StatTile
-          label="Projected revenue"
-          value={money(data?.projected_revenue, data?.currency)}
-          icon="dollar-sign"
-          iconTone="green"
-        />
-        <StatTile
-          label="Avg daily bookings"
-          value={String(data?.avg_daily_bookings ?? 0)}
-          icon="activity"
-          iconTone="violet"
-        />
-        <StatTile
-          label="Avg daily revenue"
-          value={money(data?.avg_daily_revenue, data?.currency)}
-          icon="trending-up"
-          iconTone="green"
-        />
-      </TileGrid>
-      <ChartGrid>
-        <ChartCard title="Bookings outlook" subtitle="Hover a bar for the count">
-          <BarChart data={bookingCompare} unit="bookings" />
-        </ChartCard>
-        <ChartCard title="Revenue outlook" subtitle="Hover a bar for the amount">
-          <BarChart data={revenueCompare} formatValue={formatAxisValue} unit={data?.currency} />
-        </ChartCard>
-      </ChartGrid>
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
+      />
+      {product === 'appointie' && showAppointie && appointie ? (
+        <>
+          <Text style={styles.section}>Orbit Appoint</Text>
+          <Text style={styles.heroHint}>
+            {appointie.note ||
+              `Based on the last ${appointie.based_on_days ?? 30} days (${appointie.based_on_bookings ?? 0} bookings).`}
+          </Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile
+              label="Projected bookings"
+              value={String(appointie.projected_bookings ?? 0)}
+              icon="calendar"
+              iconTone="blue"
+            />
+            <StatTile
+              label="Projected revenue"
+              value={money(appointie.projected_revenue, appointie.currency)}
+              icon="dollar-sign"
+              iconTone="green"
+            />
+            <StatTile
+              label="Avg daily bookings"
+              value={String(appointie.avg_daily_bookings ?? 0)}
+              icon="activity"
+              iconTone="violet"
+            />
+            <StatTile
+              label="Avg daily revenue"
+              value={money(appointie.avg_daily_revenue, appointie.currency)}
+              icon="trending-up"
+              iconTone="green"
+            />
+          </TileGrid>
+          <ChartGrid>
+            <ChartCard title="Bookings outlook" subtitle="Hover a bar for the count">
+              <BarChart data={bookingCompare} unit="bookings" />
+            </ChartCard>
+            <ChartCard title="Revenue outlook" subtitle="Hover a bar for the amount">
+              <BarChart data={appointieRevenue} formatValue={formatAxisValue} unit={appointie.currency} />
+            </ChartCard>
+          </ChartGrid>
+        </>
+      ) : null}
+      {product === 'shopie' && showShopie && shopie ? (
+        <>
+          <Text style={styles.section}>Orbit Mart</Text>
+          <Text style={styles.heroHint}>
+            {shopie.note ||
+              `Based on the last ${shopie.based_on_days ?? 30} days (${shopie.based_on_orders ?? 0} orders).`}
+          </Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile
+              label="Projected orders"
+              value={String(shopie.projected_orders ?? 0)}
+              icon="shopping-bag"
+              iconTone="blue"
+            />
+            <StatTile
+              label="Projected GMV"
+              value={money(shopie.projected_revenue, shopie.currency)}
+              icon="dollar-sign"
+              iconTone="green"
+            />
+            <StatTile
+              label="Avg daily orders"
+              value={String(shopie.avg_daily_orders ?? 0)}
+              icon="activity"
+              iconTone="violet"
+            />
+            <StatTile
+              label="Avg daily GMV"
+              value={money(shopie.avg_daily_revenue, shopie.currency)}
+              icon="trending-up"
+              iconTone="green"
+            />
+          </TileGrid>
+          <ChartGrid>
+            <ChartCard title="Orders outlook" subtitle="Hover a bar for the count">
+              <BarChart data={orderCompare} unit="orders" />
+            </ChartCard>
+            <ChartCard title="GMV outlook" subtitle="Hover a bar for the amount">
+              <BarChart data={shopieRevenue} formatValue={formatAxisValue} unit={shopie.currency} />
+            </ChartCard>
+          </ChartGrid>
+        </>
+      ) : null}
     </View>
   );
 }
 
-function BIReports({ data, loading }: { data: ReturnType<typeof useBIReports>['data']; loading: boolean }) {
+function BIReports({
+  data,
+  loading,
+  showAppointie,
+  showShopie,
+  product: preferredProduct = 'appointie',
+  onProductChange,
+}: {
+  data: ReturnType<typeof useBIReports>['data'];
+  loading: boolean;
+  showAppointie: boolean;
+  showShopie: boolean;
+  product?: ProductKey;
+  onProductChange?: (next: ProductKey) => void;
+}) {
+  const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
-  const summary = data?.summary;
-  const trend = fillDailySeries((data?.trends?.rows ?? []).map((row) => ({ day: row.day, value: row.total })));
+  const appointie = data?.appointie ?? (showAppointie && data?.summary && data?.revenue ? data : null);
+  const shopie = data?.shopie ?? null;
+  const summary = appointie?.summary;
+  const trend = fillDailySeries((appointie?.trends?.rows ?? []).map((row) => ({ day: row.day, value: row.total })));
   const mix = summary
     ? [
         { label: 'Completed', value: summary.completed ?? 0, color: iconTones.green.foreground },
@@ -1808,38 +2466,80 @@ function BIReports({ data, loading }: { data: ReturnType<typeof useBIReports>['d
         { label: 'No-show', value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
       ].filter((slice) => slice.value > 0)
     : [];
+  const shopieTrend = fillDailySeries((shopie?.trend ?? []).map((row) => ({ day: row.day, value: row.orders })));
 
   return (
     <View style={styles.stack}>
       <View>
         <Text style={styles.heroTitle}>Operations report</Text>
-        <Text style={styles.heroHint}>Combined summary for the last 30 days.</Text>
+        <Text style={styles.heroHint}>
+          {showAppointie && showShopie
+            ? 'Combined summary for the last 30 days. Switch between Orbit Appoint and Orbit Mart.'
+            : 'Combined summary for the last 30 days.'}
+        </Text>
       </View>
-      <TileGrid gap={spacing.md}>
-        <StatTile label="Bookings" value={String(summary?.bookings ?? 0)} icon="calendar" iconTone="blue" />
-        <StatTile label="Completion" value={pct(summary?.completion_rate)} icon="check-circle" iconTone="green" />
-        <StatTile
-          label="Est. revenue"
-          value={money(data?.revenue?.estimated_revenue, data?.revenue?.currency)}
-          icon="trending-up"
-          iconTone="green"
-        />
-        <StatTile label="Repeat rate" value={pct(data?.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
-      </TileGrid>
-      <InsightPanel
-        title="Insights"
-        subtitle="What this report is telling you — and what to do about it."
-        insights={data?.insights ?? []}
+      <BiProductSwitch
+        showAppointie={showAppointie}
+        showShopie={showShopie}
+        value={product}
+        onChange={onProductChange ?? (() => undefined)}
       />
-      {trend.some((row) => row.value > 0) ? (
-        <ChartCard title="Daily trend" subtitle="Hover a day for the booking count">
-          <LineAreaChart data={trend} color={iconTones.blue.foreground} unit="bookings" />
-        </ChartCard>
+      {product === 'appointie' && showAppointie && appointie ? (
+        <>
+          <Text style={styles.section}>Orbit Appoint</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile label="Bookings" value={String(summary?.bookings ?? 0)} icon="calendar" iconTone="blue" />
+            <StatTile label="Completion" value={pct(summary?.completion_rate)} icon="check-circle" iconTone="green" />
+            <StatTile
+              label="Est. revenue"
+              value={money(appointie.revenue?.estimated_revenue, appointie.revenue?.currency)}
+              icon="trending-up"
+              iconTone="green"
+            />
+            <StatTile label="Repeat rate" value={pct(appointie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
+          </TileGrid>
+          <InsightPanel
+            title="Insights"
+            subtitle="What this report is telling you — and what to do about it."
+            insights={appointie.insights ?? []}
+          />
+          {trend.some((row) => row.value > 0) ? (
+            <ChartCard title="Daily trend" subtitle="Hover a day for the booking count">
+              <LineAreaChart data={trend} color={iconTones.blue.foreground} unit="bookings" />
+            </ChartCard>
+          ) : null}
+          {mix.length ? (
+            <ChartCard title="Outcomes" subtitle="Hover a slice for the count">
+              <DonutChart data={mix} centerLabel="bookings" />
+            </ChartCard>
+          ) : null}
+        </>
       ) : null}
-      {mix.length ? (
-        <ChartCard title="Outcomes" subtitle="Hover a slice for the count">
-          <DonutChart data={mix} centerLabel="bookings" />
-        </ChartCard>
+      {product === 'shopie' && showShopie && shopie ? (
+        <>
+          <Text style={styles.section}>Orbit Mart</Text>
+          <TileGrid gap={spacing.md}>
+            <StatTile label="Orders" value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
+            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="trending-up" iconTone="green" />
+            <StatTile
+              label="Avg order"
+              value={money(shopie.avg_order_value, shopie.currency)}
+              icon="tag"
+              iconTone="amber"
+            />
+            <StatTile label="Repeat rate" value={pct(shopie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
+          </TileGrid>
+          <InsightPanel
+            title="Commerce insights"
+            subtitle="What shop activity is telling you."
+            insights={shopie.insights ?? []}
+          />
+          {shopieTrend.some((row) => row.value > 0) ? (
+            <ChartCard title="Order trend" subtitle="Hover a day for the order count">
+              <LineAreaChart data={shopieTrend} color={iconTones.green.foreground} unit="orders" />
+            </ChartCard>
+          ) : null}
+        </>
       ) : null}
     </View>
   );
@@ -1853,6 +2553,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.background,
+    gap: spacing.sm,
+  },
+  tabStaffFilter: {
+    marginTop: 2,
   },
   tabTrack: {
     flexDirection: 'row',
@@ -1929,6 +2633,33 @@ const styles = StyleSheet.create({
   stack: { gap: spacing.md },
   heroTitle: { ...typography.title, fontSize: 20, color: colors.foreground },
   heroHint: { ...typography.caption, color: colors.mutedForeground, marginTop: 4 },
+  productTrack: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 4,
+    gap: 4,
+  },
+  productBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: radius.md,
+  },
+  productBtnActive: {
+    backgroundColor: colors.primary,
+  },
+  productBtnText: {
+    ...typography.label,
+    fontFamily: fonts.bodySemi,
+    color: colors.foreground,
+  },
+  productBtnTextActive: {
+    color: colors.primaryForeground,
+  },
   section: { ...typography.title, fontSize: 16, color: colors.foreground },
   empty: { ...typography.body, color: colors.mutedForeground },
   panel: { gap: spacing.sm },

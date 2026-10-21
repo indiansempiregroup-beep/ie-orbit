@@ -59,7 +59,10 @@ export function LandingPage() {
                   Request demo
                 </Button>
               </div>
-              <p className="register-landing-note">UPI billing · Your brand on every plan · Cancel anytime in trial</p>
+              <p className="register-landing-note">
+                UPI billing · Your brand on every plan · AI assistant, automations, and invoice extraction · Cancel
+                anytime in trial
+              </p>
             </div>
 
             <div className="register-landing-visual">

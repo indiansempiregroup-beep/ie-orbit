@@ -10,7 +10,12 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useSheetKeyboardLayout } from '../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from './SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../hooks/useExpandableSheet';
 import { colors, fonts, radius, spacing, typography } from '../theme/tokens';
 import { Button } from './ui/Button';
 import { inputReset } from './ui/fieldStyles';
@@ -36,7 +41,8 @@ export function FilterSheet({
   children,
   embedded,
 }: Props) {
-  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.72);
+  const { lift, maxHeight, bottomPad, driven, onSheetLayout, sheetMotionStyle, handleProps } =
+    useExpandableSheet(0.72, visible);
 
   useEffect(() => {
     if (visible) Keyboard.dismiss();
@@ -47,17 +53,18 @@ export function FilterSheet({
   const sheet = (
     <View style={embedded ? styles.embeddedRoot : styles.overlay}>
       <Pressable style={styles.flexFill} onPress={onClose} accessibilityLabel="Close" />
-      <View
+      <ExpandableSheetView
+        onLayout={onSheetLayout}
         style={[
           styles.sheet,
           {
-            maxHeight: embedded ? '80%' : maxHeight,
             marginBottom: embedded ? 0 : lift,
             paddingBottom: bottomPad,
           },
+          driven ? sheetMotionStyle : { maxHeight: embedded ? '80%' : maxHeight },
         ]}
       >
-        <View style={styles.handle} />
+        <SheetHandle {...handleProps} tone="muted" />
         <View style={styles.header}>
           <Text style={styles.title}>{title}</Text>
           <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
@@ -65,6 +72,7 @@ export function FilterSheet({
           </Pressable>
         </View>
         <ScrollView
+          style={driven ? sheetBodyStyle : undefined}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
@@ -84,7 +92,7 @@ export function FilterSheet({
             <Button label="Done" size="sm" fullWidth onPress={onApply ?? onClose} />
           </View>
         </View>
-      </View>
+      </ExpandableSheetView>
     </View>
   );
 
@@ -226,14 +234,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     width: '100%',
     overflow: 'hidden',
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    marginTop: spacing.sm,
   },
   header: {
     flexDirection: 'row',

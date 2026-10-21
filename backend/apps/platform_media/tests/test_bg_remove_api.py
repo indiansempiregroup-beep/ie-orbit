@@ -110,3 +110,31 @@ def test_remove_background_allowed_on_pro(mock_rembg) -> None:
     )
     assert response.status_code in {200, 201}, response.content
     mock_rembg.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_remove_background_blocked_by_tenant_flag() -> None:
+    from apps.platform_admin.models import PlatformFeatureFlag
+
+    client, business = _make_client(plan_code="shopie-pro")
+    PlatformFeatureFlag.objects.create(
+        tenant=business.tenant,
+        key="shopie_product_bg_remove",
+        enabled=False,
+    )
+    upload = SimpleUploadedFile("pack.png", _png_bytes(), content_type="image/png")
+    response = client.post(
+        "/api/v1/media/upload",
+        {
+            "file": upload,
+            "business": str(business.id),
+            "folder_type": "products",
+            "visibility": "public",
+            "prepare_product_canvas": "true",
+            "remove_background": "true",
+        },
+        format="multipart",
+        HTTP_X_TENANT_ID=str(business.tenant_id),
+        HTTP_X_BUSINESS_ID=str(business.id),
+    )
+    assert response.status_code == 403

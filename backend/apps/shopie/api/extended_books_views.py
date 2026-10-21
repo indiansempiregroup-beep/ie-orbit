@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -27,6 +27,7 @@ from apps.shopie.api.serializers import (
     ShopBooksDocumentConvertSerializer,
     ShopBooksDocumentCreateSerializer,
     ShopBooksDocumentSerializer,
+    ShopBooksDocumentUpdateSerializer,
     ShopBooksVoucherSerializer,
     ShopChequeClearSerializer,
     ShopChequeCreateSerializer,
@@ -137,6 +138,64 @@ class ShopBooksDocumentConvertView(APIView):
         if isinstance(result, ShopBooksVoucher):
             return success_response(ShopBooksVoucherSerializer(result).data)
         return success_response(ShopBooksDocumentSerializer(result).data)
+
+
+class ShopBooksDocumentDetailView(APIView):
+    permission_classes = [ShopAccessPermission]
+    documents = DocumentsService()
+
+    def _get(self, request: Request, document_id) -> ShopBooksDocument:
+        document = (
+            ShopBooksDocument.objects.filter(tenant=request.current_tenant, id=document_id)
+            .select_related("customer", "supplier")
+            .first()
+        )
+        if not document:
+            raise NotFound("Document not found.")
+        require_document_feature(document.business, document.doc_type)
+        return document
+
+    def get(self, request: Request, document_id) -> Response:
+        return success_response(ShopBooksDocumentSerializer(self._get(request, document_id)).data)
+
+    def patch(self, request: Request, document_id) -> Response:
+        document = self._get(request, document_id)
+        serializer = ShopBooksDocumentUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        customer = None
+        has_customer = "customer_id" in data
+        if data.get("customer_id"):
+            customer = get_object_or_404(
+                Customer,
+                tenant=request.current_tenant,
+                business=document.business,
+                id=data["customer_id"],
+            )
+        supplier = None
+        has_supplier = "supplier_id" in data
+        if data.get("supplier_id"):
+            supplier = get_object_or_404(
+                ShopSupplier,
+                tenant=request.current_tenant,
+                business=document.business,
+                id=data["supplier_id"],
+            )
+        try:
+            doc = self.documents.update_document(
+                tenant=request.current_tenant,
+                business=document.business,
+                document=document,
+                **({"customer": customer} if has_customer else {}),
+                **({"supplier": supplier} if has_supplier else {}),
+                notes=data.get("notes") if "notes" in data else None,
+                **({"document_date": data["document_date"]} if "document_date" in data else {}),
+                status=data.get("status"),
+                lines=data.get("lines"),
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopBooksDocumentSerializer(doc).data)
 
 
 class ShopGodownListCreateView(APIView):

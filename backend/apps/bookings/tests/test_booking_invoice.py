@@ -143,6 +143,50 @@ def test_booking_invoice_loyalty_uses_service_points_not_spend(loyalty_setup):
     )
     assert int(payload.get("points_earned") or 0) == 50
     assert int(payload.get("points_to_earn") or 0) == 0
+    assert int(payload.get("points_reversed") or 0) == 0
+
+
+@pytest.mark.django_db
+def test_booking_invoice_shows_reversed_points_after_refund(loyalty_setup):
+    setup = loyalty_setup
+    booking = _make_booking(setup, number="BK-INV-REV")
+    start = booking.start_at
+    BookingLineItem.objects.create(
+        tenant=setup["tenant"],
+        booking=booking,
+        service_id=setup["service"].id,
+        staff_id=setup["staff"].id,
+        start_at=start,
+        end_at=start + timedelta(hours=1),
+        duration_minutes=60,
+        sort_order=0,
+        price_snapshot=Decimal("500.00"),
+    )
+    _complete_paid(setup, booking)
+    from apps.customers.services.loyalty import LoyaltyService
+
+    LoyaltyService().refund_for_booking(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        customer=setup["customer"],
+        booking_id=booking.id,
+        points_redeemed=0,
+    )
+    voucher = BooksService.books_voucher_for_booking(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        booking_id=booking.id,
+    )
+    assert voucher is not None
+    payload = ShopDocumentService().build_payload(
+        tenant=setup["tenant"],
+        business=setup["business"],
+        kind="sale",
+        document_id=voucher.id,
+    )
+    assert int(payload.get("points_earned") or 0) == 50
+    assert int(payload.get("points_reversed") or 0) == 50
+    assert "Reversed" in str(payload.get("reversal_reason") or "")
 
 
 @pytest.mark.django_db

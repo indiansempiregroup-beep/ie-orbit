@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, F, Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -16,10 +17,15 @@ from apps.businesses.constants import (
     FEATURE_APPOINTIE_SERVICES,
     FEATURE_APPOINTIE_STAFF,
     FEATURE_SHOPIE_BOOKS_CASH,
+    FEATURE_SHOPIE_BOOKS_CHALLAN,
     FEATURE_SHOPIE_BOOKS_EXPENSE,
     FEATURE_SHOPIE_BOOKS_GODOWNS,
     FEATURE_SHOPIE_BOOKS_PARTIES,
     FEATURE_SHOPIE_BOOKS_PURCHASE,
+    FEATURE_SHOPIE_BOOKS_PURCHASE_ORDER,
+    FEATURE_SHOPIE_BOOKS_QUOTATIONS,
+    FEATURE_SHOPIE_BOOKS_SALE,
+    FEATURE_SHOPIE_BOOKS_SALE_ORDER,
     FEATURE_SHOPIE_COUPONS,
     FEATURE_SHOPIE_LOYALTY,
     FEATURE_SHOPIE_ORDERS,
@@ -28,20 +34,31 @@ from apps.businesses.constants import (
     PRODUCT_SHOPIE,
 )
 from apps.businesses.models import Business
-from apps.customers.models import Customer, CustomerBorrowAccount, CustomerLoyaltyAccount
+from apps.customers.models import (
+    Customer,
+    CustomerBorrowAccount,
+    CustomerLoyaltyAccount,
+    CustomerLoyaltyLedger,
+)
 from apps.services.models import Service, ServiceDuration, ServicePricing, ServiceStatus
 from apps.shopie.models import (
+    BooksDocumentStatus,
+    BooksDocumentType,
     OrderStatus,
+    QuotationStatus,
+    ShopBooksDocument,
+    ShopBooksVoucher,
     ShopCashAccount,
     ShopCoupon,
     ShopGodown,
     ShopGodownStock,
     ShopOrder,
     ShopProduct,
+    ShopQuotation,
+    ShopSaleProfitFact,
     VoucherStatus,
     VoucherType,
 )
-from apps.shopie.models import ShopBooksVoucher
 from apps.shopie.services.books import BooksService
 from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.orders import OrderService
@@ -1023,6 +1040,230 @@ def service_slots(
         end = timezone.localtime(slot.end_at).strftime("%H:%M")
         lines.append(f"• {start}–{end}")
     return "\n".join(lines)
+
+
+def _local_day_bounds():
+    start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    return start, start + timedelta(days=1)
+
+
+def open_quotations(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(
+        business=business, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS, product_code=PRODUCT_SHOPIE
+    ):
+        return "Quotations are not enabled on your Orbit Mart plan."
+    today = timezone.localdate()
+    horizon = today + timedelta(days=7)
+    rows = list(
+        ShopQuotation.objects.require_tenant(tenant)
+        .filter(
+            business=business,
+            status__in=[QuotationStatus.DRAFT, QuotationStatus.SENT],
+            converted_order__isnull=True,
+        )
+        .select_related("customer")
+        .order_by("valid_until", "-created_at")[:12]
+    )
+    if not rows:
+        return "No open quotations."
+    expiring = [
+        row
+        for row in rows
+        if row.valid_until is not None and row.valid_until <= horizon
+    ]
+    lines = [f"Open quotations — {len(rows)}:"]
+    if expiring:
+        lines.append(f"{len(expiring)} expire within 7 days.")
+    for row in rows:
+        party = _customer_label(row.customer)
+        when = row.valid_until.isoformat() if row.valid_until else "no expiry"
+        flag = " · expiring" if row.valid_until is not None and row.valid_until <= horizon else ""
+        lines.append(f"• {row.quotation_number} — {party} — {_money(row.total)} — valid {when}{flag}")
+    return "\n".join(lines)
+
+
+def _unpaid_vouchers(*, tenant: Tenant, business: Business, voucher_type: str) -> list:
+    return list(
+        ShopBooksVoucher.objects.require_tenant(tenant)
+        .filter(
+            business=business,
+            status=VoucherStatus.CONFIRMED,
+            voucher_type=voucher_type,
+            total__gt=F("amount_paid"),
+        )
+        .select_related("customer", "supplier")
+        .order_by("voucher_date")[:12]
+    )
+
+
+def unpaid_invoices(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
+        return "Sale invoices are not enabled on your Orbit Mart plan."
+    rows = _unpaid_vouchers(tenant=tenant, business=business, voucher_type=VoucherType.SALE)
+    if not rows:
+        return "No unpaid sale invoices."
+    today = timezone.localdate()
+    due_total = sum((row.total - row.amount_paid) for row in rows)
+    lines = [f"Unpaid sale invoices — {len(rows)} · {_money(due_total)} still due:"]
+    for row in rows:
+        due = row.total - row.amount_paid
+        overdue = " · overdue" if row.voucher_date and (today - row.voucher_date).days >= 7 else ""
+        lines.append(
+            f"• {row.voucher_number} — {_customer_label(row.customer)} — due {_money(due)} — {row.voucher_date}{overdue}"
+        )
+    return "\n".join(lines)
+
+
+def overdue_supplier_dues(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(
+        business=business, feature=FEATURE_SHOPIE_BOOKS_PURCHASE, product_code=PRODUCT_SHOPIE
+    ):
+        return "Purchase invoices are not enabled on your Orbit Mart plan."
+    rows = _unpaid_vouchers(tenant=tenant, business=business, voucher_type=VoucherType.PURCHASE)
+    today = timezone.localdate()
+    overdue = [row for row in rows if row.voucher_date and (today - row.voucher_date).days >= 7]
+    shown = overdue or rows
+    if not shown:
+        return "No supplier bills with a balance due."
+    label = "Overdue supplier bills" if overdue else "Supplier bills with a balance"
+    due_total = sum((row.total - row.amount_paid) for row in shown)
+    lines = [f"{label} — {len(shown)} · {_money(due_total)}:"]
+    for row in shown:
+        party = row.supplier.name if row.supplier_id and row.supplier else "Supplier"
+        due = row.total - row.amount_paid
+        lines.append(f"• {row.voucher_number} — {party} — due {_money(due)} — {row.voucher_date}")
+    return "\n".join(lines)
+
+
+def open_books_documents(*, tenant: Tenant, business: Business, doc_type: str) -> dict | str:
+    feature = {
+        BooksDocumentType.SALE_ORDER: FEATURE_SHOPIE_BOOKS_SALE_ORDER,
+        BooksDocumentType.PURCHASE_ORDER: FEATURE_SHOPIE_BOOKS_PURCHASE_ORDER,
+        BooksDocumentType.DELIVERY_CHALLAN: FEATURE_SHOPIE_BOOKS_CHALLAN,
+    }.get(doc_type)
+    labels = {
+        BooksDocumentType.SALE_ORDER: "sale orders",
+        BooksDocumentType.PURCHASE_ORDER: "purchase orders",
+        BooksDocumentType.DELIVERY_CHALLAN: "delivery challans",
+    }
+    label = labels.get(doc_type, "documents")
+    if feature and not has_domain_feature(business=business, feature=feature, product_code=PRODUCT_SHOPIE):
+        return f"Open {label} are not enabled on your Orbit Mart plan."
+    rows = list(
+        ShopBooksDocument.objects.require_tenant(tenant)
+        .filter(business=business, doc_type=doc_type)
+        .exclude(status__in=[BooksDocumentStatus.CONVERTED, BooksDocumentStatus.CANCELLED])
+        .select_related("customer", "supplier")
+        .order_by("-document_date")[:12]
+    )
+    if not rows:
+        return f"No open {label}."
+    lines = [f"Open {label} — {len(rows)}:"]
+    for row in rows:
+        if row.customer_id:
+            party = _customer_label(row.customer)
+        elif row.supplier_id and row.supplier:
+            party = row.supplier.name
+        else:
+            party = "—"
+        lines.append(
+            f"• {row.document_number} — {party} — {_money(row.total)} — {row.status} — {row.document_date}"
+        )
+    return "\n".join(lines)
+
+
+def profit_today(*, tenant: Tenant, business: Business) -> str:
+    if not (
+        has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE)
+        or has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE)
+    ):
+        return "Profit is not enabled on your Orbit Mart plan."
+    start, end = _local_day_bounds()
+    totals = (
+        ShopSaleProfitFact.objects.require_tenant(tenant)
+        .filter(business=business, sold_at__gte=start, sold_at__lt=end)
+        .aggregate(revenue=Sum("net_revenue"), profit=Sum("gross_profit"))
+    )
+    revenue = totals["revenue"] or Decimal("0")
+    profit = totals["profit"] or Decimal("0")
+    if revenue == 0 and profit == 0:
+        return "No sold-profit recorded today yet."
+    return f"Profit today: {_money(profit)} gross profit on {_money(revenue)} net revenue."
+
+
+def staff_sales_today(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    staff = _resolve_staff(tenant=tenant, business=business, query=query)
+    if isinstance(staff, dict):
+        return staff
+    if staff is None:
+        return f"No staff matching “{query}”."
+    start, end = _local_day_bounds()
+    lines = [f"{staff.display_name} today:"]
+    if staff.user_id and has_domain_feature(
+        business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE
+    ):
+        orders = ShopOrder.objects.require_tenant(tenant).filter(
+            business=business,
+            created_by=staff.user_id,
+            created_at__gte=start,
+            created_at__lt=end,
+        ).exclude(status__in=[OrderStatus.CANCELLED, OrderStatus.RETURNED])
+        count = orders.count()
+        total = orders.aggregate(t=Sum("total"))["t"] or Decimal("0")
+        lines.append(f"• Orders billed: {count} · {_money(total)}")
+    elif not staff.user_id:
+        lines.append("• Orders: this staff member has no login, so counter bills are not tied to them.")
+    if has_domain_feature(
+        business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE
+    ):
+        bookings = Booking.objects.require_tenant(tenant).filter(
+            business=business,
+            appointment_date=timezone.localdate(),
+            staff_id=staff.id,
+        ).exclude(status__in=[BookingStatus.CANCELLED, BookingStatus.REJECTED, BookingStatus.EXPIRED])
+        completed = bookings.filter(status=BookingStatus.COMPLETED).count()
+        lines.append(f"• Bookings: {bookings.count()} · {completed} completed")
+    if len(lines) == 1:
+        lines.append("Nothing to report for this staff member on the current plan.")
+    return pack_reply(
+        "\n".join(lines),
+        links=[entity_link(kind="staff", id=str(staff.id), label=staff.display_name, subtitle="Staff")],
+    )
+
+
+def loyalty_activity(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_LOYALTY, product_code=PRODUCT_SHOPIE):
+        return "Loyalty points are not enabled on your Orbit Mart plan."
+    customer = _resolve_customer(tenant=tenant, business=business, query=query)
+    if isinstance(customer, dict):
+        return customer
+    if customer is None:
+        return f"No customer matching “{query}”."
+    account = (
+        CustomerLoyaltyAccount.objects.require_tenant(tenant)
+        .filter(business=business, customer=customer)
+        .first()
+    )
+    pts = account.points_balance if account else 0
+    rows = list(
+        CustomerLoyaltyLedger.objects.require_tenant(tenant)
+        .filter(business=business, customer=customer)
+        .order_by("-created_at")[:8]
+    )
+    label = _customer_label(customer)
+    lines = [f"{label} — {pts} point{'s' if pts != 1 else ''}."]
+    if not rows:
+        lines.append("No loyalty activity yet.")
+    else:
+        lines.append("Recent activity:")
+        for row in rows:
+            sign = "+" if row.points_delta > 0 else ""
+            when = timezone.localtime(row.created_at).strftime("%d %b")
+            lines.append(f"• {when} — {sign}{row.points_delta} — {row.reason}")
+    return pack_reply(
+        "\n".join(lines),
+        links=[entity_link(kind="customer", id=str(customer.id), label=label, subtitle=f"{pts} pts")],
+    )
 
 
 def execute_extra_action(

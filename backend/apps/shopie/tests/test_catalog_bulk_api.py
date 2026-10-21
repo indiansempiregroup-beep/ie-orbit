@@ -110,3 +110,63 @@ def test_bulk_create_and_patch_products(
     assert Decimal(by_name["Rice 5kg"]["price"]) == Decimal("220.00")
     assert Decimal(by_name["Atta 10kg"]["price"]) == Decimal("440.00")
     assert ShopProduct.objects.filter(business=business).count() == 2
+
+
+@pytest.mark.django_db
+def test_bulk_create_persists_all_add_many_fields(
+    api_client: APIClient,
+    owner: User,
+    shop_workspace: tuple[Tenant, Business],
+) -> None:
+    tenant, business = shop_workspace
+    authenticate(api_client, owner, tenant)
+    url = reverse("shop-product-bulk")
+
+    created = api_client.post(
+        url,
+        {
+            "business_id": str(business.id),
+            "items": [
+                {
+                    "name": "Rice 5kg",
+                    "sku": "RICE-5",
+                    "brand": "India Gate",
+                    "pack_size": "5kg",
+                    "category": "food_grocery",
+                    "price": "249.00",
+                    "purchase_price": "180.00",
+                    "gst_rate": "5",
+                    "tax_rate": "5",
+                    "hsn_sac": "1006",
+                    "stock_on_hand": "20",
+                    "status": "active",
+                    "barcodes": [{"code": "8901234567890", "barcode_type": "manufacturer", "is_primary": True}],
+                }
+            ],
+        },
+        format="json",
+    )
+    assert created.status_code == 200, created.content
+    payload = created.json()["data"]
+    assert payload["errors"] == []
+    assert len(payload["created"]) == 1
+    row = payload["created"][0]
+    assert row["name"] == "Rice 5kg"
+    assert row["sku"] == "RICE-5"
+    assert row["brand"] == "India Gate"
+    assert row["pack_size"] == "5kg"
+    assert row["category"] == "food_grocery"
+    assert Decimal(row["price"]) == Decimal("249.00")
+    assert Decimal(row["purchase_price"]) == Decimal("180.00")
+    assert Decimal(row["gst_rate"]) == Decimal("5")
+    assert Decimal(row["tax_rate"]) == Decimal("5")
+    assert row["hsn_sac"] == "1006"
+    assert Decimal(row["stock_on_hand"]) == Decimal("20")
+    assert row["status"] == "active"
+    assert row["barcodes"][0]["code"] == "8901234567890"
+
+    product = ShopProduct.objects.get(id=row["id"])
+    assert product.purchase_price == Decimal("180.00")
+    assert product.hsn_sac == "1006"
+    assert product.pack_size == "5kg"
+    assert product.gst_rate == Decimal("5")

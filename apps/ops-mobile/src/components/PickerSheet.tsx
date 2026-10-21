@@ -2,8 +2,13 @@ import React from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useBreakpoint } from '../hooks/useBreakpoint';
-import { useSheetKeyboardLayout } from '../hooks/useSheetKeyboardLayout';
-import { colors, radius, spacing, typography } from '../theme/tokens';
+import { SheetHandle } from './SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../hooks/useExpandableSheet';
+import { colors, spacing, typography } from '../theme/tokens';
 import { Button } from './ui/Button';
 
 type Props = {
@@ -30,7 +35,8 @@ export function PickerSheet({
   actionDisabled,
 }: Props) {
   const { isDesktop } = useBreakpoint();
-  const { keyboardOpen, lift, maxHeight, bottomPad } = useSheetKeyboardLayout(isDesktop ? 0.7 : 0.78);
+  const { keyboardOpen, lift, maxHeight, bottomPad, driven, onSheetLayout, sheetMotionStyle, handleProps } =
+    useExpandableSheet(isDesktop ? 0.7 : 0.78, visible);
   const sheetLift = isDesktop ? 0 : lift;
   const bodyMaxHeight = Math.max(160, maxHeight - (keyboardOpen ? 168 : 220));
 
@@ -38,15 +44,20 @@ export function PickerSheet({
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={[styles.overlay, isDesktop && styles.overlayCenter]}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-        <View
+        <ExpandableSheetView
+          onLayout={isDesktop ? undefined : onSheetLayout}
           style={[
             styles.sheet,
             isDesktop ? styles.sheetDesktop : styles.sheetMobile,
-            { paddingBottom: isDesktop ? spacing.lg : bottomPad, marginBottom: sheetLift, maxHeight },
+            {
+              paddingBottom: isDesktop ? spacing.lg : bottomPad,
+              marginBottom: sheetLift,
+              ...(isDesktop ? { maxHeight } : sheetMotionStyle),
+            },
           ]}
         >
           <View style={[styles.hero, keyboardOpen && styles.heroCompact]}>
-            {!isDesktop && <View style={styles.handle} />}
+            {!isDesktop ? <SheetHandle {...handleProps} /> : null}
             <View style={styles.heroTop}>
               <View style={styles.iconWrap}>
                 <Feather name={icon} size={18} color={colors.primaryForeground} />
@@ -62,7 +73,7 @@ export function PickerSheet({
           </View>
 
           <ScrollView
-            style={{ maxHeight: bodyMaxHeight }}
+            style={driven && !isDesktop ? sheetBodyStyle : { maxHeight: bodyMaxHeight }}
             contentContainerStyle={styles.body}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
@@ -82,7 +93,7 @@ export function PickerSheet({
               />
             </View>
           ) : null}
-        </View>
+        </ExpandableSheetView>
       </View>
     </Modal>
   );
@@ -120,14 +131,6 @@ const styles = StyleSheet.create({
   },
   sheetDesktop: {
     borderRadius: 24,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    marginBottom: spacing.sm,
   },
   hero: {
     backgroundColor: colors.primary,

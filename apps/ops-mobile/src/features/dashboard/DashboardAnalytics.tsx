@@ -189,9 +189,10 @@ export function DashboardAnalytics({
 
   const bookingTrendTotal = bookingTrend.reduce((sum, row) => sum + row.value, 0);
   const gmvTrendTotal = gmvTrend.reduce((sum, row) => sum + row.value, 0);
+  const showPeriodCharts = showReports;
   const hasAnyChart =
-    (hasAppointie && (bookingTrendTotal > 0 || bookingMix.length > 0 || weekdayBars.some((row) => row.value > 0))) ||
-    (shopieEnabled && (gmvTrendTotal > 0 || orderMix.length > 0)) ||
+    (hasAppointie && (bookingMix.length > 0 || (showPeriodCharts && (bookingTrendTotal > 0 || weekdayBars.some((row) => row.value > 0))))) ||
+    (shopieEnabled && (orderMix.length > 0 || (showPeriodCharts && gmvTrendTotal > 0))) ||
     cashMix.length > 0 ||
     partyMix.length > 0 ||
     (petsEnabled && petsMix.length > 0);
@@ -201,11 +202,13 @@ export function DashboardAnalytics({
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>Business snapshot</Text>
-        <Text style={styles.sectionHint}>Last 30 days · trends owners actually use</Text>
+        <Text style={styles.sectionTitle}>{showPeriodCharts ? 'Business snapshot' : 'Your snapshot'}</Text>
+        <Text style={styles.sectionHint}>
+          {showPeriodCharts ? 'Last 30 days · trends owners actually use' : 'Based on your bookings and work today'}
+        </Text>
       </View>
 
-      {hasAppointie && bookingTrendTotal > 0 ? (
+      {showPeriodCharts && hasAppointie && bookingTrendTotal > 0 ? (
         <ChartCard
           title="Bookings over time"
           subtitle={`${formatAxisValue(bookingTrendTotal)} in 30 days`}
@@ -216,7 +219,7 @@ export function DashboardAnalytics({
         </ChartCard>
       ) : null}
 
-      {shopieEnabled && gmvTrendTotal > 0 ? (
+      {showPeriodCharts && shopieEnabled && gmvTrendTotal > 0 ? (
         <ChartCard
           title="Sales (GMV)"
           subtitle={moneyLabel(shopie?.gmv ?? gmvTrendTotal, resolvedCurrency)}
@@ -243,7 +246,7 @@ export function DashboardAnalytics({
           </ChartCard>
         ) : null}
 
-        {hasAppointie && weekdayBars.some((row) => row.value > 0) ? (
+        {showPeriodCharts && hasAppointie && weekdayBars.some((row) => row.value > 0) ? (
           <ChartCard
             title="Demand by weekday"
             subtitle={
@@ -256,7 +259,7 @@ export function DashboardAnalytics({
           </ChartCard>
         ) : null}
 
-        {hasAppointie && serviceMix.length ? (
+        {showPeriodCharts && hasAppointie && serviceMix.length ? (
           <ChartCard title="Revenue by service" subtitle="Top services · 30 days">
             <DonutChart
               data={serviceMix}
@@ -267,7 +270,7 @@ export function DashboardAnalytics({
           </ChartCard>
         ) : null}
 
-        {hasAppointie && growthMix.length ? (
+        {showPeriodCharts && hasAppointie && growthMix.length ? (
           <ChartCard
             title="Customers"
             subtitle={

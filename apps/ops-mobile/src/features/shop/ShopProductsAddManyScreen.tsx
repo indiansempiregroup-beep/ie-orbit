@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -64,8 +65,90 @@ const CATEGORY_OPTIONS = [
   ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
 ];
 
+const DESKTOP_COLUMNS = [
+  { key: 'name', label: 'Name *', width: 200 },
+  { key: 'barcode', label: 'Barcode', width: 236 },
+  { key: 'sku', label: 'SKU', width: 104 },
+  { key: 'brand', label: 'Brand', width: 120 },
+  { key: 'pack_size', label: 'Pack', width: 88 },
+  { key: 'category', label: 'Category', width: 148 },
+  { key: 'price', label: 'Price', width: 88 },
+  { key: 'purchase_price', label: 'Cost', width: 88 },
+  { key: 'gst_rate', label: 'GST %', width: 72 },
+  { key: 'hsn_sac', label: 'HSN', width: 84 },
+  { key: 'stock_on_hand', label: 'Stock', width: 72 },
+  { key: 'status', label: 'Status', width: 112 },
+] as const;
+
+type RowTone = 'empty' | 'ready' | 'warn' | 'error';
+
+function rowStatusMeta(row: BulkProductRow): { label: string; tone: RowTone } {
+  if (row.error) return { label: row.error, tone: 'error' };
+  if (rowIsReady(row)) return { label: 'Ready', tone: 'ready' };
+  if (rowHasContent(row)) return { label: 'Needs name', tone: 'warn' };
+  return { label: 'Empty', tone: 'empty' };
+}
+
 function nextRowId(seed: number) {
   return `row-${seed}`;
+}
+
+function MiniSelect({
+  value,
+  options,
+  onChange,
+  accessibilityLabel,
+}: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  accessibilityLabel: string;
+}) {
+  if (Platform.OS !== 'web') {
+    const selected = options.find((item) => item.value === value);
+    return (
+      <Pressable
+        accessibilityLabel={accessibilityLabel}
+        onPress={() => {
+          const index = Math.max(0, options.findIndex((item) => item.value === value));
+          const next = options[(index + 1) % Math.max(options.length, 1)];
+          if (next) onChange(next.value);
+        }}
+        style={{
+          minHeight: 40,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: radius.sm,
+          paddingHorizontal: 8,
+          justifyContent: 'center',
+          backgroundColor: colors.field,
+        }}
+      >
+        <Text numberOfLines={1} style={{ fontSize: 13, color: colors.foreground }}>
+          {selected?.label || '—'}
+        </Text>
+      </Pressable>
+    );
+  }
+  return React.createElement(
+    'select',
+    {
+      value,
+      'aria-label': accessibilityLabel,
+      onChange: (event: { target: { value: string } }) => onChange(event.target.value),
+      style: {
+        width: '100%',
+        minHeight: 40,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        background: colors.inputBackground,
+        color: colors.foreground,
+        padding: '0 8px',
+        fontSize: 13,
+      },
+    },
+    options.map((item) => React.createElement('option', { key: item.value || 'none', value: item.value }, item.label)),
+  );
 }
 
 export function ShopProductsAddManyScreen() {
@@ -78,16 +161,16 @@ export function ShopProductsAddManyScreen() {
   const { user } = useAuth();
   const { businessId } = useWorkspace();
   const canWrite = canWriteShopCatalog(user);
-  const idRef = useRef(4);
+  const idRef = useRef(1);
   const [defaults, setDefaults] = useState<BulkProductDefaults>(emptyBulkDefaults());
-  const [rows, setRows] = useState<BulkProductRow[]>(() =>
-    Array.from({ length: 4 }, (_, index) => emptyBulkRow(nextRowId(index), emptyBulkDefaults())),
-  );
+  const [rows, setRows] = useState<BulkProductRow[]>(() => [emptyBulkRow(nextRowId(0), emptyBulkDefaults())]);
   const [godowns, setGodowns] = useState<ShopGodown[]>([]);
   const [scanCode, setScanCode] = useState('');
   const [pasteText, setPasteText] = useState('');
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const defaultsReady = useRef(false);
 
   const readyRows = useMemo(
@@ -195,14 +278,32 @@ export function ShopProductsAddManyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, businessId, route.params?.enrichCode, route.params?.enrichRowId]);
 
+  function withSpareRow(current: BulkProductRow[]): BulkProductRow[] {
+    if (!current.length || rowHasContent(current[current.length - 1])) {
+      return [...current, emptyBulkRow(nextRowId(idRef.current++), defaults)];
+    }
+    return current;
+  }
+
   function updateRow(id: string, patch: Partial<BulkProductRow>) {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch, error: patch.error ?? '' } : row)));
+    setRows((current) =>
+      withSpareRow(current.map((row) => (row.id === id ? { ...row, ...patch, error: patch.error ?? '' } : row))),
+    );
   }
 
   function addEmptyRow() {
-    const id = nextRowId(idRef.current);
-    idRef.current += 1;
-    setRows((current) => [...current, emptyBulkRow(id, defaults)]);
+    setRows((current) => withSpareRow(current));
+  }
+
+  function duplicateRow(id: string) {
+    setRows((current) => {
+      const index = current.findIndex((row) => row.id === id);
+      if (index < 0) return current;
+      const copyId = nextRowId(idRef.current++);
+      const next = current.slice();
+      next.splice(index + 1, 0, copyRowWithoutBarcode(current[index], copyId));
+      return withSpareRow(next);
+    });
   }
 
   function copyLastRow() {
@@ -211,15 +312,13 @@ export function ShopProductsAddManyScreen() {
       toast.push('Fill a row first, then copy it.', 'info');
       return;
     }
-    const id = nextRowId(idRef.current);
-    idRef.current += 1;
-    setRows((current) => [...current, copyRowWithoutBarcode(source, id)]);
+    duplicateRow(source.id);
   }
 
   function removeRow(id: string) {
     setRows((current) => {
       const next = current.filter((row) => row.id !== id);
-      return next.length ? next : [emptyBulkRow(nextRowId(idRef.current++), defaults)];
+      return withSpareRow(next.length ? next : []);
     });
   }
 
@@ -240,7 +339,7 @@ export function ShopProductsAddManyScreen() {
         }
         cursor += 1;
       });
-      return next;
+      return withSpareRow(next);
     });
     return usable.length;
   }
@@ -404,16 +503,63 @@ export function ShopProductsAddManyScreen() {
     }
   }
 
-  function renderRowCard(row: BulkProductRow, index: number) {
+  const defaultsSummary = [
+    defaults.gst_rate ? `GST ${defaults.gst_rate}%` : null,
+    defaults.hsn_sac ? `HSN ${defaults.hsn_sac}` : null,
+    CATEGORY_OPTIONS.find((item) => item.value === defaults.category)?.label,
+    STATUS_OPTIONS.find((item) => item.value === defaults.status)?.label,
+    godowns.find((item) => item.id === defaults.godown_id)?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  function statusPill(row: BulkProductRow) {
+    const status = rowStatusMeta(row);
     return (
-      <View key={row.id} style={[styles.card, row.error ? styles.cardError : null]}>
+      <View
+        style={[
+          styles.pill,
+          status.tone === 'ready' && styles.pill_ready,
+          status.tone === 'warn' && styles.pill_warn,
+          status.tone === 'error' && styles.pill_error,
+          status.tone === 'empty' && styles.pill_empty,
+        ]}
+      >
+        <Text
+          style={[
+            styles.pillText,
+            status.tone === 'ready' && styles.pillText_ready,
+            status.tone === 'warn' && styles.pillText_warn,
+            status.tone === 'error' && styles.pillText_error,
+            status.tone === 'empty' && styles.pillText_empty,
+          ]}
+          numberOfLines={1}
+        >
+          {status.label}
+        </Text>
+      </View>
+    );
+  }
+
+  function renderRowCard(row: BulkProductRow, index: number) {
+    const status = rowStatusMeta(row);
+    return (
+      <View
+        key={row.id}
+        style={[
+          styles.card,
+          status.tone === 'ready' && styles.card_ready,
+          status.tone === 'warn' && styles.card_warn,
+          status.tone === 'error' && styles.card_error,
+        ]}
+      >
         <View style={styles.cardHeader}>
-          <Text style={styles.cardIndex}>#{index + 1}</Text>
-          <Text style={[styles.cardStatus, row.error ? styles.cardStatusError : null]}>
-            {row.error || (rowIsReady(row) ? 'Ready' : rowHasContent(row) ? 'Needs name' : 'Empty')}
-          </Text>
-          {lastFilledRow(rows)?.id === row.id ? (
-            <Pressable onPress={copyLastRow} hitSlop={8} accessibilityLabel="Copy last row">
+          <View style={styles.indexBadge}>
+            <Text style={styles.cardIndex}>{index + 1}</Text>
+          </View>
+          {statusPill(row)}
+          {rowHasContent(row) ? (
+            <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel="Duplicate row">
               <Feather name="copy" size={16} color={colors.primary} />
             </Pressable>
           ) : null}
@@ -421,13 +567,25 @@ export function ShopProductsAddManyScreen() {
             <Feather name="trash-2" size={16} color={colors.mutedForeground} />
           </Pressable>
         </View>
-        <Input
-          label="Product name"
-          required
-          value={row.name}
-          onChangeText={(value) => updateRow(row.id, { name: value })}
-          placeholder="Product name"
-        />
+        <View style={styles.identityRow}>
+          {row.image_url ? (
+            <Image source={{ uri: row.image_url }} style={styles.thumb} />
+          ) : (
+            <View style={styles.thumbPlaceholder}>
+              <Feather name="package" size={16} color={colors.mutedForeground} />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Input
+              label="Product name"
+              required
+              value={row.name}
+              onChangeText={(value) => updateRow(row.id, { name: value })}
+              placeholder="What are you adding?"
+              onSubmitEditing={addEmptyRow}
+            />
+          </View>
+        </View>
         <View style={styles.row2}>
           <TextInput
             value={row.barcode}
@@ -438,9 +596,7 @@ export function ShopProductsAddManyScreen() {
             onSubmitEditing={() => void lookupRow(row.id, row.barcode)}
           />
           <Pressable
-            onPress={() =>
-              navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })
-            }
+            onPress={() => navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })}
             style={styles.iconBtn}
             accessibilityLabel="Scan barcode with camera"
           >
@@ -454,21 +610,21 @@ export function ShopProductsAddManyScreen() {
             onPress={() => void lookupRow(row.id, row.barcode)}
           />
         </View>
-        <View style={styles.row2}>
+        <View style={styles.fieldGrid}>
           <TextInput
             value={row.price}
             onChangeText={(value) => updateRow(row.id, { price: value })}
             placeholder="Price"
             keyboardType="decimal-pad"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.purchase_price}
             onChangeText={(value) => updateRow(row.id, { purchase_price: value })}
-            placeholder="Purchase"
+            placeholder="Cost"
             keyboardType="decimal-pad"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
@@ -476,7 +632,7 @@ export function ShopProductsAddManyScreen() {
             onChangeText={(value) => updateRow(row.id, { gst_rate: value })}
             placeholder="GST %"
             keyboardType="decimal-pad"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
@@ -484,104 +640,153 @@ export function ShopProductsAddManyScreen() {
             onChangeText={(value) => updateRow(row.id, { stock_on_hand: value })}
             placeholder="Stock"
             keyboardType="decimal-pad"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
-        </View>
-        <View style={styles.row2}>
           <TextInput
             value={row.sku}
             onChangeText={(value) => updateRow(row.id, { sku: value })}
             placeholder="SKU"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.brand}
             onChangeText={(value) => updateRow(row.id, { brand: value })}
             placeholder="Brand"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
-        </View>
-        <View style={styles.row2}>
           <TextInput
             value={row.pack_size}
             onChangeText={(value) => updateRow(row.id, { pack_size: value })}
-            placeholder="Pack size"
-            style={[styles.input, { flex: 1 }]}
+            placeholder="Pack"
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.hsn_sac}
             onChangeText={(value) => updateRow(row.id, { hsn_sac: value })}
             placeholder="HSN"
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
         </View>
-        <SelectField
-          label="Category"
-          optional
-          value={row.category}
-          options={CATEGORY_OPTIONS}
-          onChange={(value) => updateRow(row.id, { category: value })}
-          searchable
-        />
-        <SelectField
-          label="Status"
-          required
-          value={row.status}
-          options={STATUS_OPTIONS}
-          onChange={(value) => updateRow(row.id, { status: value })}
-        />
+        <View style={styles.row2}>
+          <View style={{ flex: 1 }}>
+            <SelectField
+              label="Category"
+              optional
+              value={row.category}
+              options={CATEGORY_OPTIONS}
+              onChange={(value) => updateRow(row.id, { category: value })}
+              searchable
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SelectField
+              label="Status"
+              required
+              value={row.status}
+              options={STATUS_OPTIONS}
+              onChange={(value) => updateRow(row.id, { status: value })}
+            />
+          </View>
+        </View>
       </View>
     );
   }
 
-  function renderDesktopRow(row: BulkProductRow, index: number) {
-    return (
-      <View key={row.id} style={[styles.gridRow, row.error ? styles.cardError : null]}>
-        <Text style={styles.gridIndex}>{index + 1}</Text>
-        <TextInput value={row.name} onChangeText={(value) => updateRow(row.id, { name: value })} style={styles.gridInput} placeholder="Name *" />
-        <View style={styles.gridBarcode}>
+  function renderDesktopCell(row: BulkProductRow, key: (typeof DESKTOP_COLUMNS)[number]['key']) {
+    const width = DESKTOP_COLUMNS.find((column) => column.key === key)?.width ?? 110;
+    if (key === 'barcode') {
+      return (
+        <View style={[styles.gridBarcode, { width }]}>
           <TextInput
             value={row.barcode}
             onChangeText={(value) => updateRow(row.id, { barcode: value })}
-            style={[styles.gridInput, { flex: 1 }]}
-            placeholder="Barcode"
+            style={[styles.gridInput, { flex: 1, width: undefined }]}
+            placeholder="Scan or type"
+            placeholderTextColor={colors.mutedForeground}
             onSubmitEditing={() => void lookupRow(row.id, row.barcode)}
           />
           <Pressable
-            onPress={() =>
-              navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })
-            }
+            onPress={() => navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })}
             hitSlop={8}
             accessibilityLabel="Scan barcode with camera"
           >
-            <Feather name="camera" size={16} color={colors.primary} />
+            <Feather name="camera" size={15} color={colors.primary} />
           </Pressable>
           <Pressable onPress={() => void lookupRow(row.id, row.barcode)} disabled={!row.barcode.trim()}>
-            <Text style={styles.lookupText}>{row.lookingUp ? '…' : 'Lookup'}</Text>
+            <Text style={styles.lookupText}>{row.lookingUp ? '…' : 'Go'}</Text>
           </Pressable>
         </View>
-        <TextInput value={row.sku} onChangeText={(value) => updateRow(row.id, { sku: value })} style={styles.gridInput} placeholder="SKU" />
-        <TextInput value={row.brand} onChangeText={(value) => updateRow(row.id, { brand: value })} style={styles.gridInput} placeholder="Brand" />
-        <TextInput value={row.pack_size} onChangeText={(value) => updateRow(row.id, { pack_size: value })} style={styles.gridInput} placeholder="Pack" />
-        <TextInput value={row.price} onChangeText={(value) => updateRow(row.id, { price: value })} style={styles.gridInput} placeholder="Price" keyboardType="decimal-pad" />
-        <TextInput value={row.purchase_price} onChangeText={(value) => updateRow(row.id, { purchase_price: value })} style={styles.gridInput} placeholder="Purchase" keyboardType="decimal-pad" />
-        <TextInput value={row.gst_rate} onChangeText={(value) => updateRow(row.id, { gst_rate: value })} style={styles.gridInput} placeholder="GST" keyboardType="decimal-pad" />
-        <TextInput value={row.hsn_sac} onChangeText={(value) => updateRow(row.id, { hsn_sac: value })} style={styles.gridInput} placeholder="HSN" />
-        <TextInput value={row.stock_on_hand} onChangeText={(value) => updateRow(row.id, { stock_on_hand: value })} style={styles.gridInput} placeholder="Stock" keyboardType="decimal-pad" />
-        <Text style={[styles.gridStatus, row.error ? styles.cardStatusError : null]}>
-          {row.error || (rowIsReady(row) ? 'Ready' : '')}
-        </Text>
-        {lastFilledRow(rows)?.id === row.id ? (
-          <Pressable onPress={copyLastRow} hitSlop={8} accessibilityLabel="Copy last row">
+      );
+    }
+    if (key === 'category') {
+      return (
+        <View style={{ width }}>
+          <MiniSelect
+            value={row.category}
+            options={CATEGORY_OPTIONS}
+            onChange={(value) => updateRow(row.id, { category: value })}
+            accessibilityLabel="Category"
+          />
+        </View>
+      );
+    }
+    if (key === 'status') {
+      return (
+        <View style={{ width }}>
+          <MiniSelect
+            value={row.status}
+            options={STATUS_OPTIONS}
+            onChange={(value) => updateRow(row.id, { status: value })}
+            accessibilityLabel="Status"
+          />
+        </View>
+      );
+    }
+    const numeric = key === 'price' || key === 'purchase_price' || key === 'gst_rate' || key === 'stock_on_hand';
+    return (
+      <TextInput
+        value={row[key]}
+        onChangeText={(value) => updateRow(row.id, { [key]: value })}
+        style={[styles.gridInput, { width }]}
+        placeholder={key === 'name' ? 'Product name' : ''}
+        placeholderTextColor={colors.mutedForeground}
+        keyboardType={numeric ? 'decimal-pad' : 'default'}
+        onSubmitEditing={key === 'name' ? addEmptyRow : undefined}
+      />
+    );
+  }
+
+  function renderDesktopRow(row: BulkProductRow, index: number) {
+    const status = rowStatusMeta(row);
+    return (
+      <View
+        key={row.id}
+        style={[
+          styles.gridRow,
+          index % 2 ? styles.gridRowAlt : null,
+          status.tone === 'ready' && styles.card_ready,
+          status.tone === 'warn' && styles.card_warn,
+          status.tone === 'error' && styles.card_error,
+        ]}
+      >
+        <Text style={styles.gridIndex}>{index + 1}</Text>
+        {DESKTOP_COLUMNS.map((column) => (
+          <View key={column.key}>{renderDesktopCell(row, column.key)}</View>
+        ))}
+        <View style={styles.gridStatusWrap}>{statusPill(row)}</View>
+        {rowHasContent(row) ? (
+          <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel="Duplicate row">
             <Feather name="copy" size={16} color={colors.primary} />
           </Pressable>
-        ) : null}
-        <Pressable onPress={() => removeRow(row.id)} hitSlop={8}>
+        ) : (
+          <View style={{ width: 16 }} />
+        )}
+        <Pressable onPress={() => removeRow(row.id)} hitSlop={8} accessibilityLabel="Delete row">
           <Feather name="trash-2" size={16} color={colors.mutedForeground} />
         </Pressable>
       </View>
@@ -594,74 +799,106 @@ export function ShopProductsAddManyScreen() {
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 140 + insets.bottom }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.lede}>
-          Type, paste from Excel, import a CSV, or scan barcodes. Photos stay on the single-product editor.
-        </Text>
+        <View style={styles.hero}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.lede}>
+              Type a name, scan a barcode, paste Excel, or import a CSV. A new blank row appears as you go.
+            </Text>
+          </View>
+          <View style={styles.statRow}>
+            <View style={[styles.statChip, readyRows.length ? styles.statChipReady : null]}>
+              <Text style={styles.statValue}>{readyRows.length}</Text>
+              <Text style={styles.statLabel}>ready</Text>
+            </View>
+            {incompleteCount ? (
+              <View style={[styles.statChip, styles.statChipWarn]}>
+                <Text style={styles.statValue}>{incompleteCount}</Text>
+                <Text style={styles.statLabel}>need name</Text>
+              </View>
+            ) : null}
+            {errorCount ? (
+              <View style={[styles.statChip, styles.statChipError]}>
+                <Text style={styles.statValue}>{errorCount}</Text>
+                <Text style={styles.statLabel}>errors</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
 
         <View style={styles.defaults}>
-          <View style={styles.row2}>
-            <Text style={[styles.sectionTitle, { flex: 1, marginBottom: 0 }]}>Shared defaults</Text>
-            <Button label="Copy last row" variant="ghost" size="sm" onPress={copyLastRow} />
-          </View>
-          <View style={styles.row2}>
-            <TextInput
-              value={defaults.gst_rate}
-              onChangeText={(value) => setDefaults((current) => ({ ...current, gst_rate: value }))}
-              placeholder="GST %"
-              keyboardType="decimal-pad"
-              style={[styles.input, { flex: 1 }]}
-              placeholderTextColor={colors.mutedForeground}
-            />
-            <TextInput
-              value={defaults.hsn_sac}
-              onChangeText={(value) => setDefaults((current) => ({ ...current, hsn_sac: value }))}
-              placeholder="HSN"
-              style={[styles.input, { flex: 1 }]}
-              placeholderTextColor={colors.mutedForeground}
-            />
-          </View>
-          <SelectField
-            label="Default category"
-            optional
-            value={defaults.category}
-            options={CATEGORY_OPTIONS}
-            onChange={(value) => setDefaults((current) => ({ ...current, category: value }))}
-            searchable
-          />
-          <SelectField
-            label="Default status"
-            required
-            value={defaults.status}
-            options={STATUS_OPTIONS}
-            onChange={(value) => setDefaults((current) => ({ ...current, status: value }))}
-          />
-          {godowns.length ? (
-            <SelectField
-              label="Stock godown"
-              optional
-              value={defaults.godown_id}
-              options={[{ value: '', label: 'Default' }, ...godowns.map((item) => ({ value: item.id, label: item.name }))]}
-              onChange={(value) => setDefaults((current) => ({ ...current, godown_id: value }))}
-            />
+          <Pressable style={styles.row2} onPress={() => setDefaultsOpen((open) => !open)}>
+            <Feather name="sliders" size={16} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Shared defaults</Text>
+              <Text style={styles.hint} numberOfLines={1}>
+                {defaultsSummary || 'GST, category, status, and godown for new rows'}
+              </Text>
+            </View>
+            <Feather name={defaultsOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
+          </Pressable>
+          {defaultsOpen ? (
+            <View>
+              <View style={[styles.row2, { marginTop: spacing.sm }]}>
+                <TextInput
+                  value={defaults.gst_rate}
+                  onChangeText={(value) => setDefaults((current) => ({ ...current, gst_rate: value }))}
+                  placeholder="GST %"
+                  keyboardType="decimal-pad"
+                  style={[styles.input, { flex: 1 }]}
+                  placeholderTextColor={colors.mutedForeground}
+                />
+                <TextInput
+                  value={defaults.hsn_sac}
+                  onChangeText={(value) => setDefaults((current) => ({ ...current, hsn_sac: value }))}
+                  placeholder="HSN"
+                  style={[styles.input, { flex: 1 }]}
+                  placeholderTextColor={colors.mutedForeground}
+                />
+              </View>
+              <SelectField
+                label="Default category"
+                optional
+                value={defaults.category}
+                options={CATEGORY_OPTIONS}
+                onChange={(value) => setDefaults((current) => ({ ...current, category: value }))}
+                searchable
+              />
+              <SelectField
+                label="Default status"
+                required
+                value={defaults.status}
+                options={STATUS_OPTIONS}
+                onChange={(value) => setDefaults((current) => ({ ...current, status: value }))}
+              />
+              {godowns.length ? (
+                <SelectField
+                  label="Stock godown"
+                  optional
+                  value={defaults.godown_id}
+                  options={[{ value: '', label: 'Default' }, ...godowns.map((item) => ({ value: item.id, label: item.name }))]}
+                  onChange={(value) => setDefaults((current) => ({ ...current, godown_id: value }))}
+                />
+              ) : null}
+            </View>
           ) : null}
-          <Text style={styles.hint}>Defaults fill empty cells on new, pasted, and imported rows.</Text>
         </View>
 
         <View style={styles.intake}>
           <View style={styles.row2}>
+            <Feather name="hash" size={16} color={colors.primary} />
             <TextInput
               value={scanCode}
               onChangeText={setScanCode}
-              placeholder="Scan or paste a barcode"
+              placeholder="Scan or paste a barcode, then Enter"
               style={[styles.input, { flex: 1 }]}
               placeholderTextColor={colors.mutedForeground}
               onSubmitEditing={() => void handleScan()}
             />
             <Button label="Add" variant="secondary" size="sm" loading={scanning} disabled={!scanCode.trim()} onPress={() => void handleScan()} />
           </View>
-          <View style={styles.row2}>
+          <View style={styles.intakeActions}>
             <Button
-              label="Scan camera"
+              label="Camera"
               variant="outline"
               size="sm"
               icon="camera"
@@ -672,11 +909,12 @@ export function ShopProductsAddManyScreen() {
             />
             {Platform.OS === 'web' ? (
               <>
-                <Button label="Import CSV" variant="outline" size="sm" onPress={() => void importCsv()} />
+                <Button label="Import CSV" variant="outline" size="sm" icon="upload" onPress={() => void importCsv()} />
                 <Button
                   label="Template"
                   variant="ghost"
                   size="sm"
+                  icon="download"
                   onPress={() => {
                     try {
                       downloadCsvTemplate();
@@ -688,38 +926,53 @@ export function ShopProductsAddManyScreen() {
                 />
               </>
             ) : null}
+            <Button
+              label={pasteOpen ? 'Hide paste' : 'Paste Excel'}
+              variant="ghost"
+              size="sm"
+              icon="clipboard"
+              onPress={() => setPasteOpen((open) => !open)}
+            />
           </View>
-          <TextInput
-            value={pasteText}
-            onChangeText={setPasteText}
-            placeholder="Paste Excel or CSV rows here"
-            multiline
-            style={[styles.input, styles.paste]}
-            placeholderTextColor={colors.mutedForeground}
-          />
-          <Button label="Load pasted rows" variant="secondary" disabled={!pasteText.trim()} onPress={applyPaste} />
+          {Platform.OS === 'web' ? (
+            <Text style={styles.hint}>
+              Template columns match this grid. Fill in Excel, then File → Save As → CSV UTF-8. Workbooks
+              (.xlsx) are not imported.
+            </Text>
+          ) : null}
+          {pasteOpen ? (
+            <>
+              <TextInput
+                value={pasteText}
+                onChangeText={setPasteText}
+                placeholder="Paste rows from Excel or Google Sheets"
+                multiline
+                style={[styles.input, styles.paste]}
+                placeholderTextColor={colors.mutedForeground}
+              />
+              <Button label="Load pasted rows" variant="secondary" disabled={!pasteText.trim()} onPress={applyPaste} />
+            </>
+          ) : null}
         </View>
 
         {isDesktop ? (
-          <ScrollView horizontal>
-            <View>
-              <View style={styles.gridHeader}>
-                <Text style={styles.gridIndex}>#</Text>
-                <Text style={styles.gridHead}>Name</Text>
-                <Text style={[styles.gridHead, { width: 228 }]}>Barcode</Text>
-                <Text style={styles.gridHead}>SKU</Text>
-                <Text style={styles.gridHead}>Brand</Text>
-                <Text style={styles.gridHead}>Pack</Text>
-                <Text style={styles.gridHead}>Price</Text>
-                <Text style={styles.gridHead}>GST</Text>
-                <Text style={styles.gridHead}>HSN</Text>
-                <Text style={styles.gridHead}>Stock</Text>
-                <Text style={[styles.gridHead, { width: 90 }]}>Row</Text>
-                <Text style={{ width: 24 }} />
+          <View style={styles.gridCard}>
+            <ScrollView horizontal>
+              <View>
+                <View style={styles.gridHeader}>
+                  <Text style={styles.gridIndex}>#</Text>
+                  {DESKTOP_COLUMNS.map((column) => (
+                    <Text key={column.key} style={[styles.gridHead, { width: column.width }]}>
+                      {column.label}
+                    </Text>
+                  ))}
+                  <Text style={[styles.gridHead, { width: 120 }]}>Status</Text>
+                  <Text style={{ width: 48 }} />
+                </View>
+                {rows.map(renderDesktopRow)}
               </View>
-              {rows.map(renderDesktopRow)}
-            </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         ) : (
           rows.map(renderRowCard)
         )}
@@ -732,15 +985,15 @@ export function ShopProductsAddManyScreen() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.footerMeta}>
-          {readyRows.length} ready
+          {readyRows.length} ready to save
           {catalogDupeCount ? ` · ${catalogDupeCount} already in catalog` : ''}
           {incompleteCount ? ` · ${incompleteCount} need a name` : ''}
           {errorCount ? ` · ${errorCount} errors` : ''}
         </Text>
         <Button
-          label="Save all"
+          label={readyRows.length ? `Save ${readyRows.length} product${readyRows.length === 1 ? '' : 's'}` : 'Save all'}
           loading={saving}
-          disabled={!canWrite || !businessId}
+          disabled={!canWrite || !businessId || !readyRows.length}
           onPress={() => void handleSave()}
         />
       </View>
@@ -750,11 +1003,26 @@ export function ShopProductsAddManyScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  lede: { color: colors.mutedForeground, fontSize: 14, marginBottom: spacing.md },
+  hero: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', marginBottom: spacing.md, flexWrap: 'wrap' },
+  lede: { color: colors.mutedForeground, fontSize: 14, lineHeight: 20 },
   sectionTitle: { fontFamily: fonts.bodySemi, fontSize: 14, color: colors.foreground, marginBottom: spacing.sm },
+  statRow: { flexDirection: 'row', gap: 8 },
+  statChip: {
+    minWidth: 64,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.muted,
+    alignItems: 'center',
+  },
+  statChipReady: { backgroundColor: colors.successSoft },
+  statChipWarn: { backgroundColor: colors.warningSoft },
+  statChipError: { backgroundColor: colors.destructiveSoft },
+  statValue: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.foreground },
+  statLabel: { fontSize: 11, color: colors.mutedForeground },
   defaults: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
@@ -763,55 +1031,116 @@ const styles = StyleSheet.create({
   },
   intake: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
+  intakeActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   hint: { color: colors.mutedForeground, fontSize: 12 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.md,
-    minHeight: 48,
+    minHeight: 44,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     color: colors.foreground,
     backgroundColor: colors.inputBackground,
   },
-  paste: { minHeight: 80, textAlignVertical: 'top' },
+  paste: { minHeight: 88, textAlignVertical: 'top' },
   row2: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  fieldGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  fieldCell: { flexGrow: 1, flexBasis: '46%', minWidth: 140 },
+  identityRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  thumb: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.muted, marginTop: 22 },
+  thumbPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.md,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 22,
+  },
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
-  cardError: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+  card_empty: {},
+  card_ready: { borderColor: '#A7F3D0', backgroundColor: '#F0FDF8' },
+  card_warn: { borderColor: '#FCD34D', backgroundColor: colors.warningSoft },
+  card_error: { borderColor: '#FECACA', backgroundColor: colors.destructiveSoft },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardIndex: { fontFamily: fonts.bodySemi, color: colors.mutedForeground },
-  cardStatus: { flex: 1, fontSize: 12, color: colors.mutedForeground },
-  cardStatusError: { color: colors.destructive },
-  gridHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 8 },
-  gridRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  gridIndex: { width: 28, color: colors.mutedForeground, fontSize: 12 },
-  gridHead: { width: 110, fontSize: 12, fontFamily: fonts.bodySemi, color: colors.mutedForeground },
+  indexBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardIndex: { fontFamily: fonts.bodySemi, color: colors.foreground, fontSize: 12 },
+  pill: { flex: 1, alignSelf: 'center', borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
+  pill_empty: { backgroundColor: colors.muted },
+  pill_ready: { backgroundColor: colors.successSoft },
+  pill_warn: { backgroundColor: '#FDE68A' },
+  pill_error: { backgroundColor: '#FECACA' },
+  pillText: { fontSize: 12, fontFamily: fonts.bodyMedium },
+  pillText_empty: { color: colors.mutedForeground },
+  pillText_ready: { color: colors.success },
+  pillText_warn: { color: colors.warning },
+  pillText_error: { color: colors.destructive },
+  gridCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  gridHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F3F6F8',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  gridRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  gridRowAlt: { backgroundColor: '#FAFCFD' },
+  gridIndex: { width: 28, color: colors.mutedForeground, fontSize: 12, textAlign: 'center' },
+  gridHead: { fontSize: 11, fontFamily: fonts.bodySemi, color: colors.mutedForeground, letterSpacing: 0.2 },
   gridInput: {
-    width: 110,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    color: colors.foreground,
+    backgroundColor: colors.field,
+  },
+  gridBarcode: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  gridStatusWrap: { width: 120 },
+  miniSelectFallback: {
+    minHeight: 40,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     paddingHorizontal: 8,
-    paddingVertical: 8,
-    color: colors.foreground,
-    backgroundColor: colors.inputBackground,
+    justifyContent: 'center',
+    backgroundColor: colors.field,
   },
-  gridBarcode: { width: 228, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  miniSelectText: { fontSize: 13, color: colors.foreground },
   iconBtn: {
     width: 40,
     height: 40,
@@ -822,7 +1151,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.card,
   },
-  gridStatus: { width: 90, fontSize: 12, color: colors.mutedForeground },
   lookupText: { color: colors.primary, fontSize: 12, fontFamily: fonts.bodySemi },
   footer: {
     position: 'absolute',

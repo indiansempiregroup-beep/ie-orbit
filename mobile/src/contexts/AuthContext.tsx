@@ -539,7 +539,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastName: input.last_name,
       });
       if (input.phone_number) {
-        await mobileClient.auth.patchMe({ phone_number: input.phone_number });
+        const response = await mobileClient.auth.patchMe({ phone_number: input.phone_number });
+        setUser(response.data);
+        userEmailRef.current = response.data.email?.trim() || null;
       }
     },
     [loginWithOtp],

@@ -36,6 +36,7 @@ from apps.businesses.models import (
     WhiteLabelProfile,
 )
 from apps.businesses.services.businesses import BusinessService
+from apps.businesses.constants import DEFAULT_TRIAL_DAYS
 from apps.businesses.services.product_billing import ProductBillingService
 from apps.businesses.services.white_label import ensure_white_label_profile
 from apps.customers.models import Customer, CustomerStatus
@@ -955,9 +956,9 @@ def _ensure_subscription(*, business: Business, product_code: str) -> BusinessPr
     subscription.plan = plan
     subscription.status = BusinessProductSubscriptionStatus.TRIALING
     subscription.billing_interval = str((plan_definition or {}).get("billing_interval") or "monthly")
-    subscription.trial_ends_at = now + timedelta(days=14)
+    subscription.trial_ends_at = now + timedelta(days=DEFAULT_TRIAL_DAYS)
     subscription.current_period_starts_at = now - timedelta(days=1)
-    subscription.current_period_ends_at = now + timedelta(days=14)
+    subscription.current_period_ends_at = now + timedelta(days=DEFAULT_TRIAL_DAYS)
     subscription.canceled_at = None
     subscription.save()
     return subscription

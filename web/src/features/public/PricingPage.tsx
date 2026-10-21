@@ -170,6 +170,7 @@ export function PricingPage() {
             </p>
             <div className="public-chip-row">
               <span className="public-chip">White-label customer app</span>
+              <span className="public-chip">AI assistant, automations, and invoice extraction on Pro</span>
               <span className="public-chip">No credit card to start</span>
               <span className="public-chip">{region === 'IN' ? 'UPI billing' : 'Card billing (USD)'}</span>
               <span className="public-chip">{yearlyCopy.chip}</span>

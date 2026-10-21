@@ -10,6 +10,12 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useAuth } from '../../contexts/AuthContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -57,6 +63,10 @@ export function DocumentActionsSheet({
   onNewBill,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.92,
+    visible && target?.id,
+  );
   const client = useOpsClient();
   const auth = useAuth();
   const { tenantId, activeBusiness } = useWorkspace();
@@ -225,8 +235,11 @@ export function DocumentActionsSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <View style={styles.handle} />
+      <ExpandableSheetView
+        onLayout={onSheetLayout}
+        style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }, sheetMotionStyle]}
+      >
+        <SheetHandle {...handleProps} tone="muted" />
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.kicker}>
@@ -265,7 +278,11 @@ export function DocumentActionsSheet({
           </View>
         ) : null}
 
-        <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ gap: 14 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={driven ? sheetBodyStyle : { maxHeight: 460 }}
+          contentContainerStyle={{ gap: 14 }}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Quick actions</Text>
             <View style={styles.actionGrid}>
@@ -350,13 +367,12 @@ export function DocumentActionsSheet({
               label="New bill"
               onPress={() => {
                 onNewBill?.();
-                onClose();
               }}
             />
           ) : null}
           <Button label="Done" variant="ghost" onPress={onClose} />
         </View>
-      </View>
+      </ExpandableSheetView>
     </Modal>
   );
 }
@@ -401,14 +417,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     gap: spacing.sm,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 999,
-    backgroundColor: colors.border,
-    marginBottom: 4,
   },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   headerText: { flex: 1, gap: 2 },

@@ -437,6 +437,8 @@ def test_purchase_voucher_updates_supplier_ledger_and_stock(shop_business: Busin
     assert voucher.total == Decimal("1180.00")
     product.refresh_from_db()
     assert product.stock_on_hand == Decimal("10")
+    assert product.purchase_price == Decimal("100")
+    assert product.avg_cost == Decimal("100")
 
     statement = books.party_statement(
         tenant=shop_business.tenant,
@@ -446,6 +448,84 @@ def test_purchase_voucher_updates_supplier_ledger_and_stock(shop_business: Busin
     )
     # opening 1000 + purchase 1180 - paid 500 = 1680 owed to supplier
     assert statement["closing_balance"] == "1680.00"
+
+
+@pytest.mark.django_db
+def test_apply_purchase_payment_marks_bill_and_void_restores_cash(shop_business: Business) -> None:
+    supplier = SupplierService().create_supplier(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={"name": "Acme Supplies"},
+    )
+    bank = ShopCashAccount.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Bank",
+        account_type=CashAccountType.BANK,
+        opening_balance=Decimal("2000"),
+        current_balance=Decimal("2000"),
+    )
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Widget",
+        price=Decimal("100"),
+        gst_rate=Decimal("18"),
+    )
+    books = BooksService()
+    voucher = books.create_purchase_voucher(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        data={
+            "supplier": supplier,
+            "lines": [{"product_id": product.id, "qty": "10", "rate": "100", "gst_rate": "18"}],
+            "amount_paid": "0",
+        },
+    )
+    assert voucher.amount_paid == Decimal("0.00")
+    assert voucher.total == Decimal("1180.00")
+
+    paid = books.apply_purchase_payment(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher=voucher,
+        data={"amount": "200", "cash_account_id": bank.id, "notes": "Partial"},
+    )
+    assert paid.amount_paid == Decimal("200.00")
+    bank.refresh_from_db()
+    assert bank.current_balance == Decimal("1800.00")
+
+    statement = books.party_statement(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        party_kind="supplier",
+        party_id=supplier.id,
+    )
+    assert statement["closing_balance"] == "980.00"
+    assert any(entry.voucher_id == voucher.id for entry in statement["entries"])
+
+    with pytest.raises(ValidationError):
+        books.apply_purchase_payment(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            voucher=paid,
+            data={"amount": "9999", "cash_account_id": bank.id},
+        )
+
+    settled = books.apply_purchase_payment(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        voucher=paid,
+        data={"amount": "980", "cash_account_id": bank.id},
+    )
+    assert settled.amount_paid == Decimal("1180.00")
+    bank.refresh_from_db()
+    assert bank.current_balance == Decimal("820.00")
+
+    voided = books.void_voucher(tenant=shop_business.tenant, business=shop_business, voucher=settled)
+    assert voided.status == "void"
+    bank.refresh_from_db()
+    assert bank.current_balance == Decimal("2000.00")
 
 
 @pytest.mark.django_db

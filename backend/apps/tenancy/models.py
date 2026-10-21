@@ -213,6 +213,7 @@ class TenantSettings(TenantModel):
     language = models.CharField(max_length=16, default="en")
     notification_defaults = models.JSONField(default=dict, blank=True)
     security_preferences = models.JSONField(default=dict, blank=True)
+    role_menus = models.JSONField(default=dict, blank=True)
 
     class Meta(TenantModel.Meta):
         db_table = "tenant_settings"

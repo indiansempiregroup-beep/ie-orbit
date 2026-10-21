@@ -159,6 +159,7 @@ class BookingSerializer(serializers.ModelSerializer):
     service_label = serializers.SerializerMethodField()
     books_voucher_id = serializers.SerializerMethodField()
     books_voucher_number = serializers.SerializerMethodField()
+    loyalty = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -198,6 +199,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "review",
             "books_voucher_id",
             "books_voucher_number",
+            "loyalty",
             "created_at",
             "updated_at",
             "is_active",
@@ -219,6 +221,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "review",
             "books_voucher_id",
             "books_voucher_number",
+            "loyalty",
             "created_at",
             "updated_at",
             "is_active",
@@ -248,6 +251,58 @@ class BookingSerializer(serializers.ModelSerializer):
     def get_books_voucher_number(self, obj: Booking) -> str | None:
         voucher = self._books_voucher(obj)
         return voucher.voucher_number if voucher is not None else None
+
+    def get_loyalty(self, obj: Booking) -> dict:
+        meta = obj.metadata if isinstance(obj.metadata, dict) else {}
+        snap = dict(meta.get("loyalty") or {}) if isinstance(meta.get("loyalty"), dict) else {}
+        remaining = int(snap.get("points_earned") or 0)
+        reversed_pts = int(snap.get("points_reversed") or snap.get("points_revoked") or 0)
+        redeemed = int(snap.get("points_redeemed") or 0)
+        # List views stay on the stamped snapshot to avoid N+1 ledger queries.
+        if getattr(self.parent, "many", False):
+            return {
+                "points_earned": max(0, remaining + reversed_pts),
+                "points_reversed": max(0, reversed_pts),
+                "points_redeemed": max(0, redeemed),
+                "points_redeem_refunded": int(snap.get("points_redeem_refunded") or 0),
+                "remaining_earned": max(0, remaining),
+                "discount_amount": snap.get("discount_amount"),
+                "reversal_reason": str(snap.get("reversal_reason") or ""),
+                "earn_reversed": bool(snap.get("earn_reversed")),
+                "refunded": bool(snap.get("refunded")),
+            }
+        try:
+            from apps.customers.services.loyalty import LoyaltyService
+
+            summary = LoyaltyService().document_points_summary(
+                tenant=obj.tenant, booking_id=obj.id
+            )
+            if summary["points_earned"] or summary["points_reversed"] or summary["points_redeemed"]:
+                return {
+                    "points_earned": summary["points_earned"],
+                    "points_reversed": summary["points_reversed"],
+                    "points_redeemed": summary["points_redeemed"],
+                    "points_redeem_refunded": summary["points_redeem_refunded"],
+                    "remaining_earned": summary["remaining_earned"],
+                    "discount_amount": snap.get("discount_amount"),
+                    "reversal_reason": summary["reversal_reason"]
+                    or str(snap.get("reversal_reason") or ""),
+                    "earn_reversed": bool(snap.get("earn_reversed") or summary["points_reversed"]),
+                    "refunded": bool(snap.get("refunded")),
+                }
+        except Exception:
+            pass
+        return {
+            "points_earned": max(0, remaining + reversed_pts),
+            "points_reversed": max(0, reversed_pts),
+            "points_redeemed": max(0, redeemed),
+            "points_redeem_refunded": int(snap.get("points_redeem_refunded") or 0),
+            "remaining_earned": max(0, remaining),
+            "discount_amount": snap.get("discount_amount"),
+            "reversal_reason": str(snap.get("reversal_reason") or ""),
+            "earn_reversed": bool(snap.get("earn_reversed")),
+            "refunded": bool(snap.get("refunded")),
+        }
 
     def get_customer_name(self, obj: Booking) -> str:
         customer_map = self.context.get("customer_map") or {}

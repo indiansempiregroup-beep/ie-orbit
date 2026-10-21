@@ -10,6 +10,7 @@ import { MenuSection } from '../../components/ui/MenuSection';
 import { useAuth } from '../../contexts/AuthContext';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
 import { canManageTeam } from '../../utils/roles';
+import { useRoleMenus } from '../../hooks/useOpsExtended';
 import { spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -17,7 +18,9 @@ export function SettingsScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { canManage } = useRoleMenus();
   const showTeam = canManageTeam(user);
+  const showRoleMenus = canManage;
 
   useLayoutEffect(() => {
     setStackSubtitle(navigation, t('settings.workspaceConfig'));
@@ -67,10 +70,19 @@ export function SettingsScreen() {
           {showTeam ? (
             <MenuRow
               icon="users"
-              label="Sync & share"
+              label="Team"
               subtitle="Team users, roles & invitations"
-              last
+              last={!showRoleMenus}
               onPress={() => navigation.navigate('Team')}
+            />
+          ) : null}
+          {showRoleMenus ? (
+            <MenuRow
+              icon="grid"
+              label="Role menus"
+              subtitle="Choose which menus each role can see"
+              last
+              onPress={() => navigation.navigate('RoleMenus')}
             />
           ) : null}
         </MenuSection>

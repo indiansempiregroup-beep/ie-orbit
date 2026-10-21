@@ -87,6 +87,14 @@ class BorrowService:
         if amount_due <= 0:
             raise ValidationError({"amount": "Borrow charge must be greater than zero."})
         account = self.ensure_account(tenant=tenant, business=business, customer=customer)
+        already = CustomerBorrowLedger.objects.filter(
+            tenant=tenant,
+            customer=customer,
+            order_id=order_id,
+            entry_type=BorrowLedgerEntryType.CHARGE,
+        ).exists()
+        if already:
+            return account
         if currency:
             account.currency = currency
         account.balance_due = (Decimal(account.balance_due) + amount_due).quantize(Decimal("0.01"))
@@ -301,3 +309,160 @@ class BorrowService:
             remaining = (remaining - applied).quantize(Decimal("0.01"))
 
         return allocations
+
+    def order_open_amount(
+        self,
+        *,
+        tenant: Tenant,
+        customer: Customer,
+        order_id: UUID | str,
+    ) -> Decimal:
+        net = Decimal("0.00")
+        for row in CustomerBorrowLedger.objects.filter(
+            tenant=tenant, customer=customer, order_id=order_id
+        ):
+            amount = Decimal(str(row.amount or "0")).quantize(Decimal("0.01"))
+            if row.entry_type == BorrowLedgerEntryType.CHARGE:
+                net += amount
+            else:
+                net -= amount
+        return max(Decimal("0.00"), net).quantize(Decimal("0.01"))
+
+    @transaction.atomic
+    def reconcile_order(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        customer: Customer,
+        order,
+    ) -> CustomerBorrowAccount:
+        """Close leftover credit when a bill was never credit, or was later collected."""
+        account = self.ensure_account(tenant=tenant, business=business, customer=customer)
+        if order is None or getattr(order, "id", None) is None:
+            return account
+        open_amount = self.order_open_amount(
+            tenant=tenant, customer=customer, order_id=order.id
+        )
+        if open_amount <= 0:
+            return account
+
+        metadata = order.metadata if isinstance(getattr(order, "metadata", None), dict) else {}
+        pos = metadata.get("pos") if isinstance(metadata.get("pos"), dict) else {}
+        method = str(pos.get("payment_method") or "").strip().lower()
+        status = str(pos.get("payment_status") or "").strip().lower()
+        try:
+            due = Decimal(str(pos.get("amount_due") if pos.get("amount_due") is not None else "0"))
+        except Exception:
+            due = Decimal("0.00")
+        due = due.quantize(Decimal("0.01"))
+        charge_total = sum(
+            (
+                Decimal(str(row.amount or "0"))
+                for row in CustomerBorrowLedger.objects.filter(
+                    tenant=tenant,
+                    customer=customer,
+                    order_id=order.id,
+                    entry_type=BorrowLedgerEntryType.CHARGE,
+                )
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        mode = str(getattr(order, "fulfillment_mode", "") or "").strip().lower()
+        total = Decimal(str(getattr(order, "total", "0") or "0")).quantize(Decimal("0.01"))
+        is_true_credit = method == "borrow" or (
+            mode == "pos" and method in {"cash", "upi", "card"} and charge_total < total
+        )
+        collected = status in {"paid", "settled"} or due <= 0
+        number = str(getattr(order, "order_number", "") or "")
+        if is_true_credit and not collected:
+            return account
+
+        return self._credit_open_amount(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            amount=open_amount,
+            order_id=order.id,
+            order_number=number,
+            notes=(
+                f"Collected on {number}"
+                if is_true_credit
+                else f"Not credit · {method or 'sale'} {number}"
+            ).strip(),
+            metadata={
+                "source": "reconcile_collected" if is_true_credit else "reconcile_non_credit",
+                "payment_method": method,
+            },
+        )
+
+    @transaction.atomic
+    def reconcile_customer(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        customer: Customer,
+    ) -> None:
+        from apps.shopie.models import ShopOrder
+
+        order_ids = list(
+            CustomerBorrowLedger.objects.filter(
+                tenant=tenant,
+                customer=customer,
+                entry_type=BorrowLedgerEntryType.CHARGE,
+            )
+            .exclude(order_id=None)
+            .values_list("order_id", flat=True)
+            .distinct()
+        )
+        if not order_ids:
+            return
+        orders = {
+            order.id: order
+            for order in ShopOrder.objects.filter(tenant=tenant, id__in=order_ids)
+        }
+        for order_id in order_ids:
+            order = orders.get(order_id)
+            if order is None:
+                continue
+            self.reconcile_order(
+                tenant=tenant, business=business, customer=customer, order=order
+            )
+
+    def _credit_open_amount(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        customer: Customer,
+        amount: Decimal,
+        order_id: UUID | str | None,
+        order_number: str,
+        notes: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> CustomerBorrowAccount:
+        credit = Decimal(str(amount or "0")).quantize(Decimal("0.01"))
+        account = self.ensure_account(tenant=tenant, business=business, customer=customer)
+        if credit <= 0:
+            return account
+        balance = Decimal(account.balance_due).quantize(Decimal("0.01"))
+        applied = min(credit, balance).quantize(Decimal("0.01"))
+        if applied <= 0:
+            return account
+        account.balance_due = (balance - applied).quantize(Decimal("0.01"))
+        account.save(update_fields=["balance_due", "updated_at"])
+        CustomerBorrowLedger.objects.create(
+            tenant=tenant,
+            business=business,
+            customer=customer,
+            account=account,
+            entry_type=BorrowLedgerEntryType.ADJUSTMENT,
+            amount=applied,
+            balance_after=account.balance_due,
+            notes=notes[:255],
+            order_id=order_id,
+            order_number=order_number or "",
+            metadata=metadata or {},
+        )
+        return account

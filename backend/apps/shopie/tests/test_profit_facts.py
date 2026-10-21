@@ -16,6 +16,7 @@ from apps.shopie.models import (
 from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.orders import OrderService
 from apps.shopie.services.returns import ReturnService
+from apps.staff.models import EmploymentStatus, Staff
 from apps.tenancy.models import Organization, Tenant
 
 
@@ -369,3 +370,104 @@ def test_inclusive_gst_uses_shelf_profit_and_tracks_tax(
     assert Decimal(insights["summary"]["sales_revenue"]) == Decimal("100.00")
     assert Decimal(insights["summary"]["gst_collected"]) == Decimal("15.25")
     assert Decimal(insights["summary"]["gst_to_remit"]) == Decimal("15.25")
+
+
+@pytest.mark.django_db
+def test_profit_insights_filter_by_staff(profit_ctx: tuple[Tenant, Business, Customer]) -> None:
+    tenant, business, customer = profit_ctx
+    catalog = CatalogService()
+    orders = OrderService()
+    cashier_user = User.objects.create_user(
+        email="profit-cashier@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    other_user = User.objects.create_user(
+        email="profit-other-cashier@example.com",
+        password="ValidPass123",
+        status=UserStatus.ACTIVE,
+    )
+    cashier = Staff.objects.create(
+        tenant=tenant,
+        business=business,
+        user=cashier_user,
+        staff_code="cashier-1",
+        first_name="Cash",
+        last_name="Ier",
+        display_name="Cashier One",
+        employment_status=EmploymentStatus.ACTIVE,
+        is_bookable=False,
+    )
+    Staff.objects.create(
+        tenant=tenant,
+        business=business,
+        user=other_user,
+        staff_code="cashier-2",
+        first_name="Other",
+        last_name="Till",
+        display_name="Cashier Two",
+        employment_status=EmploymentStatus.ACTIVE,
+        is_bookable=False,
+    )
+    product = catalog.create_product(
+        tenant=tenant,
+        business=business,
+        data={
+            "name": "Staff Filter Soap",
+            "price": "100.00",
+            "purchase_price": "80.00",
+            "stock_on_hand": "20",
+        },
+    )
+    cashier_order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": product.id, "quantity": "1", "unit_price": "100.00"}],
+        confirm=True,
+        created_by_user_id=cashier_user.id,
+    )
+    other_order = orders.create_order(
+        tenant=tenant,
+        business=business,
+        customer=customer,
+        fulfillment_mode=FulfillmentMode.POS,
+        lines=[{"product_id": product.id, "quantity": "1", "unit_price": "100.00"}],
+        confirm=True,
+        created_by_user_id=other_user.id,
+    )
+    assert cashier_order.created_by == cashier_user.id
+    assert other_order.created_by == other_user.id
+
+    day = cashier_order.created_at.date().isoformat()
+    all_staff = catalog.product_profit_insights(
+        tenant=tenant,
+        business=business,
+        date_from=day,
+        date_to=day,
+        channel="pos",
+        include_catalog=False,
+    )
+    cashier_only = catalog.product_profit_insights(
+        tenant=tenant,
+        business=business,
+        date_from=day,
+        date_to=day,
+        channel="pos",
+        include_catalog=False,
+        staff_id=cashier.id,
+    )
+    unknown = catalog.product_profit_insights(
+        tenant=tenant,
+        business=business,
+        date_from=day,
+        date_to=day,
+        channel="pos",
+        include_catalog=False,
+        staff_id="00000000-0000-0000-0000-000000000000",
+    )
+    assert Decimal(all_staff["summary"]["gross_profit"]) == Decimal("40.00")
+    assert Decimal(cashier_only["summary"]["gross_profit"]) == Decimal("20.00")
+    assert Decimal(unknown["summary"]["gross_profit"]) == Decimal("0.00")
+    assert cashier_only["summary"]["order_count"] == 1

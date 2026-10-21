@@ -492,6 +492,71 @@ def test_inactive_staff_has_no_slots(api_client: APIClient, user: User) -> None:
 
 
 @pytest.mark.django_db
+def test_staff_without_weekly_schedule_uses_business_hours(
+    api_client: APIClient, user: User
+) -> None:
+    access = authenticate(api_client, user)
+    tenant_id = create_tenant(api_client)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}", HTTP_X_TENANT_ID=tenant_id)
+    business_id = create_business(api_client)
+    business = Business.objects.get(id=business_id)
+    day = _future_day_start(9)
+    schedule = BusinessSchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        name="Default",
+        is_default=True,
+    )
+    BusinessWeeklySchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        schedule=schedule,
+        weekday=day.date().weekday(),
+        opening_time=time(9, 0),
+        closing_time=time(17, 0),
+    )
+    unscheduled = create_active_staff(tenant_id=tenant_id, business=business, code="unscheduled")
+    day_off = create_active_staff(tenant_id=tenant_id, business=business, code="day-off")
+    StaffWeeklySchedule.objects.create(
+        tenant_id=tenant_id,
+        business=business,
+        staff_id=day_off.id,
+        weekday=day.date().weekday(),
+        is_available=False,
+        shift_start=time(9, 0),
+        shift_end=time(17, 0),
+    )
+
+    open_response = api_client.get(
+        reverse("availability"),
+        {
+            "business": business_id,
+            "staff_id": str(unscheduled.id),
+            "date": day.date().isoformat(),
+            "duration_minutes": 30,
+            "interval_minutes": 30,
+        },
+    )
+    closed_response = api_client.get(
+        reverse("availability"),
+        {
+            "business": business_id,
+            "staff_id": str(day_off.id),
+            "date": day.date().isoformat(),
+            "duration_minutes": 30,
+            "interval_minutes": 30,
+        },
+    )
+
+    assert open_response.status_code == 200
+    starts = [slot["start_at"] for slot in open_response.json()["data"]]
+    assert any(day.replace(hour=9).isoformat()[:16] in value for value in starts)
+    assert not any(day.replace(hour=8).isoformat()[:16] in value for value in starts)
+    assert closed_response.status_code == 200
+    assert closed_response.json()["data"] == []
+
+
+@pytest.mark.django_db
 def test_break_period_removes_mid_shift_slots(api_client: APIClient, user: User) -> None:
     access = authenticate(api_client, user)
     tenant_id = create_tenant(api_client)

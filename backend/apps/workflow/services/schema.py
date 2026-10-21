@@ -13,6 +13,13 @@ ALLOWED_TRIGGERS = {
     "checkout.quote",
     "booking.quote",
     "calendar.date",
+    "inventory.low_stock",
+    "order.completed",
+    "order.payment_received",
+    "booking.no_show",
+    "books.overdue",
+    "quotation.followup",
+    "loyalty.milestone",
 }
 
 

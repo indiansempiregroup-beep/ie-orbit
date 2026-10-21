@@ -3,10 +3,12 @@ from __future__ import annotations
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.common.api.responses import success_response
 from apps.tenancy.api.permissions import HasTenantContext, IsTenantOwnerOrPlatformAdmin
@@ -18,6 +20,11 @@ from apps.tenancy.api.serializers import (
 from apps.tenancy.models import Organization, Tenant, TenantSettings
 from apps.tenancy.repositories import TenantRepository
 from apps.tenancy.services import TenantService
+from apps.tenancy.services.role_menus import (
+    save_role_menus,
+    serialize_role_menus,
+    validate_enabled_payload,
+)
 
 
 @extend_schema_view(
@@ -200,5 +207,69 @@ class TenantSettingsView(GenericAPIView):
         serializer.save()
         return success_response(
             TenantSettingsSerializer(settings).data,
+            request_id=getattr(request, "request_id", None),
+        )
+
+
+def _request_role_codes(request: Request) -> list[str]:
+    user = request.user
+    if not user or not user.is_authenticated:
+        return []
+    codes = list(user.user_roles.filter(role__is_active=True).values_list("role__code", flat=True))
+    tenant = getattr(request, "current_tenant", None)
+    # Global business_owner must not bleed into another tenant's resolved menus.
+    if tenant is not None and tenant.owner_id != user.id:
+        codes = [code for code in codes if code != "business_owner"]
+    return codes
+
+
+def _can_manage_role_menus(request: Request) -> bool:
+    user = request.user
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    tenant = getattr(request, "current_tenant", None)
+    if tenant and tenant.owner_id == user.id:
+        return True
+    return user.user_roles.filter(
+        role__is_active=True,
+        role__code__in={"platform_admin", "super_admin"},
+    ).exists()
+
+
+class RoleMenusView(APIView):
+    permission_classes = [IsAuthenticated, HasTenantContext]
+
+    @extend_schema(
+        tags=["Tenant Settings"],
+        description="Menus enabled for each workspace role, plus the catalog and current user's resolved set.",
+    )
+    def get(self, request: Request) -> Response:
+        settings = TenantRepository().tenant_settings(request.current_tenant)
+        payload = serialize_role_menus(settings, role_codes=_request_role_codes(request))
+        payload["can_manage"] = _can_manage_role_menus(request)
+        return success_response(
+            payload,
+            request_id=getattr(request, "request_id", None),
+        )
+
+    @extend_schema(
+        tags=["Tenant Settings"],
+        description="Business owners set which menus each role can see. Plan and permission gates still apply.",
+    )
+    def put(self, request: Request) -> Response:
+        if not _can_manage_role_menus(request):
+            raise PermissionDenied("Only the business owner can change role menus.")
+        payload = request.data.get("enabled", request.data)
+        enabled = validate_enabled_payload(payload)
+        if not enabled:
+            raise ValidationError({"enabled": "Provide at least one role to update."})
+        settings = TenantRepository().tenant_settings(request.current_tenant)
+        save_role_menus(settings, enabled)
+        payload = serialize_role_menus(settings, role_codes=_request_role_codes(request))
+        payload["can_manage"] = True
+        return success_response(
+            payload,
             request_id=getattr(request, "request_id", None),
         )

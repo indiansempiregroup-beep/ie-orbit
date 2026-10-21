@@ -191,6 +191,11 @@ class AuthOtpService:
         if purpose == "login":
             user = self._resolve_user(channel=channel, identifier=identifier)
             if user is None:
+                pending_message = self._pending_invite_login_message(
+                    client=client, channel=channel, identifier=identifier
+                )
+                if pending_message:
+                    raise exceptions.ValidationError({"identifier": pending_message})
                 if channel == "whatsapp":
                     raise exceptions.ValidationError(
                         {
@@ -207,6 +212,11 @@ class AuthOtpService:
                     "This account is disabled. Contact support if you need access."
                 )
             if client == "ops" and not self.auth_service._user_has_ops_workspace(user):
+                pending_message = self._pending_invite_login_message(
+                    client=client, channel=channel, identifier=identifier
+                )
+                if pending_message:
+                    raise exceptions.ValidationError({"identifier": pending_message})
                 raise exceptions.ValidationError(
                     {
                         "identifier": (
@@ -316,6 +326,11 @@ class AuthOtpService:
 
         user = self._resolve_user(channel=channel, identifier=identifier)
         if user is None:
+            pending_message = self._pending_invite_login_message(
+                client=client, channel=channel, identifier=identifier
+            )
+            if pending_message:
+                raise exceptions.ValidationError({"identifier": pending_message})
             if not create_if_missing:
                 raise exceptions.ValidationError(
                     {"identifier": "No account found. Create an account or use a different email."}
@@ -340,6 +355,11 @@ class AuthOtpService:
             )
 
         if client == "ops" and not self.auth_service._user_has_ops_workspace(user):
+            pending_message = self._pending_invite_login_message(
+                client=client, channel=channel, identifier=identifier
+            )
+            if pending_message:
+                raise exceptions.ValidationError({"identifier": pending_message})
             raise exceptions.ValidationError(
                 {"identifier": "This account is not set up for OPS. Accept your invitation or create a business."}
             )
@@ -419,6 +439,17 @@ class AuthOtpService:
             raise exceptions.ValidationError(
                 {"identifier": customer_login_missing_message(channel=channel)}
             )
+
+    def _pending_invite_login_message(
+        self, *, client: str, channel: str, identifier: str
+    ) -> str | None:
+        if client != "ops":
+            return None
+        from apps.staff.services.invitations import PENDING_INVITE_LOGIN_MESSAGE, pending_invitation_for_login
+
+        if pending_invitation_for_login(channel=channel, identifier=identifier):
+            return PENDING_INVITE_LOGIN_MESSAGE
+        return None
 
     def _resolve_user(self, *, channel: str, identifier: str) -> User | None:
         if channel == "email":

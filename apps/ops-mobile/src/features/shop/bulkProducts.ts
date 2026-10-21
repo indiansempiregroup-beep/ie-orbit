@@ -21,6 +21,22 @@ export const BULK_GRID_COLUMNS = [
 
 export type BulkGridColumn = (typeof BULK_GRID_COLUMNS)[number];
 
+/** Headers in the downloadable CSV — same labels as the Add many form. */
+export const CSV_TEMPLATE_HEADERS: Record<BulkGridColumn, string> = {
+  name: 'Name',
+  barcode: 'Barcode',
+  sku: 'SKU',
+  brand: 'Brand',
+  pack_size: 'Pack size',
+  category: 'Category',
+  price: 'Price',
+  purchase_price: 'Cost',
+  gst_rate: 'GST %',
+  hsn_sac: 'HSN',
+  stock_on_hand: 'Stock',
+  status: 'Status',
+};
+
 export type BulkProductDefaults = {
   gst_rate: string;
   hsn_sac: string;
@@ -69,6 +85,7 @@ const COLUMN_ALIASES: Record<string, BulkGridColumn> = {
   mrp: 'price',
   selling_price: 'price',
   purchase_price: 'purchase_price',
+  purchase: 'purchase_price',
   cost: 'purchase_price',
   cost_price: 'purchase_price',
   buy_price: 'purchase_price',
@@ -78,6 +95,7 @@ const COLUMN_ALIASES: Record<string, BulkGridColumn> = {
   tax_rate: 'gst_rate',
   hsn_sac: 'hsn_sac',
   hsn: 'hsn_sac',
+  hsn_code: 'hsn_sac',
   sac: 'hsn_sac',
   stock_on_hand: 'stock_on_hand',
   stock: 'stock_on_hand',
@@ -291,13 +309,41 @@ export function chunkRows<T>(items: T[], size = BULK_SAVE_CHUNK): T[][] {
 }
 
 function normalizeHeader(value: string): string {
-  return value.trim().toLowerCase().replace(/[%#]/g, '').replace(/[\s-/]+/g, '_');
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[%#]/g, '')
+    .replace(/[\s-/]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+function detectDelimiter(source: string): string {
+  if (source.includes('\t')) return '\t';
+  const firstLine = source.split('\n')[0] || '';
+  const commas = (firstLine.match(/,/g) || []).length;
+  const semis = (firstLine.match(/;/g) || []).length;
+  return semis > commas ? ';' : ',';
+}
+
+export function assertCsvImport(fileName: string, text: string): void {
+  const name = fileName.trim().toLowerCase();
+  if (name.endsWith('.xlsx') || name.endsWith('.xls') || text.startsWith('PK') || text.includes('\u0000')) {
+    throw new Error(
+      'Excel workbook (.xlsx) cannot be imported directly. In Excel use File → Save As → CSV UTF-8, then import that file.',
+    );
+  }
+}
+
+function csvCell(value: string): string {
+  if (/[",\n;]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
 }
 
 export function parseDelimitedTable(text: string): string[][] {
   const source = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (!source.trim()) return [];
-  const delimiter = source.includes('\t') ? '\t' : ',';
+  const delimiter = detectDelimiter(source);
   const rows: string[][] = [];
   let current = '';
   let row: string[] = [];
@@ -377,7 +423,24 @@ export function mergePartialRow(
 }
 
 export function csvTemplate(): string {
-  return `${BULK_GRID_COLUMNS.join(',')}\nRice 5kg,8901234567890,RICE-5,India Gate,5kg,food_grocery,249,180,5,1006,20,active\n`;
+  const headers = BULK_GRID_COLUMNS.map((column) => csvCell(CSV_TEMPLATE_HEADERS[column])).join(',');
+  const sample = [
+    'Rice 5kg',
+    '8901234567890',
+    'RICE-5',
+    'India Gate',
+    '5kg',
+    'Food & grocery',
+    '249',
+    '180',
+    '5',
+    '1006',
+    '20',
+    'active',
+  ]
+    .map(csvCell)
+    .join(',');
+  return `\uFEFF${headers}\n${sample}\n`;
 }
 
 export function downloadCsvTemplate() {
@@ -402,14 +465,20 @@ export function pickCsvFile(): Promise<string> {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.csv,text/csv,text/plain';
+    input.accept = '.csv,.tsv,text/csv,text/plain';
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) {
         reject(new Error('No file selected.'));
         return;
       }
-      void file.text().then(resolve).catch(reject);
+      void file
+        .text()
+        .then((text) => {
+          assertCsvImport(file.name, text);
+          resolve(text);
+        })
+        .catch(reject);
     };
     input.click();
   });

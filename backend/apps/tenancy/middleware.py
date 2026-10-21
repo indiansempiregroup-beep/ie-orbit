@@ -22,6 +22,9 @@ class TenantResolutionMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         result = self.resolver.resolve(request)
+        # Header/domain resolution skips JWT fallback; bind the user before freezing context
+        # so current_user() / created_by stamps work on API requests.
+        resolve_authenticated_user(request)
         organization = (
             self.repository.default_organization(result.tenant) if result.tenant else None
         )

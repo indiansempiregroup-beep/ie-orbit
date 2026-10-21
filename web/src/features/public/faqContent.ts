@@ -63,6 +63,34 @@ export const faqSections: FaqSection[] = [
     ],
   },
   {
+    title: 'AI in the workspace',
+    description: 'Assistant, automations, and supplier-bill extraction.',
+    items: [
+      {
+        q: 'What is the AI Assistant?',
+        a: {
+          paragraphs: [
+            'The Business Assistant lets owners and staff ask about bookings, orders, stock, and customers in plain language. A change does not run until you confirm it.',
+            'A free daily allowance comes first. Extra messages and confirms use the Assistant wallet. Business Assistant is on Pro for Orbit Appoint and Orbit Mart, and on the 45-day full-Pro trial.',
+          ],
+        },
+      },
+      {
+        q: 'What is Automation Creator?',
+        a: {
+          paragraphs: [
+            'Describe a birthday offer, an occasion, or a VIP rule in your own words. Orbit drafts the automation so you can preview it and turn it on.',
+            'Orbit Mart can apply discounts. Orbit Appoint can send reminders and hint offers to staff. Automation Creator is on Pro and during the 45-day full-Pro trial. Drafts use the prepaid AI wallet.',
+          ],
+        },
+      },
+      {
+        q: 'What is AI invoice extraction?',
+        a: 'On Orbit Mart Pro — and during the 45-day full-Pro trial — photograph a supplier bill. Review the extracted lines, prices, and GST, then post a purchase that adds stock. Each scan uses the prepaid AI wallet.',
+      },
+    ],
+  },
+  {
     title: 'Orbit Appoint',
     description: 'Bookings, calendar, staff, and customers.',
     items: [
@@ -79,6 +107,8 @@ export const faqSections: FaqSection[] = [
             'Second office, payments, and an ad-free customer app on Pro',
             'Business intelligence on Starter (Overview) and full BI on Pro',
             'Customer reward points on Pro (earn and redeem)',
+            'AI Assistant for plain-language questions about bookings and customers',
+            'Automation Creator on Pro for reminders and staff offer hints',
           ],
         },
       },
@@ -102,6 +132,8 @@ export const faqSections: FaqSection[] = [
             'White-label customer app so shoppers browse and order under your brand',
             'Starter: POS, catalog, online orders, returns, sales bills, parties, cash, expenses, and stock — one location, two staff (add 1 extra staff)',
             'Pro: Instant Delivery with Porter/Shiprocket, purchases, GST reports, e-invoice, e-way bill, Grow WhatsApp / Google, loyalty, payment gateways, and a second office',
+            'AI invoice extraction on Pro: photograph a supplier bill, review the lines, then add stock',
+            'Automation Creator on Pro for birthday, occasion, and VIP discounts',
             'Pets pack remains an optional monthly add-on on Orbit Mart',
           ],
         },

@@ -1,15 +1,14 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -18,7 +17,9 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
+import { FormHero } from '../../components/FormHero';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
@@ -31,6 +32,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { useAuth } from '../../contexts/AuthContext';
+import { confirmAction } from '../../utils/confirmAction';
 import { getApiErrorMessage } from '../../utils/format';
 import type { Customer, ShopProduct, ShopQuotation } from '@ie-orbit/sdk';
 import {
@@ -41,6 +43,7 @@ import {
   todayIso,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
+import { QuotationDetailModal } from './QuotationDetailModal';
 
 type QuoteLine = {
   key: string;
@@ -62,15 +65,48 @@ function emptyLine(): QuoteLine {
   };
 }
 
+const STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'expired', label: 'Expired' },
+];
+
 function canConvert(quotation: ShopQuotation) {
   if (quotation.converted_order) return false;
   const status = (quotation.status || '').toLowerCase();
-  return status !== 'converted' && status !== 'cancelled' && status !== 'void';
+  return status !== 'converted' && status !== 'cancelled' && status !== 'void' && status !== 'rejected' && status !== 'expired';
+}
+
+function canEdit(quotation: ShopQuotation) {
+  const status = (quotation.status || '').toLowerCase();
+  return status !== 'converted' && !quotation.converted_order;
+}
+
+function linesFromQuotation(quote: ShopQuotation): QuoteLine[] {
+  const items = Array.isArray(quote.line_items) ? quote.line_items : [];
+  const mapped = items
+    .map((raw) => {
+      const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+      return {
+        key: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        productId: String(line.product_id || line.product || ''),
+        name: String(line.name || ''),
+        qty: String(line.quantity ?? line.qty ?? '1'),
+        rate: String(line.unit_price ?? line.rate ?? '0'),
+        gst: String(line.tax_rate ?? line.gst_rate ?? '0'),
+      };
+    })
+    .filter((line) => line.productId || line.name);
+  return mapped.length ? mapped : [emptyLine()];
 }
 
 export function ShopBooksQuotationsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksQuotations'>>();
+  const openQuotationId = route.params?.quotationId;
   const client = useOpsClient();
   const toast = useToast();
   const auth = useAuth();
@@ -87,37 +123,54 @@ export function ShopBooksQuotationsScreen() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detailQuote, setDetailQuote] = useState<ShopQuotation | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [customerId, setCustomerId] = useState('');
   const [validUntil, setValidUntil] = useState('');
+  const [status, setStatus] = useState('draft');
   const [lines, setLines] = useState<QuoteLine[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
+    setEditingId(null);
     setCustomerId('');
     setValidUntil('');
+    setStatus('draft');
     setLines([emptyLine()]);
     setNotes('');
   }, []);
 
+  const openEdit = useCallback((quote: ShopQuotation) => {
+    if (!canEdit(quote)) {
+      toast.push('Converted quotations cannot be edited', 'error');
+      return;
+    }
+    setDetailQuote(null);
+    navigation.navigate('ShopPos', { mode: 'quotation', quotationId: quote.id });
+  }, [navigation, toast]);
+
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: 'Estimates / Proforma',
+      title: showForm ? (editingId ? 'Edit quotation' : 'New quotation') : 'Estimates / Proforma',
       headerRight: () => (
         <Pressable
-          onPress={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
+          onPress={() => {
+            if (showForm) closeForm();
+            else navigation.navigate('ShopPos', { mode: 'quotation' });
+          }}
           accessibilityRole="button"
-          accessibilityLabel="New quotation"
+          accessibilityLabel={showForm ? 'Close' : 'New quotation'}
           hitSlop={8}
           style={styles.headerBtn}
         >
-          <Feather name="plus" size={20} color={colors.primary} />
+          <Feather name={showForm ? 'x' : 'plus'} size={20} color={colors.primary} />
         </Pressable>
       ),
     });
-  }, [navigation]);
+  }, [navigation, showForm, editingId, closeForm]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -145,6 +198,24 @@ export function ShopBooksQuotationsScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    if (!openQuotationId || !client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await client.shop.getQuotation(openQuotationId);
+        if (!cancelled && response.data) setDetailQuote(response.data);
+      } catch (err) {
+        if (!cancelled) {
+          toast.push(getApiErrorMessage(err, "Couldn't open that quotation."), 'error');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openQuotationId, client, toast]);
+
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
   const filtered = useMemo(() => {
@@ -154,7 +225,13 @@ export function ShopBooksQuotationsScreen() {
       if (statusFilter === 'open' && !canConvert(item)) return false;
       if (statusFilter === 'converted' && status !== 'converted' && !item.converted_order) return false;
       if (!term) return true;
-      return [item.quotation_number, item.status, String(item.total), item.valid_until ?? '']
+      return [
+        item.quotation_number,
+        item.status,
+        String(item.total),
+        item.valid_until ?? '',
+        item.customer_name ?? '',
+      ]
         .join(' ')
         .toLowerCase()
         .includes(term);
@@ -232,6 +309,13 @@ export function ShopBooksQuotationsScreen() {
     );
   }, [lines]);
 
+  function closeDetail() {
+    setDetailQuote(null);
+    if (route.params?.quotationId) {
+      navigation.setParams({ quotationId: undefined });
+    }
+  }
+
   async function submit() {
     if (!client || !businessId) return;
     const validLines = lines.filter((line) => line.productId && Number(line.qty) > 0);
@@ -239,19 +323,34 @@ export function ShopBooksQuotationsScreen() {
       toast.push('Add at least one product line', 'error');
       return;
     }
+    const linesPayload = validLines.map((line) => ({
+      product_id: line.productId,
+      quantity: line.qty,
+      unit_price: line.rate,
+      tax_rate: line.gst,
+    }));
     setBusy(true);
     try {
+      if (editingId) {
+        const response = await client.shop.updateQuotation(editingId, {
+          customer_id: customerId || null,
+          valid_until: validUntil || null,
+          notes: notes.trim(),
+          status,
+          lines: linesPayload,
+        });
+        toast.push(`Quotation ${response.data.quotation_number} updated`, 'success');
+        closeForm();
+        setDetailQuote(response.data);
+        await load();
+        return;
+      }
       const response = await client.shop.createQuotation({
         business_id: businessId,
         customer_id: customerId || null,
         valid_until: validUntil || null,
         notes: notes.trim() || undefined,
-        lines: validLines.map((line) => ({
-          product_id: line.productId,
-          quantity: line.qty,
-          unit_price: line.rate,
-          tax_rate: line.gst,
-        })),
+        lines: linesPayload,
       });
       toast.push(`Quotation ${response.data.quotation_number} created`, 'success');
       closeForm();
@@ -265,7 +364,13 @@ export function ShopBooksQuotationsScreen() {
       });
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't create this quotation. Try again.", 'error');
+      toast.push(
+        getApiErrorMessage(
+          err,
+          editingId ? "Couldn't update this quotation. Try again." : "Couldn't create this quotation. Try again.",
+        ),
+        'error',
+      );
     } finally {
       setBusy(false);
     }
@@ -273,18 +378,139 @@ export function ShopBooksQuotationsScreen() {
 
   async function onConvert(quotation: ShopQuotation) {
     if (!client) return;
+    const ok = await confirmAction({
+      title: 'Convert to sale',
+      message: `Convert ${quotation.quotation_number} into a sale invoice?`,
+      confirmLabel: 'Convert',
+    });
+    if (!ok) return;
     setConvertingId(quotation.id);
     try {
       const response = await client.shop.convertQuotationToSale(quotation.id, {
         voucher_date: todayIso(),
       });
       toast.push(`Converted to sale ${response.data.voucher_number}`, 'success');
+      closeDetail();
       await load();
+      navigation.navigate('ShopBooksSale', { voucherId: response.data.id });
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't convert this quotation. Try again.", 'error');
+      toast.push(getApiErrorMessage(err, "Couldn't convert this quotation. Try again."), 'error');
     } finally {
       setConvertingId(null);
     }
+  }
+
+  if (showForm) {
+    return (
+      <FormScreen
+        footer={
+          <Button
+            label={busy ? 'Saving…' : editingId ? 'Save quotation' : 'Create quotation'}
+            loading={busy}
+            fullWidth
+            size="lg"
+            onPress={() => void submit()}
+          />
+        }
+      >
+        <FormHero
+          subtitle={
+            editingId
+              ? 'Update the customer, lines, validity, or status. Converted quotations stay locked.'
+              : 'Add products and send this estimate. Convert it to a sale when the customer confirms.'
+          }
+        />
+        <SelectField
+          label="Customer"
+          value={customerId}
+          options={customerOptions}
+          onChange={setCustomerId}
+          optional
+        />
+        {editingId ? (
+          <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+        ) : null}
+        <Input
+          label="Valid until"
+          value={validUntil}
+          onChangeText={setValidUntil}
+          placeholder="YYYY-MM-DD"
+          optional
+        />
+        <Text style={styles.section}>Items</Text>
+        {lines.map((line) => (
+          <View key={line.key} style={styles.lineCard}>
+            <SelectField
+              label="Product"
+              value={line.productId}
+              options={productOptions}
+              onChange={(value) => selectProductForLine(line.key, value)}
+            />
+            <View style={styles.lineRow}>
+              <View style={styles.lineField}>
+                <Input
+                  label="Qty"
+                  value={line.qty}
+                  onChangeText={(value) => setLine(line.key, { qty: value.replace(/[^0-9.]/g, '') })}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.lineField}>
+                <Input
+                  label="Rate"
+                  value={line.rate}
+                  onChangeText={(value) => setLine(line.key, { rate: value.replace(/[^0-9.]/g, '') })}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              <View style={styles.lineField}>
+                <Input
+                  label="GST %"
+                  value={line.gst}
+                  onChangeText={(value) => setLine(line.key, { gst: value.replace(/[^0-9.]/g, '') })}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+            <View style={styles.rowBottom}>
+              <Text style={styles.meta}>
+                Line {formatMoney((Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + (Number(line.gst) || 0) / 100))}
+              </Text>
+              {lines.length > 1 ? (
+                <Pressable onPress={() => removeLine(line.key)} style={styles.removeBtn} hitSlop={8}>
+                  <Text style={styles.convertText}>Remove</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ))}
+        <Pressable style={styles.addLineBtn} onPress={addLine}>
+          <Feather name="plus" size={16} color={colors.primary} />
+          <Text style={styles.addLineText}>Add line</Text>
+        </Pressable>
+        <View style={styles.totalsCard}>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Subtotal</Text>
+            <Text style={styles.meta}>{formatMoney(totals.subtotal)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.meta}>Tax</Text>
+            <Text style={styles.meta}>{formatMoney(totals.tax)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.payableLabel}>Total</Text>
+            <Text style={styles.payableValue}>{formatMoney(totals.total)}</Text>
+          </View>
+        </View>
+        <Input
+          label="Notes"
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          optional
+        />
+      </FormScreen>
+    );
   }
 
   return (
@@ -339,11 +565,12 @@ export function ShopBooksQuotationsScreen() {
           renderItem={({ item }) => {
             const converting = convertingId === item.id;
             const customer =
-              item.customer && customerById.get(item.customer)
+              item.customer_name?.trim() ||
+              (item.customer && customerById.get(item.customer)
                 ? customerLabel(customerById.get(item.customer)!)
                 : item.customer
                   ? 'Customer'
-                  : 'No customer';
+                  : 'No customer');
             const open = canConvert(item);
             const converted = Boolean(item.converted_order || (item.status || '').toLowerCase() === 'converted');
             return (
@@ -355,6 +582,7 @@ export function ShopBooksQuotationsScreen() {
                 badgeKind={converted ? 'paid' : open ? 'due' : 'neutral'}
                 icon="file-text"
                 iconTone={converted ? 'green' : 'navy'}
+                onPress={() => setDetailQuote(item)}
                 actionLabel={open ? (converting ? 'Converting…' : 'Convert to sale') : undefined}
                 onAction={open && !converting ? () => void onConvert(item) : undefined}
                 extraActions={
@@ -419,6 +647,18 @@ export function ShopBooksQuotationsScreen() {
           }
         />
       </View>
+      <QuotationDetailModal
+        quotation={detailQuote}
+        visible={Boolean(detailQuote)}
+        converting={Boolean(detailQuote && convertingId === detailQuote.id)}
+        onClose={closeDetail}
+        onEdit={openEdit}
+        onConvert={(quote) => void onConvert(quote)}
+        onUpdated={(quote) => {
+          setDetailQuote(quote);
+          setQuotations((current) => current.map((item) => (item.id === quote.id ? quote : item)));
+        }}
+      />
       <DocumentActionsSheet
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}

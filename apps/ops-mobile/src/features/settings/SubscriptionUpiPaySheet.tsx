@@ -14,6 +14,12 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { getApiBaseUrl } from '../../config/apiBaseUrl';
 import { getProductName } from '../../utils/products';
 import { getApiErrorMessage } from '../../utils/format';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 
 const PROOF_REQUIRED_MESSAGE = 'Enter a UTR / UPI reference or upload a payment screenshot.';
 const SCREENSHOT_REQUIRED_MESSAGE = 'Upload a payment screenshot or enter a UTR / UPI reference.';
@@ -101,6 +107,10 @@ export function SubscriptionUpiPaySheet({
   const [fieldErrors, setFieldErrors] = useState<{ utr?: string; proof?: string }>({});
   const [proofLightboxOpen, setProofLightboxOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const { driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.92,
+    `${request.mode}:${request.planCode ?? ''}`,
+  );
 
   function clearProofErrors() {
     setFormError(null);
@@ -262,8 +272,11 @@ export function SubscriptionUpiPaySheet({
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityRole="button" />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
+        <ExpandableSheetView
+          onLayout={onSheetLayout}
+          style={[styles.sheet, sheetMotionStyle]}
+        >
+          <SheetHandle {...handleProps} tone="muted" />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.meta}>
             {request.planName || payItems.map((item) => item.planCode).join(' + ')}
@@ -274,7 +287,7 @@ export function SubscriptionUpiPaySheet({
 
           <ScrollView
             ref={scrollRef}
-            style={styles.scroll}
+            style={[styles.scroll, driven && sheetBodyStyle]}
             contentContainerStyle={styles.stack}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
@@ -389,7 +402,7 @@ export function SubscriptionUpiPaySheet({
             ) : null}
             {status === 'awaiting' ? <Button label="Done" fullWidth onPress={onClose} /> : null}
           </View>
-        </View>
+        </ExpandableSheetView>
       </View>
       <ImageLightbox
         uri={proofUrl || null}
@@ -420,14 +433,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: spacing.md,
   },
   title: { ...typography.title, color: colors.foreground },
   /** Lets the sheet hit maxHeight and scroll instead of clipping the footer. */

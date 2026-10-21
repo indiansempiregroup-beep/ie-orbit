@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AvailabilitySlot,
-  BIReportsBundle,
+  BIReportsResponse,
   BIOverviewResponse,
-  BIForecastReport,
-  BIGrowthReport,
-  BIRevenueReport,
+  BIForecastResponse,
+  BIGrowthResponse,
+  BIRevenueResponse,
   BillingStatus,
   BillingOrder,
   Booking,
@@ -32,6 +32,7 @@ import type {
   StaffWeeklyScheduleInput,
   TenantMember,
   TenantSettingsResponse,
+  RoleMenusResponse,
 } from '@ie-orbit/sdk';
 import { filterFutureSlots } from '../utils/format';
 import { createScopedClient } from '../api/client';
@@ -40,6 +41,9 @@ import { useOpsClient } from './useOpsClient';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { buildNameMap } from '../utils/entities';
 import { entitledFeatureList, hasAnyPlanFeature, hasPlanFeature } from '../utils/planFeatures';
+import { isMenuEnabled } from '../utils/roleMenus';
+import { subscribeRoleMenusRevision } from '../utils/roleMenusRefresh';
+import { isPlatformAdmin } from '../utils/roles';
 import { useCustomers, useServices, useStaffMembers } from './useOpsData';
 
 export function useEntityMaps() {
@@ -160,7 +164,7 @@ export function useGlobalSearch(term: string) {
   return { results, loading };
 }
 
-export function useBIOverview(enabled = true) {
+export function useBIOverview(enabled = true, staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
   const [data, setData] = useState<BIOverviewResponse | null>(null);
@@ -170,14 +174,14 @@ export function useBIOverview(enabled = true) {
     if (!enabled || !client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.bi.overview();
+      const response = await client.bi.overview(staffId ? { staff_id: staffId } : undefined);
       setData(response.data);
     } catch {
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [client, enabled, ready]);
+  }, [client, enabled, ready, staffId]);
 
   useEffect(() => {
     void reload();
@@ -186,22 +190,22 @@ export function useBIOverview(enabled = true) {
   return { data, loading, reload };
 }
 
-export function useBIRevenue() {
+export function useBIRevenue(staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [data, setData] = useState<BIRevenueReport | null>(null);
+  const [data, setData] = useState<BIRevenueResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.bi.revenue();
+      const response = await client.bi.revenue(staffId ? { staff_id: staffId } : undefined);
       setData(response.data);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, staffId]);
 
   useEffect(() => {
     void reload();
@@ -210,22 +214,25 @@ export function useBIRevenue() {
   return { data, loading, reload };
 }
 
-export function useBIForecast() {
+export function useBIForecast(staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [data, setData] = useState<BIForecastReport | null>(null);
+  const [data, setData] = useState<BIForecastResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.bi.forecast({ horizon_days: 30 });
+      const response = await client.bi.forecast({
+        horizon_days: 30,
+        ...(staffId ? { staff_id: staffId } : {}),
+      });
       setData(response.data);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, staffId]);
 
   useEffect(() => {
     void reload();
@@ -234,22 +241,22 @@ export function useBIForecast() {
   return { data, loading, reload };
 }
 
-export function useBIGrowth() {
+export function useBIGrowth(staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [data, setData] = useState<BIGrowthReport | null>(null);
+  const [data, setData] = useState<BIGrowthResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.bi.growth();
+      const response = await client.bi.growth(staffId ? { staff_id: staffId } : undefined);
       setData(response.data);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, staffId]);
 
   useEffect(() => {
     void reload();
@@ -258,22 +265,22 @@ export function useBIGrowth() {
   return { data, loading, reload };
 }
 
-export function useBIReports() {
+export function useBIReports(staffId?: string | null) {
   const client = useOpsClient();
   const { ready } = useWorkspace();
-  const [data, setData] = useState<BIReportsBundle | null>(null);
+  const [data, setData] = useState<BIReportsResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.bi.reports();
+      const response = await client.bi.reports(staffId ? { staff_id: staffId } : undefined);
       setData(response.data);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, staffId]);
 
   useEffect(() => {
     void reload();
@@ -304,6 +311,45 @@ export function useTenantSettings() {
   }, [reload]);
 
   return { settings, loading, reload };
+}
+
+export function useRoleMenus() {
+  const client = useOpsClient();
+  const { ready } = useWorkspace();
+  const { user } = useAuth();
+  const skip = isPlatformAdmin(user);
+  const [data, setData] = useState<RoleMenusResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const canManage = Boolean(data?.can_manage);
+
+  const reload = useCallback(async () => {
+    if (!client || !ready) return;
+    setLoading(true);
+    try {
+      const response = await client.tenants.getRoleMenus();
+      setData(response.data);
+    } catch {
+      // Keep the last successful payload so a transient error does not
+      // fail-open staff menus (BI, settings, etc.).
+    } finally {
+      setLoading(false);
+    }
+  }, [client, ready]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  useEffect(() => subscribeRoleMenusRevision(() => { void reload(); }), [reload]);
+
+  const enabledMenus = data?.enabled_menus;
+  const isEnabled = useCallback(
+    (key: string | undefined) =>
+      isMenuEnabled(enabledMenus, key, { skip, defaultOn: !enabledMenus && canManage }),
+    [enabledMenus, skip, canManage],
+  );
+
+  return { data, loading, reload, isEnabled, enabledMenus, skip, canManage };
 }
 
 export function useBillingStatus() {

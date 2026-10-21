@@ -58,6 +58,11 @@ export function isManagerOrAbove(user: UserProfile | null | undefined): boolean 
   return hasAnyRole(user, [...MANAGER_ROLES]);
 }
 
+/** Staff role without owner/manager/platform privileges. */
+export function isStaffOnly(user: UserProfile | null | undefined): boolean {
+  return hasRole(user, 'staff') && !isManagerOrAbove(user);
+}
+
 export function canManageBusinessSettings(user: UserProfile | null | undefined): boolean {
   return (
     isManagerOrAbove(user) ||

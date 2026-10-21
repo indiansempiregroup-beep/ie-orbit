@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -19,6 +20,34 @@ from apps.workflow.services.registry import get_action, get_condition
 from apps.workflow.services.schema import flatten_step_params
 
 logger = logging.getLogger("ie_orbit.workflow")
+
+_CONTEXT_SKIP = {
+    "tenant",
+    "business",
+    "customer",
+    "pet",
+    "pets",
+    "order",
+    "product",
+    "quotation",
+    "booking",
+    "supplier",
+}
+
+
+def _context_snapshot(context: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep workflow run context JSON-safe. Domain models stay in the live context only."""
+    snap: dict[str, Any] = {}
+    for key, value in (context or {}).items():
+        if key in _CONTEXT_SKIP or callable(value) or hasattr(value, "_meta"):
+            continue
+        if isinstance(value, Decimal):
+            snap[key] = str(value)
+        elif hasattr(value, "isoformat") and not isinstance(value, str):
+            snap[key] = value.isoformat()
+        elif isinstance(value, (str, int, float, bool, dict, list)) or value is None:
+            snap[key] = value
+    return snap
 
 
 class WorkflowEngine:
@@ -172,12 +201,7 @@ class WorkflowEngine:
                 subject_id=str(subject_id or ""),
                 status=WorkflowRunStatus.FAILED if failed else WorkflowRunStatus.SUCCEEDED,
                 idempotency_key=idempotency_key or "",
-                context={
-                    k: (v.isoformat() if hasattr(v, "isoformat") else v)
-                    for k, v in (context or {}).items()
-                    if k not in {"tenant", "business", "customer", "pet", "pets"}
-                    and not callable(v)
-                },
+                context=_context_snapshot(context),
                 result=payload,
                 error="" if not failed else "One or more actions reported failure.",
             )

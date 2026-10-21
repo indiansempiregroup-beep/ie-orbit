@@ -4,6 +4,7 @@ import type {
   ShopBooksReportSlug,
   ShopBooksDocumentCreateInput,
   ShopBooksDocumentType,
+  ShopBooksDocumentUpdateInput,
   ShopBooksVoucherCreateInput,
   ShopBooksVoucherType,
   ShopCashAccountWriteInput,
@@ -17,6 +18,7 @@ import type {
   ShopProductBulkCreateInput,
   ShopProductBulkPatchInput,
   ShopProductWriteInput,
+  ShopQuotationUpdateInput,
   ShopReturnCreateInput,
   ShopSupplierWriteInput,
 } from '@ie-orbit/sdk';
@@ -85,6 +87,42 @@ export function useShopQuotations() {
       return response.data;
     },
   });
+}
+
+export function useShopQuotationMutations() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+
+  const updateQuotation = useMutation({
+    mutationFn: async ({
+      quotationId,
+      body,
+    }: {
+      quotationId: string;
+      body: ShopQuotationUpdateInput;
+    }) => {
+      const response = await client.shop.updateQuotation(quotationId, body);
+      return response.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['shop-quotations'] });
+    },
+  });
+
+  const convertQuotation = useMutation({
+    mutationFn: async (quotationId: string) => {
+      const response = await client.shop.convertQuotationToSale(quotationId, {
+        voucher_date: new Date().toISOString().slice(0, 10),
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['shop-quotations'] });
+      void queryClient.invalidateQueries({ queryKey: ['shop-vouchers'] });
+    },
+  });
+
+  return { updateQuotation, convertQuotation };
 }
 
 export function useShopReturns(orderId?: string) {
@@ -730,10 +768,27 @@ export function useShopBooksDocumentMutations() {
       const response = await client.shop.convertDocument(documentId, body);
       return response.data;
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shop-books-documents', businessId] });
+      queryClient.invalidateQueries({ queryKey: ['shop-vouchers'] });
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: async ({
+      documentId,
+      body,
+    }: {
+      documentId: string;
+      body: ShopBooksDocumentUpdateInput;
+    }) => {
+      const response = await client.shop.updateDocument(documentId, body);
+      return response.data;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['shop-books-documents', businessId] }),
   });
 
-  return { create, convert };
+  return { create, convert, update };
 }
 
 export function useShopCashAccounts() {
@@ -814,6 +869,7 @@ export function useShopVoucherMutations() {
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['shop-books-vouchers'] });
+    queryClient.invalidateQueries({ queryKey: ['shop-books-voucher'] });
     queryClient.invalidateQueries({ queryKey: ['shop-books-dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['shop-books-accounts'] });
     queryClient.invalidateQueries({ queryKey: ['shop-books-party-statement'] });
@@ -836,7 +892,21 @@ export function useShopVoucherMutations() {
     onSuccess: invalidateAll,
   });
 
-  return { createVoucher, voidVoucher, businessId };
+  const payVoucher = useMutation({
+    mutationFn: async ({
+      voucherId,
+      body,
+    }: {
+      voucherId: string;
+      body: { amount: string | number; cash_account_id: string; notes?: string };
+    }) => {
+      const response = await client.shop.payVoucher(voucherId, body);
+      return response.data;
+    },
+    onSuccess: invalidateAll,
+  });
+
+  return { createVoucher, voidVoucher, payVoucher, businessId };
 }
 
 export function useShopSuppliers(search = '') {

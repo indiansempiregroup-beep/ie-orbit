@@ -38,3 +38,10 @@ class AcceptInvitationSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, min_length=8)
     first_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
     last_name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+
+
+class InvitationPreviewSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=["pending", "accepted", "expired", "revoked", "invalid"])
+    business_name = serializers.CharField(allow_null=True)
+    role = serializers.CharField(allow_null=True)
+    email = serializers.EmailField(allow_null=True)

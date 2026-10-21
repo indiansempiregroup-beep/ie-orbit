@@ -752,3 +752,23 @@ def test_looks_like_uuid_helper():
     assert looks_like_uuid("550e8400-e29b-41d4-a716-446655440000") is True
     assert looks_like_uuid("SO-RUPALI-S-20260825132551") is False
     assert looks_like_uuid("Riya") is False
+
+
+def test_rules_brain_answers_new_books_and_profit_questions(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    monkeypatch.setattr(toolset, "open_quotations", lambda **kwargs: "Open quotations — QT-1")
+    monkeypatch.setattr(toolset, "unpaid_invoices", lambda **kwargs: "Unpaid sale invoices — SV-1")
+    monkeypatch.setattr(toolset, "overdue_supplier_dues", lambda **kwargs: "Overdue supplier bills — PV-1")
+    monkeypatch.setattr(toolset, "profit_today", lambda **kwargs: "Profit today: ₹80.00 gross profit")
+    monkeypatch.setattr(toolset, "staff_sales_today", lambda **kwargs: "Riya today: 2 orders")
+    monkeypatch.setattr(toolset, "loyalty_activity", lambda **kwargs: "Asha — 120 points.")
+
+    context = {"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access}
+    assert "QT-1" in brain.handle(text="open quotations", context=context).reply
+    assert "SV-1" in brain.handle(text="unpaid invoices", context=context).reply
+    assert "PV-1" in brain.handle(text="overdue supplier bills", context=context).reply
+    assert "₹80" in brain.handle(text="profit today", context=context).reply
+    assert "Riya" in brain.handle(text="sales for Riya today", context=context).reply
+    assert "120" in brain.handle(text="loyalty activity for Asha", context=context).reply

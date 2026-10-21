@@ -438,6 +438,7 @@ class MobileShopOrderListCreateView(APIView):
                 metadata_extra=metadata_extra or None,
                 upi_utr=str(request.data.get("upi_utr") or ""),
                 payment_proof_url=str(request.data.get("payment_proof_url") or ""),
+                created_by_user_id=getattr(request.user, "id", None),
             )
         except (DjangoValidationError, ShopProduct.DoesNotExist) as exc:
             if isinstance(exc, DjangoValidationError) and hasattr(exc, "message_dict"):

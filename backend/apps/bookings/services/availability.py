@@ -13,6 +13,8 @@ from apps.bookings.models import (
     Booking,
     BookingStatus,
     BusinessHoliday,
+    BusinessSchedule,
+    BusinessWeeklySchedule,
     EmergencyClosure,
     StaffEmergencySlot,
     StaffLeave,
@@ -800,32 +802,106 @@ class AvailabilityService:
                 is_available=True,
             )
         )
-        windows: list[tuple[time, time, int]] = []
-        for row in rows:
-            base = [(row.shift_start, row.shift_end, row.capacity)]
-            breaks = self._parse_break_periods(row.break_periods)
-            if breaks:
+        if rows:
+            windows: list[tuple[time, time, int]] = []
+            for row in rows:
                 windows.extend(
-                    self._subtract_intervals_from_windows(
+                    self._shift_windows(
                         business=business,
                         target_date=target_date,
-                        windows=base,
-                        blocked=[
-                            (
-                                self._combine_local(
-                                    business=business, target_date=target_date, clock=start
-                                ),
-                                self._combine_local(
-                                    business=business, target_date=target_date, clock=end
-                                ),
-                            )
-                            for start, end in breaks
-                        ],
+                        shift_start=row.shift_start,
+                        shift_end=row.shift_end,
+                        capacity=row.capacity,
+                        break_periods=row.break_periods,
                     )
                 )
-            else:
-                windows.append((row.shift_start, row.shift_end, row.capacity))
-        return windows
+            return windows
+
+        # A weekday marked unavailable is an explicit day off. No rows at all means
+        # hours were never set, so the staff member follows shop opening hours.
+        has_personal_schedule = (
+            StaffWeeklySchedule.objects.for_tenant(tenant)
+            .filter(business=business, staff_id=staff_id)
+            .exists()
+        )
+        if has_personal_schedule:
+            return []
+        return self._business_windows(tenant=tenant, business=business, target_date=target_date)
+
+    def _business_windows(
+        self,
+        *,
+        tenant: Any,
+        business: Any,
+        target_date: date,
+    ) -> list[tuple[time, time, int]]:
+        schedules = list(
+            BusinessSchedule.objects.for_tenant(tenant)
+            .filter(business=business, is_default=True)
+            .order_by("created_at")
+        )
+        if not schedules:
+            schedules = list(
+                BusinessSchedule.objects.for_tenant(tenant)
+                .filter(business=business)
+                .order_by("created_at")
+            )
+        for schedule in schedules:
+            if schedule.effective_from and target_date < schedule.effective_from:
+                continue
+            if schedule.effective_to and target_date > schedule.effective_to:
+                continue
+            row = (
+                BusinessWeeklySchedule.objects.for_tenant(tenant)
+                .filter(
+                    schedule=schedule,
+                    weekday=target_date.weekday(),
+                    is_open=True,
+                )
+                .first()
+            )
+            if row is None:
+                continue
+            # Shop capacity is how many people the business can take at once.
+            # An unconfigured staff member is one person, so capacity stays 1.
+            return self._shift_windows(
+                business=business,
+                target_date=target_date,
+                shift_start=row.opening_time,
+                shift_end=row.closing_time,
+                capacity=1,
+                break_periods=row.break_periods,
+            )
+        return []
+
+    def _shift_windows(
+        self,
+        *,
+        business: Any,
+        target_date: date,
+        shift_start: time,
+        shift_end: time,
+        capacity: int,
+        break_periods: Any,
+    ) -> list[tuple[time, time, int]]:
+        if shift_start >= shift_end:
+            return []
+        base = [(shift_start, shift_end, int(capacity or 1))]
+        breaks = self._parse_break_periods(break_periods)
+        if not breaks:
+            return base
+        return self._subtract_intervals_from_windows(
+            business=business,
+            target_date=target_date,
+            windows=base,
+            blocked=[
+                (
+                    self._combine_local(business=business, target_date=target_date, clock=start),
+                    self._combine_local(business=business, target_date=target_date, clock=end),
+                )
+                for start, end in breaks
+            ],
+        )
 
     def _union_emergency_windows(
         self,

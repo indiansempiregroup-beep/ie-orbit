@@ -45,6 +45,7 @@ from apps.shopie.api.serializers import (
     ShopSupplierSerializer,
     ShopSupplierWriteSerializer,
     ShopTransferCreateSerializer,
+    ShopVoucherPaySerializer,
 )
 from apps.shopie.models import (
     ShopBooksVoucher,
@@ -340,6 +341,27 @@ class ShopBooksVoucherVoidView(APIView):
         try:
             voucher = self.books.void_voucher(
                 tenant=request.current_tenant, business=voucher.business, voucher=voucher
+            )
+        except DjangoValidationError as exc:
+            raise _validation_error(exc) from exc
+        return success_response(ShopBooksVoucherSerializer(voucher).data)
+
+
+class ShopBooksVoucherPayView(APIView):
+    permission_classes = [ShopAccessPermission]
+    books = BooksService()
+
+    def post(self, request: Request, voucher_id) -> Response:
+        voucher = get_object_or_404(ShopBooksVoucher, tenant=request.current_tenant, id=voucher_id)
+        require_voucher_feature(voucher.business, voucher.voucher_type)
+        serializer = ShopVoucherPaySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            voucher = self.books.apply_purchase_payment(
+                tenant=request.current_tenant,
+                business=voucher.business,
+                voucher=voucher,
+                data=serializer.validated_data,
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc

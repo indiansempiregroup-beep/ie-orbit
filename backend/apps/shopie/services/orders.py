@@ -33,10 +33,12 @@ from apps.shopie.services.zones import DeliveryZoneService
 
 logger = logging.getLogger("ie_orbit.shopie.orders")
 from apps.tenancy.models import Tenant
+from apps.tenancy.services.context import current_user
 
 DELIVERY_METHOD_STANDARD = "standard"
 DELIVERY_METHOD_INSTANT = "instant"
 DELIVERY_METHODS = {DELIVERY_METHOD_STANDARD, DELIVERY_METHOD_INSTANT}
+_UNSET = object()
 
 
 class OrderService:
@@ -178,6 +180,7 @@ class OrderService:
         delivery_phone: str = "",
         upi_utr: str = "",
         payment_proof_url: str = "",
+        created_by_user_id: UUID | str | None = None,
     ) -> ShopOrder:
         if not lines:
             raise ValidationError({"lines": "At least one line item is required."})
@@ -457,6 +460,14 @@ class OrderService:
             delivery_address=delivery_address or "",
             metadata=metadata,
         )
+        actor_id = created_by_user_id
+        if not actor_id:
+            actor = current_user()
+            if actor is not None and getattr(actor, "is_authenticated", True):
+                actor_id = getattr(actor, "id", None)
+        if actor_id:
+            order.mark_created(actor_id=actor_id)
+            order.save(update_fields=["created_by", "updated_by", "updated_at"])
         if mode in {FulfillmentMode.DELIVERY, FulfillmentMode.PICKUP}:
             from apps.shopie.services.tracking import TrackingHistoryService
 
@@ -834,10 +845,15 @@ class OrderService:
                 customer=customer,
             )
 
+        is_credit_due = payment == "borrow" or (
+            mode == FulfillmentMode.POS
+            and payment in {"cash", "upi", "card"}
+            and due_now > 0
+        )
         if (
-            due_now > 0
+            is_credit_due
+            and due_now > 0
             and customer is not None
-            and payment in {"borrow", "cash", "upi", "card"}
             and str(pos_meta.get("payment_status") or "").strip().lower() != "awaiting_confirmation"
         ):
             from apps.customers.services.borrow import BorrowService
@@ -1008,6 +1024,25 @@ class OrderService:
             self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
         if notify:
             self._notify_online(refreshed, status)
+        if status == OrderStatus.COMPLETED:
+            from apps.workflow.services.emit_domain import emit_domain_on_commit
+
+            customer = refreshed.customer
+            emit_domain_on_commit(
+                tenant=tenant,
+                business=business,
+                event_key="order.completed",
+                context={
+                    "customer": customer,
+                    "order": refreshed,
+                    "order_number": refreshed.order_number,
+                    "party_name": getattr(customer, "display_name", None) or "Customer",
+                },
+                product_code="shopie",
+                subject_type="order",
+                subject_id=str(refreshed.id),
+                idempotency_prefix=f"order.completed:{refreshed.id}",
+            )
         return refreshed
 
     def _sync_shipment_delivered(self, *, order: ShopOrder) -> ShopOrder:
@@ -1066,9 +1101,30 @@ class OrderService:
         locked.metadata = metadata
         locked.save(update_fields=["metadata", "updated_at", "version"])
         refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
+        self._reconcile_borrow_for_paid_order(tenant=tenant, business=business, order=refreshed)
         self._maybe_award_referral_on_paid(order=refreshed)
         self._maybe_award_loyalty_on_paid(order=refreshed)
         return refreshed
+
+    def _reconcile_borrow_for_paid_order(
+        self, *, tenant: Tenant, business: Business, order: ShopOrder
+    ) -> None:
+        if order.customer_id is None:
+            return
+        try:
+            from apps.customers.services.borrow import BorrowService
+
+            BorrowService().reconcile_order(
+                tenant=tenant,
+                business=business,
+                customer=order.customer,
+                order=order,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to reconcile borrow for paid order",
+                extra={"order_id": str(order.id)},
+            )
 
     def _notify_online(self, order: ShopOrder, status: str) -> None:
         order_id = str(order.id)
@@ -1243,6 +1299,7 @@ class OrderService:
         if act == "confirm":
             refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
             self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+            self._reconcile_borrow_for_paid_order(tenant=tenant, business=business, order=refreshed)
             self._maybe_award_referral_on_paid(order=refreshed)
             self._maybe_award_loyalty_on_paid(order=refreshed)
             return refreshed
@@ -1307,6 +1364,7 @@ class OrderService:
         locked.save(update_fields=["metadata", "updated_at", "version"])
         refreshed = self.get_order(tenant=tenant, business=business, order_id=locked.id)
         self._post_order_to_books(tenant=tenant, business=business, order=refreshed)
+        self._reconcile_borrow_for_paid_order(tenant=tenant, business=business, order=refreshed)
         self._maybe_award_referral_on_paid(order=refreshed)
         self._maybe_award_loyalty_on_paid(order=refreshed)
         return refreshed
@@ -1342,12 +1400,32 @@ class OrderService:
         )
 
     def _maybe_award_loyalty_on_paid(self, *, order: ShopOrder) -> None:
+        pos = (order.metadata or {}).get("pos") if isinstance(order.metadata, dict) else {}
+        status_value = str((pos or {}).get("payment_status") or "").strip().lower()
+        if status_value in {"paid", "settled"}:
+            from apps.workflow.services.emit_domain import emit_domain_on_commit
+
+            customer = order.customer if order.customer_id else None
+            emit_domain_on_commit(
+                tenant=order.tenant,
+                business=order.business,
+                event_key="order.payment_received",
+                context={
+                    "customer": customer,
+                    "order": order,
+                    "order_number": order.order_number,
+                    "party_name": getattr(customer, "display_name", None) or "Customer",
+                    "balance": str(order.total),
+                },
+                product_code="shopie",
+                subject_type="order",
+                subject_id=str(order.id),
+                idempotency_prefix=f"order.payment_received:{order.id}",
+            )
         if order.customer_id is None:
             return
-        pos = (order.metadata or {}).get("pos") if isinstance(order.metadata, dict) else {}
         if isinstance(pos, dict) and pos.get("award_loyalty_points") is False:
             return
-        status_value = str((pos or {}).get("payment_status") or "").strip().lower()
         if status_value not in {"paid", "settled"}:
             return
         try:
@@ -1446,7 +1524,9 @@ class OrderService:
             earned = int(loyalty.get("points_earned") or 0)
             if earned > 0:
                 loyalty["points_revoked"] = int(loyalty.get("points_revoked") or 0) + earned
+                loyalty["points_reversed"] = loyalty["points_revoked"]
                 loyalty["points_earned"] = 0
+                loyalty["reversal_reason"] = "Reversed cancelled order earn"
             loyalty["refunded"] = True
             meta["loyalty"] = loyalty
             order.metadata = meta
@@ -1552,27 +1632,45 @@ class OrderService:
             )
             return
 
-    @transaction.atomic
-    def create_quotation(
+    def _serialize_quotation_lines(
         self,
         *,
         tenant: Tenant,
         business: Business,
         lines: list[dict[str, Any]],
-        customer: Customer | None = None,
-        notes: str = "",
-        valid_until=None,
-    ) -> ShopQuotation:
+    ) -> tuple[list[dict[str, Any]], Decimal, Decimal]:
         if not lines:
             raise ValidationError({"lines": "At least one line item is required."})
         subtotal = Decimal("0.00")
         tax_total = Decimal("0.00")
         serialized: list[dict[str, Any]] = []
         for raw in lines:
-            product = ShopProduct.objects.get(tenant=tenant, business=business, id=raw["product_id"])
-            qty = Decimal(str(raw.get("quantity") or "1"))
-            unit_price = Decimal(str(raw.get("unit_price") if raw.get("unit_price") is not None else product.price))
-            tax_rate = Decimal(str(raw.get("tax_rate") if raw.get("tax_rate") is not None else product.tax_rate))
+            product_id = raw.get("product_id") or raw.get("product")
+            if not product_id:
+                raise ValidationError({"lines": "Each line needs a product."})
+            try:
+                product = ShopProduct.objects.get(tenant=tenant, business=business, id=product_id)
+            except ShopProduct.DoesNotExist as exc:
+                raise ValidationError({"lines": "One or more products were not found."}) from exc
+            qty_raw = raw.get("quantity")
+            if qty_raw is None:
+                qty_raw = raw.get("qty") or "1"
+            qty = Decimal(str(qty_raw))
+            if qty <= 0:
+                raise ValidationError({"lines": "Quantity must be greater than zero."})
+            if raw.get("unit_price") is not None:
+                price_raw = raw.get("unit_price")
+            elif raw.get("rate") is not None:
+                price_raw = raw.get("rate")
+            else:
+                price_raw = product.price
+            unit_price = Decimal(str(price_raw))
+            tax_source = raw.get("tax_rate")
+            if tax_source is None:
+                tax_source = raw.get("gst_rate")
+            if tax_source is None:
+                tax_source = product.gst_rate or product.tax_rate
+            tax_rate = Decimal(str(tax_source))
             line_subtotal = (unit_price * qty).quantize(Decimal("0.01"))
             line_tax = (line_subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
             serialized.append(
@@ -1587,6 +1685,22 @@ class OrderService:
             )
             subtotal += line_subtotal
             tax_total += line_tax
+        return serialized, subtotal, tax_total
+
+    @transaction.atomic
+    def create_quotation(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        lines: list[dict[str, Any]],
+        customer: Customer | None = None,
+        notes: str = "",
+        valid_until=None,
+    ) -> ShopQuotation:
+        serialized, subtotal, tax_total = self._serialize_quotation_lines(
+            tenant=tenant, business=business, lines=lines
+        )
         return ShopQuotation.objects.create(
             tenant=tenant,
             business=business,
@@ -1601,6 +1715,64 @@ class OrderService:
             line_items=serialized,
             valid_until=valid_until,
         )
+
+    @transaction.atomic
+    def update_quotation(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        quotation: ShopQuotation,
+        customer: Customer | None | object = _UNSET,
+        notes: str | None = None,
+        valid_until: Any = _UNSET,
+        status: str | None = None,
+        lines: list[dict[str, Any]] | None = None,
+    ) -> ShopQuotation:
+        if quotation.status == QuotationStatus.CONVERTED or quotation.converted_order_id:
+            raise ValidationError({"status": "Converted quotations cannot be updated."})
+
+        update_fields = ["updated_at", "version"]
+
+        if customer is not _UNSET:
+            quotation.customer = customer  # type: ignore[assignment]
+            update_fields.append("customer")
+
+        if notes is not None:
+            quotation.notes = notes
+            update_fields.append("notes")
+
+        if valid_until is not _UNSET:
+            quotation.valid_until = valid_until
+            update_fields.append("valid_until")
+
+        if status is not None:
+            allowed = {
+                QuotationStatus.DRAFT,
+                QuotationStatus.SENT,
+                QuotationStatus.ACCEPTED,
+                QuotationStatus.REJECTED,
+                QuotationStatus.EXPIRED,
+            }
+            if status == QuotationStatus.CONVERTED:
+                raise ValidationError({"status": "Use convert-to-sale to convert a quotation."})
+            if status not in allowed:
+                raise ValidationError({"status": "Invalid quotation status."})
+            quotation.status = status
+            update_fields.append("status")
+
+        if lines is not None:
+            serialized, subtotal, tax_total = self._serialize_quotation_lines(
+                tenant=tenant, business=business, lines=lines
+            )
+            quotation.line_items = serialized
+            quotation.subtotal = subtotal
+            quotation.tax_total = tax_total
+            quotation.total = subtotal + tax_total
+            update_fields.extend(["line_items", "subtotal", "tax_total", "total"])
+
+        quotation.save(update_fields=update_fields)
+        return quotation
 
     def _next_number(self, *, business: Business, prefix: str) -> str:
         stamp = timezone.now().strftime("%Y%m%d%H%M%S")

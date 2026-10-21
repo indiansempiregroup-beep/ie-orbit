@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrandMark } from '../../components/BrandMark';
@@ -37,6 +37,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export function LoginScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
+  const route = useRoute<RouteProp<AuthStackParamList, 'Login'>>();
   const { isDesktop } = useBreakpoint();
   const {
     sendOtp,
@@ -51,7 +52,8 @@ export function LoginScreen() {
     refreshBiometricState,
   } = useAuth();
   const insets = useSafeAreaInsets();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(route.params?.email ?? '');
+  const inviteMessage = route.params?.message ?? null;
   const [mobileOtpEnabled, setMobileOtpEnabled] = useState(false);
   const [loginChannel, setLoginChannel] = useState<'email' | 'whatsapp'>('email');
   const [phone, setPhone] = useState('');
@@ -284,6 +286,7 @@ export function LoginScreen() {
         </Pressable>
       </View>
 
+      {inviteMessage ? <FormAlert message={inviteMessage} tone="success" /> : null}
       {error ? <FormAlert message={error} /> : null}
 
       <Button

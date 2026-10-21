@@ -13,9 +13,10 @@ from apps.businesses.models import (
     BusinessProductSubscription,
     BusinessProductSubscriptionStatus,
 )
-from apps.customers.models import Customer, CustomerAddress
+from apps.customers.models import Customer, CustomerAddress, CustomerBorrowLedger
 from apps.customers.services.borrow import BorrowService
 from apps.shopie.models import FulfillmentMode, OrderStatus, ShopBooksVoucher, ShopProduct
+from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.services.orders import OrderService
 from apps.tenancy.models import Organization, SubscriptionPlan, Tenant
 
@@ -183,3 +184,105 @@ def test_pos_uses_customer_default_address(pos_partial_ctx):
     assert order.metadata.get("delivery_city") == "Nashik"
     assert order.metadata.get("delivery_state") == "Maharashtra"
     assert order.metadata.get("delivery_postal_code") == "422001"
+
+
+@pytest.mark.django_db
+def test_pos_full_cash_does_not_open_borrow(pos_partial_ctx):
+    ctx = pos_partial_ctx
+    order = OrderService().create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+    )
+    assert order.metadata["pos"]["payment_status"] == "paid"
+    assert not CustomerBorrowLedger.objects.filter(order_id=order.id).exists()
+    balance = BorrowService().get_balance(
+        tenant=ctx["tenant"], business=ctx["business"], customer=ctx["customer"]
+    )
+    assert Decimal(balance["balance_due"]) == Decimal("0.00")
+
+
+@pytest.mark.django_db
+def test_online_cash_does_not_open_borrow_for_unpaid_cod(pos_partial_ctx):
+    ctx = pos_partial_ctx
+    MerchantPaymentService().update_cod_enabled(business=ctx["business"], cod_enabled=True)
+    order = OrderService().create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.PICKUP,
+        payment_method="cash",
+        confirm=True,
+    )
+    assert Decimal(str(order.metadata["pos"]["amount_due"])) == Decimal("200.00")
+    assert not CustomerBorrowLedger.objects.filter(order_id=order.id).exists()
+
+
+@pytest.mark.django_db
+def test_borrow_charge_is_idempotent(pos_partial_ctx):
+    ctx = pos_partial_ctx
+    order = OrderService().create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="borrow",
+        confirm=True,
+    )
+    BorrowService().charge_from_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        order_id=order.id,
+        order_number=order.order_number,
+        amount="200.00",
+        currency="INR",
+    )
+    assert CustomerBorrowLedger.objects.filter(order_id=order.id, entry_type="charge").count() == 1
+
+
+@pytest.mark.django_db
+def test_reconcile_closes_mistaken_cash_borrow_on_paid_order(pos_partial_ctx):
+    ctx = pos_partial_ctx
+    order = OrderService().create_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        lines=[{"product_id": str(ctx["product"].id), "quantity": 1}],
+        fulfillment_mode=FulfillmentMode.POS,
+        payment_method="cash",
+        confirm=True,
+    )
+    BorrowService().charge_from_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        order_id=order.id,
+        order_number=order.order_number,
+        amount="200.00",
+        currency="INR",
+    )
+    assert Decimal(
+        BorrowService().get_balance(
+            tenant=ctx["tenant"], business=ctx["business"], customer=ctx["customer"]
+        )["balance_due"]
+    ) == Decimal("200.00")
+
+    BorrowService().reconcile_order(
+        tenant=ctx["tenant"],
+        business=ctx["business"],
+        customer=ctx["customer"],
+        order=order,
+    )
+    assert Decimal(
+        BorrowService().get_balance(
+            tenant=ctx["tenant"], business=ctx["business"], customer=ctx["customer"]
+        )["balance_due"]
+    ) == Decimal("0.00")
+    assert CustomerBorrowLedger.objects.filter(order_id=order.id, entry_type="adjustment").exists()

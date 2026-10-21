@@ -461,6 +461,7 @@ class BooksService:
                     voucher=voucher,
                     direction=1,
                     movement_type=StockMovementType.RECEIVE,
+                    godown_id=data.get("godown_id"),
                 )
             self._record_ledger(
                 tenant=tenant,
@@ -740,6 +741,7 @@ class BooksService:
         voucher: ShopBooksVoucher,
         direction: int,
         movement_type: str,
+        godown_id=None,
     ) -> None:
         for row in voucher.line_items or []:
             product_id = row.get("product_id")
@@ -754,6 +756,14 @@ class BooksService:
             qty = Decimal(str(row.get("qty") or "0"))
             if qty <= 0:
                 continue
+            unit_cost = None
+            if direction > 0:
+                try:
+                    rate = Decimal(str(row.get("rate") or "0"))
+                except Exception:
+                    rate = Decimal("0")
+                if rate > 0:
+                    unit_cost = rate
             self.catalog.adjust_stock(
                 tenant=tenant,
                 business=business,
@@ -761,6 +771,8 @@ class BooksService:
                 quantity_delta=qty * direction,
                 movement_type=movement_type,
                 reason=f"{voucher.get_voucher_type_display()} {voucher.voucher_number}",
+                godown_id=godown_id or row.get("godown_id"),
+                unit_cost=unit_cost,
             )
 
     # ------------------------------------------------------------------
@@ -859,6 +871,95 @@ class BooksService:
         )
         self._adjust_cash_balance(account=cash_account, delta=-amount)
         return voucher
+
+    @transaction.atomic
+    def apply_purchase_payment(
+        self, *, tenant: Tenant, business: Business, voucher: ShopBooksVoucher, data: dict[str, Any]
+    ) -> ShopBooksVoucher:
+        locked = (
+            ShopBooksVoucher.objects.select_for_update()
+            .filter(tenant=tenant, business=business, id=voucher.id)
+            .first()
+        )
+        if locked is None:
+            raise ValidationError({"voucher": "Voucher not found."})
+        if locked.voucher_type != VoucherType.PURCHASE:
+            raise ValidationError({"voucher": "Only purchase bills can be paid from this action."})
+        if locked.status != VoucherStatus.CONFIRMED:
+            raise ValidationError({"status": "Only confirmed purchase bills can be paid."})
+
+        amount = _q(data.get("amount"))
+        if amount <= 0:
+            raise ValidationError({"amount": "Amount must be greater than zero."})
+        due = _q(locked.total - locked.amount_paid)
+        if amount > due:
+            raise ValidationError({"amount": "Amount cannot exceed the balance due."})
+
+        try:
+            cash_account = self._cash_account_for(
+                tenant=tenant, business=business, cash_account_id=data.get("cash_account_id")
+            )
+        except ShopCashAccount.DoesNotExist as exc:
+            raise ValidationError({"cash_account_id": "Cash account not found."}) from exc
+        if cash_account is None:
+            raise ValidationError({"cash_account_id": "Select a cash/bank account."})
+
+        locked.amount_paid = _q(locked.amount_paid + amount)
+        meta = dict(locked.metadata or {})
+        payments = list(meta.get("payments") or [])
+        payments.append(
+            {
+                "amount": str(amount),
+                "cash_account_id": str(cash_account.id),
+                "cash_account_name": cash_account.name,
+                "at": timezone.now().isoformat(),
+                "notes": str(data.get("notes") or ""),
+            }
+        )
+        meta["payments"] = payments
+        locked.metadata = meta
+        locked.save(update_fields=["amount_paid", "metadata", "updated_at", "version"])
+
+        self._record_ledger(
+            tenant=tenant,
+            business=business,
+            party_kind=PartyKind.SUPPLIER,
+            supplier=locked.supplier,
+            entry_type=LedgerEntryType.PAYMENT_OUT,
+            amount=amount,
+            direction=LedgerDirection.DEBIT,
+            voucher=locked,
+            notes=str(data.get("notes") or f"Payment for {locked.voucher_number}"),
+        )
+        self._adjust_cash_balance(account=cash_account, delta=-amount)
+        return locked
+
+    def _reverse_purchase_cash_payments(
+        self, *, tenant: Tenant, business: Business, locked: ShopBooksVoucher
+    ) -> None:
+        remaining = _q(locked.amount_paid)
+        extras = list((locked.metadata or {}).get("payments") or [])
+        for payment in reversed(extras):
+            if remaining <= 0:
+                break
+            pay_amt = min(_q(payment.get("amount")), remaining)
+            if pay_amt <= 0:
+                continue
+            account = None
+            account_id = payment.get("cash_account_id")
+            if account_id:
+                try:
+                    account = self._cash_account_for(
+                        tenant=tenant, business=business, cash_account_id=account_id
+                    )
+                except ShopCashAccount.DoesNotExist:
+                    account = None
+            if account is None:
+                account = locked.cash_account
+            self._adjust_cash_balance(account=account, delta=pay_amt)
+            remaining = _q(remaining - pay_amt)
+        if remaining > 0:
+            self._adjust_cash_balance(account=locked.cash_account, delta=remaining)
 
     @transaction.atomic
     def create_expense(
@@ -1062,7 +1163,9 @@ class BooksService:
                     voucher=locked,
                     notes=f"Void payment {locked.voucher_number}",
                 )
-                self._adjust_cash_balance(account=locked.cash_account, delta=locked.amount_paid)
+                self._reverse_purchase_cash_payments(
+                    tenant=tenant, business=business, locked=locked
+                )
         elif vtype == VoucherType.PAYMENT_IN:
             self._record_ledger(
                 tenant=tenant,
@@ -1236,7 +1339,9 @@ class BooksService:
                 earned = int(snap.get("points_earned") or 0)
                 if earned > 0:
                     snap["points_revoked"] = int(snap.get("points_revoked") or 0) + earned
+                    snap["points_reversed"] = snap["points_revoked"]
                     snap["points_earned"] = 0
+                    snap["reversal_reason"] = "Reversed voided sale earn"
                 snap["refunded"] = True
                 meta["loyalty"] = snap
                 order.metadata = meta
@@ -1342,7 +1447,11 @@ class BooksService:
         if party is None:
             raise ValidationError({"party_id": "Party not found."})
 
-        qs = ShopPartyLedgerEntry.objects.filter(**filters).order_by("created_at", "id")
+        qs = (
+            ShopPartyLedgerEntry.objects.filter(**filters)
+            .select_related("voucher")
+            .order_by("created_at", "id")
+        )
         opening_balance = Decimal("0.00")
         if party_kind == PartyKind.SUPPLIER:
             opening_balance = _q(getattr(party, "opening_balance", 0))

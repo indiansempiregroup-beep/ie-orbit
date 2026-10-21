@@ -2,6 +2,7 @@ from django.urls import path
 
 from apps.tenancy.api.views import (
     CurrentOrganizationView,
+    RoleMenusView,
     TenantDetailView,
     TenantListCreateView,
     TenantSettingsView,
@@ -14,4 +15,5 @@ urlpatterns = [
     path("tenants/<uuid:tenant_id>", TenantDetailView.as_view(), name="tenant-detail"),
     path("organizations/me", CurrentOrganizationView.as_view(), name="organization-me"),
     path("tenant/settings", TenantSettingsView.as_view(), name="tenant-settings"),
+    path("tenant/role-menus", RoleMenusView.as_view(), name="tenant-role-menus"),
 ]

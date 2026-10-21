@@ -22,10 +22,12 @@ import { useNotifications } from '../../contexts/NotificationsContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
+import { StaffReportFilter } from '../../components/StaffReportFilter';
 import { useBookings, useDashboardSummary } from '../../hooks/useOpsData';
 import { subscribeBookingsListRevision } from '../../utils/bookingsListRefresh';
 import { useShopOrders } from '../../hooks/useShopOrders';
-import { useBIOverview, useEntityMaps, usePlanFeatures } from '../../hooks/useOpsExtended';
+import { useBIOverview, useEntityMaps, usePlanFeatures, useRoleMenus } from '../../hooks/useOpsExtended';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import {
   bookingCustomerLabel,
@@ -36,7 +38,7 @@ import {
 import { getSubscribedProductIds, hasPetsPack, hasShopie } from '../../utils/products';
 import { homeOrdersFromList } from '../../utils/shopOrderDisplay';
 import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
-import { canAccessReports, canAccessStaffDirectory } from '../../utils/roles';
+import { canAccessReports, canAccessStaffDirectory, isStaffOnly } from '../../utils/roles';
 import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import { businessDateKey, formatTime } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
@@ -57,11 +59,13 @@ export function DashboardScreen() {
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const { has, hasAny } = usePlanFeatures();
+  const { isEnabled } = useRoleMenus();
+  const { staffId, setStaffId, canFilter } = useReportStaffFilter();
+  const staffFilterActive = Boolean(staffId);
   const today = businessDateKey(activeBusiness?.timezone);
-  const { summary, todayCount, reload: reloadSummary } = useDashboardSummary();
-  const { bookings, loading, reload: reloadBookings } = useBookings(today);
-  const { data: bi, reload: reloadBi } = useBIOverview(showReports);
-  const { customerMap, serviceMap, staffMap } = useEntityMaps();
+  const { summary, todayCount, reload: reloadSummary } = useDashboardSummary(staffId);
+  const { bookings, loading, reload: reloadBookings } = useBookings(today, staffId);
+  const { customerMap, serviceMap, staffMap, staff } = useEntityMaps();
   const [books, setBooks] = useState<ShopBooksDashboard | null>(null);
 
   const subscribedIds = useMemo(
@@ -77,13 +81,21 @@ export function DashboardScreen() {
     Boolean(summary?.shopie) ||
     (summary?.products?.includes('shopie') ?? hasShopie(activeBusiness?.product_subscriptions));
   const petsEnabled = Boolean(summary?.pets) || hasPetsPack(activeBusiness?.product_subscriptions);
-  const showPos = shopieEnabled && has(PlanFeature.shopiePos);
-  const showBooksHub = shopieEnabled && hasAny(SHOPIE_BOOKS_FEATURES);
-  const showOrders = shopieEnabled && has(PlanFeature.shopieOrders);
-  const showReturns = shopieEnabled && has(PlanFeature.shopieReturns);
-  const showAssistant = has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant);
-  const showCashTiles = shopieEnabled && has(PlanFeature.shopieBooksCash);
-  const showPartyTiles = shopieEnabled && has(PlanFeature.shopieBooksParties);
+  const bookingStaffOnly = Boolean(summary?.viewer?.booking_staff);
+  const hideShopUntilKnown = isStaffOnly(user) && !summary;
+  const showShopOps = shopieEnabled && !bookingStaffOnly && !hideShopUntilKnown && !staffFilterActive;
+  const showPos = showShopOps && has(PlanFeature.shopiePos) && isEnabled('pos');
+  const showBooksHub = showShopOps && hasAny(SHOPIE_BOOKS_FEATURES) && isEnabled('books');
+  const showOrders = showShopOps && has(PlanFeature.shopieOrders) && isEnabled('orders');
+  const showReturns = showShopOps && has(PlanFeature.shopieReturns) && isEnabled('returns');
+  const showBookings = hasAppointie && (isEnabled('bookings') || isEnabled('calendar'));
+  const showPets = petsEnabled && isEnabled('pets') && !staffFilterActive;
+  const showBi = showReports && isEnabled('bi');
+  const { data: bi, reload: reloadBi } = useBIOverview(showBi, staffId);
+  const showAssistant =
+    (has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant)) && isEnabled('assistant');
+  const showCashTiles = showBooksHub && has(PlanFeature.shopieBooksCash) && isEnabled('booksCash');
+  const showPartyTiles = showBooksHub && has(PlanFeature.shopieBooksParties) && isEnabled('booksParties');
   const { orders: shopOrders, loading: ordersLoading, reload: reloadOrders } = useShopOrders(showOrders);
 
   const loadBooks = useCallback(async () => {
@@ -139,7 +151,7 @@ export function DashboardScreen() {
 
   const insightLines = useMemo(() => {
     const lines: Array<{ icon: keyof typeof Feather.glyphMap; text: string }> = [];
-    if (hasAppointie) {
+    if (showBookings) {
       const remaining = upcomingAll.length;
       lines.push({
         icon: 'calendar',
@@ -157,7 +169,7 @@ export function DashboardScreen() {
         });
       }
     }
-    if (shopieEnabled && books) {
+    if (showPartyTiles && books) {
       if (Number(books.to_collect || 0) > 0) {
         lines.push({
           icon: 'trending-up',
@@ -171,21 +183,21 @@ export function DashboardScreen() {
         });
       }
     }
-    if (shopieEnabled && shopie) {
+    if (showOrders && shopie) {
       if ((shopie.open_orders ?? 0) > 0) {
         lines.push({
           icon: 'shopping-bag',
           text: `${shopie.open_orders} open order${shopie.open_orders === 1 ? '' : 's'} need attention`,
         });
       }
-      if ((shopie.pending_returns ?? 0) > 0) {
+      if (showReturns && (shopie.pending_returns ?? 0) > 0) {
         lines.push({
           icon: 'rotate-ccw',
           text: `${shopie.pending_returns} return${shopie.pending_returns === 1 ? '' : 's'} pending`,
         });
       }
     }
-    if (petsEnabled && pets && (pets.birthdays_next_7d ?? 0) > 0) {
+    if (showPets && pets && (pets.birthdays_next_7d ?? 0) > 0) {
       lines.push({
         icon: 'heart',
         text: `${pets.birthdays_next_7d} pet birthday${pets.birthdays_next_7d === 1 ? '' : 's'} in the next 7 days`,
@@ -193,17 +205,19 @@ export function DashboardScreen() {
     }
     return lines.slice(0, 4);
   }, [
-    hasAppointie,
+    showBookings,
     upcomingAll,
     completedToday,
     todayCount,
     nextBooking,
     serviceMap,
     customerMap,
-    shopieEnabled,
+    showPartyTiles,
     books,
+    showOrders,
+    showReturns,
     shopie,
-    petsEnabled,
+    showPets,
     pets,
   ]);
 
@@ -239,7 +253,7 @@ export function DashboardScreen() {
     navigation.navigate('ShopPos');
   }
 
-  const showHomeTabs = hasAppointie && showOrders;
+  const showHomeTabs = showBookings && showOrders;
 
   const bookingsPanel = (
     <TodayBookingsPanel
@@ -301,6 +315,10 @@ export function DashboardScreen() {
             <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
               <SoftLockBanner />
 
+              {canFilter ? (
+                <StaffReportFilter staff={staff} staffId={staffId} onChange={setStaffId} />
+              ) : null}
+
               <View style={styles.operationsCard}>
                 <Text style={styles.sectionTitle}>Today</Text>
                 {showHomeTabs ? (
@@ -310,7 +328,7 @@ export function DashboardScreen() {
                     bookingsPanel={bookingsPanel}
                     ordersPanel={ordersPanel}
                   />
-                ) : hasAppointie ? (
+                ) : showBookings ? (
                   bookingsPanel
                 ) : showOrders ? (
                   ordersPanel
@@ -354,7 +372,7 @@ export function DashboardScreen() {
                 </View>
               ) : null}
 
-              {showReports && periodInsights.length ? (
+              {showBi && periodInsights.length ? (
                 <InsightPanel
                   title="What to act on"
                   subtitle="The strongest signals from the last 30 days."
@@ -362,9 +380,9 @@ export function DashboardScreen() {
                 />
               ) : null}
 
-              {hasAppointie || shopieEnabled ? (
+              {showBookings || showOrders || showBooksHub || showReturns || (staffFilterActive && shopieEnabled && shopie) ? (
                 <TileGrid gap={spacing.md}>
-                  {hasAppointie ? (
+                  {showBookings ? (
                     <StatTile
                       label="Today"
                       value={String(appointie?.today_bookings ?? todayCount)}
@@ -373,27 +391,27 @@ export function DashboardScreen() {
                       iconTone="blue"
                     />
                   ) : null}
-                  {hasAppointie ? (
+                  {showBookings ? (
                     <StatTile
                       label="Month revenue"
                       value={formatMoney(appointie?.estimated_revenue_month, revenueCurrency)}
                       hint={revenueCurrency || 'Est.'}
                       icon="trending-up"
                       iconTone="green"
-                      onPress={showReports ? () => navigation.navigate('BI', { tab: 'revenue' }) : undefined}
+                      onPress={showBi ? () => navigation.navigate('BI', { tab: 'revenue' }) : undefined}
                     />
                   ) : null}
-                  {shopieEnabled && showOrders ? (
+                  {showOrders || (staffFilterActive && shopieEnabled && !bookingStaffOnly && shopie) ? (
                     <StatTile
                       label="Orders today"
                       value={String(shopie?.orders_today ?? 0)}
                       hint={`${shopie?.open_orders ?? 0} open`}
                       icon="shopping-bag"
                       iconTone="green"
-                      onPress={() => navigation.navigate('ShopOrders')}
+                      onPress={showOrders ? () => navigation.navigate('ShopOrders') : undefined}
                     />
                   ) : null}
-                  {shopieEnabled ? (
+                  {(showBooksHub || showBi || staffFilterActive) && shopieEnabled && shopie ? (
                     <StatTile
                       label="GMV this month"
                       value={formatMoney(shopie?.gmv_month, summary?.currency)}
@@ -431,12 +449,12 @@ export function DashboardScreen() {
                 books={books}
                 bookings={bookings}
                 shopOrders={shopOrders}
-                hasAppointie={hasAppointie}
-                shopieEnabled={shopieEnabled}
-                petsEnabled={petsEnabled}
+                hasAppointie={showBookings}
+                shopieEnabled={Boolean(bi?.shopie) || showOrders || showBooksHub}
+                petsEnabled={showPets}
                 showCashTiles={showCashTiles}
                 showPartyTiles={showPartyTiles}
-                showReports={showReports}
+                showReports={showBi}
                 currency={revenueCurrency}
                 onOpenBI={() => navigation.navigate('BI', { tab: 'overview' })}
               />
@@ -445,37 +463,37 @@ export function DashboardScreen() {
                 <View style={isDesktop ? styles.desktopCol : undefined}>
                   <Text style={styles.sectionLabel}>Quick actions</Text>
                   <TileGrid columns={isDesktop ? 4 : 2} gap={spacing.md}>
-                    {hasAppointie ? (
+                    {hasAppointie && isEnabled('bookings') ? (
                       <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
                     ) : null}
                     {showPos ? (
                       <QuickAction icon="shopping-cart" label="Sale" onPress={() => navigation.navigate('ShopPos')} />
                     ) : null}
-                    {has(PlanFeature.appointieCustomers) || shopieEnabled ? (
+                    {(has(PlanFeature.appointieCustomers) || shopieEnabled) && isEnabled('customers') ? (
                       <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
                     ) : null}
                     {showAssistant ? (
                       <QuickAction icon="message-circle" label="Assistant" onPress={() => navigation.navigate('Assistant')} />
                     ) : null}
-                    {hasAppointie && has(PlanFeature.appointieServices) ? (
+                    {hasAppointie && has(PlanFeature.appointieServices) && isEnabled('services') ? (
                       <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
                     ) : null}
                     {showBooksHub ? (
                       <QuickAction icon="layers" label="Books" onPress={() => navigation.navigate('ShopBooks')} />
                     ) : null}
-                    {petsEnabled ? (
+                    {petsEnabled && isEnabled('pets') ? (
                       <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
                     ) : null}
-                    {showStaff && hasAppointie && has(PlanFeature.appointieStaff) ? (
+                    {showStaff && hasAppointie && has(PlanFeature.appointieStaff) && isEnabled('staff') ? (
                       <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
                     ) : null}
                   </TileGrid>
 
-                  {(showBooksHub || showPos || showReports) && (
+                  {(showBooksHub || showPos || showBi) && (
                     <View style={styles.reportsCard}>
                       <Text style={styles.sectionLabel}>Reports</Text>
                       <TileGrid gap={spacing.md}>
-                        {has(PlanFeature.shopieGstReports) ? (
+                        {has(PlanFeature.shopieGstReports) && isEnabled('booksReports') ? (
                           <ReportLink
                             icon="bar-chart-2"
                             tone="violet"
@@ -493,7 +511,7 @@ export function DashboardScreen() {
                             onPress={() => navigation.navigate('ShopPos')}
                           />
                         ) : null}
-                        {showReports ? (
+                        {showBi ? (
                           <ReportLink
                             icon="pie-chart"
                             tone="blue"

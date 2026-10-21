@@ -27,7 +27,9 @@ import { colors, fonts, iconTones, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
 import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
+import { hasBiFeature } from '../../utils/planFeatures';
 import { canWriteShopCatalog } from '../../utils/roles';
+import { useBusinessBillingSnapshot } from '../../hooks/useOpsExtended';
 import { getPersistentItem, setPersistentItem } from '../../utils/persistentStore';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { primaryProductImageUrl } from './productImages';
@@ -72,6 +74,8 @@ export function ShopProductsScreen() {
   const { isDesktop } = useBreakpoint();
   const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.82);
   const canWrite = canWriteShopCatalog(user);
+  const { billing } = useBusinessBillingSnapshot();
+  const canSeeProfit = hasBiFeature(billing, 'profit', 'shopie');
   const [items, setItems] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,16 +105,18 @@ export function ShopProductsScreen() {
     navigation.setOptions({
       headerRight: () => (
         <View style={styles.headerActions}>
-          <Pressable
-            onPress={() => navigation.navigate('BI', { tab: 'profit' })}
-            accessibilityRole="button"
-            accessibilityLabel="BI Profit insights"
-            hitSlop={8}
-            style={isDesktop ? styles.headerTextBtn : styles.headerBtn}
-          >
-            <Feather name="trending-up" size={isDesktop ? 16 : 18} color={colors.primary} />
-            {isDesktop ? <Text style={styles.headerTextBtnLabel}>BI Profit</Text> : null}
-          </Pressable>
+          {canSeeProfit ? (
+            <Pressable
+              onPress={() => navigation.navigate('BI', { tab: 'profit' })}
+              accessibilityRole="button"
+              accessibilityLabel="BI Profit insights"
+              hitSlop={8}
+              style={isDesktop ? styles.headerTextBtn : styles.headerBtn}
+            >
+              <Feather name="trending-up" size={isDesktop ? 16 : 18} color={colors.primary} />
+              {isDesktop ? <Text style={styles.headerTextBtnLabel}>BI Profit</Text> : null}
+            </Pressable>
+          ) : null}
           {canWrite ? (
             <>
               {isDesktop ? (
@@ -148,7 +154,7 @@ export function ShopProductsScreen() {
         </View>
       ),
     });
-  }, [canWrite, isDesktop, navigation]);
+  }, [canSeeProfit, canWrite, isDesktop, navigation]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;

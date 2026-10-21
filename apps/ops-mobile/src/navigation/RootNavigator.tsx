@@ -15,6 +15,8 @@ import { MainTabs } from './MainTabs';
 import { DesktopShell } from './DesktopShell';
 import { rootNavigationRef } from './rootNavigationRef';
 import { opsRecordLinking } from './recordLinks';
+import { booksMenuKeyForRoute } from '../utils/roleMenus';
+import { useRoleMenus } from '../hooks/useOpsExtended';
 import { WorkspacePickerScreen } from '../features/workspace/WorkspacePickerScreen';
 import { NoAccessScreen } from '../features/auth/NoAccessScreen';
 import { PlatformAdminHomeScreen } from '../features/admin/PlatformAdminHomeScreen';
@@ -30,6 +32,7 @@ import { BookingDetailScreen } from '../features/bookings/BookingDetailScreen';
 import { CustomersScreen } from '../features/customers/CustomersScreen';
 import { CustomerFormScreen } from '../features/customers/CustomerFormScreen';
 import { CustomerDetailScreen } from '../features/customers/CustomerDetailScreen';
+import { CustomerRecordsScreen } from '../features/customers/CustomerRecordsScreen';
 import { ReviewsScreen } from '../features/reviews/ReviewsScreen';
 import { ServicesScreen } from '../features/services/ServicesScreen';
 import { ServiceFormScreen } from '../features/services/ServiceFormScreen';
@@ -40,6 +43,7 @@ import { StaffDetailScreen } from '../features/staff/StaffDetailScreen';
 import { StaffScheduleScreen } from '../features/staff/StaffScheduleScreen';
 import { StaffAvailabilityScreen } from '../features/staff/StaffAvailabilityScreen';
 import { SettingsScreen } from '../features/settings/SettingsScreen';
+import { RoleMenusScreen } from '../features/settings/RoleMenusScreen';
 import { SupportTicketsScreen } from '../features/support/SupportTicketsScreen';
 import { SupportTicketDetailScreen } from '../features/support/SupportTicketDetailScreen';
 import { BusinessProfileScreen } from '../features/settings/BusinessProfileScreen';
@@ -69,6 +73,7 @@ import { ShopPetDetailScreen } from '../features/shop/ShopPetDetailScreen';
 import { ShopBooksDashboardScreen } from '../features/shop/ShopBooksDashboardScreen';
 import { ShopBooksSaleScreen } from '../features/shop/ShopBooksSaleScreen';
 import { ShopBooksPurchaseScreen } from '../features/shop/ShopBooksPurchaseScreen';
+import { ShopInvoiceScanScreen } from '../features/shop/ShopInvoiceScanScreen';
 import { ShopBooksExpenseScreen } from '../features/shop/ShopBooksExpenseScreen';
 import { ShopBooksCashScreen } from '../features/shop/ShopBooksCashScreen';
 import { ShopBooksPartiesScreen } from '../features/shop/ShopBooksPartiesScreen';
@@ -145,13 +150,27 @@ const LazyProductSettings = lazyNamedScreen(
 );
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function getActiveRouteName(state: NavigationState | undefined): string | undefined {
-  if (!state) return undefined;
+function getActiveRoute(state: NavigationState | undefined): { name?: string; params?: { docType?: string } } {
+  if (!state) return {};
   const route = state.routes[state.index];
-  if (route.state) {
-    return getActiveRouteName(route.state as NavigationState);
-  }
-  return route.name;
+  if (!route) return {};
+  if (route.state) return getActiveRoute(route.state as NavigationState);
+  return { name: route.name, params: route.params as { docType?: string } | undefined };
+}
+
+function BooksMenuGuard({ routeName, docType }: { routeName?: string; docType?: string }) {
+  const { isEnabled, enabledMenus } = useRoleMenus();
+  useEffect(() => {
+    if (!enabledMenus || !routeName || !rootNavigationRef.isReady()) return;
+    const key = booksMenuKeyForRoute(routeName, { docType });
+    if (!key || isEnabled(key)) return;
+    if (key !== 'books' && isEnabled('books')) {
+      rootNavigationRef.navigate('ShopBooks');
+      return;
+    }
+    rootNavigationRef.navigate('Main', { screen: 'Dashboard' });
+  }, [docType, enabledMenus, isEnabled, routeName]);
+  return null;
 }
 
 const stackScreen = (
@@ -183,6 +202,7 @@ export function RootNavigator() {
   const { ready } = useWorkspace();
   const [bootstrapped, setBootstrapped] = useState(false);
   const [activeRoute, setActiveRoute] = useState<string | undefined>();
+  const [activeDocType, setActiveDocType] = useState<string | undefined>();
 
   const isAuthenticated = Boolean(token && user);
   const platformAdminOnly = isPlatformAdminOnly(user);
@@ -220,8 +240,16 @@ export function RootNavigator() {
     <NavigationContainer
       ref={rootNavigationRef}
       linking={isAuthenticated && ((opsAccess && ready) || platformAdminOnly) ? opsRecordLinking : undefined}
-      onStateChange={(state) => setActiveRoute(getActiveRouteName(state))}
-      onReady={() => setActiveRoute(getActiveRouteName(rootNavigationRef.getRootState()))}
+      onStateChange={(state) => {
+        const route = getActiveRoute(state);
+        setActiveRoute(route.name);
+        setActiveDocType(route.params?.docType);
+      }}
+      onReady={() => {
+        const route = getActiveRoute(rootNavigationRef.getRootState());
+        setActiveRoute(route.name);
+        setActiveDocType(route.params?.docType);
+      }}
     >
       {!isAuthenticated ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -252,6 +280,7 @@ export function RootNavigator() {
         </Stack.Navigator>
       ) : (
         <DesktopShell key="app-shell" activeRoute={activeRoute}>
+          <BooksMenuGuard routeName={activeRoute} docType={activeDocType} />
           <Stack.Navigator key="app-stack" initialRouteName="Main" screenOptions={{ headerShown: false }}>
             <Stack.Screen name="Main" component={MainTabs} />
             {stackScreen('Search', SearchScreen, t('common.search'))}
@@ -261,6 +290,7 @@ export function RootNavigator() {
             {stackScreen('Customers', CustomersScreen, t('nav.customers'))}
             {stackScreen('CustomerForm', CustomerFormScreen, t('bookings.customer'))}
             {stackScreen('CustomerDetail', CustomerDetailScreen, t('bookings.customer'))}
+            {stackScreen('CustomerRecords', CustomerRecordsScreen, 'Customer records')}
             {stackScreen('Reviews', ReviewsScreen, t('settings.reviews'))}
             {stackScreen('Services', ServicesScreen, t('nav.services'))}
             {stackScreen('ServiceForm', ServiceFormScreen, t('bookings.service'))}
@@ -271,6 +301,7 @@ export function RootNavigator() {
             {stackScreen('StaffSchedule', StaffScheduleScreen, t('nav.weeklySchedule'))}
             {stackScreen('StaffAvailability', StaffAvailabilityScreen, t('nav.staffAvailability'))}
             {stackScreen('Settings', SettingsScreen, t('nav.settings'))}
+            {stackScreen('RoleMenus', RoleMenusScreen, 'Role menus')}
             {stackScreen('SupportTickets', SupportTicketsScreen, 'Support tickets')}
             {stackScreen('SupportTicketDetail', SupportTicketDetailScreen, 'Ticket')}
             {stackScreen('BusinessProfile', BusinessProfileScreen, t('settings.businessProfile'))}
@@ -312,6 +343,7 @@ export function RootNavigator() {
             {stackScreen('ShopBooks', ShopBooksDashboardScreen, t('nav.shopBooks'))}
             {stackScreen('ShopBooksSale', ShopBooksSaleScreen, t('nav.shopSale'))}
             {stackScreen('ShopBooksPurchase', ShopBooksPurchaseScreen, t('nav.shopPurchase'))}
+            {stackScreen('ShopInvoiceScan', ShopInvoiceScanScreen, 'Scan invoice')}
             {stackScreen('ShopBooksExpense', ShopBooksExpenseScreen, t('nav.shopExpense'))}
             {stackScreen('ShopBooksCash', ShopBooksCashScreen, t('nav.shopCashBank'))}
             {stackScreen('ShopBooksParties', ShopBooksPartiesScreen, t('nav.shopParties'))}

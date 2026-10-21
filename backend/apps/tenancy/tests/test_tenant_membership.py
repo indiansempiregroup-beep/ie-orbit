@@ -73,11 +73,7 @@ def test_staff_member_can_list_owned_tenant(api_client: APIClient, owner: User) 
     invitation = StaffInvitation.objects.get(id=invitation_id)
     token = str(invitation.token)
 
-    StaffInvitationService().accept_invitation(
-        token=token,
-        first_name="Linked",
-        last_name="Staff",
-    )
+    StaffInvitationService().accept_invitation(token=token)
 
     staff_user = User.objects.get(email="linked-staff@example.com")
     visible_tenants = TenantRepository().list_for_user(staff_user)

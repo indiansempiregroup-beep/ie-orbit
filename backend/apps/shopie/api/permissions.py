@@ -36,9 +36,9 @@ class ShopAccessPermission(BasePermission):
             return True
         if request.current_tenant.owner_id == request.user.id:
             return True
+        # Roles are global. Filtering role__tenant crashes because Role has no tenant field.
         return request.user.user_roles.filter(
             role__is_active=True,
             role__role_permissions__permission__code__in=self.write_permissions,
             role__role_permissions__permission__is_active=True,
-            role__tenant=request.current_tenant,
         ).exists()

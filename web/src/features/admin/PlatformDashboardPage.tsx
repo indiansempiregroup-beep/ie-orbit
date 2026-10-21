@@ -208,7 +208,7 @@ export function PlatformDashboardPage() {
             <Wallet size={16} />
           </span>
           <strong>Usage pricing</strong>
-          <span>Add-ons, Assistant, and Smart lookup</span>
+          <span>Add-ons, Assistant, and the AI wallet</span>
         </Link>
         <Link className="admin-shortcut" to="/admin/coupons">
           <span className="admin-shortcut__icon">

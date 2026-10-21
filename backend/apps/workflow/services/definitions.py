@@ -151,6 +151,145 @@ STARTER_TEMPLATES: list[dict[str, Any]] = [
             }
         ],
     },
+    {
+        "key": "mart_low_stock",
+        "product_code": "shopie",
+        "name": "Low stock alert",
+        "description": "Tell managers when a product falls to its reorder level.",
+        "trigger": {"type": "inventory.low_stock"},
+        "conditions": [{"type": "inventory.below_threshold"}],
+        "actions": [
+            {
+                "type": "notify.staff",
+                "subject": "Low stock · {product}",
+                "body": "{product} is down to {stock}. Reorder before it runs out.",
+            }
+        ],
+    },
+    {
+        "key": "mart_out_of_stock",
+        "product_code": "shopie",
+        "name": "Out of stock alert",
+        "description": "Tell managers only when a product hits zero.",
+        "trigger": {"type": "inventory.low_stock"},
+        "conditions": [{"type": "inventory.out_of_stock"}],
+        "actions": [
+            {
+                "type": "notify.staff",
+                "subject": "Out of stock · {product}",
+                "body": "{product} is out of stock.",
+            }
+        ],
+    },
+    {
+        "key": "mart_order_completed",
+        "product_code": "shopie",
+        "name": "Order completed message",
+        "description": "Message the customer when their order is completed.",
+        "trigger": {"type": "order.completed"},
+        "conditions": [],
+        "actions": [
+            {
+                "type": "notify.customer",
+                "channels": "in_app",
+                "subject": "Order {order} is complete",
+                "body": "Hi {customer}, order {order} is complete. Thank you for shopping with us.",
+            }
+        ],
+    },
+    {
+        "key": "mart_payment_received",
+        "product_code": "shopie",
+        "name": "Payment received alert",
+        "description": "Tell managers when an order is paid.",
+        "trigger": {"type": "order.payment_received"},
+        "conditions": [],
+        "actions": [
+            {
+                "type": "notify.staff",
+                "subject": "Payment received · {order}",
+                "body": "Payment received for order {order} ({customer}).",
+            }
+        ],
+    },
+    {
+        "key": "mart_overdue_dues",
+        "product_code": "shopie",
+        "name": "Overdue balance reminder",
+        "description": "Each morning, remind staff about balances overdue by a day or more.",
+        "trigger": {"type": "books.overdue"},
+        "conditions": [{"type": "party.balance_due", "min_days": 1}],
+        "actions": [
+            {
+                "type": "notify.staff",
+                "subject": "Balance due · {party}",
+                "body": "{party} still has ₹{balance} outstanding ({age} days).",
+            }
+        ],
+    },
+    {
+        "key": "mart_quotation_followup",
+        "product_code": "shopie",
+        "name": "Quotation follow-up",
+        "description": "Remind staff about quotations that are still open after 3 days.",
+        "trigger": {"type": "quotation.followup"},
+        "conditions": [{"type": "quotation.older_than_days", "days": 3}],
+        "actions": [
+            {
+                "type": "notify.staff",
+                "subject": "Follow up · {quotation}",
+                "body": "Quotation {quotation} for {party} is still open (₹{balance}).",
+            }
+        ],
+    },
+    {
+        "key": "mart_loyalty_milestone",
+        "product_code": "shopie",
+        "name": "Loyalty milestone",
+        "description": "Thank a customer when their points cross 500.",
+        "trigger": {"type": "loyalty.milestone"},
+        "conditions": [{"type": "loyalty.crossed_points", "points": 500}],
+        "actions": [
+            {
+                "type": "notify.customer",
+                "channels": "in_app",
+                "subject": "You reached {points} points",
+                "body": "Hi {customer}, you now have {points} loyalty points. Thank you for shopping with us.",
+            }
+        ],
+    },
+    {
+        "key": "appoint_no_show",
+        "product_code": "appointie",
+        "name": "No-show follow-up",
+        "description": "Message the customer after a booking is marked as a no-show.",
+        "trigger": {"type": "booking.no_show"},
+        "conditions": [],
+        "actions": [
+            {
+                "type": "notify.customer",
+                "channels": "in_app",
+                "subject": "We missed you today",
+                "body": "Hi {customer}, we missed you for booking {booking}. Reply if you would like a new time.",
+            }
+        ],
+    },
+    {
+        "key": "appoint_loyalty_milestone",
+        "product_code": "appointie",
+        "name": "Loyalty milestone",
+        "description": "Thank a customer when their points cross 200.",
+        "trigger": {"type": "loyalty.milestone"},
+        "conditions": [{"type": "loyalty.crossed_points", "points": 200}],
+        "actions": [
+            {
+                "type": "notify.customer",
+                "channels": "in_app",
+                "subject": "You reached {points} points",
+                "body": "Hi {customer}, you now have {points} loyalty points. Thank you for visiting.",
+            }
+        ],
+    },
 ]
 
 

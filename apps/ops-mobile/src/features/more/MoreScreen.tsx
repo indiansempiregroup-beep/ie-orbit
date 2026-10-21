@@ -22,8 +22,8 @@ import {
   formatUserRole,
 } from '../../utils/roles';
 import { hasShopie } from '../../utils/products';
-import { PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
-import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { hasBiFeature, PlanFeature, SHOPIE_BOOKS_FEATURES } from '../../utils/planFeatures';
+import { usePlanFeatures, useRoleMenus } from '../../hooks/useOpsExtended';
 import { confirmAction } from '../../utils/confirmAction';
 import { colors, fonts, radius, shadows, spacing, typography, type IconTone } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -46,9 +46,11 @@ export function MoreScreen() {
   const showStaff = canAccessStaffDirectory(user);
   const showReports = canAccessReports(user);
   const showShop = hasShopie(activeBusiness?.product_subscriptions);
-  const { has, hasAny } = usePlanFeatures();
-  const showBooks = showShop && hasAny(SHOPIE_BOOKS_FEATURES);
-  const showAssistant = has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant);
+  const { has, hasAny, billing } = usePlanFeatures();
+  const { isEnabled } = useRoleMenus();
+  const showBooks = showShop && hasAny(SHOPIE_BOOKS_FEATURES) && isEnabled('books');
+  const showAssistant =
+    (has(PlanFeature.shopieAiAssistant) || has(PlanFeature.appointieAiAssistant)) && isEnabled('assistant');
   const workspaceLabel = activeBusiness?.display_name ?? activeBusiness?.business_name ?? t('common.workspace');
 
   async function onSignOut() {
@@ -86,16 +88,16 @@ export function MoreScreen() {
         </Pressable>
 
         <View style={styles.quickGrid}>
-          {has(PlanFeature.shopiePos) ? (
+          {has(PlanFeature.shopiePos) && isEnabled('pos') ? (
             <MoreShortcut icon="shopping-cart" tone="green" label={t('nav.pos')} onPress={() => navigation.navigate('ShopPos')} />
           ) : null}
           {showBooks ? (
             <MoreShortcut icon="book-open" tone="violet" label={t('nav.shopBooks')} onPress={() => navigation.navigate('ShopBooks')} />
           ) : null}
-          {has(PlanFeature.appointieCustomers) || showShop ? (
+          {(has(PlanFeature.appointieCustomers) || showShop) && isEnabled('customers') ? (
             <MoreShortcut icon="users" tone="cyan" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
           ) : null}
-          {showSettings ? (
+          {showSettings && isEnabled('settings') ? (
             <MoreShortcut icon="settings" tone="navy" label={t('settings.title')} onPress={() => navigation.navigate('Settings')} />
           ) : null}
         </View>
@@ -113,7 +115,7 @@ export function MoreScreen() {
         ) : null}
         {showShop ? (
           <MenuSection title="Sale">
-            {has(PlanFeature.shopiePos) ? (
+            {has(PlanFeature.shopiePos) && isEnabled('pos') ? (
               <MenuRow
                 icon="shopping-cart"
                 label={t('nav.pos')}
@@ -129,14 +131,17 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopBooks')}
               />
             ) : null}
-            {has(PlanFeature.shopieProducts) ? (
+            {has(PlanFeature.shopieProducts) && isEnabled('products') ? (
               <MenuRow
                 icon="shopping-bag"
                 label={t('nav.shopProducts')}
                 onPress={() => navigation.navigate('ShopProducts')}
               />
             ) : null}
-            {has(PlanFeature.shopieProducts) ? (
+            {showReports &&
+            has(PlanFeature.shopieProducts) &&
+            isEnabled('bi') &&
+            hasBiFeature(billing, 'profit') ? (
               <MenuRow
                 icon="trending-up"
                 label="BI Profit"
@@ -144,7 +149,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('BI', { tab: 'profit' })}
               />
             ) : null}
-            {has(PlanFeature.shopieOrders) ? (
+            {has(PlanFeature.shopieOrders) && isEnabled('orders') ? (
               <MenuRow
                 icon="list"
                 label={t('nav.shopOrders')}
@@ -152,21 +157,21 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopOrders')}
               />
             ) : null}
-            {has(PlanFeature.shopieReturns) ? (
+            {has(PlanFeature.shopieReturns) && isEnabled('returns') ? (
               <MenuRow
                 icon="rotate-ccw"
                 label={t('nav.shopReturns')}
                 onPress={() => navigation.navigate('ShopReturns')}
               />
             ) : null}
-            {has(PlanFeature.shopieDeliveryZones) ? (
+            {has(PlanFeature.shopieDeliveryZones) && isEnabled('zones') ? (
               <MenuRow
                 icon="map-pin"
                 label={t('nav.shopDeliveryZones')}
                 onPress={() => navigation.navigate('ShopDeliveryZones')}
               />
             ) : null}
-            {has(PlanFeature.shopieInstantDelivery) ? (
+            {has(PlanFeature.shopieInstantDelivery) && isEnabled('instantDelivery') ? (
               <MenuRow
                 icon="truck"
                 label={t('nav.shopInstantDelivery')}
@@ -174,7 +179,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopDeliverySettings')}
               />
             ) : null}
-            {has(PlanFeature.shopieCoupons) ? (
+            {has(PlanFeature.shopieCoupons) && isEnabled('coupons') ? (
               <MenuRow
                 icon="tag"
                 label={t('nav.shopCoupons')}
@@ -182,25 +187,25 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('ShopCoupons')}
               />
             ) : null}
+            {isEnabled('pets') ? (
             <MenuRow
               icon="heart"
               label={t('nav.shopPets')}
               last
               onPress={() => navigation.navigate('ShopPets')}
             />
+            ) : null}
           </MenuSection>
         ) : null}
 
-        {hasAny([
-          PlanFeature.shopieGrowWhatsapp,
-          PlanFeature.shopieGrowGoogle,
-          PlanFeature.shopieGrowSync,
-          PlanFeature.shopieGrowUtilities,
-          PlanFeature.shopieGrowAds,
-          PlanFeature.shopieCustomerReferral,
-        ]) ? (
+        {(showShop && has(PlanFeature.shopieGrowWhatsapp) && isEnabled('wa')) ||
+        (showShop && has(PlanFeature.shopieGrowGoogle) && isEnabled('gbp')) ||
+        (showShop && has(PlanFeature.shopieGrowSync) && isEnabled('sync')) ||
+        (showShop && has(PlanFeature.shopieGrowUtilities) && isEnabled('utils')) ||
+        (has(PlanFeature.shopieGrowAds) && isEnabled('ads')) ||
+        (has(PlanFeature.shopieCustomerReferral) && isEnabled('referral')) ? (
           <MenuSection title="Grow">
-            {showShop && has(PlanFeature.shopieGrowWhatsapp) ? (
+            {showShop && has(PlanFeature.shopieGrowWhatsapp) && isEnabled('wa') ? (
               <MenuRow
                 icon="message-circle"
                 label="WhatsApp"
@@ -208,7 +213,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowWhatsApp')}
               />
             ) : null}
-            {showShop && has(PlanFeature.shopieGrowGoogle) ? (
+            {showShop && has(PlanFeature.shopieGrowGoogle) && isEnabled('gbp') ? (
               <MenuRow
                 icon="globe"
                 label="Google Profile"
@@ -216,7 +221,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowGoogleProfile')}
               />
             ) : null}
-            {showShop && has(PlanFeature.shopieGrowSync) ? (
+            {showShop && has(PlanFeature.shopieGrowSync) && isEnabled('sync') ? (
               <MenuRow
                 icon="share-2"
                 label="Sync & share"
@@ -224,7 +229,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowSyncShare')}
               />
             ) : null}
-            {showShop && has(PlanFeature.shopieGrowUtilities) ? (
+            {showShop && has(PlanFeature.shopieGrowUtilities) && isEnabled('utils') ? (
               <MenuRow
                 icon="tool"
                 label="Utilities"
@@ -232,7 +237,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowUtilities')}
               />
             ) : null}
-            {has(PlanFeature.shopieGrowAds) ? (
+            {has(PlanFeature.shopieGrowAds) && isEnabled('ads') ? (
               <MenuRow
                 icon="image"
                 label="Ads"
@@ -240,7 +245,7 @@ export function MoreScreen() {
                 onPress={() => navigation.navigate('GrowAds')}
               />
             ) : null}
-            {has(PlanFeature.shopieCustomerReferral) ? (
+            {has(PlanFeature.shopieCustomerReferral) && isEnabled('referral') ? (
               <MenuRow
                 icon="gift"
                 label="Referrals"
@@ -252,7 +257,7 @@ export function MoreScreen() {
           </MenuSection>
         ) : null}
 
-        {has(PlanFeature.automations) ? (
+        {has(PlanFeature.automations) && isEnabled('automations') ? (
           <MenuSection title="Automations">
             <MenuRow
               icon="zap"
@@ -265,13 +270,13 @@ export function MoreScreen() {
         ) : null}
 
         <MenuSection title={t('settings.business')}>
-          {has(PlanFeature.appointieCustomers) || showShop ? (
+          {(has(PlanFeature.appointieCustomers) || showShop) && isEnabled('customers') ? (
             <MenuRow icon="users" label={t('settings.customers')} onPress={() => navigation.navigate('Customers')} />
           ) : null}
-          {has(PlanFeature.appointieReviews) ? (
+          {has(PlanFeature.appointieReviews) && isEnabled('reviews') ? (
             <MenuRow icon="star" label={t('settings.reviews')} onPress={() => navigation.navigate('Reviews')} />
           ) : null}
-          {has(PlanFeature.appointieServices) ? (
+          {has(PlanFeature.appointieServices) && isEnabled('services') ? (
             <MenuRow
               icon="package"
               label={t('settings.services')}
@@ -279,7 +284,7 @@ export function MoreScreen() {
               onPress={() => navigation.navigate('Services')}
             />
           ) : null}
-          {showStaff && has(PlanFeature.appointieStaff) ? (
+          {showStaff && has(PlanFeature.appointieStaff) && isEnabled('staff') ? (
             <MenuRow
               icon="user-check"
               label={t('bookings.staff')}
@@ -287,7 +292,7 @@ export function MoreScreen() {
               onPress={() => navigation.navigate('StaffList')}
             />
           ) : null}
-          {showReports ? (
+          {showReports && isEnabled('bi') ? (
             <MenuRow
               icon="bar-chart-2"
               label={t('nav.businessIntelligence')}
@@ -296,7 +301,7 @@ export function MoreScreen() {
               onPress={() => navigation.navigate('BI', { tab: 'overview' })}
             />
           ) : null}
-          {showSettings ? (
+          {showSettings && isEnabled('settings') ? (
             <MenuRow
               icon="settings"
               label={t('settings.title')}

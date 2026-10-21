@@ -1290,6 +1290,8 @@ class ReturnService:
             earned = int(loyalty_meta.get("points_earned") or 0)
             prior_revoked = int(loyalty_meta.get("points_revoked") or 0)
             loyalty_meta["points_revoked"] = prior_revoked + int(revoked)
+            loyalty_meta["points_reversed"] = loyalty_meta["points_revoked"]
+            loyalty_meta["reversal_reason"] = f"Reversed earn for return {shop_return.return_number}"
             if earned > 0:
                 loyalty_meta["points_earned"] = max(0, earned - int(revoked))
             metadata["loyalty"] = loyalty_meta
@@ -1314,6 +1316,8 @@ class ReturnService:
             v_earned = int(v_loyalty.get("points_earned") or earned or 0)
             v_loyalty["points_earned"] = max(0, v_earned - int(revoked))
             v_loyalty["points_revoked"] = int(v_loyalty.get("points_revoked") or 0) + int(revoked)
+            v_loyalty["points_reversed"] = v_loyalty["points_revoked"]
+            v_loyalty["reversal_reason"] = f"Reversed earn for return {shop_return.return_number}"
             v_meta["loyalty"] = v_loyalty
             billing = (
                 dict(v_meta.get("billing") or {}) if isinstance(v_meta.get("billing"), dict) else {}

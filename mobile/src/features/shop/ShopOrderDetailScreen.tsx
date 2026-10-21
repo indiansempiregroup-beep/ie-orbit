@@ -58,7 +58,7 @@ import {
   shopOrderIsCashOnHandover,
   shopRefundPlan,
 } from './shopHelpers';
-import { lineMerchandiseGross, shopOrderBillBreakdown } from './shopOrderBill';
+import { lineMerchandiseGross, loyaltyBillHighlight, shopOrderBillBreakdown } from './shopOrderBill';
 import { GatewayCheckoutModal } from './GatewayCheckoutModal';
 import {
   startCashfreeCheckout,
@@ -498,14 +498,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
   const bill = order ? shopOrderBillBreakdown(order) : null;
   const loyaltyEnabled = Boolean(bootstrap?.loyalty?.enabled);
   const loyaltyLine =
-    bill && (loyaltyEnabled || bill.pointsEarned > 0 || bill.pointsToEarn > 0 || bill.rewardPoints > 0)
-      ? bill.pointsEarned > 0
-        ? `+${bill.pointsEarned} points earned · Enjoy rewards on next visit!`
-        : bill.pointsToEarn > 0
-          ? `+${bill.pointsToEarn} points to earn when paid · Enjoy rewards on next visit!`
-          : bill.rewardPoints > 0
-            ? `${bill.rewardPoints} points used on this bill`
-            : ''
+    bill &&
+    (loyaltyEnabled ||
+      bill.pointsEarned > 0 ||
+      bill.pointsToEarn > 0 ||
+      bill.rewardPoints > 0 ||
+      bill.pointsReversed > 0)
+      ? loyaltyBillHighlight(bill)
       : '';
   const invoiceVoucherId = String(order?.books_voucher_id || '').trim();
   const invoiceNumber = String(order?.books_voucher_number || order?.order_number || '').trim();
@@ -882,7 +881,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 #{order.order_number}
                 {unpaidOnline
                   ? ' · Complete payment below to confirm your order.'
-                  : ' · We will update you when it ships.'}
+                  : fulfillmentMode === 'pickup'
+                    ? ' · We will update you when it is ready for pickup.'
+                    : ' · We will update you when it ships.'}
               </Text>
               {order.metadata &&
               typeof order.metadata === 'object' &&

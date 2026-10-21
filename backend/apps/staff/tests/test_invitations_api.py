@@ -9,6 +9,7 @@ from apps.authentication.models import User, UserStatus
 from apps.authentication.services.roles import RoleService
 from apps.authentication.tests.otp_helpers import otp_login_ops
 from apps.staff.models import InvitationStatus, Staff, StaffInvitation
+from apps.staff.services.invitations import ALREADY_USED_INVITE_MESSAGE, PENDING_INVITE_LOGIN_MESSAGE
 
 
 @pytest.fixture
@@ -81,11 +82,7 @@ def test_staff_invitation_and_accept_flow(api_client: APIClient, owner: User) ->
 
     accept_response = api_client.post(
         reverse("auth-accept-invitation"),
-        {
-            "token": str(invitation.token),
-            "first_name": "New",
-            "last_name": "Staff",
-        },
+        {"token": str(invitation.token)},
         format="json",
     )
     assert accept_response.status_code == 200
@@ -94,6 +91,60 @@ def test_staff_invitation_and_accept_flow(api_client: APIClient, owner: User) ->
     invitation.refresh_from_db()
     assert invitation.status == InvitationStatus.ACCEPTED
     assert invitation.staff_id is not None
+    created = User.objects.get(email="new-staff@example.com")
+    assert created.first_name == "new-staff"
+    assert created.last_name == ""
+
+    preview = api_client.get(
+        reverse("auth-accept-invitation"),
+        {"token": str(invitation.token)},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["data"]["status"] == "accepted"
+
+    reuse = api_client.post(
+        reverse("auth-accept-invitation"),
+        {"token": str(invitation.token)},
+        format="json",
+    )
+    assert reuse.status_code == 422
+    assert ALREADY_USED_INVITE_MESSAGE in str(reuse.json())
+
+
+@pytest.mark.django_db
+def test_pending_invite_blocks_ops_login_until_accepted(api_client: APIClient, owner: User) -> None:
+    _tenant_id, business_id = bootstrap_workspace(api_client, owner)
+    email = "pending-login@example.com"
+    invite_response = api_client.post(
+        reverse("business-invitation-list-create", kwargs={"pk": business_id}),
+        {"email": email, "platform_role_code": "staff"},
+        format="json",
+    )
+    assert invite_response.status_code == 201
+    invitation = StaffInvitation.objects.get(id=invite_response.json()["data"]["id"])
+    api_client.credentials()
+
+    blocked = api_client.post(
+        reverse("auth-otp-send"),
+        {"client": "ops", "channel": "email", "identifier": email, "purpose": "login"},
+        format="json",
+    )
+    assert blocked.status_code == 422
+    assert PENDING_INVITE_LOGIN_MESSAGE in str(blocked.json())
+
+    accept_response = api_client.post(
+        reverse("auth-accept-invitation"),
+        {"token": str(invitation.token)},
+        format="json",
+    )
+    assert accept_response.status_code == 200
+
+    allowed = api_client.post(
+        reverse("auth-otp-send"),
+        {"client": "ops", "channel": "email", "identifier": email, "purpose": "login"},
+        format="json",
+    )
+    assert allowed.status_code == 200
 
 
 @pytest.mark.django_db
@@ -109,6 +160,7 @@ def test_invite_accept_links_existing_directory_staff(api_client: APIClient, own
             "last_name": "Created",
             "display_name": "Pre Created",
             "email": email,
+            "phone_number": "9876543210",
             "is_bookable": True,
         },
         format="json",
@@ -127,7 +179,7 @@ def test_invite_accept_links_existing_directory_staff(api_client: APIClient, own
 
     accept_response = api_client.post(
         reverse("auth-accept-invitation"),
-        {"token": str(invitation.token), "first_name": "Pre", "last_name": "Created"},
+        {"token": str(invitation.token)},
         format="json",
     )
     assert accept_response.status_code == 200
@@ -135,6 +187,9 @@ def test_invite_accept_links_existing_directory_staff(api_client: APIClient, own
     assert Staff.objects.filter(business_id=business_id, email__iexact=email).count() == 1
     staff = Staff.objects.get(id=staff_id)
     assert staff.user_id is not None
+    linked_user = User.objects.get(id=staff.user_id)
+    assert linked_user.first_name == "Pre"
+    assert linked_user.last_name == "Created"
 
 
 @pytest.mark.django_db
@@ -146,22 +201,29 @@ def test_staff_create_rejects_duplicate_email(api_client: APIClient, owner: User
         "first_name": "One",
         "display_name": "One",
         "email": "dup@example.com",
+        "phone_number": "9876500001",
         "is_bookable": True,
     }
     first = api_client.post(reverse("staff-list-create"), payload, format="json")
     assert first.status_code == 201
     second = api_client.post(
         reverse("staff-list-create"),
-        {**payload, "staff_code": "staff-two", "display_name": "Two"},
+        {
+            **payload,
+            "staff_code": "staff-two",
+            "display_name": "Two",
+            "phone_number": "9876500002",
+        },
         format="json",
     )
-    assert second.status_code == 400
+    assert second.status_code in (400, 422)
     assert "email" in str(second.json()).lower()
 
 
 @pytest.mark.django_db
 def test_staff_invitation_resend_pending(api_client: APIClient, owner: User) -> None:
     _tenant_id, business_id = bootstrap_workspace(api_client, owner)
+    mail.outbox.clear()
 
     first = api_client.post(
         reverse("business-invitation-list-create", kwargs={"pk": business_id}),
@@ -220,3 +282,81 @@ def test_iam_role_assign_rejects_external_user(api_client: APIClient, owner: Use
         format="json",
     )
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_pending_invitation_phone_matches_staff_on_same_tenant() -> None:
+    import uuid
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.businesses.models import Business
+    from apps.staff.models import EmploymentStatus
+    from apps.staff.services.invitations import pending_invitation_for_login
+    from apps.tenancy.models import Organization, Tenant
+
+    owner_a = User.objects.create_user(
+        email="phone-owner-a@example.com",
+        password=None,
+        status=UserStatus.ACTIVE,
+    )
+    owner_b = User.objects.create_user(
+        email="phone-owner-b@example.com",
+        password=None,
+        status=UserStatus.ACTIVE,
+    )
+    tenant_a = Tenant.objects.create(slug="phone-invite-a", display_name="A", owner=owner_a)
+    tenant_b = Tenant.objects.create(slug="phone-invite-b", display_name="B", owner=owner_b)
+    org_a = Organization.objects.create(tenant=tenant_a, name="A")
+    org_b = Organization.objects.create(tenant=tenant_b, name="B")
+    biz_a = Business.objects.create(
+        tenant=tenant_a,
+        organization=org_a,
+        business_code="a",
+        business_name="A",
+        display_name="A",
+    )
+    biz_b = Business.objects.create(
+        tenant=tenant_b,
+        organization=org_b,
+        business_code="b",
+        business_name="B",
+        display_name="B",
+    )
+    phone = "+919898989801"
+    Staff.objects.create(
+        tenant=tenant_a,
+        business=biz_a,
+        staff_code="a",
+        first_name="A",
+        last_name="One",
+        display_name="A One",
+        email="staff-a@example.com",
+        phone_number=phone,
+        employment_status=EmploymentStatus.ACTIVE,
+    )
+    Staff.objects.create(
+        tenant=tenant_b,
+        business=biz_b,
+        staff_code="b",
+        first_name="B",
+        last_name="Two",
+        display_name="B Two",
+        email="staff-b@example.com",
+        phone_number=phone,
+        employment_status=EmploymentStatus.ACTIVE,
+    )
+    invite = StaffInvitation.objects.create(
+        tenant=tenant_b,
+        business=biz_b,
+        email="staff-b@example.com",
+        platform_role_code="staff",
+        token=uuid.uuid4(),
+        status=InvitationStatus.PENDING,
+        expires_at=timezone.now() + timedelta(days=3),
+    )
+
+    found = pending_invitation_for_login(channel="whatsapp", identifier="9898989801")
+    assert found is not None
+    assert found.id == invite.id

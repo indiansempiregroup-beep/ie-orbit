@@ -590,6 +590,8 @@ export function ShopOrderDetailScreen() {
     enabled: loyaltyPrefs.enabled,
     pointsEarned: bill.pointsEarned,
     pointsToEarn: bill.pointsToEarn,
+    pointsReversed: bill.pointsReversed,
+    reversalReason: bill.reversalReason,
     pointsBalance: customer ? Number(customer.loyalty_points ?? 0) : null,
   });
   const invoiceVoucherId = String(order.books_voucher_id || '').trim();
@@ -1182,7 +1184,7 @@ export function ShopOrderDetailScreen() {
                   styles.loyaltyValue,
                   bill.pointsEarned <= 0 && styles.loyaltyValuePending,
                 ]}
-                numberOfLines={1}
+                numberOfLines={bill.pointsReversed > 0 ? 3 : 1}
               >
                 {loyaltyHighlight}
               </Text>

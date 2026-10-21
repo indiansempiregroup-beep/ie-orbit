@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import type { BIAppointieProfit } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
 import { MetricTile } from './components/MetricTile';
@@ -13,6 +15,8 @@ import { TablePagination } from './components/TablePagination';
 import { WidgetHelpTitle } from './components/WidgetHelpTitle';
 import { BooksInvoiceDrawer } from '../shop/BooksInvoiceDrawer';
 import { BarGraph, CHART_PALETTE, DonutPieChart, LineAreaChart } from './components/charts';
+import { useBiProductTab, useBiProductVisibility } from './biHooks';
+import { BiProductTabs } from './components/BiProductTabs';
 
 const PROFIT_HELP = {
   kept:
@@ -69,11 +73,302 @@ const PROFIT_HELP = {
     'Sell price minus stock cost after discounts (including reward points used). GST is separate. Not shown for bookings.',
 } as const;
 
+const APPOINT_HELP = {
+  estimated: 'List-price earnings for every booking in this period — completed, open, cancelled, and no-show.',
+  completed: 'Earnings from completed visits only. This is the money you actually earned.',
+  open: 'Bookings still ahead or not marked complete. Not lost yet.',
+  lost: 'List-price earnings lost because visits were cancelled or the guest did not show.',
+  bookings: 'How many appointments sit in this period.',
+  avg: 'Average list-price value of a priced booking.',
+  completion: 'Share of bookings that were marked complete.',
+  trend: 'Day-by-day estimated booking earnings.',
+  services:
+    'List price of appointments for each service in this period. Includes open and cancelled bookings, not only finished visits.',
+  staff:
+    'List price of finished appointments assigned to each person. This is booking value, not salary or commission.',
+  weekday: 'Which weekday earned the most from bookings.',
+} as const;
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ marginBottom: 4 }}>
+      <h2 style={{ margin: 0 }}>{title}</h2>
+      {subtitle ? <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)' }}>{subtitle}</p> : null}
+    </div>
+  );
+}
+
+function changeHint(value?: number | null) {
+  if (value == null) return undefined;
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${value}% vs last period`;
+}
+
+function AppointieProfitDashboard({ data, currency }: { data: BIAppointieProfit; currency: string }) {
+  const servicePie = useMemo(
+    () =>
+      (data.by_service ?? [])
+        .slice(0, 7)
+        .map((row, index) => ({
+          label: row.service_name,
+          value: Math.max(0, Number(row.revenue) || 0),
+          color: CHART_PALETTE[index % CHART_PALETTE.length],
+        }))
+        .filter((row) => row.value > 0),
+    [data.by_service],
+  );
+  const earningsLine = useMemo(
+    () =>
+      (data.series ?? []).map((row) => ({
+        label: row.date,
+        value: Number(row.estimated_revenue) || 0,
+      })),
+    [data.series],
+  );
+  const completedLine = useMemo(
+    () =>
+      (data.series ?? []).map((row) => ({
+        label: row.date,
+        value: Number(row.completed_revenue) || 0,
+      })),
+    [data.series],
+  );
+  const weekdayBars = useMemo(
+    () =>
+      (data.by_weekday ?? []).map((row, index) => ({
+        label: (row.weekday_name || '').slice(0, 3),
+        value: Math.max(0, Number(row.revenue ?? row.total) || 0),
+        color: CHART_PALETTE[index % CHART_PALETTE.length],
+      })),
+    [data.by_weekday],
+  );
+  const outcomePie = useMemo(
+    () =>
+      [
+        { label: 'Completed', value: data.completed ?? 0, color: '#0f766e' },
+        { label: 'Cancelled', value: data.cancelled ?? 0, color: '#b91c1c' },
+        { label: 'No-show', value: data.no_shows ?? 0, color: '#b45309' },
+        {
+          label: 'Open',
+          value: Math.max(0, (data.bookings ?? 0) - (data.completed ?? 0) - (data.cancelled ?? 0) - (data.no_shows ?? 0)),
+          color: '#1d4ed8',
+        },
+      ].filter((row) => row.value > 0),
+    [data.bookings, data.cancelled, data.completed, data.no_shows],
+  );
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Card>
+        <SectionHeading
+          title="Orbit Appoint"
+          subtitle="Service booking earnings only. Shop stock margins stay in Orbit Mart."
+        />
+      </Card>
+
+      {(data.insights ?? []).length ? (
+        <Card>
+          <h3 style={{ marginTop: 0 }}>What stands out</h3>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {(data.insights ?? []).map((insight) => (
+              <div key={`${insight.type}-${insight.title}`}>
+                <div style={{ fontWeight: 700 }}>{insight.title}</div>
+                <div style={{ color: 'var(--muted-foreground)', fontSize: 14 }}>{insight.detail}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(168px, 1fr))' }}>
+        <StatCard
+          label="Estimated earnings"
+          help={APPOINT_HELP.estimated}
+          tone="profit"
+          value={formatMoney(data.estimated_revenue, currency)}
+          delta={changeHint(data.comparison?.revenue_change_pct)}
+          deltaPositive={data.comparison?.revenue_change_pct != null ? data.comparison.revenue_change_pct >= 0 : null}
+        />
+        <StatCard
+          label="Completed earnings"
+          help={APPOINT_HELP.completed}
+          tone="success"
+          value={formatMoney(data.completed_revenue ?? 0, currency)}
+        />
+        <StatCard
+          label="Still open"
+          help={APPOINT_HELP.open}
+          tone="info"
+          value={formatMoney(data.open_revenue ?? 0, currency)}
+        />
+        <StatCard
+          label="Lost to cancels / no-shows"
+          help={APPOINT_HELP.lost}
+          tone="warning"
+          value={formatMoney(data.lost_total ?? 0, currency)}
+          hint={
+            data.lost_cancelled || data.lost_no_shows
+              ? `${formatMoney(data.lost_cancelled ?? 0, currency)} cancelled · ${formatMoney(data.lost_no_shows ?? 0, currency)} no-show`
+              : undefined
+          }
+        />
+        <StatCard
+          label="Bookings"
+          help={APPOINT_HELP.bookings}
+          tone="info"
+          value={data.bookings ?? 0}
+          delta={changeHint(data.comparison?.bookings_change_pct)}
+          deltaPositive={data.comparison?.bookings_change_pct != null ? data.comparison.bookings_change_pct >= 0 : null}
+        />
+        <StatCard
+          label="Avg booking"
+          help={APPOINT_HELP.avg}
+          value={formatMoney(data.avg_booking_value ?? 0, currency)}
+        />
+        <StatCard
+          label="Completion"
+          help={APPOINT_HELP.completion}
+          tone="success"
+          value={`${Math.round((data.completion_rate ?? 0) * 100)}%`}
+          hint={`${data.completed ?? 0} completed`}
+        />
+        <StatCard
+          label="Best day"
+          tone="info"
+          value={data.busiest_day || '—'}
+          hint={data.busiest_hour ? `Peak around ${data.busiest_hour}` : undefined}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+        <Card>
+          <WidgetHelpTitle title="Is earnings going up?" help={APPOINT_HELP.trend} />
+          <p style={{ marginTop: 8, color: 'var(--muted-foreground)', fontSize: 13 }}>
+            Day-by-day estimated booking earnings
+          </p>
+          {earningsLine.length > 1 ? (
+            <LineAreaChart
+              data={earningsLine}
+              color="#0f766e"
+              formatValue={(value) => formatMoney(value, currency)}
+              formatLabel={(label) => label.slice(5)}
+            />
+          ) : (
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>Need bookings on at least 2 days.</p>
+          )}
+        </Card>
+        <Card>
+          <WidgetHelpTitle title="Completed earnings" help={APPOINT_HELP.completed} />
+          <p style={{ marginTop: 8, color: 'var(--muted-foreground)', fontSize: 13 }}>
+            Day-by-day completed visits
+          </p>
+          {completedLine.some((row) => row.value > 0) && completedLine.length > 1 ? (
+            <LineAreaChart
+              data={completedLine}
+              color="#1d4ed8"
+              formatValue={(value) => formatMoney(value, currency)}
+              formatLabel={(label) => label.slice(5)}
+            />
+          ) : (
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No completed earnings in this period yet.</p>
+          )}
+        </Card>
+        <Card>
+          <WidgetHelpTitle title="Outcomes" help={APPOINT_HELP.completion} />
+          {outcomePie.length ? (
+            <DonutPieChart data={outcomePie} centerLabel="bookings" />
+          ) : (
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No bookings in this period yet.</p>
+          )}
+        </Card>
+        <Card>
+          <WidgetHelpTitle title="Earnings by service" help={APPOINT_HELP.services} />
+          {servicePie.length ? (
+            <DonutPieChart
+              data={servicePie}
+              centerLabel="earnings"
+              formatValue={(value) => formatMoney(value, currency)}
+            />
+          ) : (
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No priced services yet.</p>
+          )}
+        </Card>
+        <Card>
+          <WidgetHelpTitle title="Which weekday earns more" help={APPOINT_HELP.weekday} />
+          {weekdayBars.some((row) => row.value > 0) ? (
+            <BarGraph data={weekdayBars} color="#0369a1" formatValue={(value) => formatMoney(value, currency)} />
+          ) : (
+            <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No weekday earnings yet.</p>
+          )}
+        </Card>
+      </div>
+
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+        <Card>
+          <WidgetHelpTitle title="Services that brought in bookings" help={APPOINT_HELP.services} />
+          <p style={{ margin: '8px 0 12px', color: 'var(--muted-foreground)', fontSize: 13 }}>
+            Rupee amount is the list price of appointments for that service — not shop sales.
+          </p>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {(data.by_service ?? []).slice(0, 8).map((row) => (
+              <div key={row.service_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{row.service_name}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+                    {row.bookings ?? 0} booked · {row.completed ?? 0} finished
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <strong>{formatMoney(row.revenue, currency)}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>booked value</div>
+                </div>
+              </div>
+            ))}
+            {!(data.by_service ?? []).length ? (
+              <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No priced bookings in this period yet.</p>
+            ) : null}
+          </div>
+        </Card>
+        <Card>
+          <WidgetHelpTitle title="Who finished the visits" help={APPOINT_HELP.staff} />
+          <p style={{ margin: '8px 0 12px', color: 'var(--muted-foreground)', fontSize: 13 }}>
+            Rupee amount is the list price of finished visits assigned to that person — not salary or commission.
+          </p>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {(data.by_staff ?? []).slice(0, 8).map((row) => (
+              <div key={row.staff_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{row.staff_name}</div>
+                  <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
+                    {row.completed} finished · {row.cancelled} cancelled · {row.no_shows} no-show
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700 }}>{formatMoney(row.revenue, currency)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>
+                    from {row.completed} finished visit{row.completed === 1 ? '' : 's'}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!(data.by_staff ?? []).length ? (
+              <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>No staff booking activity yet.</p>
+            ) : null}
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 type ChannelFilter = 'all' | 'pos' | 'online_pickup' | 'online_delivery';
 type SortKey = 'gross_profit' | 'margin_percent' | 'revenue' | 'units' | 'name';
 
 function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function presetRange(preset: string): { from: string; to: string } {
@@ -102,11 +397,13 @@ const CHANNEL_LABELS: Record<string, string> = {
 };
 
 export function BIProfitPage() {
-  usePageMeta({ title: 'BI Profit — Orbit Mart' });
+  usePageMeta({ title: 'BI Profit — Orbit' });
   const client = useApiClient();
   const { activeBusiness } = useWorkspace();
+  const { showAppointie, showShopie, currency } = useBiProductVisibility('profit');
+  const { product, setProduct, showSwitcher } = useBiProductTab(showAppointie, showShopie);
+  const { staffId } = useReportStaffFilter();
   const businessId = activeBusiness?.id || '';
-  const currency = activeBusiness?.currency || 'INR';
 
   const initial = useMemo(() => presetRange('30d'), []);
   const [dateFrom, setDateFrom] = useState(initial.from);
@@ -126,8 +423,19 @@ export function BIProfitPage() {
   const limit = pageSize;
 
   const insights = useQuery({
-    queryKey: ['bi-product-profit', businessId, dateFrom, dateTo, channel, search, sort, offset, pageSize],
-    enabled: Boolean(businessId),
+    queryKey: [
+      'bi-product-profit',
+      businessId,
+      dateFrom,
+      dateTo,
+      channel,
+      search,
+      sort,
+      offset,
+      pageSize,
+      staffId,
+    ],
+    enabled: Boolean(businessId) && showShopie,
     queryFn: async () => {
       const response = await client.shop.productProfitInsights({
         business_id: businessId,
@@ -139,7 +447,8 @@ export function BIProfitPage() {
         order: sort === 'name' ? 'asc' : 'desc',
         limit,
         offset,
-        include_catalog: true,
+        include_catalog: !staffId,
+        staff_id: staffId || undefined,
       });
       return response.data;
     },
@@ -155,8 +464,10 @@ export function BIProfitPage() {
       loyaltySearch,
       loyaltyOffset,
       loyaltyPageSize,
+      staffId,
+      'shop',
     ],
-    enabled: Boolean(businessId),
+    enabled: Boolean(businessId) && showShopie,
     queryFn: async () => {
       const response = await client.customers.loyaltyReport({
         business: businessId,
@@ -164,12 +475,35 @@ export function BIProfitPage() {
         date_to: dateTo,
         direction: loyaltyDirection === 'all' ? undefined : loyaltyDirection,
         q: loyaltySearch || undefined,
+        record_kind: 'shop',
         limit: loyaltyPageSize,
         offset: loyaltyOffset,
+        staff_id: staffId || undefined,
       });
       return response.data;
     },
   });
+
+  const appointieProfit = useQuery({
+    queryKey: ['bi-appointie-profit', businessId, dateFrom, dateTo, staffId],
+    enabled: Boolean(businessId) && showAppointie,
+    queryFn: async () => {
+      const response = await client.bi.profit({
+        start_date: dateFrom,
+        end_date: dateTo,
+        staff_id: staffId || undefined,
+      });
+      return response.data.appointie ?? null;
+    },
+  });
+
+  const activePreset = useMemo(() => {
+    for (const key of ['today', '7d', '30d', 'mtd'] as const) {
+      const range = presetRange(key);
+      if (range.from === dateFrom && range.to === dateTo) return key;
+    }
+    return null;
+  }, [dateFrom, dateTo]);
 
   const summary = insights.data?.summary;
   const comparison = insights.data?.comparison;
@@ -186,7 +520,9 @@ export function BIProfitPage() {
   const stockRisk = insights.data?.stock_risk ?? [];
   const salesTotal = insights.data?.sales_total ?? 0;
   const loyaltySummary = loyalty.data?.summary;
-  const loyaltyLedger = loyalty.data?.ledger ?? [];
+  const loyaltyLedger = (loyalty.data?.ledger ?? []).filter(
+    (row) => row.record_kind !== 'booking' && row.source_label !== 'Booking',
+  );
   const loyaltyTotal = loyalty.data?.ledger_total ?? loyaltySummary?.entry_count ?? 0;
   const loyaltyEnabled = loyalty.data?.enabled !== false;
   const loyaltyMix = useMemo(() => {
@@ -343,17 +679,31 @@ export function BIProfitPage() {
       <Card>
         <h1 style={{ marginTop: 0 }}>Profit</h1>
         <p style={{ color: 'var(--muted-foreground)', marginBottom: 12 }}>
-          Simple view of what you earned, what you spent on stock, and what ate into profit. Only you can see this —
-          customers never see cost.
+          {showSwitcher
+            ? 'Appoint booking earnings and Mart stock margins stay in their own dashboards. Only you can see this.'
+            : showShopie
+              ? 'What you earned, what stock cost, and what ate into profit. Only you can see this.'
+              : 'Booking earnings from Orbit Appoint. Only you can see this.'}
         </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <BiProductTabs
+          showAppointie={showAppointie}
+          showShopie={showShopie}
+          value={product}
+          onChange={setProduct}
+        />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, marginTop: showSwitcher ? 12 : 0 }}>
           {[
             ['today', 'Today'],
             ['7d', '7 days'],
             ['30d', '30 days'],
             ['mtd', 'MTD'],
           ].map(([key, label]) => (
-            <Button key={key} type="button" variant="neutral" onClick={() => applyPreset(key)}>
+            <Button
+              key={key}
+              type="button"
+              variant={activePreset === key ? 'primary' : 'neutral'}
+              onClick={() => applyPreset(key)}
+            >
               {label}
             </Button>
           ))}
@@ -383,6 +733,24 @@ export function BIProfitPage() {
               style={{ padding: 10, borderRadius: 10, border: '1px solid var(--border)' }}
             />
           </label>
+        </div>
+      </Card>
+
+      {product === 'appointie' && showAppointie && appointieProfit.isLoading ? (
+        <Card>Loading Appoint earnings…</Card>
+      ) : null}
+      {product === 'appointie' && showAppointie && appointieProfit.data ? (
+        <AppointieProfitDashboard data={appointieProfit.data} currency={currency} />
+      ) : null}
+
+      {product === 'shopie' && showShopie ? (
+      <>
+      <Card>
+        <SectionHeading
+          title="Orbit Mart"
+          subtitle="What you earned, what stock cost, and what ate into profit. Booking earnings stay in Orbit Appoint."
+        />
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', marginTop: 16 }}>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
             Channel
             <select
@@ -448,7 +816,6 @@ export function BIProfitPage() {
           </Link>
         </div>
       </Card>
-
       {insights.isLoading ? <Card>Loading profit insights…</Card> : null}
       {insights.error ? (
         <Card>
@@ -1267,6 +1634,16 @@ export function BIProfitPage() {
         open={Boolean(booksInvoiceId)}
         onClose={() => setBooksInvoiceId(null)}
       />
+      </>
+      ) : null}
+
+      {!appointieProfit.isLoading && !insights.isLoading && !showAppointie && !showShopie ? (
+        <Card>
+          <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
+            Profit is not included for your subscribed products.
+          </p>
+        </Card>
+      ) : null}
     </div>
   );
 }

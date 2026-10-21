@@ -12,6 +12,8 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBookingActions, useBookingDetail, useBookingReassignableStaff } from './bookingDetailHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { buildNameMap } from '../../lib/managementEntities';
+import { RewardPointsBanner } from '../../components/RewardPointsBanner';
+import { readLoyaltyDocument } from '../../lib/loyalty';
 
 function buildUpiPayUrl(input: {
   vpa: string;
@@ -147,6 +149,23 @@ export function BookingDetailPage() {
     (booking?.service_id ? serviceMap.get(String(booking.service_id)) : undefined) ||
     booking?.booking_number ||
     'Booking';
+  const loyalty = booking
+    ? readLoyaltyDocument({
+        ...(booking as unknown as Record<string, unknown>),
+        loyalty: booking.loyalty,
+        metadata: booking.metadata,
+      })
+    : null;
+  const expectedEarn = (booking?.line_items?.length
+    ? booking.line_items.map((item) => item.service_id)
+    : booking?.service_id
+      ? [booking.service_id]
+      : []
+  ).reduce((sum, serviceId) => {
+    const service = servicesQuery.data?.find((row) => String(row.id) === String(serviceId));
+    return sum + Math.max(0, Number(service?.loyalty_points_earn) || 0);
+  }, 0);
+  const isOpenBooking = !['cancelled', 'completed', 'rejected', 'no_show'].includes(status);
 
   async function uploadUpiProof(file: File) {
     if (!auth.token || !tenantId || !businessId) {
@@ -312,6 +331,16 @@ export function BookingDetailPage() {
               <div><strong>Starts:</strong> {booking.start_at ? formatDateTime(booking.start_at) : '—'}</div>
               <div><strong>Ends:</strong> {booking.end_at ? formatDateTime(booking.end_at) : '—'}</div>
               <div><strong>Duration:</strong> {booking.duration_minutes ?? '—'} min</div>
+              <RewardPointsBanner
+                earned={loyalty?.pointsEarned ?? 0}
+                pending={isOpenBooking && (loyalty?.pointsEarned ?? 0) <= 0 ? expectedEarn : 0}
+                redeemed={loyalty?.pointsRedeemed ?? 0}
+                reversed={loyalty?.pointsReversed ?? 0}
+                remaining={loyalty?.remainingEarned}
+                discountAmount={loyalty?.discountAmount ?? 0}
+                reversalReason={loyalty?.reversalReason}
+                currency={activeBusiness?.currency}
+              />
               {recordedPaymentMethod || recordedProofUrl ? (
                 <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
                   <strong>Payment</strong>

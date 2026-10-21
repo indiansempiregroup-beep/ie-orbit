@@ -50,6 +50,8 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, formatTime, getApiErrorMessage, mapBookingStatus } from '../../utils/format';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../shop/posPayment';
+import { readLoyaltyDocument } from '../../utils/loyalty';
+import { RewardPointsBanner } from '../../components/RewardPointsBanner';
 import { DocumentActionsSheet, type ShopDocTarget } from '../shop/DocumentActionsSheet';
 import { bumpBookingsListRevision } from '../../utils/bookingsListRefresh';
 import type { RootStackParamList } from '../../navigation/types';
@@ -396,6 +398,25 @@ export function BookingDetailScreen() {
     const service = services.find((item) => String(item.id) === String(booking?.service_id));
     return formatServicePrice(service) || '—';
   }, [booking?.line_items, booking?.service_id, currency, services]);
+
+  const loyalty = useMemo(() => {
+    if (!booking) return null;
+    const snapshot = readLoyaltyDocument({
+      ...(booking as unknown as Record<string, unknown>),
+      loyalty: booking.loyalty,
+      metadata: booking.metadata,
+    });
+    const serviceIds = booking.line_items?.length
+      ? booking.line_items.map((item) => item.service_id)
+      : booking.service_id
+        ? [booking.service_id]
+        : [];
+    const expectedEarn = serviceIds.reduce((sum, serviceId) => {
+      const service = services.find((row) => String(row.id) === String(serviceId));
+      return sum + Math.max(0, Number(service?.loyalty_points_earn) || 0);
+    }, 0);
+    return { ...snapshot, expectedEarn };
+  }, [booking, services]);
 
   const usePerLineReassign = (booking?.line_items?.length ?? 0) > 1;
   const {
@@ -833,6 +854,17 @@ export function BookingDetailScreen() {
         <DetailRow label="Price" value={servicePriceLabel} />
         <DetailRow label="Notes" value={booking.notes || '—'} />
       </Card>
+
+      <RewardPointsBanner
+        earned={loyalty?.pointsEarned ?? 0}
+        pending={isOpenBooking && (loyalty?.pointsEarned ?? 0) <= 0 ? loyalty?.expectedEarn ?? 0 : 0}
+        redeemed={loyalty?.pointsRedeemed ?? 0}
+        reversed={loyalty?.pointsReversed ?? 0}
+        remaining={loyalty?.remainingEarned}
+        discountAmount={loyalty?.discountAmount ?? 0}
+        reversalReason={loyalty?.reversalReason}
+        currency={currency}
+      />
 
       {booking.review ? (
         <Card>

@@ -45,9 +45,9 @@ type DraftPayload = {
 
 const EXAMPLE_PROMPTS = [
   'On pet birthday give 15% off at POS and online, and tell staff',
-  'VIP tagged customers always get 10% off at the counter',
-  'Customer birthday — suggest 10% off when booking',
-  'On 11-01 every year run a 20% festival sale',
+  'Tell staff when a product goes out of stock',
+  'Message the customer when their order is completed',
+  'Each morning, remind staff about quotations still open after 3 days',
 ];
 
 export function AutomationsScreen() {
@@ -138,6 +138,14 @@ export function AutomationsScreen() {
       ]);
       setPhase('preview');
       setRefineText('');
+      const charged = Number(result.data.usage?.charged_paise || 0);
+      if (charged > 0) {
+        const symbol = result.data.usage?.currency === 'USD' ? '$' : '₹';
+        toast.push(
+          `Draft ready. ${symbol}${(charged / 100).toFixed(2)} charged to your AI wallet.`,
+          'success',
+        );
+      }
     } catch (err) {
       toast.push(getApiErrorMessage(err, "We couldn't understand that yet. Try rephrasing."), 'error');
     } finally {

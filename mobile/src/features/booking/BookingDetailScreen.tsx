@@ -353,10 +353,20 @@ export function BookingDetailScreen() {
   const currency = bootstrap?.business.currency || 'INR';
   const loyaltyEnabled = Boolean(bootstrap?.loyalty?.enabled);
   const loyalty = booking.loyalty;
-  const pointsRedeemed = loyaltyEnabled ? Math.max(0, Number(loyalty?.points_redeemed) || 0) : 0;
-  const pointsEarned = loyaltyEnabled ? Math.max(0, Number(loyalty?.points_earned) || 0) : 0;
-  const pointsPending = loyaltyEnabled ? Math.max(0, Number(loyalty?.points_pending) || 0) : 0;
-  const pointsDiscount = loyaltyEnabled ? Number(loyalty?.discount_amount) || 0 : 0;
+  const pointsRedeemed = Math.max(0, Number(loyalty?.points_redeemed) || 0);
+  const pointsEarned = Math.max(0, Number(loyalty?.points_earned) || 0);
+  const cancelledLike = ['cancelled', 'rejected', 'no_show'].includes(String(booking.status || ''));
+  const pointsPending =
+    booking.status === 'completed' || cancelledLike
+      ? 0
+      : Math.max(0, Number(loyalty?.points_pending ?? loyalty?.points_to_earn) || 0);
+  const pointsReversed = Math.max(0, Number(loyalty?.points_reversed) || 0);
+  const remainingEarned = Math.max(
+    0,
+    Number(loyalty?.remaining_earned ?? Math.max(0, pointsEarned - pointsReversed)),
+  );
+  const pointsDiscount = Number(loyalty?.discount_amount) || 0;
+  const reversalReason = String(loyalty?.reversal_reason || '').trim();
   const loyaltyCurrency = loyalty?.currency || currency;
   const lineTotal = (booking.items ?? []).reduce(
     (sum, item) => sum + (Number(item.price_snapshot) || 0),
@@ -364,7 +374,13 @@ export function BookingDetailScreen() {
   );
   const amountLabel = formatMoney(lineTotal > 0 ? lineTotal : null, currency);
   const showLoyaltyCard =
-    loyaltyEnabled && (pointsRedeemed > 0 || pointsEarned > 0 || pointsPending > 0 || pointsDiscount > 0);
+    (loyaltyEnabled ||
+      pointsRedeemed > 0 ||
+      pointsEarned > 0 ||
+      pointsPending > 0 ||
+      pointsReversed > 0 ||
+      pointsDiscount > 0) &&
+    (pointsRedeemed > 0 || pointsEarned > 0 || pointsPending > 0 || pointsReversed > 0 || pointsDiscount > 0);
   const invoiceVoucherId = String(booking.books_voucher_id || '').trim();
   const invoiceNumber = String(booking.books_voucher_number || booking.booking_number || '').trim();
   const showInvoicePending = booking.status !== 'completed' && booking.status !== 'cancelled';
@@ -375,23 +391,35 @@ export function BookingDetailScreen() {
     if (method === 'borrow') return 'Credit';
     return method.charAt(0).toUpperCase() + method.slice(1);
   })();
-  const highlightPoints = pointsEarned > 0 ? pointsEarned : pointsPending;
-  const highlightTitle =
-    pointsEarned > 0
+  const fullyReversed = pointsReversed > 0 && remainingEarned <= 0;
+  const highlightPoints = fullyReversed
+    ? pointsReversed
+    : pointsEarned > 0
+      ? pointsEarned
+      : pointsPending > 0
+        ? pointsPending
+        : pointsRedeemed;
+  const highlightTitle = fullyReversed
+    ? 'Points reversed'
+    : pointsEarned > 0
       ? 'Rewards unlocked'
       : pointsPending > 0
         ? 'Earn on this visit'
         : pointsRedeemed > 0
           ? 'Rewards applied'
           : 'Reward points';
-  const highlightSubtitle =
-    pointsEarned > 0
-      ? 'Added to your balance after this appointment was completed.'
+  const highlightSubtitle = fullyReversed
+    ? reversalReason || 'These points were taken back after cancel or refund.'
+    : pointsEarned > 0
+      ? pointsReversed > 0
+        ? `${remainingEarned} pts still on your balance.`
+        : 'Added to your balance after this appointment was completed.'
       : pointsPending > 0
         ? 'Complete your visit to credit these points to your balance.'
         : pointsRedeemed > 0
           ? 'You saved with reward points on this booking.'
           : '';
+  const bannerAccent = fullyReversed ? '#BE123C' : primary;
 
   const stickyFooter =
     canManage && !rescheduleMode ? (
@@ -501,21 +529,45 @@ export function BookingDetailScreen() {
       </Card>
 
       {showLoyaltyCard ? (
-        <View style={[styles.loyaltyBanner, { backgroundColor: withAlpha(primary, 0.1), borderColor: withAlpha(primary, 0.28) }]}>
-          <View style={[styles.loyaltyIconWrap, { backgroundColor: withAlpha(primary, 0.18) }]}>
-            <Feather name="award" size={22} color={primary} />
+        <View
+          style={[
+            styles.loyaltyBanner,
+            {
+              backgroundColor: withAlpha(bannerAccent, fullyReversed ? 0.08 : 0.1),
+              borderColor: withAlpha(bannerAccent, 0.28),
+            },
+          ]}
+        >
+          <View style={[styles.loyaltyIconWrap, { backgroundColor: withAlpha(bannerAccent, 0.18) }]}>
+            <Feather name={fullyReversed ? 'rotate-ccw' : 'award'} size={22} color={bannerAccent} />
           </View>
           <View style={styles.loyaltyCopy}>
-            <Text style={[styles.loyaltyEyebrow, { color: primary }]}>{highlightTitle}</Text>
+            <Text style={[styles.loyaltyEyebrow, { color: bannerAccent }]}>{highlightTitle}</Text>
             {highlightPoints > 0 ? (
               <Text style={styles.loyaltyPoints}>
+                {fullyReversed ? '−' : '+'}
                 {highlightPoints}{' '}
                 <Text style={styles.loyaltyPointsUnit}>pts</Text>
               </Text>
             ) : null}
             {highlightSubtitle ? <Text style={styles.loyaltySubtitle}>{highlightSubtitle}</Text> : null}
-            {(pointsRedeemed > 0 || pointsDiscount > 0) && (pointsEarned > 0 || pointsPending > 0) ? (
+            {pointsEarned > 0 ||
+            pointsPending > 0 ||
+            pointsRedeemed > 0 ||
+            pointsDiscount > 0 ||
+            pointsReversed > 0 ? (
               <View style={styles.loyaltyMetaRow}>
+                {pointsEarned > 0 ? (
+                  <View style={[styles.loyaltyChip, { backgroundColor: '#ECFDF5' }]}>
+                    <Text style={[styles.loyaltyChipText, { color: '#047857' }]}>Earned +{pointsEarned}</Text>
+                  </View>
+                ) : pointsPending > 0 ? (
+                  <View style={[styles.loyaltyChip, { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={[styles.loyaltyChipText, { color: '#B45309' }]}>
+                      Will earn +{pointsPending}
+                    </Text>
+                  </View>
+                ) : null}
                 {pointsRedeemed > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: withAlpha(primary, 0.12) }]}>
                     <Text style={[styles.loyaltyChipText, { color: primary }]}>Used {pointsRedeemed} pts</Text>
@@ -528,17 +580,10 @@ export function BookingDetailScreen() {
                     </Text>
                   </View>
                 ) : null}
-              </View>
-            ) : null}
-            {pointsRedeemed > 0 && highlightPoints <= 0 ? (
-              <View style={styles.loyaltyMetaRow}>
-                <View style={[styles.loyaltyChip, { backgroundColor: withAlpha(primary, 0.12) }]}>
-                  <Text style={[styles.loyaltyChipText, { color: primary }]}>Used {pointsRedeemed} pts</Text>
-                </View>
-                {pointsDiscount > 0 ? (
-                  <View style={[styles.loyaltyChip, { backgroundColor: '#ECFDF5' }]}>
-                    <Text style={[styles.loyaltyChipText, { color: '#047857' }]}>
-                      Saved {formatMoney(pointsDiscount, loyaltyCurrency)}
+                {pointsReversed > 0 ? (
+                  <View style={[styles.loyaltyChip, { backgroundColor: '#FFE4E6' }]}>
+                    <Text style={[styles.loyaltyChipText, { color: '#BE123C' }]}>
+                      Reversed −{pointsReversed}
                     </Text>
                   </View>
                 ) : null}
@@ -790,6 +835,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: spacing.lg,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   loyaltyIconWrap: {
     width: 48,

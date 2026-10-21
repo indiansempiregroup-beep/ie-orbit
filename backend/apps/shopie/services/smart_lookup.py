@@ -4,10 +4,11 @@ import base64
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from datetime import datetime, time, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
@@ -35,6 +36,10 @@ GEMINI_TEXT_USE_SEARCH = (os.environ.get("GEMINI_TEXT_USE_SEARCH") or "true").st
     "off",
 }
 DEFAULT_SUGGESTED_TOP_UPS = [5000, 10000, 25000, 50000]
+_MEDIA_FILE_RE = re.compile(
+    r"(?:https?://[^/]+)?/api/v1/media/([0-9a-fA-F-]{36})/file(?:\?.*)?$",
+    re.IGNORECASE,
+)
 
 
 def serialize_usage_row(row: SmartLookupUsage, *, include_scope: bool = False) -> dict[str, Any]:
@@ -134,6 +139,8 @@ def apply_usage_ledger_filters(
         qs = qs.filter(
             Q(code__icontains=q)
             | Q(source__icontains=q)
+            | Q(metadata__invoice_number__icontains=q)
+            | Q(metadata__supplier_name__icontains=q)
             | Q(business__display_name__icontains=q)
             | Q(business__business_name__icontains=q)
             | Q(tenant__display_name__icontains=q)
@@ -341,7 +348,9 @@ class SmartLookupService:
         platform = get_platform_smart_lookup_row()
         if not platform.enabled:
             return False
-        return tenant_feature_enabled(tenant=tenant, key="shopie_smart_lookup", default=True)
+        from apps.platform_admin.feature_flags import SMART_LOOKUP_FLAG
+
+        return tenant_feature_enabled(tenant=tenant, key=SMART_LOOKUP_FLAG, default=True)
 
     def plan_allows(self, *, business: Business) -> bool:
         entitlements = EntitlementService()
@@ -733,85 +742,42 @@ class SmartLookupService:
         vision = self._call_gemini(api_key=api_key, image_url=image_url, code=code, hint=hint)
         source_ok = "gemini_vision" if mode == "vision" else "gemini_text"
         source_err = "gemini_vision_error" if mode == "vision" else "gemini_text_error"
+        usage = vision.get("usage") or {}
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
         if not vision.get("ok"):
-            SmartLookupUsage.objects.create(
+            from apps.shopie.services.gemini_billing import settle_gemini_usage
+
+            settled = settle_gemini_usage(
                 tenant=tenant,
                 business=business,
-                code=code or "",
                 source=source_err,
                 found=False,
-                charged_paise=0,
+                code=code or "",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 model=GEMINI_MODEL,
-                metadata={"error": vision.get("error") or "failed", "mode": mode},
+                metadata={"error": vision.get("error") or "failed", "mode": mode, "hint": hint[:200]},
             )
+            message = vision.get("error") or (
+                "Could not read the pack photo. Try again or fill manually."
+                if mode == "vision"
+                else "Smart lookup could not identify this product. Try a pack photo or fill manually."
+            )
+            if settled["message"]:
+                message = f"{message} {settled['message']}"
             return {
                 "found": False,
                 "code": code,
                 "source": source_ok,
                 "needs_pack_photo": mode == "text",
-                "message": vision.get("error")
-                or (
-                    "Could not read the pack photo. Try again or fill manually."
-                    if mode == "vision"
-                    else "Smart lookup could not identify this product. Try a pack photo or fill manually."
-                ),
+                "charged_paise": settled["charged_paise"],
+                "message": message,
                 "confidence": "none",
             }
 
-        usage = vision.get("usage") or {}
-        input_tokens = int(usage.get("input_tokens") or 0)
-        output_tokens = int(usage.get("output_tokens") or 0)
         data = vision.get("data") or {}
         found = bool(data.get("name") or data.get("brand"))
-        # Text barcode/name guesses with no identity: don't debit (avoid charging for blanks).
-        # Pack-photo vision still debits because image tokens were consumed.
-        if mode == "text" and not found:
-            SmartLookupUsage.objects.create(
-                tenant=tenant,
-                business=business,
-                code=code or "",
-                source="gemini_text",
-                found=False,
-                charged_paise=0,
-                balance_after_paise=int(wallet.balance_paise),
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                model=GEMINI_MODEL,
-                metadata={"mode": mode, "hint": hint[:200], "no_charge": "empty_identity"},
-            )
-            return {
-                "found": False,
-                "code": code,
-                "source": "gemini_text",
-                "needs_pack_photo": True,
-                "charged_paise": 0,
-                "message": (
-                    "Smart lookup could not identify this barcode from text alone. "
-                    "Capture a clear pack photo to fill details (wallet will be charged)."
-                ),
-                "confidence": "none",
-            }
-
-        charged_paise, usd_micros = self._cost_paise(
-            input_tokens,
-            output_tokens,
-            platform=platform,
-            currency=saas_currency,
-        )
-
-        wallet = SmartLookupWallet.objects.select_for_update().get(pk=wallet.pk)
-        if wallet.balance_paise < charged_paise:
-            return {
-                "found": False,
-                "code": code,
-                "source": "smart_lookup_no_balance",
-                "needs_pack_photo": True,
-                "message": "Wallet balance is too low for this lookup. Top up under Products & billing.",
-                "confidence": "none",
-            }
-
-        wallet.balance_paise = int(wallet.balance_paise) - charged_paise
-        wallet.save(update_fields=["balance_paise", "updated_at", "version"])
 
         result = {
             "found": found,
@@ -836,14 +802,29 @@ class SmartLookupService:
             "images": {"front": image_url, "back": "", "gallery": [image_url] if image_url else []},
             "confidence": "medium" if mode == "vision" else "low",
             "needs_pack_photo": False,
-            "charged_paise": charged_paise,
+            "charged_paise": 0,
             "message": "",
         }
-        charge_note = (
-            f" ₹{charged_paise / 100:.2f} deducted from Smart Fill wallet."
-            if charged_paise > 0
-            else " No wallet charge."
+        from apps.shopie.services.gemini_billing import settle_gemini_usage
+
+        settled = settle_gemini_usage(
+            tenant=tenant,
+            business=business,
+            source=source_ok,
+            found=found,
+            code=str(result.get("code") or code or ""),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=GEMINI_MODEL,
+            metadata={
+                "image_url": image_url,
+                "mode": mode,
+                "hint": hint[:200],
+            },
         )
+        charged_paise = int(settled["charged_paise"])
+        result["charged_paise"] = charged_paise
+        charge_note = f" {settled['message']}" if settled["message"] else " No wallet charge."
         if result["found"]:
             # Vision reads the pack — safe to cache in platform GTIN.
             # Text-only Gemini guesses must NOT poison the shared catalog.
@@ -871,27 +852,221 @@ class SmartLookupService:
                 )
             )
 
-        SmartLookupUsage.objects.create(
+        return ProductEnrichmentService.with_user_message(result)
+
+    @transaction.atomic
+    def invoice_vision(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        image_urls: list[str],
+    ) -> dict[str, Any]:
+        """Extract a supplier invoice with Gemini and debit the Smart Lookup wallet."""
+        urls = [str(url or "").strip() for url in image_urls if str(url or "").strip()]
+        if not urls:
+            return {
+                "ok": False,
+                "source": "smart_lookup_unconfigured",
+                "message": "Add a photo of the supplier invoice.",
+                "charged_paise": 0,
+            }
+
+        from apps.billing.services.region import saas_currency_for_business
+        from apps.platform_admin.feature_flags import INVOICE_SCAN_FLAG
+
+        if not tenant_feature_enabled(tenant=tenant, key=INVOICE_SCAN_FLAG, default=True):
+            return {
+                "ok": False,
+                "source": "invoice_scan_disabled",
+                "message": "Invoice scan is turned off for this workspace.",
+                "charged_paise": 0,
+            }
+        platform = get_platform_smart_lookup_row()
+        if not platform.enabled:
+            return {
+                "ok": False,
+                "source": "smart_lookup_platform_disabled",
+                "message": "AI wallet lookups are temporarily unavailable.",
+                "charged_paise": 0,
+            }
+        saas_currency = saas_currency_for_business(business)
+        currency_prices = smart_lookup_prices_for_currency(saas_currency, row=platform)
+        min_debit = max(1, int(currency_prices["min_charge"] or 1))
+        wallet = self.ensure_wallet(tenant=tenant, business=business)
+        if wallet.balance_paise < min_debit:
+            return {
+                "ok": False,
+                "source": "smart_lookup_no_balance",
+                "message": "Add wallet balance to scan an invoice, then try again.",
+                "charged_paise": 0,
+                "balance_after_paise": int(wallet.balance_paise),
+            }
+        api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            return {
+                "ok": False,
+                "source": "smart_lookup_unconfigured",
+                "message": "Invoice scan is not configured on the server yet.",
+                "charged_paise": 0,
+            }
+
+        from apps.shopie.services.gemini_billing import settle_gemini_usage
+
+        vision = self._call_invoice_gemini(api_key=api_key, image_urls=urls)
+        usage = vision.get("usage") or {}
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        if not vision.get("ok"):
+            settled = settle_gemini_usage(
+                tenant=tenant,
+                business=business,
+                source="gemini_invoice_error",
+                found=False,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model=GEMINI_MODEL,
+                metadata={
+                    "kind": "invoice_scan",
+                    "error": vision.get("error") or "failed",
+                    "image_count": len(urls),
+                },
+            )
+            message = vision.get("error") or "Could not read that invoice photo. Try a clearer shot."
+            if settled["message"]:
+                message = f"{message} {settled['message']}"
+            return {
+                "ok": False,
+                "source": "gemini_invoice_error",
+                "message": message,
+                "charged_paise": settled["charged_paise"],
+                "balance_after_paise": settled["balance_after_paise"],
+                "charge_currency": settled["charge_currency"],
+            }
+
+        data = vision.get("data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        invoice_number = str(data.get("invoice_number") or "").strip()[:64]
+        supplier_name = str(data.get("supplier_name") or "").strip()[:160]
+        lines = data.get("lines") if isinstance(data.get("lines"), list) else []
+        settled = settle_gemini_usage(
             tenant=tenant,
             business=business,
-            code=result.get("code") or code or "",
-            source=source_ok,
-            found=bool(result.get("found")),
-            charged_paise=charged_paise,
-            balance_after_paise=int(wallet.balance_paise),
+            source="gemini_invoice",
+            found=bool(lines or invoice_number or supplier_name),
+            code=invoice_number,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            usd_micros=usd_micros,
             model=GEMINI_MODEL,
             metadata={
-                "image_url": image_url,
-                "markup_bps": int(platform.markup_bps),
-                "mode": mode,
-                "hint": hint[:200],
-                "currency": saas_currency,
+                "kind": "invoice_scan",
+                "invoice_number": invoice_number,
+                "supplier_name": supplier_name,
+                "line_count": len(lines),
+                "image_count": len(urls),
+                "image_urls": urls[:8],
             },
         )
-        return ProductEnrichmentService.with_user_message(result)
+        charged_paise = int(settled["charged_paise"])
+        return {
+            "ok": True,
+            "source": "gemini_invoice",
+            "data": data,
+            "charged_paise": charged_paise,
+            "balance_after_paise": settled["balance_after_paise"],
+            "charge_currency": settled["charge_currency"],
+            "usage_id": settled["usage_id"],
+            "message": (
+                settled["message"] or "No AI wallet charge for this invoice scan."
+            ),
+        }
+
+    def _call_invoice_gemini(self, *, api_key: str, image_urls: list[str]) -> dict[str, Any]:
+        prompt = (
+            "Extract a GST supplier invoice / tax invoice / purchase bill from these photos. "
+            "Return ONLY compact JSON with keys: "
+            "supplier_name, gstin, phone, invoice_number, invoice_date, place_of_supply, "
+            "taxable, cgst, sgst, igst, grand_total, "
+            "lines (array of objects with name, barcode, sku, brand, pack_size, hsn_sac, qty, rate, mrp, discount, gst_rate, line_total). "
+            "Dates as YYYY-MM-DD when possible. Use empty strings when unknown. "
+            "qty, rate, mrp, discount, gst_rate, and money fields as numeric strings. "
+            "rate is the billed unit cost (Rate / Price / Taxable per unit). "
+            "mrp is the printed MRP / RSP / MR.P / Max Retail Price on that line or pack. "
+            "Never copy rate into mrp. Leave mrp empty if the bill has no MRP. "
+            "Do not invent products that are not on the bill."
+        )
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        attached = 0
+        for image_url in image_urls[:6]:
+            image_bytes = self._download_image(image_url)
+            if not image_bytes:
+                continue
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": self._image_mime(image_url, image_bytes),
+                        "data": base64.b64encode(image_bytes).decode("ascii"),
+                    }
+                }
+            )
+            attached += 1
+        if attached == 0:
+            return {
+                "ok": False,
+                "error": "Could not open that invoice photo. Upload it again and retry.",
+            }
+        body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"},
+        }
+        endpoint = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{GEMINI_MODEL}:generateContent?key={api_key}"
+        )
+        try:
+            request = urllib.request.Request(
+                endpoint,
+                data=json.dumps(body).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": "IE-Orbit-ShopIE/1.0"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=45) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            logger.info("Gemini invoice scan HTTP %s", exc.code)
+            return {"ok": False, "error": "Could not read that invoice photo. Try a clearer shot."}
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+            logger.info("Gemini invoice scan failed: %s", exc)
+            return {"ok": False, "error": "Could not reach the AI service. Try again."}
+        from apps.shopie.services.gemini_billing import usage_from_gemini_payload
+
+        if not payload.get("candidates"):
+            return {
+                "ok": False,
+                "error": "Could not read that invoice photo. Try a clearer shot.",
+                "usage": usage_from_gemini_payload(payload),
+            }
+        parsed = self._parse_gemini_payload(payload)
+        if not parsed.get("ok"):
+            return {
+                "ok": False,
+                "error": parsed.get("error") or "Could not parse the invoice.",
+                "usage": parsed.get("usage") or {},
+            }
+        data = parsed.get("data") or {}
+        lines = data.get("lines") if isinstance(data.get("lines"), list) else []
+        has_header = any(
+            str(data.get(key) or "").strip()
+            for key in ("supplier_name", "invoice_number", "gstin", "grand_total")
+        )
+        if not lines and not has_header:
+            return {
+                "ok": False,
+                "error": "Could not read that invoice photo. Try a clearer shot of the full bill.",
+                "usage": parsed.get("usage") or {},
+            }
+        return parsed
 
     def _cost_paise(
         self,
@@ -901,37 +1076,14 @@ class SmartLookupService:
         platform: PlatformSmartLookupSettings | None = None,
         currency: str = "INR",
     ) -> tuple[int, int]:
-        settings = platform or get_platform_smart_lookup_row()
-        code = str(currency or "INR").strip().upper()
-        if code not in {"INR", "USD"}:
-            code = "INR"
-        input_rate = Decimal(str(settings.input_usd_per_million or "0.10"))
-        output_rate = Decimal(str(settings.output_usd_per_million or "0.40"))
-        fx = Decimal(str(settings.usd_to_inr or "85"))
-        currency_prices = smart_lookup_prices_for_currency(code, row=settings)
-        min_debit = max(0, int(currency_prices["min_charge"] or 0))
-        markup_bps = max(0, int(settings.markup_bps or 0))
-        gst_percent = Decimal(str(getattr(settings, "gst_percent", None) or "0"))
-        if gst_percent < 0:
-            gst_percent = Decimal("0")
+        from apps.shopie.services.gemini_billing import quote_gemini_minor
 
-        usd = (Decimal(input_tokens) / Decimal(1_000_000)) * input_rate + (
-            Decimal(output_tokens) / Decimal(1_000_000)
-        ) * output_rate
-        if markup_bps:
-            usd = usd * (Decimal(1) + Decimal(markup_bps) / Decimal(10_000))
-        usd_micros = int((usd * Decimal(1_000_000)).to_integral_value(rounding=ROUND_HALF_UP))
-        if code == "USD":
-            # International SaaS wallets settle in USD cents (no India GST/FX).
-            minor = int((usd * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
-        else:
-            inr = usd * fx
-            if gst_percent:
-                inr = inr * (Decimal(1) + gst_percent / Decimal(100))
-            minor = int((inr * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
-        if (input_tokens or output_tokens) and minor < max(1, min_debit):
-            minor = max(1, min_debit)
-        return minor, usd_micros
+        return quote_gemini_minor(
+            input_tokens,
+            output_tokens,
+            platform=platform,
+            currency=currency,
+        )
 
     def _call_gemini(
         self,
@@ -979,8 +1131,11 @@ class SmartLookupService:
                 ),
             ]
 
+        from apps.shopie.services.gemini_billing import add_usage, empty_usage, usage_from_gemini_payload
+
         use_search = bool(GEMINI_TEXT_USE_SEARCH and not image_url)
         attempts: list[dict[str, Any]] = []
+        total_usage = empty_usage()
         for prompt in prompts:
             parts: list[dict[str, Any]] = [{"text": prompt}]
             if image_url:
@@ -1067,6 +1222,7 @@ class SmartLookupService:
                 }
                 continue
 
+            add_usage(total_usage, usage_from_gemini_payload(payload))
             if not payload.get("candidates"):
                 logger.info("Gemini smart lookup returned no candidates; trying next attempt.")
                 continue
@@ -1082,16 +1238,22 @@ class SmartLookupService:
                     data[key] = ""
             has_identity = bool(str(data.get("name") or "").strip() or str(data.get("brand") or "").strip())
             if has_identity or image_url:
-                return {"ok": True, "data": data, "usage": parsed.get("usage") or {}}
+                return {"ok": True, "data": data, "usage": dict(total_usage)}
             # Text lookup with empty identity — try next prompt/tool combo instead of stopping.
-            last_empty = {"ok": True, "data": data, "usage": parsed.get("usage") or {}}
+            last_empty = {"ok": True, "data": data, "usage": dict(total_usage)}
             logger.info("Gemini smart lookup returned empty identity; trying next attempt.")
 
         if last_empty:
+            last_empty["usage"] = dict(total_usage)
             return last_empty
-        return last_error or {
+        if last_error:
+            failed = dict(last_error)
+            failed["usage"] = dict(total_usage)
+            return failed
+        return {
             "ok": False,
             "error": "Smart lookup could not reach the AI service. Try again, or capture a pack photo.",
+            "usage": dict(total_usage),
         }
 
     def _parse_gemini_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1101,11 +1263,9 @@ class SmartLookupService:
             for part in content.get("parts") or []:
                 if part.get("text"):
                     text += str(part["text"])
-        usage_meta = payload.get("usageMetadata") or {}
-        usage = {
-            "input_tokens": int(usage_meta.get("promptTokenCount") or 0),
-            "output_tokens": int(usage_meta.get("candidatesTokenCount") or 0),
-        }
+        from apps.shopie.services.gemini_billing import usage_from_gemini_payload
+
+        usage = usage_from_gemini_payload(payload)
         try:
             data = json.loads(text) if text else {}
         except json.JSONDecodeError:
@@ -1126,6 +1286,9 @@ class SmartLookupService:
         url = (url or "").strip()
         if not url:
             return None
+        local = self._read_local_media(url)
+        if local:
+            return local
         if url.startswith("/"):
             return None
         try:
@@ -1135,3 +1298,35 @@ class SmartLookupService:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             logger.info("Smart lookup image download failed: %s", exc)
             return None
+
+    def _read_local_media(self, url: str) -> bytes | None:
+        match = _MEDIA_FILE_RE.search(url.split("?", 1)[0])
+        if not match:
+            return None
+        from apps.platform_media.models import Media
+        from apps.platform_media.storage.factory import get_storage_provider
+
+        media = Media.objects.filter(id=match.group(1)).first()
+        if media is None:
+            return None
+        try:
+            return get_storage_provider(media.storage_provider).read_bytes(path=media.storage_path)
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            logger.info("Smart lookup local media read failed: %s", exc)
+            return None
+
+    def _image_mime(self, url: str, payload: bytes) -> str:
+        if payload.startswith(b"\x89PNG"):
+            return "image/png"
+        if payload.startswith(b"RIFF") and b"WEBP" in payload[:16]:
+            return "image/webp"
+        if payload.startswith(b"%PDF"):
+            return "application/pdf"
+        lowered = url.lower()
+        if lowered.endswith(".png"):
+            return "image/png"
+        if lowered.endswith(".webp"):
+            return "image/webp"
+        if lowered.endswith(".pdf"):
+            return "application/pdf"
+        return "image/jpeg"

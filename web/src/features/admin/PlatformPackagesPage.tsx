@@ -14,7 +14,7 @@ import {
   displayPlanCode,
   productLabel,
 } from './AdminChrome';
-import { adminFeatureGroups, BI_FEATURE_OPTIONS } from '../../config/planFeatures';
+import { PLAN_FEATURE_CATALOG, adminFeatureGroups, biFeatureOptionsForProduct } from '../../config/planFeatures';
 import { usePlatformPlanPackagesQuery, useUpsertPlanPackageMutation } from './adminHooks';
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -145,12 +145,14 @@ function setListValues(list: string[], values: string[], enabled: boolean): stri
 
 function FeatureGroup({
   title,
+  description,
   options,
   selected,
   onToggle,
   onSetAll,
 }: {
   title: string;
+  description?: string;
   options: Array<{ value: string; label: string }>;
   selected: string[];
   onToggle: (value: string) => void;
@@ -165,6 +167,7 @@ function FeatureGroup({
           <span className="admin-feature-group__count">
             {enabledCount} of {options.length} on
           </span>
+          {description ? <p className="admin-panel__desc" style={{ margin: '6px 0 0' }}>{description}</p> : null}
         </div>
         <div className="admin-feature-group__actions">
           <button type="button" className="admin-btn admin-btn--ghost" onClick={() => onSetAll(true)}>
@@ -238,7 +241,16 @@ export function PlatformPackagesPage() {
   }, [grouped]);
 
   const visibleGroups = form
-    ? FEATURE_GROUPS.filter((group) => group.products.includes(form.product_code))
+    ? FEATURE_GROUPS.flatMap((group) => {
+        if (!group.products.includes(form.product_code)) return [];
+        const allowed = new Set(
+          PLAN_FEATURE_CATALOG.filter((item) => item.products.includes(form.product_code as 'appointie' | 'shopie')).map(
+            (item) => item.code,
+          ),
+        );
+        const options = group.options.filter((opt) => allowed.has(opt.value));
+        return options.length ? [{ ...group, options }] : [];
+      })
     : [];
   const visibleFeatureCount = visibleGroups.reduce((sum, group) => sum + group.options.length, 0);
   const enabledFeatureCount = visibleGroups.reduce(
@@ -666,7 +678,8 @@ export function PlatformPackagesPage() {
                 </p>
                 <FeatureGroup
                   title="Business intelligence"
-                  options={BI_FEATURE_OPTIONS}
+                  description="These flags only unlock analytics for this product. Appoint sections use bookings; Mart sections use orders and GMV. Profit on Appoint is booking earnings; Profit on Mart is stock margins."
+                  options={biFeatureOptionsForProduct(form.product_code)}
                   selected={form.bi_features}
                   onToggle={(value) => setForm({ ...form, bi_features: toggleListValue(form.bi_features, value) })}
                   onSetAll={(enabled) =>
@@ -674,7 +687,7 @@ export function PlatformPackagesPage() {
                       ...form,
                       bi_features: setListValues(
                         form.bi_features,
-                        BI_FEATURE_OPTIONS.map((opt) => opt.value),
+                        biFeatureOptionsForProduct(form.product_code).map((opt) => opt.value),
                         enabled,
                       ),
                     })

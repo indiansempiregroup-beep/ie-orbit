@@ -74,6 +74,11 @@ def run_daily_schedule_task() -> dict[str, int]:
         except Exception:  # noqa: BLE001
             pass
 
-        # Touch product_code so lint/unused stays quiet when used for future filters.
         _ = product_code
+        try:
+            from apps.workflow.services.daily import run_operational_scans
+
+            matched += run_operational_scans(business=business, today=today)
+        except Exception:  # noqa: BLE001
+            pass
     return {"businesses": scanned, "runs": matched}

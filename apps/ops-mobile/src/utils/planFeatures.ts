@@ -20,6 +20,7 @@ export const PlanFeature = {
   shopieAiAssistant: 'shopie_ai_assistant',
   shopieBooksSale: 'shopie_books_sale',
   shopieBooksPurchase: 'shopie_books_purchase',
+  shopieInvoiceScan: 'shopie_invoice_scan',
   shopieBooksCash: 'shopie_books_cash',
   shopieBooksExpense: 'shopie_books_expense',
   shopieBooksQuotations: 'shopie_books_quotations',
@@ -53,6 +54,7 @@ export const PlanFeature = {
 export const SHOPIE_BOOKS_FEATURES = [
   PlanFeature.shopieBooksSale,
   PlanFeature.shopieBooksPurchase,
+  PlanFeature.shopieInvoiceScan,
   PlanFeature.shopieBooksCash,
   PlanFeature.shopieBooksExpense,
   PlanFeature.shopieBooksQuotations,
@@ -89,4 +91,58 @@ export function hasPlanFeature(features: string[] | null | undefined, feature: s
 export function hasAnyPlanFeature(features: string[] | null | undefined, keys: string[]): boolean {
   if (features == null) return true;
   return keys.some((key) => features.includes(key));
+}
+
+export type BiBillingSnapshot = {
+  entitled_bi_features?: string[] | null;
+  bi_features?: string[] | null;
+  bi_features_by_product?: Record<string, string[]> | null;
+  product_code?: string | null;
+};
+
+const BI_FEATURE_DATA_PRODUCTS: Record<string, string[]> = {
+  overview: ['appointie', 'shopie'],
+  profit: ['appointie', 'shopie'],
+  growth: ['appointie', 'shopie'],
+  revenue: ['appointie', 'shopie'],
+  forecast: ['appointie', 'shopie'],
+  reports: ['appointie', 'shopie'],
+};
+
+export function entitledBiFeatures(billing?: BiBillingSnapshot | null): string[] {
+  if (!billing) return [];
+  if (billing.entitled_bi_features != null) return billing.entitled_bi_features;
+  return billing.bi_features ?? [];
+}
+
+export function biFeaturesByProduct(billing?: BiBillingSnapshot | null): Record<string, string[]> {
+  if (!billing) return {};
+  if (billing.bi_features_by_product && Object.keys(billing.bi_features_by_product).length) {
+    return billing.bi_features_by_product;
+  }
+  const features = entitledBiFeatures(billing);
+  const product = billing.product_code || 'appointie';
+  return features.length ? { [product]: features } : {};
+}
+
+export function productsWithBiFeature(
+  billing: BiBillingSnapshot | null | undefined,
+  feature: string,
+  subscribedIds?: string[],
+): string[] {
+  const byProduct = biFeaturesByProduct(billing);
+  const dataProducts = BI_FEATURE_DATA_PRODUCTS[feature] ?? ['appointie', 'shopie'];
+  const subscribed = new Set(subscribedIds?.length ? subscribedIds : Object.keys(byProduct));
+  return dataProducts.filter(
+    (product) => subscribed.has(product) && (byProduct[product] ?? []).includes(feature),
+  );
+}
+
+export function hasBiFeature(
+  billing: BiBillingSnapshot | null | undefined,
+  feature: string,
+  product?: string,
+): boolean {
+  if (product) return productsWithBiFeature(billing, feature).includes(product);
+  return productsWithBiFeature(billing, feature).length > 0;
 }

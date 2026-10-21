@@ -51,6 +51,9 @@ export type ShopOrderBillBreakdown = {
   pointsEarned: number;
   /** Points that will credit when the bill is paid. */
   pointsToEarn: number;
+  /** Points clawed back after a return, cancel, or refund. */
+  pointsReversed: number;
+  reversalReason: string;
   deliveryFee: number;
   /** Taxable value after all discounts. */
   taxableSubtotal: number;
@@ -132,7 +135,15 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
   const rewardDiscount = money(num(loyalty.discount_amount));
   const rewardPoints = Math.max(0, Math.floor(num(loyalty.points_redeemed)));
   const awardLoyalty = pos.award_loyalty_points !== false;
-  let pointsEarned = Math.max(0, Math.floor(num(loyalty.points_earned)));
+  const pointsReversed = Math.max(
+    0,
+    Math.floor(num(loyalty.points_reversed || loyalty.points_revoked || order.points_reversed)),
+  );
+  const reversalReason = String(loyalty.reversal_reason || '').trim();
+  let pointsEarned = Math.max(
+    0,
+    Math.floor(num(order.points_earned) || num(loyalty.points_earned) + pointsReversed),
+  );
   const expectedEarn = Math.max(0, Math.floor(num(pos.points_to_earn)));
   let pointsToEarn = 0;
 
@@ -210,6 +221,8 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
     rewardDiscount,
     pointsEarned,
     pointsToEarn,
+    pointsReversed,
+    reversalReason,
     deliveryFee,
     taxableSubtotal,
     taxTotal,
@@ -287,9 +300,22 @@ export function voucherBillBreakdown(
     Math.floor(num(billing.reward_points) || num(loyalty.points_redeemed)),
   );
   const awardLoyalty = billing.award_loyalty_points !== false;
+  const pointsReversed = Math.max(
+    0,
+    Math.floor(
+      num(voucher.points_reversed) ||
+        num(loyalty.points_reversed || loyalty.points_revoked) ||
+        num(billing.points_reversed || billing.points_revoked),
+    ),
+  );
+  const reversalReason = String(loyalty.reversal_reason || billing.reversal_reason || '').trim();
   let pointsEarned = Math.max(
     0,
-    Math.floor(num(loyalty.points_earned) || num(billing.points_earned)),
+    Math.floor(
+      num(voucher.points_earned) ||
+        num(loyalty.points_earned) + pointsReversed ||
+        num(billing.points_earned) + pointsReversed,
+    ),
   );
   const expectedEarn = Math.max(0, Math.floor(num(billing.points_to_earn)));
   let pointsToEarn = 0;
@@ -337,6 +363,8 @@ export function voucherBillBreakdown(
     rewardDiscount,
     pointsEarned,
     pointsToEarn,
+    pointsReversed,
+    reversalReason,
     deliveryFee: 0,
     taxableSubtotal,
     taxTotal,

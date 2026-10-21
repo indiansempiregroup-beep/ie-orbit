@@ -347,7 +347,6 @@ export function DocumentActionsSheet({
               type="button"
               onClick={() => {
                 onNewBill?.();
-                onClose();
               }}
             >
               New bill

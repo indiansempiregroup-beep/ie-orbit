@@ -183,6 +183,10 @@ export function ShopVoucherForm({
         });
         return;
       }
+      if (voucherType === 'purchase') {
+        navigate(`/shop/books/purchase/${voucher.id}`);
+        return;
+      }
       navigate(`${backTo}?created=${encodeURIComponent(voucher.voucher_number)}`);
     } catch (error) {
       setMessage(getApiErrorMessage(error, `Couldn't save this ${voucherType}. Try again.`));

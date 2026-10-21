@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -14,6 +16,7 @@ from apps.businesses.models import Business
 from apps.common.api.responses import success_response
 from apps.staff.api.invitation_serializers import (
     AcceptInvitationSerializer,
+    InvitationPreviewSerializer,
     StaffInvitationCreateSerializer,
     StaffInvitationSerializer,
 )
@@ -83,8 +86,32 @@ class AcceptInvitationView(APIView):
 
     @extend_schema(
         tags=["Staff Invitations"],
+        parameters=[
+            OpenApiParameter(
+                "token",
+                str,
+                OpenApiParameter.QUERY,
+                required=True,
+                description="Invitation token from the email link.",
+            )
+        ],
+        responses={200: InvitationPreviewSerializer},
+        description="Preview a staff invitation without accepting it.",
+    )
+    def get(self, request: Request) -> Response:
+        raw = str(request.query_params.get("token") or "").strip()
+        try:
+            token = str(UUID(raw))
+        except ValueError:
+            preview = {"status": "invalid", "business_name": None, "role": None, "email": None}
+        else:
+            preview = StaffInvitationService().preview_invitation(token=token)
+        return success_response(preview, request_id=getattr(request, "request_id", None))
+
+    @extend_schema(
+        tags=["Staff Invitations"],
         request=AcceptInvitationSerializer,
-        description="Accept a staff invitation using the invitation token.",
+        description="Accept a staff invitation using the invitation token. Each link works once.",
     )
     def post(self, request: Request) -> Response:
         serializer = AcceptInvitationSerializer(data=request.data)

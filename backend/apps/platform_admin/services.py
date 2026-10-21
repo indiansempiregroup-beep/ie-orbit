@@ -600,16 +600,9 @@ class PlatformAdminService:
     # --- feature flags -------------------------------------------------------------
 
     def list_flags(self, *, tenant: Tenant) -> list[dict[str, Any]]:
-        defaults = [
-            "appointie",
-            "shopie",
-            "bi_full",
-            "white_label",
-            "google_ads",
-            "razorpay",
-            "cashfree",
-            "shopie_smart_lookup",
-        ]
+        from apps.platform_admin.feature_flags import DEFAULT_TENANT_FLAGS
+
+        defaults = list(DEFAULT_TENANT_FLAGS)
         existing = {f.key: f for f in PlatformFeatureFlag.objects.filter(tenant=tenant)}
         rows = []
         for key in defaults:

@@ -18,6 +18,7 @@ from apps.shopie.models import (
     OrderStatus,
     PartyKind,
     ProductStatus,
+    QuotationStatus,
     ShopBooksDocument,
     ShopBooksVoucher,
     ShopBusinessSettings,
@@ -58,14 +59,21 @@ def _money_str(value: Any) -> str | None:
     return f"{amount:.2f}"
 
 
-def _loyalty_points_from_metadata(metadata: Any) -> tuple[int, int]:
-    """Return (points_earned, points_redeemed) from order/voucher metadata."""
+def _loyalty_points_from_metadata(metadata: Any) -> tuple[int, int, int]:
+    """Return (points_earned original, points_redeemed, points_reversed) from metadata."""
     meta = metadata if isinstance(metadata, dict) else {}
     loyalty = meta.get("loyalty") if isinstance(meta.get("loyalty"), dict) else {}
     billing = meta.get("billing") if isinstance(meta.get("billing"), dict) else {}
-    earned = int(
+    remaining = int(
         loyalty.get("points_earned")
         or billing.get("points_earned")
+        or 0
+    )
+    reversed_pts = int(
+        loyalty.get("points_reversed")
+        or loyalty.get("points_revoked")
+        or billing.get("points_reversed")
+        or billing.get("points_revoked")
         or 0
     )
     redeemed = int(
@@ -73,7 +81,7 @@ def _loyalty_points_from_metadata(metadata: Any) -> tuple[int, int]:
         or billing.get("reward_points")
         or 0
     )
-    return max(0, earned), max(0, redeemed)
+    return max(0, remaining + reversed_pts), max(0, redeemed), max(0, reversed_pts)
 
 
 def _is_booking_metadata(metadata: Any) -> bool:
@@ -419,6 +427,7 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
     points_earned = serializers.SerializerMethodField()
     points_redeemed = serializers.SerializerMethodField()
+    points_reversed = serializers.SerializerMethodField()
     gross_profit = serializers.SerializerMethodField()
 
     class Meta:
@@ -444,6 +453,7 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
             "payment_status",
             "points_earned",
             "points_redeemed",
+            "points_reversed",
             "gross_profit",
             "lines",
             "created_at",
@@ -481,6 +491,9 @@ class ShopOrderListSerializer(serializers.ModelSerializer):
     def get_points_redeemed(self, obj: ShopOrder) -> int:
         return _loyalty_points_from_metadata(obj.metadata)[1]
 
+    def get_points_reversed(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[2]
+
     def get_gross_profit(self, obj: ShopOrder) -> str | None:
         return _order_gross_profit(obj)
 
@@ -517,6 +530,7 @@ class ShopOrderSerializer(serializers.ModelSerializer):
     seller_gstin = serializers.SerializerMethodField()
     points_earned = serializers.SerializerMethodField()
     points_redeemed = serializers.SerializerMethodField()
+    points_reversed = serializers.SerializerMethodField()
     gross_profit = serializers.SerializerMethodField()
     return_days = serializers.SerializerMethodField()
     return_eligible_until = serializers.SerializerMethodField()
@@ -568,6 +582,7 @@ class ShopOrderSerializer(serializers.ModelSerializer):
             "books_voucher_number",
             "points_earned",
             "points_redeemed",
+            "points_reversed",
             "gross_profit",
             "return_days",
             "return_eligible_until",
@@ -784,6 +799,9 @@ class ShopOrderSerializer(serializers.ModelSerializer):
 
     def get_points_redeemed(self, obj: ShopOrder) -> int:
         return _loyalty_points_from_metadata(obj.metadata)[1]
+
+    def get_points_reversed(self, obj: ShopOrder) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[2]
 
     def get_gross_profit(self, obj: ShopOrder) -> str | None:
         return _order_gross_profit(obj)
@@ -1258,6 +1276,7 @@ class ShopInvoiceSerializer(serializers.ModelSerializer):
 
 
 class ShopQuotationSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
     customer_email = serializers.SerializerMethodField()
 
@@ -1267,6 +1286,7 @@ class ShopQuotationSerializer(serializers.ModelSerializer):
             "id",
             "business",
             "customer",
+            "customer_name",
             "customer_phone",
             "customer_email",
             "quotation_number",
@@ -1282,6 +1302,25 @@ class ShopQuotationSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_customer_name(self, obj: ShopQuotation) -> str:
+        customer = obj.customer
+        if customer is None:
+            return ""
+        return (
+            str(getattr(customer, "display_name", "") or "").strip()
+            or " ".join(
+                filter(
+                    None,
+                    [
+                        str(getattr(customer, "first_name", "") or "").strip(),
+                        str(getattr(customer, "last_name", "") or "").strip(),
+                    ],
+                )
+            )
+            or str(getattr(customer, "email", "") or "").strip()
+            or ""
+        )
 
     def get_customer_phone(self, obj: ShopQuotation) -> str:
         from apps.customers.services.contact import resolve_customer_phone
@@ -1305,6 +1344,23 @@ class ShopQuotationCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     valid_until = serializers.DateField(required=False, allow_null=True)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class ShopQuotationUpdateSerializer(serializers.Serializer):
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    valid_until = serializers.DateField(required=False, allow_null=True)
+    status = serializers.ChoiceField(
+        choices=[
+            (QuotationStatus.DRAFT, QuotationStatus.DRAFT.label),
+            (QuotationStatus.SENT, QuotationStatus.SENT.label),
+            (QuotationStatus.ACCEPTED, QuotationStatus.ACCEPTED.label),
+            (QuotationStatus.REJECTED, QuotationStatus.REJECTED.label),
+            (QuotationStatus.EXPIRED, QuotationStatus.EXPIRED.label),
+        ],
+        required=False,
+    )
+    lines = serializers.ListField(child=serializers.DictField(), required=False, allow_empty=False)
 
 
 class ShopStockMovementSerializer(serializers.ModelSerializer):
@@ -1420,6 +1476,7 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
     contra_account_name = serializers.SerializerMethodField()
     points_earned = serializers.SerializerMethodField()
     points_redeemed = serializers.SerializerMethodField()
+    points_reversed = serializers.SerializerMethodField()
     gross_profit = serializers.SerializerMethodField()
 
     class Meta:
@@ -1460,6 +1517,7 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
             "metadata",
             "points_earned",
             "points_redeemed",
+            "points_reversed",
             "gross_profit",
             "created_at",
             "updated_at",
@@ -1502,6 +1560,9 @@ class ShopBooksVoucherSerializer(serializers.ModelSerializer):
 
     def get_points_redeemed(self, obj: ShopBooksVoucher) -> int:
         return _loyalty_points_from_metadata(obj.metadata)[1]
+
+    def get_points_reversed(self, obj: ShopBooksVoucher) -> int:
+        return _loyalty_points_from_metadata(obj.metadata)[2]
 
     def get_gross_profit(self, obj: ShopBooksVoucher) -> str | None:
         if _is_booking_metadata(obj.metadata):
@@ -1556,6 +1617,7 @@ class ShopPurchaseVoucherCreateSerializer(serializers.Serializer):
     cash_account_id = serializers.UUIDField(required=False, allow_null=True)
     currency = serializers.CharField(required=False, allow_blank=True, max_length=3)
     metadata = serializers.DictField(required=False)
+    godown_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class ShopCreditNoteCreateSerializer(ShopSaleVoucherCreateSerializer):
@@ -1628,6 +1690,9 @@ class ShopTransferCreateSerializer(serializers.Serializer):
 
 
 class ShopPartyLedgerEntrySerializer(serializers.ModelSerializer):
+    voucher_number = serializers.SerializerMethodField()
+    voucher_type = serializers.SerializerMethodField()
+
     class Meta:
         model = ShopPartyLedgerEntry
         fields = [
@@ -1640,10 +1705,26 @@ class ShopPartyLedgerEntrySerializer(serializers.ModelSerializer):
             "direction",
             "balance_after",
             "voucher",
+            "voucher_number",
+            "voucher_type",
             "notes",
             "metadata",
             "created_at",
         ]
+
+    def get_voucher_number(self, obj: ShopPartyLedgerEntry) -> str | None:
+        voucher = getattr(obj, "voucher", None)
+        return voucher.voucher_number if voucher is not None else None
+
+    def get_voucher_type(self, obj: ShopPartyLedgerEntry) -> str | None:
+        voucher = getattr(obj, "voucher", None)
+        return voucher.voucher_type if voucher is not None else None
+
+
+class ShopVoucherPaySerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    cash_account_id = serializers.UUIDField()
+    notes = serializers.CharField(required=False, allow_blank=True)
 
 
 class ShopPartyStatementQuerySerializer(serializers.Serializer):
@@ -1741,6 +1822,18 @@ class ShopBooksDocumentCreateSerializer(serializers.Serializer):
     document_date = serializers.DateField(required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
     lines = serializers.ListField(child=serializers.DictField(), allow_empty=False)
+
+
+class ShopBooksDocumentUpdateSerializer(serializers.Serializer):
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
+    document_date = serializers.DateField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.ChoiceField(
+        choices=["draft", "confirmed", "cancelled"],
+        required=False,
+    )
+    lines = serializers.ListField(child=serializers.DictField(), required=False, allow_empty=False)
 
 
 class ShopBooksDocumentConvertSerializer(serializers.Serializer):
@@ -2275,3 +2368,18 @@ class ShopCouponPatchSerializer(ShopCouponWriteSerializer):
     name = serializers.CharField(max_length=120, required=False)
     discount_type = serializers.ChoiceField(choices=DiscountType.choices, required=False)
     discount_value = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
+
+class ShopInvoiceScanAnalyzeSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    image_urls = serializers.ListField(child=serializers.CharField(max_length=800), min_length=1, max_length=6)
+
+
+class ShopInvoiceScanConfirmSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    draft = serializers.DictField()
+    create_missing = serializers.BooleanField(required=False, default=True)
+    create_supplier = serializers.BooleanField(required=False, default=False)
+    amount_paid = serializers.DecimalField(max_digits=14, decimal_places=2, required=False, default=0)
+    cash_account_id = serializers.UUIDField(required=False, allow_null=True)
+    godown_id = serializers.UUIDField(required=False, allow_null=True)

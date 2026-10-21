@@ -13,6 +13,12 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 import type { ShopReturn } from '@ie-orbit/sdk';
 import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
@@ -56,6 +62,10 @@ export function ArrangeReturnPickupSheet({
   onDone,
 }: Props) {
   const insets = useSafeAreaInsets();
+  const { driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.92,
+    visible && shopReturn?.id,
+  );
   const client = useOpsClient();
   const toast = useToast();
   const [mode, setMode] = useState('instant');
@@ -168,10 +178,15 @@ export function ArrangeReturnPickupSheet({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-          <View style={styles.grab}>
-            <View style={styles.handle} />
-          </View>
+        <ExpandableSheetView
+          onLayout={onSheetLayout}
+          style={[
+            styles.sheet,
+            { paddingBottom: Math.max(insets.bottom, spacing.md) },
+            sheetMotionStyle,
+          ]}
+        >
+          <SheetHandle {...handleProps} tone="muted" />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Arrange return pickup</Text>
@@ -187,6 +202,7 @@ export function ArrangeReturnPickupSheet({
           </View>
 
           <ScrollView
+            style={driven ? sheetBodyStyle : undefined}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             bounces={false}
@@ -318,7 +334,7 @@ export function ArrangeReturnPickupSheet({
               onPress={() => void submit()}
             />
           </View>
-        </View>
+        </ExpandableSheetView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -334,8 +350,6 @@ const styles = StyleSheet.create({
     maxHeight: '92%',
     paddingHorizontal: spacing.lg,
   },
-  grab: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  handle: { width: 40, height: 4, borderRadius: 999, backgroundColor: colors.border },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
   title: { fontFamily: fonts.bodySemi, fontSize: 18, color: colors.foreground },
   subtitle: { marginTop: 2, fontSize: 13, color: colors.mutedForeground },

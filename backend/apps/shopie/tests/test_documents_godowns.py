@@ -52,6 +52,72 @@ def test_sale_order_converts_to_sale(
 
 
 @pytest.mark.django_db
+def test_update_document_changes_lines_and_blocks_converted(
+    shop_business: Business, customer: Customer
+) -> None:
+    product = ShopProduct.objects.create(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        name="Frame",
+        price=Decimal("100"),
+        gst_rate=Decimal("18"),
+        stock_on_hand=Decimal("10"),
+    )
+    docs = DocumentsService()
+    document = docs.create_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        doc_type=BooksDocumentType.SALE_ORDER,
+        customer=customer,
+        lines=[{"product_id": product.id, "quantity": "1"}],
+        notes="First",
+    )
+    updated = docs.update_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=document,
+        notes="Revised",
+        lines=[{"product_id": product.id, "quantity": "2", "unit_price": "150", "tax_rate": "18"}],
+    )
+    assert updated.notes == "Revised"
+    assert updated.total == Decimal("354.00")
+
+    inclusive = docs.create_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        doc_type=BooksDocumentType.SALE_ORDER,
+        customer=customer,
+        lines=[
+            {
+                "product_id": product.id,
+                "quantity": "1",
+                "unit_price": "118",
+                "tax_rate": "18",
+                "tax_inclusive": True,
+            }
+        ],
+    )
+    assert inclusive.total == Decimal("118.00")
+    assert inclusive.tax_total == Decimal("18.00")
+
+    converted = docs.convert_document(
+        tenant=shop_business.tenant,
+        business=shop_business,
+        document=updated,
+    )
+    updated.refresh_from_db()
+    assert converted.total == Decimal("354.00")
+    assert updated.status == BooksDocumentStatus.CONVERTED
+    with pytest.raises(ValidationError):
+        docs.update_document(
+            tenant=shop_business.tenant,
+            business=shop_business,
+            document=updated,
+            notes="Too late",
+        )
+
+
+@pytest.mark.django_db
 def test_delivery_challan_dispatches_stock_only_once(
     shop_business: Business, customer: Customer
 ) -> None:

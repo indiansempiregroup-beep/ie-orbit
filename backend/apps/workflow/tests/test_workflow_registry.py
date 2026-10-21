@@ -139,3 +139,35 @@ def test_resolve_automation_product_prefers_mart_for_pos_prompt():
     assert _MART_INTENT.search("15% off at POS and Online orders")
     assert _MART_INTENT.search("It should be for Orbit Mart")
     assert _APPOINT_INTENT.search("booking staff hint for Orbit Appoint")
+
+
+def test_operational_triggers_and_conditions():
+    import apps.workflow.services.handlers  # noqa: F401
+    from apps.workflow.services.gemini_creator import explain_workflow
+    from apps.workflow.services.handlers import (
+        inventory_out_of_stock,
+        loyalty_crossed_points,
+        party_balance_due,
+        quotation_older_than_days,
+    )
+
+    assert inventory_out_of_stock({}, {"stock_on_hand": "0"}) is True
+    assert inventory_out_of_stock({}, {"stock_on_hand": "2"}) is False
+    assert loyalty_crossed_points({"points": 100}, {"points_before": 80, "points_after": 120}) is True
+    assert loyalty_crossed_points({"points": 100}, {"points_before": 120, "points_after": 140}) is False
+    assert party_balance_due({"min_days": 1}, {"balance": "50", "age_days": 3}) is True
+    assert party_balance_due({"min_days": 7}, {"balance": "50", "age_days": 2}) is False
+    assert quotation_older_than_days({"days": 3}, {"age_days": 3}) is True
+
+    validated = validate_workflow_payload(
+        data={
+            "name": "Low stock",
+            "trigger": {"type": "inventory.low_stock"},
+            "conditions": [{"type": "inventory.out_of_stock"}],
+            "actions": [{"type": "notify.staff", "subject": "Out of stock", "body": "{product} is at {stock}"}],
+        },
+        product_code="shopie",
+    )
+    explained = explain_workflow(validated, product_code="shopie")
+    assert "low-stock" in explained["how_it_works"].lower() or "out of stock" in explained["how_it_works"].lower()
+    assert "notify" in explained["how_it_works"].lower()

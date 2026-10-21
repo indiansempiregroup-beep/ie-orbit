@@ -17,11 +17,15 @@ from apps.businesses.constants import (
     FEATURE_APPOINTIE_SERVICES,
     FEATURE_APPOINTIE_STAFF,
     FEATURE_SHOPIE_BOOKS_CASH,
+    FEATURE_SHOPIE_BOOKS_CHALLAN,
     FEATURE_SHOPIE_BOOKS_EXPENSE,
     FEATURE_SHOPIE_BOOKS_GODOWNS,
     FEATURE_SHOPIE_BOOKS_PARTIES,
     FEATURE_SHOPIE_BOOKS_PURCHASE,
+    FEATURE_SHOPIE_BOOKS_PURCHASE_ORDER,
+    FEATURE_SHOPIE_BOOKS_QUOTATIONS,
     FEATURE_SHOPIE_BOOKS_SALE,
+    FEATURE_SHOPIE_BOOKS_SALE_ORDER,
     FEATURE_SHOPIE_COUPONS,
     FEATURE_SHOPIE_LOYALTY,
     FEATURE_SHOPIE_ORDERS,
@@ -140,6 +144,13 @@ def suggestion_chips(*, access: AssistantAccess, business: Business) -> list[str
             chips.append("Cash balance")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
             chips.append("Daybook today")
+            chips.append("Unpaid invoices")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
+            chips.append("Profit today")
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS, product_code=PRODUCT_SHOPIE
+        ):
+            chips.append("Open quotations")
     if access.appoint_enabled:
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_BOOKINGS, product_code=PRODUCT_APPOINTIE):
             chips.extend(["Bookings today", "Pending bookings", "Upcoming bookings", "No-shows today"])
@@ -216,6 +227,8 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
                 compose=True,
             )
             add("Orbit Mart", "Orders", "Orders for customer", "orders for [customer name]", compose=True)
+            add("Orbit Mart", "Orders", "Profit today", "Profit today")
+            add("Orbit Mart", "Orders", "Sales for staff", "sales for [staff name] today", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Products", "List products", "List products")
             add("Orbit Mart", "Products", "Low stock", "Low stock")
@@ -248,6 +261,32 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
             add("Orbit Mart", "Books", "Expenses today", "Expenses today")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_PARTIES, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Books", "Statement for customer", "statement for [customer name]", compose=True)
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "Books", "Open quotations", "Open quotations")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "Books", "Unpaid invoices", "Unpaid invoices")
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_BOOKS_PURCHASE, product_code=PRODUCT_SHOPIE
+        ):
+            add("Orbit Mart", "Books", "Supplier dues", "Overdue supplier dues")
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_BOOKS_SALE_ORDER, product_code=PRODUCT_SHOPIE
+        ):
+            add("Orbit Mart", "Books", "Open sale orders", "Open sale orders")
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_BOOKS_PURCHASE_ORDER, product_code=PRODUCT_SHOPIE
+        ):
+            add("Orbit Mart", "Books", "Open purchase orders", "Open purchase orders")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_CHALLAN, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "Books", "Open challans", "Open delivery challans")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_LOYALTY, product_code=PRODUCT_SHOPIE):
+            add(
+                "Orbit Mart",
+                "Loyalty",
+                "Loyalty activity",
+                "loyalty activity for [customer name]",
+                compose=True,
+            )
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_GODOWNS, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Godowns", "List godowns", "List godowns")
             add(
@@ -281,6 +320,7 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_STAFF, product_code=PRODUCT_APPOINTIE):
             add("Orbit Appoint", "Staff", "Who’s working today", "Who's working today")
             add("Orbit Appoint", "Staff", "Find staff", "find staff [name]", compose=True)
+            add("Orbit Appoint", "Staff", "Sales for staff", "sales for [staff name] today", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_REVIEWS, product_code=PRODUCT_APPOINTIE):
             add("Orbit Appoint", "Reviews", "Recent reviews", "Recent reviews")
             add("Orbit Appoint", "Reviews", "Low ratings", "low ratings")
@@ -2006,7 +2046,14 @@ from apps.assistant.services.tools_ops import (  # noqa: E402
     list_recent_reviews,
     lookup_barcode,
     low_rating_reviews,
+    loyalty_activity,
     loyalty_points_for_customer,
+    open_books_documents,
+    open_quotations,
+    overdue_supplier_dues,
+    profit_today,
+    staff_sales_today,
+    unpaid_invoices,
     orders_for_customer,
     price_of_product,
     propose_borrow_payment,

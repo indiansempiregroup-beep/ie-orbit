@@ -888,8 +888,29 @@ def _payload_from_voucher(
         loyalty_enabled = False
         points_balance = 0
 
+    points_reversed = 0
+    reversal_reason = ""
+    try:
+        from apps.customers.services.loyalty import LoyaltyService
+
+        summary = LoyaltyService().document_points_summary(
+            tenant=voucher.tenant,
+            booking_id=source_booking_id or None,
+            order_id=getattr(linked_order, "id", None),
+            voucher_id=voucher.id,
+        )
+        if int(summary.get("points_earned") or 0) > 0:
+            points_earned = int(summary["points_earned"])
+        points_reversed = int(summary.get("points_reversed") or 0)
+        reversal_reason = str(summary.get("reversal_reason") or "")
+    except Exception:
+        points_reversed = int(
+            loyalty.get("points_reversed") or loyalty.get("points_revoked") or 0
+        )
+        reversal_reason = str(loyalty.get("reversal_reason") or "")
+
     if not loyalty_enabled:
-        points_earned = 0
+        # Keep historical earn/reversal so customers still see points on this bill.
         points_to_earn = 0
         pending_earn = 0
         award_loyalty = False
@@ -995,6 +1016,8 @@ def _payload_from_voucher(
         "points_used": loyalty["reward_points"],
         "points_earned": int(points_earned),
         "points_to_earn": int(pending_earn),
+        "points_reversed": int(points_reversed),
+        "reversal_reason": reversal_reason,
         "loyalty_enabled": bool(loyalty_enabled),
         "points_balance": int(points_balance),
         "tax_total": _dec_str(tax_total),
@@ -1102,8 +1125,10 @@ def _pos_bill_summary_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     reward_points = int(payload.get("points_used") or payload.get("reward_points") or 0)
     loyalty_enabled = bool(payload.get("loyalty_enabled"))
     points_balance = max(0, int(payload.get("points_balance") or 0))
-    points_earned = int(payload.get("points_earned") or 0) if loyalty_enabled else 0
-    points_to_earn = int(payload.get("points_to_earn") or 0) if loyalty_enabled else 0
+    points_earned = int(payload.get("points_earned") or 0)
+    points_to_earn = int(payload.get("points_to_earn") or 0)
+    points_reversed = int(payload.get("points_reversed") or 0)
+    reversal_reason = str(payload.get("reversal_reason") or "")
     taxable_value = _q(payload.get("taxable_value") or payload.get("subtotal") or "0")
     line_total_sum = sum(
         (_q(line.get("total") or "0") for line in (payload.get("lines") or []) if isinstance(line, dict)),
@@ -1144,6 +1169,8 @@ def _pos_bill_summary_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "reward_points": reward_points,
         "points_earned": points_earned,
         "points_to_earn": points_to_earn,
+        "points_reversed": points_reversed,
+        "reversal_reason": reversal_reason,
         "loyalty_enabled": loyalty_enabled,
         "points_balance": points_balance,
         "taxable_value": taxable_value,
@@ -1159,26 +1186,45 @@ def _loyalty_highlight_text(
     points_earned: int,
     points_to_earn: int,
     points_balance: int,
+    points_reversed: int = 0,
+    reversal_reason: str = "",
     compact: bool = False,
 ) -> str:
     """Single-line loyalty callout for invoices. Empty when nothing to show."""
     earned = max(0, int(points_earned or 0))
     pending = max(0, int(points_to_earn or 0))
+    reversed_pts = max(0, int(points_reversed or 0))
     balance = max(0, int(points_balance or 0))
-    if earned <= 0 and pending <= 0:
+    why = str(reversal_reason or "").strip()
+    if earned <= 0 and pending <= 0 and reversed_pts <= 0:
         return ""
     tag = "Enjoy rewards on next visit!"
     if compact:
+        parts: list[str] = []
         if earned > 0:
-            head = f"+{earned} pts" + (f" · {balance} total" if balance > 0 else "")
-        else:
-            head = f"+{pending} pts on pay" + (f" · {balance} total" if balance > 0 else "")
-        return f"{head} · {tag}"
+            parts.append(f"+{earned} pts")
+        elif pending > 0:
+            parts.append(f"+{pending} pts on pay")
+        if reversed_pts > 0:
+            parts.append(f"−{reversed_pts} reversed")
+        if balance > 0 and reversed_pts <= 0:
+            parts.append(f"{balance} total")
+        return " · ".join(parts)
+    parts = []
     if earned > 0:
-        head = f"+{earned} points earned" + (f" · {balance} pts total" if balance > 0 else "")
-    else:
-        head = f"+{pending} points to earn" + (f" · {balance} pts total" if balance > 0 else "")
-    return f"{head} · {tag}"
+        parts.append(f"+{earned} points earned")
+    elif pending > 0:
+        parts.append(f"+{pending} points to earn")
+    if reversed_pts > 0:
+        parts.append(f"−{reversed_pts} reversed" + (f" · {why}" if why else ""))
+    elif balance > 0:
+        parts.append(f"{balance} pts total")
+        return f"{' · '.join(parts)} · {tag}"
+    if not parts:
+        return ""
+    if reversed_pts <= 0:
+        return f"{' · '.join(parts)} · {tag}"
+    return " · ".join(parts)
 
 
 class ShopDocumentService:
@@ -1566,20 +1612,29 @@ class ShopDocumentService:
             f"<span>{currency_sym}{_money(total)}</span></div>"
         )
         loyalty_highlight_html = ""
-        if bill.get("loyalty_enabled"):
-            highlight = _loyalty_highlight_text(
-                points_earned=int(bill.get("points_earned") or 0),
-                points_to_earn=int(bill.get("points_to_earn") or 0),
-                points_balance=int(bill.get("points_balance") or 0),
-                compact=bool(is_thermal),
+        highlight = _loyalty_highlight_text(
+            points_earned=int(bill.get("points_earned") or 0),
+            points_to_earn=int(bill.get("points_to_earn") or 0),
+            points_balance=int(bill.get("points_balance") or 0),
+            points_reversed=int(bill.get("points_reversed") or 0),
+            reversal_reason=str(bill.get("reversal_reason") or ""),
+            compact=bool(is_thermal),
+        )
+        if highlight:
+            earned_pts = int(bill.get("points_earned") or 0)
+            reversed_pts = int(bill.get("points_reversed") or 0)
+            tone_cls = (
+                " reversed"
+                if reversed_pts > 0 and earned_pts <= reversed_pts
+                else " pending"
+                if earned_pts <= 0
+                else ""
             )
-            if highlight:
-                pending_cls = " pending" if int(bill.get("points_earned") or 0) <= 0 else ""
-                loyalty_highlight_html = (
-                    f"<div class='loyalty-highlight{pending_cls}'>"
-                    f"<strong class='loyalty-value'>{escape(highlight)}</strong>"
-                    "</div>"
-                )
+            loyalty_highlight_html = (
+                f"<div class='loyalty-highlight{tone_cls}'>"
+                f"<strong class='loyalty-value'>{escape(highlight)}</strong>"
+                "</div>"
+            )
         if payment_label:
             totals_html += (
                 f"<div class='tot-row'><span>Payment</span>"
@@ -1879,6 +1934,10 @@ class ShopDocumentService:
     .loyalty-highlight.pending {{
       background:linear-gradient(135deg, #fffbeb 0%, #fef9c3 100%);
       border-color:#fde68a; color:#92400e;
+    }}
+    .loyalty-highlight.reversed {{
+      background:linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
+      border-color:#fecdd3; color:#be123c;
     }}
     .loyalty-value {{ font-size:14px; font-weight:800; letter-spacing:-.01em; }}
     .sheet.thermal .loyalty-highlight {{ margin-top:8px; padding:8px 10px; border-radius:8px; }}
@@ -2399,15 +2458,22 @@ class ShopDocumentService:
         loyalty_fill = (0.925, 0.990, 0.961)
         loyalty_ink = (0.024, 0.373, 0.275)
         loyalty_border = (0.655, 0.953, 0.816)
-        loyalty_line = ""
         loyalty_bottom = words_bottom
-        if bill.get("loyalty_enabled"):
-            loyalty_line = _loyalty_highlight_text(
-                points_earned=int(bill.get("points_earned") or 0),
-                points_to_earn=int(bill.get("points_to_earn") or 0),
-                points_balance=int(bill.get("points_balance") or 0),
-            )
-            if loyalty_line and int(bill.get("points_earned") or 0) <= 0:
+        loyalty_line = _loyalty_highlight_text(
+            points_earned=int(bill.get("points_earned") or 0),
+            points_to_earn=int(bill.get("points_to_earn") or 0),
+            points_balance=int(bill.get("points_balance") or 0),
+            points_reversed=int(bill.get("points_reversed") or 0),
+            reversal_reason=str(bill.get("reversal_reason") or ""),
+        )
+        if loyalty_line:
+            earned_pts = int(bill.get("points_earned") or 0)
+            reversed_pts = int(bill.get("points_reversed") or 0)
+            if reversed_pts > 0 and earned_pts <= reversed_pts:
+                loyalty_fill = (1.0, 0.945, 0.949)
+                loyalty_ink = (0.745, 0.071, 0.235)
+                loyalty_border = (0.996, 0.804, 0.827)
+            elif earned_pts <= 0:
                 loyalty_fill = (1.0, 0.980, 0.922)
                 loyalty_ink = (0.573, 0.251, 0.055)
                 loyalty_border = (0.992, 0.906, 0.541)
@@ -2709,6 +2775,8 @@ class ShopDocumentService:
                 points_earned=int(bill.get("points_earned") or 0),
                 points_to_earn=int(bill.get("points_to_earn") or 0),
                 points_balance=int(bill.get("points_balance") or 0),
+                points_reversed=int(bill.get("points_reversed") or 0),
+                reversal_reason=str(bill.get("reversal_reason") or ""),
                 compact=True,
             )
             if loyalty_line:

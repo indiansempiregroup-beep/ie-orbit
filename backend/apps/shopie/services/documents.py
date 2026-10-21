@@ -20,6 +20,8 @@ from apps.shopie.models import (
 from apps.shopie.services.books import BooksService
 from apps.tenancy.models import Tenant
 
+_UNSET = object()
+
 
 def _q(value: Any) -> Decimal:
     return Decimal(str(value or "0")).quantize(Decimal("0.01"))
@@ -55,22 +57,48 @@ class DocumentsService:
         tax_total = Decimal("0.00")
         serialized: list[dict[str, Any]] = []
         for raw in lines:
-            product = ShopProduct.objects.get(tenant=tenant, business=business, id=raw["product_id"])
-            qty = Decimal(str(raw.get("quantity") or raw.get("qty") or "1"))
-            unit_price = Decimal(
-                str(raw.get("unit_price") if raw.get("unit_price") is not None else raw.get("rate") if raw.get("rate") is not None else product.price)
-            )
-            tax_rate = Decimal(
-                str(
-                    raw.get("tax_rate")
-                    if raw.get("tax_rate") is not None
-                    else raw.get("gst_rate")
-                    if raw.get("gst_rate") is not None
-                    else (product.gst_rate if hasattr(product, "gst_rate") else product.tax_rate)
+            product_id = raw.get("product_id") or raw.get("product")
+            if not product_id:
+                raise ValidationError({"lines": "Each line needs a product."})
+            try:
+                product = ShopProduct.objects.get(tenant=tenant, business=business, id=product_id)
+            except ShopProduct.DoesNotExist as exc:
+                raise ValidationError({"lines": "One or more products were not found."}) from exc
+            qty_raw = raw.get("quantity")
+            if qty_raw is None:
+                qty_raw = raw.get("qty") or "1"
+            qty = Decimal(str(qty_raw))
+            if qty <= 0:
+                raise ValidationError({"lines": "Quantity must be greater than zero."})
+            if raw.get("unit_price") is not None:
+                price_raw = raw.get("unit_price")
+            elif raw.get("rate") is not None:
+                price_raw = raw.get("rate")
+            else:
+                price_raw = product.price
+            unit_price = Decimal(str(price_raw))
+            tax_source = raw.get("tax_rate")
+            if tax_source is None:
+                tax_source = raw.get("gst_rate")
+            if tax_source is None:
+                tax_source = product.gst_rate if hasattr(product, "gst_rate") else product.tax_rate
+            tax_rate = Decimal(str(tax_source))
+            product_meta = product.metadata if isinstance(product.metadata, dict) else {}
+            if raw.get("tax_inclusive") is not None:
+                tax_inclusive = bool(raw.get("tax_inclusive"))
+            else:
+                tax_inclusive = bool(product_meta.get("tax_inclusive"))
+            gross = (unit_price * qty).quantize(Decimal("0.01"))
+            if tax_inclusive and tax_rate > 0:
+                line_total = gross
+                line_subtotal = (gross * Decimal("100") / (Decimal("100") + tax_rate)).quantize(
+                    Decimal("0.01")
                 )
-            )
-            line_subtotal = (unit_price * qty).quantize(Decimal("0.01"))
-            line_tax = (line_subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+                line_tax = (line_total - line_subtotal).quantize(Decimal("0.01"))
+            else:
+                line_subtotal = gross
+                line_tax = (line_subtotal * tax_rate / Decimal("100")).quantize(Decimal("0.01"))
+                line_total = line_subtotal + line_tax
             serialized.append(
                 {
                     "product_id": str(product.id),
@@ -81,7 +109,8 @@ class DocumentsService:
                     "rate": str(unit_price),
                     "tax_rate": str(tax_rate),
                     "gst_rate": str(tax_rate),
-                    "line_total": str(line_subtotal + line_tax),
+                    "tax_inclusive": tax_inclusive,
+                    "line_total": str(line_total),
                 }
             )
             subtotal += line_subtotal
@@ -136,6 +165,90 @@ class DocumentsService:
             line_items=serialized,
         )
 
+    @transaction.atomic
+    def update_document(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        document: ShopBooksDocument,
+        customer: Customer | None | object = _UNSET,
+        supplier: ShopSupplier | None | object = _UNSET,
+        notes: str | None = None,
+        document_date: Any = _UNSET,
+        status: str | None = None,
+        lines: list[dict[str, Any]] | None = None,
+    ) -> ShopBooksDocument:
+        if document.status in {BooksDocumentStatus.CONVERTED, BooksDocumentStatus.CANCELLED}:
+            raise ValidationError({"status": "This document cannot be updated."})
+        if document.converted_voucher_id:
+            raise ValidationError({"status": "Converted documents cannot be updated."})
+
+        dispatched = document.status == BooksDocumentStatus.DISPATCHED
+        if dispatched and (
+            lines is not None
+            or customer is not _UNSET
+            or supplier is not _UNSET
+            or document_date is not _UNSET
+            or (status is not None and status != BooksDocumentStatus.DISPATCHED)
+        ):
+            raise ValidationError(
+                {
+                    "status": (
+                        "Dispatched challans cannot change lines, party, or status. "
+                        "Create an invoice instead."
+                    )
+                }
+            )
+
+        update_fields = ["updated_at", "version"]
+
+        if customer is not _UNSET:
+            document.customer = customer  # type: ignore[assignment]
+            update_fields.append("customer")
+
+        if supplier is not _UNSET:
+            if document.doc_type == BooksDocumentType.PURCHASE_ORDER and supplier is None:
+                raise ValidationError({"supplier_id": "A supplier is required for purchase orders."})
+            document.supplier = supplier  # type: ignore[assignment]
+            update_fields.append("supplier")
+
+        if notes is not None:
+            document.notes = notes
+            update_fields.append("notes")
+
+        if document_date is not _UNSET:
+            document.document_date = document_date
+            update_fields.append("document_date")
+
+        if status is not None and not dispatched:
+            allowed = {
+                BooksDocumentStatus.DRAFT,
+                BooksDocumentStatus.CONFIRMED,
+                BooksDocumentStatus.CANCELLED,
+            }
+            if status == BooksDocumentStatus.DISPATCHED:
+                raise ValidationError({"status": "Use Dispatch to mark a challan as dispatched."})
+            if status == BooksDocumentStatus.CONVERTED:
+                raise ValidationError({"status": "Use convert to convert this document."})
+            if status not in allowed:
+                raise ValidationError({"status": "Invalid document status."})
+            document.status = status
+            update_fields.append("status")
+
+        if lines is not None:
+            serialized, subtotal, tax_total, total = self._serialize_lines(
+                tenant=tenant, business=business, lines=lines
+            )
+            document.line_items = serialized
+            document.subtotal = subtotal
+            document.tax_total = tax_total
+            document.total = total
+            update_fields.extend(["line_items", "subtotal", "tax_total", "total"])
+
+        document.save(update_fields=update_fields)
+        return document
+
     def _document_lines(self, document: ShopBooksDocument) -> list[dict[str, Any]]:
         return [
             {
@@ -144,6 +257,7 @@ class DocumentsService:
                 "qty": row.get("qty") or row.get("quantity") or "1",
                 "rate": row.get("rate") or row.get("unit_price") or "0",
                 "gst_rate": row.get("gst_rate") or row.get("tax_rate") or "0",
+                "tax_inclusive": row.get("tax_inclusive"),
             }
             for row in (document.line_items or [])
             if row.get("product_id")

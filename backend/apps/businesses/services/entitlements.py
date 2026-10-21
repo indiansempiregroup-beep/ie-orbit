@@ -13,6 +13,7 @@ from apps.billing.constants import (
 )
 from apps.billing.services.addon_pricing import get_addon_prices
 from apps.businesses.constants import (
+    BI_FEATURE_DATA_PRODUCTS,
     BI_FEATURES_FULL,
     BI_FEATURES_LIMITED,
     DEFAULT_PRODUCT_CODE,
@@ -23,7 +24,7 @@ from apps.businesses.constants import (
     PLAN_FEATURES_FULL,
     PLAN_FEATURES_LIMITED,
     PRODUCT_APPOINTIE,
-    PRODUCT_DISPLAY_NAMES,
+    PRODUCT_SHOPIE,
     get_default_plan_code,
     get_plan_definition,
     plan_extra_cap,
@@ -365,7 +366,11 @@ class EntitlementService:
             )
             max_staff = int(pro_definition.get("max_staff", 5) or 5)
             max_branches = int(pro_definition.get("max_branches", 2) or 2)
-            raw_bi = pro_definition.get("bi_features") or list(BI_FEATURES_FULL)
+            raw_bi = definition.get("bi_features")
+            if raw_bi is None:
+                raw_bi = pro_definition.get("bi_features")
+                if raw_bi is None:
+                    raw_bi = list(BI_FEATURES_FULL)
             bi_features = tuple(str(item) for item in raw_bi)
             raw_features = pro_definition.get("features") or list(PLAN_FEATURES_FULL)
             features = tuple(str(item) for item in raw_features)
@@ -374,12 +379,22 @@ class EntitlementService:
         else:
             max_staff = int(definition.get("max_staff", 1) or 1)
             max_branches = int(definition.get("max_branches", 1) or 1)
-            raw_bi = definition.get("bi_features") or list(BI_FEATURES_LIMITED)
+            raw_bi = definition.get("bi_features")
+            if raw_bi is None:
+                raw_bi = list(BI_FEATURES_LIMITED)
             bi_features = tuple(str(item) for item in raw_bi)
             raw_features = definition.get("features") or list(PLAN_FEATURES_LIMITED)
             features = tuple(str(item) for item in raw_features)
             max_extra_staff = plan_extra_cap(definition, "max_extra_staff")
             max_extra_offices = plan_extra_cap(definition, "max_extra_offices")
+
+        from apps.platform_admin.feature_flags import BI_FULL_FLAG, tenant_feature_enabled
+
+        if not tenant_feature_enabled(tenant=business.tenant, key=normalized_product, default=True):
+            features = ()
+        if not tenant_feature_enabled(tenant=business.tenant, key=BI_FULL_FLAG, default=True):
+            limited = set(BI_FEATURES_LIMITED)
+            bi_features = tuple(item for item in bi_features if item in limited)
 
         return PlanEntitlements(
             plan_code=plan_code,
@@ -562,6 +577,40 @@ class EntitlementService:
             "Ask your platform admin to enable it on the plan package."
         )
 
+    def bi_features_by_product(self, *, business: Business) -> dict[str, list[str]]:
+        subscriptions = [
+            item
+            for item in business.product_subscriptions.all()
+            if item.status != BusinessProductSubscriptionStatus.CANCELED
+        ]
+        if not subscriptions:
+            product = (business.selected_product or DEFAULT_PRODUCT_CODE).strip().lower()
+            return {product: list(self.resolve(business=business, product_code=product).bi_features)}
+        return {
+            subscription.product_code: list(
+                self.resolve(business=business, product_code=subscription.product_code).bi_features
+            )
+            for subscription in subscriptions
+        }
+
+    def products_with_bi_feature(self, *, business: Business, feature: str) -> list[str]:
+        data_products = BI_FEATURE_DATA_PRODUCTS.get(feature, (PRODUCT_APPOINTIE, PRODUCT_SHOPIE))
+        return [
+            product
+            for product, features in self.bi_features_by_product(business=business).items()
+            if feature in features and product in data_products
+        ]
+
+    def entitled_bi_features(self, *, business: Business) -> list[str]:
+        collected: list[str] = []
+        seen: set[str] = set()
+        for features in self.bi_features_by_product(business=business).values():
+            for feature in features:
+                if feature not in seen:
+                    seen.add(feature)
+                    collected.append(feature)
+        return collected
+
     def entitled_features(self, *, business: Business) -> list[str]:
         from apps.billing.services.region import business_allows_india_feature
 
@@ -586,12 +635,28 @@ class EntitlementService:
                     collected.append(feature)
         return collected
 
-    def ensure_bi_feature(self, *, business: Business, feature: str) -> None:
-        entitlements = self.resolve(business=business)
-        if feature not in entitlements.bi_features:
+    def ensure_bi_feature(
+        self,
+        *,
+        business: Business,
+        feature: str,
+        product_code: str | None = None,
+    ) -> list[str]:
+        products = self.products_with_bi_feature(business=business, feature=feature)
+        if product_code:
+            normalized = product_code.strip().lower()
+            if normalized not in products:
+                raise PermissionDenied(
+                    "This analytics view is not included in the current plan. "
+                    "Ask your platform admin to enable it on the plan package."
+                )
+            return [normalized]
+        if not products:
             raise PermissionDenied(
-                f"'{feature}' analytics require {PRODUCT_DISPLAY_NAMES[PRODUCT_APPOINTIE]} Pro. Upgrade to unlock full BI."
+                "This analytics view is not included in the current plan. "
+                "Ask your platform admin to enable it on the plan package."
             )
+        return products
 
     def loyalty_program_access(self, *, business: Business) -> tuple[bool, bool]:
         """Return (entitled_and_unlocked, soft_locked) across product subscriptions."""
@@ -772,6 +837,8 @@ class EntitlementService:
         payload["billing_region"] = billing_region_for_business(business)
         payload["saas_currency"] = saas_currency_for_business(business)
         payload["entitled_features"] = self.entitled_features(business=business)
+        payload["entitled_bi_features"] = self.entitled_bi_features(business=business)
+        payload["bi_features_by_product"] = self.bi_features_by_product(business=business)
         from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
 
         payload["show_google_ads"] = tenant_feature_enabled(

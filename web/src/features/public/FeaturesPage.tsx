@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
 import { stripPlanProductPrefix } from '../../config/products';
 import { PlanFeatureList } from './PlanFeatureList';
+import { PublicAiShowcase } from './PublicAiShowcase';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicProductShot } from './PublicProductShot';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -36,6 +37,8 @@ const productTabs: Array<{
       'POS, catalog, online orders, and returns on Starter',
       'Instant Delivery with Porter/Shiprocket on Pro',
       'Day-book on Starter; GST reports, e-invoice, Grow, and e-way on Pro',
+      'AI invoice extraction on Pro — photograph a supplier bill, review the lines, then add stock',
+      'Automation Creator on Pro for birthday, occasion, and VIP rules',
     ],
   },
   {
@@ -49,6 +52,8 @@ const productTabs: Array<{
       'Smart availability and staff calendars',
       'Automated email reminders; WhatsApp on Pro',
       'Pro adds a second office, payments, full BI, reward points, and an ad-free customer app',
+      'AI Assistant for plain-language questions about the day',
+      'Automation Creator on Pro for reminders and staff offer hints',
     ],
   },
   {
@@ -62,6 +67,7 @@ const productTabs: Array<{
       'Unified customer profiles',
       'Cross-sell bookings and products',
       'One 45-day trial, one workspace, UPI billing',
+      'AI Assistant and Automation Creator across bookings and the shop',
     ],
   },
 ];
@@ -130,7 +136,7 @@ export function FeaturesPage() {
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">White-label · Mart · Appoint</p>
+            <p className="public-badge">White-label · Mart · Appoint · AI</p>
             <h1>
               Your app. Their pocket.
               <br />
@@ -138,7 +144,8 @@ export function FeaturesPage() {
             </h1>
             <p className="public-lead">
               The customer-facing app is branded to your business on every plan. Orbit Appoint runs bookings. Orbit Mart
-              runs the counter. Both share one workspace.
+              runs the counter. Both share one workspace — with an AI assistant, an automation creator, and invoice
+              extraction for supplier bills.
             </p>
           </div>
         </div>
@@ -186,6 +193,8 @@ export function FeaturesPage() {
           <PublicProductShot slot={item.id} />
         </div>
       </section>
+
+      <PublicAiShowcase />
 
       <div className="public-page">
         <section className="public-section" style={{ marginTop: 0 }}>

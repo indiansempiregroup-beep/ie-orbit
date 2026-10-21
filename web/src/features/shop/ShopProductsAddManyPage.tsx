@@ -16,6 +16,8 @@ import {
   applyDefaultsToEmpty,
   applyEnrichmentToRow,
   chunkRows,
+  copyRowWithoutBarcode,
+  assertCsvImport,
   downloadCsvTemplate,
   emptyBulkDefaults,
   emptyBulkRow,
@@ -40,7 +42,7 @@ const COLUMN_LABELS: Record<BulkGridColumn, string> = {
   pack_size: 'Pack size',
   category: 'Category',
   price: 'Price',
-  purchase_price: 'Purchase price',
+  purchase_price: 'Cost',
   gst_rate: 'GST %',
   hsn_sac: 'HSN',
   stock_on_hand: 'Stock',
@@ -67,7 +69,7 @@ export function ShopProductsAddManyPage() {
   const godownsQuery = useShopGodowns();
   const { createBulk, enrich } = useShopProductMutations();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const idRef = useRef(8);
+  const idRef = useRef(1);
   const godowns = godownsQuery.data ?? [];
   const defaultGodownId = godowns.find((godown) => godown.is_default)?.id || godowns[0]?.id || '';
 
@@ -86,9 +88,8 @@ export function ShopProductsAddManyPage() {
     ...emptyBulkDefaults(),
     godown_id: defaultGodownId,
   });
-  const [rows, setRows] = useState<BulkProductRow[]>(() =>
-    Array.from({ length: 8 }, (_, index) => emptyBulkRow(nextRowId(index), emptyBulkDefaults())),
-  );
+  const [rows, setRows] = useState<BulkProductRow[]>(() => [emptyBulkRow(nextRowId(0), emptyBulkDefaults())]);
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
   const [scanCode, setScanCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,14 +113,21 @@ export function ShopProductsAddManyPage() {
     setDefaults((current) => ({ ...current, ...patch }));
   }
 
+  function withSpareRow(current: BulkProductRow[]): BulkProductRow[] {
+    if (!current.length || rowHasContent(current[current.length - 1])) {
+      return [...current, emptyBulkRow(nextRowId(idRef.current++), defaults)];
+    }
+    return current;
+  }
+
   function updateRow(id: string, patch: Partial<BulkProductRow>) {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch, error: patch.error ?? '' } : row)));
+    setRows((current) =>
+      withSpareRow(current.map((row) => (row.id === id ? { ...row, ...patch, error: patch.error ?? '' } : row))),
+    );
   }
 
   function addEmptyRow() {
-    const id = nextRowId(idRef.current);
-    idRef.current += 1;
-    setRows((current) => [...current, emptyBulkRow(id, defaults)]);
+    setRows((current) => withSpareRow(current));
   }
 
   function duplicateRow(id: string) {
@@ -128,17 +136,16 @@ export function ShopProductsAddManyPage() {
       if (index < 0) return current;
       const copyId = nextRowId(idRef.current);
       idRef.current += 1;
-      const copy: BulkProductRow = { ...current[index], id: copyId, error: '', lookingUp: false };
       const next = current.slice();
-      next.splice(index + 1, 0, copy);
-      return next;
+      next.splice(index + 1, 0, copyRowWithoutBarcode(current[index], copyId));
+      return withSpareRow(next);
     });
   }
 
   function removeRow(id: string) {
     setRows((current) => {
       const next = current.filter((row) => row.id !== id);
-      return next.length ? next : [emptyBulkRow(nextRowId(idRef.current++), defaults)];
+      return withSpareRow(next.length ? next : []);
     });
   }
 
@@ -160,7 +167,7 @@ export function ShopProductsAddManyPage() {
         }
         cursor += 1;
       });
-      return next;
+      return withSpareRow(next);
     });
     return usable.length;
   }
@@ -200,9 +207,17 @@ export function ShopProductsAddManyPage() {
   }
 
   async function importCsv(file: File) {
-    const text = await file.text();
-    const added = appendPartials(tableToPartialRows(parseDelimitedTable(text)));
-    snackbar.push(added ? `Loaded ${added} row${added === 1 ? '' : 's'} from CSV.` : 'No product rows found in that file.', added ? 'success' : 'error');
+    try {
+      const text = await file.text();
+      assertCsvImport(file.name, text);
+      const added = appendPartials(tableToPartialRows(parseDelimitedTable(text)));
+      snackbar.push(
+        added ? `Loaded ${added} row${added === 1 ? '' : 's'} from the template.` : 'No product rows found in that file.',
+        added ? 'success' : 'error',
+      );
+    } catch (error) {
+      snackbar.push(error instanceof Error ? error.message : "Couldn't import that file.", 'error');
+    }
   }
 
   async function lookupRow(id: string, code: string) {
@@ -349,9 +364,18 @@ export function ShopProductsAddManyPage() {
   }
 
   const currencyOptions = ensureSelectOption(currencySelectOptions, defaults.currency);
+  const defaultsSummary = [
+    defaults.gst_rate ? `GST ${defaults.gst_rate}%` : null,
+    defaults.hsn_sac ? `HSN ${defaults.hsn_sac}` : null,
+    categoryOptions.find((item) => item.slug === defaults.category)?.label,
+    defaults.status,
+    godowns.find((item) => item.id === defaults.godown_id)?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div className="page-stack">
+    <div className="page-stack bulk-add">
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div>
@@ -361,20 +385,42 @@ export function ShopProductsAddManyPage() {
             </Link>
             <h1 style={{ margin: '8px 0 4px' }}>Add many products</h1>
             <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-              Type, paste from Excel, import a CSV, or scan barcodes. Photos and packaging details stay on the single-product editor.
+              Type a name, scan a barcode, paste Excel, or import a CSV. A blank row appears as you go.
             </p>
           </div>
-          <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId}>
-            Save all
-          </Button>
+          <div className="bulk-add__stats">
+            <span className={`bulk-add__stat${readyRows.length ? ' is-ready' : ''}`}>
+              <strong>{readyRows.length}</strong> ready
+            </span>
+            {incompleteCount ? (
+              <span className="bulk-add__stat is-warn">
+                <strong>{incompleteCount}</strong> need a name
+              </span>
+            ) : null}
+            {errorCount ? (
+              <span className="bulk-add__stat is-error">
+                <strong>{errorCount}</strong> errors
+              </span>
+            ) : null}
+            <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId || !readyRows.length}>
+              {readyRows.length ? `Save ${readyRows.length}` : 'Save all'}
+            </Button>
+          </div>
         </div>
 
+        <button type="button" className="bulk-add__defaults-toggle" onClick={() => setDefaultsOpen((open) => !open)}>
+          <span>
+            Shared defaults
+            <small>{defaultsSummary || 'GST, category, status, and godown for new rows'}</small>
+          </span>
+          {defaultsOpen ? 'Hide' : 'Edit'}
+        </button>
         <div
           style={{
-            display: 'grid',
+            display: defaultsOpen ? 'grid' : 'none',
             gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
             gap: 10,
-            marginTop: 18,
+            marginTop: 12,
           }}
         >
           <label style={{ display: 'grid', gap: 4 }}>
@@ -469,6 +515,10 @@ export function ShopProductsAddManyPage() {
             Download template
           </Button>
         </div>
+        <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>
+          Template columns match this grid. Fill in Excel, then File → Save As → CSV UTF-8 before importing.
+          Workbooks (.xlsx) are not imported.
+        </p>
         {cameraOpen && !cameraRowId ? (
           <div style={{ marginTop: 12 }}>
             <BarcodeCameraPanel
@@ -483,7 +533,7 @@ export function ShopProductsAddManyPage() {
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,text/csv,text/plain"
+          accept=".csv,.tsv,text/csv,text/plain"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -534,7 +584,19 @@ export function ShopProductsAddManyPage() {
               }}
             >
               {rows.map((row, index) => (
-                <tr key={row.id} data-row-id={row.id} style={{ borderTop: '1px solid #f3f4f6', background: row.error ? '#fef2f2' : undefined }}>
+                <tr
+                  key={row.id}
+                  data-row-id={row.id}
+                  className={
+                    row.error
+                      ? 'bulk-add__row is-error'
+                      : rowIsReady(row)
+                        ? 'bulk-add__row is-ready'
+                        : rowHasContent(row)
+                          ? 'bulk-add__row is-warn'
+                          : 'bulk-add__row'
+                  }
+                >
                   <td style={{ padding: '6px 8px', fontSize: 12, color: '#9ca3af' }}>{index + 1}</td>
                   {BULK_GRID_COLUMNS.map((column) => (
                     <td key={column} style={{ padding: '4px 6px' }}>
@@ -617,8 +679,14 @@ export function ShopProductsAddManyPage() {
                       )}
                     </td>
                   ))}
-                  <td style={{ padding: '6px 8px', fontSize: 12, minWidth: 140, color: row.error ? '#b91c1c' : '#6b7280' }}>
-                    {row.error || (rowIsReady(row) ? 'Ready' : rowHasContent(row) ? 'Needs name' : '')}
+                  <td style={{ padding: '6px 8px', fontSize: 12, minWidth: 140 }}>
+                    <span
+                      className={`bulk-add__pill${
+                        row.error ? ' is-error' : rowIsReady(row) ? ' is-ready' : rowHasContent(row) ? ' is-warn' : ''
+                      }`}
+                    >
+                      {row.error || (rowIsReady(row) ? 'Ready' : rowHasContent(row) ? 'Needs name' : 'Empty')}
+                    </span>
                   </td>
                   <td style={{ padding: '4px 6px' }}>
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -672,8 +740,8 @@ export function ShopProductsAddManyPage() {
               {errorCount ? ` · ${errorCount} errors` : ''}
             </span>
           </div>
-          <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId}>
-            Save all
+          <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId || !readyRows.length}>
+            {readyRows.length ? `Save ${readyRows.length} product${readyRows.length === 1 ? '' : 's'}` : 'Save all'}
           </Button>
         </div>
       </Card>

@@ -115,7 +115,14 @@ export function BooksDocumentRow({
             {textActions.length ? (
               <View style={styles.textActions}>
                 {textActions.map((action) => (
-                  <Pressable key={action.label} onPress={action.onPress} hitSlop={8}>
+                  <Pressable
+                    key={action.label}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      action.onPress();
+                    }}
+                    hitSlop={8}
+                  >
                     <Text style={styles.textAction}>{action.label}</Text>
                   </Pressable>
                 ))}
@@ -123,23 +130,17 @@ export function BooksDocumentRow({
             ) : null}
           </View>
         ) : null}
-        {children}
       </View>
     </View>
   );
 
-  const main = onPress ? (
-    <Pressable style={styles.rowMain} onPress={onPress}>
-      {body}
-    </Pressable>
-  ) : (
-    <View style={styles.rowMain}>{body}</View>
-  );
-
   return (
-    <View style={[styles.row, dimmed && styles.dim]}>
+    <View style={[styles.row, dimmed && styles.dim, children ? styles.rowWithChildren : null]}>
       {leading ? <View style={styles.leading}>{leading}</View> : null}
-      {main}
+      <View style={styles.rowMain}>
+        {onPress ? <Pressable onPress={onPress}>{body}</Pressable> : body}
+        {children}
+      </View>
       {iconActions.length ? (
         <View style={styles.iconRail}>
           {iconActions.map((action) => (
@@ -179,6 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     gap: 10,
   },
+  rowWithChildren: { alignItems: 'flex-start' },
   leading: { height: 44, justifyContent: 'center', alignItems: 'center' },
   rowMain: { flex: 1, minWidth: 0 },
   rowInner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },

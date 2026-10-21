@@ -7,6 +7,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { PublicAiShowcase } from './PublicAiShowcase';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicProductShot } from './PublicProductShot';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -101,7 +102,10 @@ export function HomePage() {
                 See how it works
               </Link>
             </div>
-            <p className="public-hero-note">White-label app on every plan · 45-day full-Pro trial · UPI · No credit card</p>
+            <p className="public-hero-note">
+              White-label app on every plan · AI assistant, automations, and invoice extraction · 45-day full-Pro trial ·
+              UPI · No credit card
+            </p>
           </div>
           <div className="public-hero-visual">
             <div className="public-visual-tag public-visual-tag--one" aria-hidden="true">
@@ -141,6 +145,8 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      <PublicAiShowcase showCta />
 
       <section className="public-dark-band" aria-label="The IE Orbit difference">
         <div className="public-dark-inner public-dark-grid">

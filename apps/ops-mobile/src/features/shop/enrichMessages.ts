@@ -113,6 +113,12 @@ export function enrichLedgerSourceLabel(source?: string | null): string {
       return 'Pack photo fill';
     case 'gemini_text':
       return 'Smart fill';
+    case 'gemini_invoice':
+      return 'Invoice scan';
+    case 'gemini_invoice_error':
+      return 'Invoice scan (failed)';
+    case 'gemini_automation':
+      return 'Automation draft';
     case 'gemini_text_error':
     case 'gemini_vision_error':
       return 'Smart fill (failed)';

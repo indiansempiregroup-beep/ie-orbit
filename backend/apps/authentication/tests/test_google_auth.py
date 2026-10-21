@@ -122,7 +122,7 @@ def test_google_customer_login_rejects_user_without_shop_customer(
         format="json",
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "No account found for this shop" in str(response.json())
 
 

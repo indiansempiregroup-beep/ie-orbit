@@ -1,30 +1,65 @@
-import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import type { ShopQuotation } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { Dialog } from '../../components/Dialog';
+import { Input } from '../../components/Input';
+import { Select } from '../../components/Select';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useShopInvoices, useShopOrders, useShopQuotations } from './shopHooks';
+import { useShopInvoices, useShopOrders, useShopQuotationMutations, useShopQuotations } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
 import { useApiClient } from '../../hooks/useApiClient';
 import { formatMoney } from '../../lib/currency';
+import { getApiErrorMessage } from '../../lib/apiClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 /**
  * Commerce billing (customer invoices / credit notes / quotations).
  * Platform SaaS subscription billing lives under Settings → Products & billing.
  */
+const QUOTE_STATUSES = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'sent', label: 'Sent' },
+  { value: 'accepted', label: 'Accepted' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'expired', label: 'Expired' },
+];
+
+function quoteIsConverted(quote: ShopQuotation) {
+  return Boolean(quote.converted_order || (quote.status || '').toLowerCase() === 'converted');
+}
+
+function quoteCanConvert(quote: ShopQuotation) {
+  const status = (quote.status || '').toLowerCase();
+  return !quoteIsConverted(quote) && status !== 'rejected' && status !== 'expired';
+}
+
 export function ShopBillingPage() {
   const workspace = useWorkspace();
+  const navigate = useNavigate();
   const invoices = useShopInvoices();
   const quotations = useShopQuotations();
   const orders = useShopOrders('completed');
+  const { updateQuotation, convertQuotation } = useShopQuotationMutations();
   const client = useApiClient();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<ShopQuotation | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState('draft');
+  const [quoteValidUntil, setQuoteValidUntil] = useState('');
+  const [quoteNotes, setQuoteNotes] = useState('');
+
+  useEffect(() => {
+    if (!selectedQuote) return;
+    setQuoteStatus((selectedQuote.status || 'draft').toLowerCase());
+    setQuoteValidUntil(selectedQuote.valid_until || '');
+    setQuoteNotes(selectedQuote.notes || '');
+  }, [selectedQuote?.id]);
 
   const createInvoice = useMutation({
     mutationFn: async (orderId: string) => {
@@ -55,6 +90,39 @@ export function ShopBillingPage() {
       setMessage(`Invoice ${invoice.invoice_number} created.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Couldn't create this invoice. Try again.");
+    }
+  }
+
+  async function saveQuote() {
+    if (!selectedQuote) return;
+    setMessage(null);
+    try {
+      const updated = await updateQuotation.mutateAsync({
+        quotationId: selectedQuote.id,
+        body: {
+          status: quoteStatus,
+          valid_until: quoteValidUntil || null,
+          notes: quoteNotes,
+        },
+      });
+      setSelectedQuote(updated);
+      setMessage(`Quotation ${updated.quotation_number} updated.`);
+    } catch (error) {
+      setMessage(getApiErrorMessage(error, "Couldn't update this quotation. Try again."));
+    }
+  }
+
+  async function convertQuote() {
+    if (!selectedQuote) return;
+    if (!window.confirm(`Convert ${selectedQuote.quotation_number} into a sale invoice?`)) return;
+    setMessage(null);
+    try {
+      const voucher = await convertQuotation.mutateAsync(selectedQuote.id);
+      setSelectedQuote(null);
+      setMessage(`Converted to sale ${voucher.voucher_number}.`);
+      navigate(`/shop/books/sale/${voucher.id}`);
+    } catch (error) {
+      setMessage(getApiErrorMessage(error, "Couldn't convert this quotation. Try again."));
     }
   }
 
@@ -180,10 +248,93 @@ export function ShopBillingPage() {
         <h2>Quotations</h2>
         <div style={{ display: 'grid', gap: 8 }}>
           {(quotations.data ?? []).map((quote) => (
-            <div key={quote.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              key={quote.id}
+              type="button"
+              onClick={() => setSelectedQuote(quote)}
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                justifyContent: 'space-between',
+                textAlign: 'left',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '10px 12px',
+                background: 'var(--card)',
+                cursor: 'pointer',
+              }}
+            >
               <span>
-                {quote.quotation_number} · {quote.status} · {formatMoney(Number(quote.total ?? 0), quote.currency)}
+                {quote.quotation_number} · {quote.customer_name || 'No customer'} · {quote.status} ·{' '}
+                {formatMoney(Number(quote.total ?? 0), quote.currency)}
               </span>
+              <span style={{ color: 'var(--primary)', fontSize: 13 }}>Open</span>
+            </button>
+          ))}
+          {!quotations.data?.length ? <p>No quotations yet.</p> : null}
+        </div>
+      </Card>
+      <Dialog
+        open={Boolean(selectedQuote)}
+        onClose={() => setSelectedQuote(null)}
+        title={selectedQuote ? selectedQuote.quotation_number : 'Quotation'}
+        labelledBy="quotation-detail-dialog"
+        busy={updateQuotation.isPending || convertQuotation.isPending}
+      >
+        {selectedQuote ? (
+          <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320 }}>
+            <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
+              {selectedQuote.customer_name || 'No customer'} · {formatMoney(Number(selectedQuote.total ?? 0), selectedQuote.currency)}
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {((selectedQuote.line_items as Array<Record<string, unknown>> | undefined) ?? []).map((line, index) => {
+                const productId = String(line.product_id || '').trim();
+                const name = String(line.name || `Item ${index + 1}`);
+                const qty = line.quantity ?? line.qty ?? 0;
+                const label = `${name} × ${qty}`;
+                return (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    {productId ? (
+                      <Link to={`/shop/products?product=${encodeURIComponent(productId)}`}>{label}</Link>
+                    ) : (
+                      <span>{label}</span>
+                    )}
+                    <strong>{formatMoney(Number(line.line_total ?? 0), selectedQuote.currency)}</strong>
+                  </div>
+                );
+              })}
+              {!selectedQuote.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
+            </div>
+            {quoteIsConverted(selectedQuote) ? (
+              <p style={{ margin: 0, fontSize: 13 }}>This quotation has been converted to a sale.</p>
+            ) : (
+              <>
+                <Select
+                  label="Status"
+                  value={quoteStatus}
+                  onChange={(event) => setQuoteStatus(event.target.value)}
+                  options={QUOTE_STATUSES}
+                />
+                <Input
+                  label="Valid until"
+                  type="date"
+                  value={quoteValidUntil}
+                  onChange={(event) => setQuoteValidUntil(event.target.value)}
+                />
+                <label className="ui-field">
+                  <span className="ui-field-label">Notes</span>
+                  <textarea
+                    className="ui-control"
+                    rows={3}
+                    value={quoteNotes}
+                    onChange={(event) => setQuoteNotes(event.target.value)}
+                  />
+                </label>
+              </>
+            )}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               {workspace.businessId ? (
                 <Button
                   type="button"
@@ -191,22 +342,34 @@ export function ShopBillingPage() {
                   onClick={() =>
                     setDocActions({
                       kind: 'quotation',
-                      id: quote.id,
-                      number: quote.quotation_number,
+                      id: selectedQuote.id,
+                      number: selectedQuote.quotation_number,
                       businessId: workspace.businessId!,
-                      phone: quote.customer_phone || '',
-                      email: quote.customer_email || '',
+                      phone: selectedQuote.customer_phone || '',
+                      email: selectedQuote.customer_email || '',
                     })
                   }
                 >
-                  View / Share
+                  Print / Share
                 </Button>
               ) : null}
+              {!quoteIsConverted(selectedQuote) ? (
+                <Button type="button" variant="neutral" onClick={() => void saveQuote()} disabled={updateQuotation.isPending}>
+                  {updateQuotation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              ) : null}
+              {quoteCanConvert(selectedQuote) ? (
+                <Button type="button" onClick={() => void convertQuote()} disabled={convertQuotation.isPending}>
+                  {convertQuotation.isPending ? 'Converting…' : 'Convert to sale'}
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={() => setSelectedQuote(null)}>
+                Close
+              </Button>
             </div>
-          ))}
-          {!quotations.data?.length ? <p>No quotations yet.</p> : null}
-        </div>
-      </Card>
+          </div>
+        ) : null}
+      </Dialog>
       <DocumentActionsSheet
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}

@@ -12,6 +12,9 @@ export function Chip({ label, active, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: Boolean(active) }}
       style={[
         styles.chip,
         active ? { backgroundColor: colors.primary, borderColor: colors.primary } : null,

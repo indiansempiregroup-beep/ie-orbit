@@ -432,6 +432,27 @@ class CatalogService:
             order=order,
             metadata=metadata,
         )
+        threshold = Decimal(str(product.low_stock_threshold or 0))
+        crossed_low = threshold > 0 and qty_before > threshold >= new_qty
+        crossed_out = qty_before > 0 >= new_qty
+        if crossed_low or crossed_out:
+            from apps.workflow.services.emit_domain import emit_domain_on_commit
+
+            emit_domain_on_commit(
+                tenant=tenant,
+                business=business,
+                event_key="inventory.low_stock",
+                context={
+                    "product": product,
+                    "product_name": product.name,
+                    "stock_on_hand": str(new_qty),
+                    "threshold": str(threshold),
+                },
+                product_code="shopie",
+                subject_type="product",
+                subject_id=str(product.id),
+                idempotency_prefix=f"inventory.low_stock:{product.id}:{new_qty}",
+            )
         return product
 
     @staticmethod
@@ -573,6 +594,43 @@ class CatalogService:
                 errors.append(_bulk_row_error(index, exc))
         return updated, errors
 
+    def _filter_profit_facts_by_staff(
+        self,
+        facts: QuerySet[ShopSaleProfitFact],
+        *,
+        tenant: Tenant,
+        business: Business,
+        staff_id: Any | None = None,
+        actor_user_id: Any | None = None,
+    ) -> QuerySet[ShopSaleProfitFact]:
+        user_id = None
+        scoped = False
+        if staff_id:
+            scoped = True
+            try:
+                parsed = UUID(str(staff_id))
+            except (TypeError, ValueError):
+                return facts.none()
+            from apps.staff.models import Staff
+
+            staff = (
+                Staff.objects.require_tenant(tenant)
+                .filter(id=parsed, business=business)
+                .first()
+            )
+            if staff is None or staff.user_id is None:
+                return facts.none()
+            user_id = staff.user_id
+        elif actor_user_id:
+            scoped = True
+            try:
+                user_id = UUID(str(actor_user_id))
+            except (TypeError, ValueError):
+                return facts.none()
+        if not scoped:
+            return facts
+        return facts.filter(Q(order__created_by=user_id) | Q(created_by=user_id))
+
     def product_profit_insights(
         self,
         *,
@@ -588,6 +646,8 @@ class CatalogService:
         limit: int | None = None,
         offset: int | None = None,
         include_catalog: bool = True,
+        staff_id: Any | None = None,
+        actor_user_id: Any | None = None,
     ) -> dict[str, Any]:
         from django.utils.dateparse import parse_date
 
@@ -609,6 +669,15 @@ class CatalogService:
             facts = facts.filter(sold_at__date__gte=parsed_from)
         if parsed_to:
             facts = facts.filter(sold_at__date__lte=parsed_to)
+        facts = self._filter_profit_facts_by_staff(
+            facts,
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            actor_user_id=actor_user_id,
+        )
+        if staff_id or actor_user_id:
+            include_catalog = False
 
         channel_key = str(channel or "all").strip().lower()
         if channel_key in {
@@ -922,6 +991,13 @@ class CatalogService:
                 business=business,
                 sold_at__date__gte=prev_from,
                 sold_at__date__lte=prev_to,
+            )
+            prev_facts = self._filter_profit_facts_by_staff(
+                prev_facts,
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                actor_user_id=actor_user_id,
             )
             if channel_key in {
                 ProfitChannel.POS,

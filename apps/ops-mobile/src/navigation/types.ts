@@ -2,7 +2,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { Booking } from '@ie-orbit/sdk';
 
 export type AuthStackParamList = {
-  Login: undefined;
+  Login: { email?: string; message?: string } | undefined;
   RegisterWizard:
     | {
         googleIdToken?: string;
@@ -49,6 +49,11 @@ export type RootStackParamList = {
   Customers: undefined;
   CustomerForm: { customerId?: string; returnTo?: 'pos' | 'pets' };
   CustomerDetail: { customerId: string };
+  CustomerRecords: {
+    customerId: string;
+    tab?: 'activity' | 'rewards' | 'reviews';
+    customerName?: string;
+  };
   Reviews: undefined;
   Services: undefined;
   ServiceForm: { serviceId?: string };
@@ -59,6 +64,7 @@ export type RootStackParamList = {
   StaffSchedule: { staffId: string };
   StaffAvailability: { staffId: string };
   Settings: undefined;
+  RoleMenus: undefined;
   SupportTickets: { mode?: 'workspace' | 'platform' } | undefined;
   SupportTicketDetail: { ticketId: string; mode?: 'workspace' | 'platform' };
   BusinessProfile: undefined;
@@ -94,10 +100,14 @@ export type RootStackParamList = {
         selectCustomerId?: string;
         /** Persisted POS customer selection across scanner / add-product navigations. */
         selectedCustomerId?: string;
+        /** Open an existing estimate on the same counter used to create it. */
+        quotationId?: string;
+        /** Open an existing sale order, purchase order, or delivery challan. */
+        documentId?: string;
       }
     | undefined;
   BarcodeScanner: {
-    target?: 'pos' | 'addProduct' | 'addMany' | 'addManyRow';
+    target?: 'pos' | 'addProduct' | 'addMany' | 'addManyRow' | 'invoiceScanLine';
     productId?: string;
     rowId?: string;
   } | undefined;
@@ -113,14 +123,18 @@ export type RootStackParamList = {
   ShopBooks: undefined;
   ShopBooksSale: { voucherId?: string } | undefined;
   ShopBooksPurchase: { voucherId?: string } | undefined;
+  ShopInvoiceScan: { enrichCode?: string; enrichLineIndex?: number } | undefined;
   ShopBooksExpense: undefined;
   ShopBooksCash: undefined;
   ShopBooksParties: undefined;
   ShopBooksReports: undefined;
   ShopBooksCompliance: undefined;
-  ShopBooksQuotations: undefined;
+  ShopBooksQuotations: { quotationId?: string } | undefined;
   ShopBooksNotes: undefined;
-  ShopBooksDocuments: { docType: 'sale_order' | 'purchase_order' | 'delivery_challan' | 'job_work' };
+  ShopBooksDocuments: {
+    docType: 'sale_order' | 'purchase_order' | 'delivery_challan' | 'job_work';
+    documentId?: string;
+  };
   ShopGodowns: undefined;
   ShopBooksCheques: undefined;
   ShopBooksLoans: undefined;

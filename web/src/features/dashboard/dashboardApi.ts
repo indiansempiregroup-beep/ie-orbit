@@ -72,9 +72,19 @@ export async function listNotifications(token: string | null, tenantId?: string 
   return response.data;
 }
 
-export async function getAvailability(token: string | null, tenantId: string | null | undefined, businessId: string | null | undefined, date: string) {
+export async function getAvailability(
+  token: string | null,
+  tenantId: string | null | undefined,
+  businessId: string | null | undefined,
+  date: string,
+  staffId?: string | null,
+) {
   const client = buildClient(token, tenantId);
-  const response = await client.bookings.availability({ date, ...businessQueryParam(businessId) });
+  const response = await client.bookings.availability({
+    date,
+    ...businessQueryParam(businessId),
+    ...(staffId ? { staff_id: staffId } : {}),
+  });
   return response.data;
 }
 

@@ -20,6 +20,11 @@ from apps.businesses.constants import (
 )
 from apps.businesses.models import Business
 from apps.businesses.services.entitlements import EntitlementService
+from apps.platform_admin.feature_flags import (
+    PRODUCT_BG_REMOVE_FLAG,
+    SERVICE_BG_REMOVE_FLAG,
+    tenant_feature_enabled,
+)
 from apps.common.api.responses import success_response
 from apps.platform_media.api.permissions import MediaAccessPermission
 from apps.platform_media.api.serializers import (
@@ -151,12 +156,24 @@ class MediaUploadView(APIView):
             raise PermissionDenied("A business is required to remove image backgrounds.")
         kind = str(folder_type or "").strip().lower()
         if kind == MediaFolderType.PRODUCTS:
+            if not tenant_feature_enabled(
+                tenant=business.tenant,
+                key=PRODUCT_BG_REMOVE_FLAG,
+                default=True,
+            ):
+                raise PermissionDenied("Product photo background removal is turned off for this workspace.")
             EntitlementService().ensure_feature(
                 business=business,
                 feature=FEATURE_SHOPIE_PRODUCT_BG_REMOVE,
             )
             return
         if kind == MediaFolderType.SERVICES:
+            if not tenant_feature_enabled(
+                tenant=business.tenant,
+                key=SERVICE_BG_REMOVE_FLAG,
+                default=True,
+            ):
+                raise PermissionDenied("Service photo background removal is turned off for this workspace.")
             EntitlementService().ensure_feature(
                 business=business,
                 feature=FEATURE_APPOINTIE_SERVICE_BG_REMOVE,

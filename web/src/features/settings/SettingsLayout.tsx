@@ -2,23 +2,36 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { useAuth } from '../../hooks/useAuth';
+import { useRoleMenusQuery } from '../../hooks/useRoleMenus';
 
-const settingsNav = [
+const settingsNav: Array<{
+  to: string;
+  labelKey?: string;
+  label?: string;
+  end?: boolean;
+  permission?: string;
+  ownerOnly?: boolean;
+}> = [
   { to: '/settings', labelKey: 'settings.overview', end: true },
   { to: '/settings/business', labelKey: 'settings.businessProfile' },
   { to: '/settings/payments', labelKey: 'settings.payments', label: 'Payments' },
   { to: '/settings/support', labelKey: 'settings.support', label: 'Support tickets' },
   { to: '/settings/products', labelKey: 'settings.productsBilling' },
   { to: '/settings/team', labelKey: 'settings.team', permission: 'iam:role:assign' },
+  { to: '/settings/role-menus', label: 'Role menus', ownerOnly: true },
 ];
 
 export function SettingsLayout() {
   const { t } = useTranslation();
   const auth = useAuth();
   const permissions = auth.user?.permissions ?? [];
-  const visibleNav = settingsNav.filter(
-    (item) => !item.permission || permissions.includes(item.permission),
-  );
+  const roleMenus = useRoleMenusQuery();
+  const canManageRoleMenus = Boolean(roleMenus.data?.can_manage);
+  const visibleNav = settingsNav.filter((item) => {
+    if ('ownerOnly' in item && item.ownerOnly && !canManageRoleMenus) return false;
+    if (!item.permission) return true;
+    return permissions.includes(item.permission);
+  });
 
   return (
     <div className="settings-layout" style={{ display: 'grid', gap: 20 }}>
@@ -39,7 +52,7 @@ export function SettingsLayout() {
                 border: isActive ? '1px solid #bfdbfe' : '1px solid transparent',
               })}
             >
-              {'label' in item ? item.label : t(item.labelKey)}
+              {item.label ?? (item.labelKey ? t(item.labelKey) : item.to)}
             </NavLink>
           ))}
         </nav>

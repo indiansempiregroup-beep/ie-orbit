@@ -10,7 +10,7 @@ from apps.businesses.models import (
     WhiteLabelProfile,
 )
 from apps.businesses.services.entitlements import EntitlementService
-from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, tenant_feature_enabled
+from apps.platform_admin.feature_flags import GOOGLE_ADS_FLAG, WHITE_LABEL_FLAG, tenant_feature_enabled
 
 
 def _shop_settings_for(business: Business):
@@ -196,7 +196,8 @@ def serialize_white_label_profile(profile: WhiteLabelProfile) -> dict[str, Any]:
         "app_name": profile.app_name,
         "bundle_id_ios": profile.bundle_id_ios,
         "bundle_id_android": profile.bundle_id_android,
-        "white_label_enabled": profile.white_label_enabled,
+        "white_label_enabled": profile.white_label_enabled
+        and tenant_feature_enabled(tenant=tenant, key=WHITE_LABEL_FLAG, default=True),
         "tenant_id": str(tenant.id),
         "tenant_slug": tenant.slug,
         "business_code": business.business_code,

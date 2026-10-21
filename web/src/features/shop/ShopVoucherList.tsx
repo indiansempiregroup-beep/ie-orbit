@@ -18,6 +18,7 @@ import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet
 import { openShopDocumentView } from './shopDocumentActions';
 import { voucherLineGrossAmount } from './saleInvoiceSource';
 import { SaleInsightChips } from './SaleInsightChips';
+import { PurchasePayForm } from './PurchasePayForm';
 import { useAuthContext } from '../../contexts/AuthContext';
 import {
   useShopComplianceMutations,
@@ -37,6 +38,7 @@ type VoucherLineItem = {
   gross?: string | number;
   discount_amount?: string | number;
   total?: string | number;
+  product_id?: string | null;
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -80,9 +82,24 @@ function voucherBillSummaryRows(voucher: ShopBooksVoucher) {
     Math.floor(moneyNum(billing.reward_points) || moneyNum(loyalty.points_redeemed)),
   );
   const awardLoyalty = billing.award_loyalty_points !== false;
+  const pointsReversed = Math.max(
+    0,
+    Math.floor(
+      moneyNum(voucher.points_reversed) ||
+        moneyNum(loyalty.points_reversed) ||
+        moneyNum(loyalty.points_revoked) ||
+        moneyNum(billing.points_reversed) ||
+        moneyNum(billing.points_revoked),
+    ),
+  );
+  const reversalReason = String(loyalty.reversal_reason || billing.reversal_reason || '').trim();
   let pointsEarned = Math.max(
     0,
-    Math.floor(moneyNum(loyalty.points_earned) || moneyNum(billing.points_earned)),
+    Math.floor(
+      moneyNum(voucher.points_earned) ||
+        moneyNum(loyalty.points_earned) + pointsReversed ||
+        moneyNum(billing.points_earned) + pointsReversed,
+    ),
   );
   const expectedEarn = Math.max(0, Math.floor(moneyNum(billing.points_to_earn)));
   let pointsToEarn = 0;
@@ -128,6 +145,8 @@ function voucherBillSummaryRows(voucher: ShopBooksVoucher) {
     rewardPoints,
     pointsEarned,
     pointsToEarn,
+    pointsReversed,
+    reversalReason,
     taxable,
     taxTotal,
     igst,
@@ -157,6 +176,8 @@ function VoucherBillSummary({
     enabled: loyaltyEnabled,
     pointsEarned: bill.pointsEarned,
     pointsToEarn: bill.pointsToEarn,
+    pointsReversed: bill.pointsReversed,
+    reversalReason: bill.reversalReason,
     pointsBalance,
   });
   const row = (label: string, value: string, strong?: boolean) => (
@@ -467,6 +488,8 @@ export function ShopVoucherList({
   emptyLabel,
   heading,
   source,
+  scanPath,
+  scanLabel,
 }: {
   voucherType: 'sale' | 'purchase';
   newPath: string;
@@ -475,6 +498,8 @@ export function ShopVoucherList({
   heading?: string;
   /** Sale list: pass `pos` to show only counter/POS invoices. */
   source?: string;
+  scanPath?: string;
+  scanLabel?: string;
 }) {
   const workspace = useWorkspace();
   const auth = useAuthContext();
@@ -625,14 +650,23 @@ export function ShopVoucherList({
     <div className="page-stack">
       <div className="invoice-page-header">
         <h1 className="invoice-page-title">{pageTitle}</h1>
-        <Link to={newPath}>
-          <Button type="button" variant="primary">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={16} aria-hidden="true" />
-              {title}
-            </span>
-          </Button>
-        </Link>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {scanPath ? (
+            <Link to={scanPath}>
+              <Button type="button" variant="neutral">
+                {scanLabel || 'Scan invoice'}
+              </Button>
+            </Link>
+          ) : null}
+          <Link to={newPath}>
+            <Button type="button" variant="primary">
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <Plus size={16} aria-hidden="true" />
+                {title}
+              </span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {createdNumber ? (
@@ -844,16 +878,26 @@ export function ShopVoucherList({
               {formatVoucherWhen(selected.voucher_date, selected.created_at) || selected.voucher_date} · {selected.customer_name || selected.supplier_name || 'Cash'} · {selected.status}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
-              {(selected.line_items as VoucherLineItem[] | undefined ?? []).map((line, index) => (
-                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span>
+              {(selected.line_items as VoucherLineItem[] | undefined ?? []).map((line, index) => {
+                const productId = String(line.product_id || '').trim();
+                const label = (
+                  <>
                     {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
-                  </span>
-                  <strong>
-                    {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
-                  </strong>
-                </div>
-              ))}
+                  </>
+                );
+                return (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    {productId ? (
+                      <Link to={`/shop/products?product=${encodeURIComponent(productId)}`}>{label}</Link>
+                    ) : (
+                      <span>{label}</span>
+                    )}
+                    <strong>
+                      {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
+                    </strong>
+                  </div>
+                );
+              })}
               {!selected.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
             </div>
             <VoucherBillSummary
@@ -866,6 +910,10 @@ export function ShopVoucherList({
               <SaleInsightChips source={selected} currency={currency} />
             ) : null}
             {selected.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {selected.notes}</p> : null}
+
+            {voucherType === 'purchase' ? (
+              <PurchasePayForm voucher={selected} onPaid={(updated) => setSelected(updated)} />
+            ) : null}
 
             {voucherType === 'sale' ? <GstComplianceSection voucher={selected} /> : null}
 

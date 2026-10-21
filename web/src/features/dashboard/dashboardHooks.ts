@@ -21,6 +21,7 @@ import {
   searchBookings,
 } from './dashboardApi';
 import { useAuth } from '../../hooks/useAuth';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { createAuthenticatedClient } from '../../lib/apiClient';
 import { useApiClient } from '../../hooks/useApiClient';
@@ -154,32 +155,33 @@ export function useTenantSettings() {
   });
 }
 
-export function useBookingLists(date: string, range?: { from: string; to: string }) {
+export function useBookingLists(date: string, range?: { from: string; to: string }, staffId?: string | null) {
   const auth = useAuth();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
   const businessId = workspace.businessId;
   const tenantId = workspace.tenantId;
+  const staffQuery = staffId ? { staff: staffId } : {};
 
   const todayQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'today', tenantId, businessId, date],
-    queryFn: () => listBookings(auth.token, tenantId, businessId, { date }),
+    queryKey: ['dashboard', 'bookings', 'today', tenantId, businessId, date, staffId ?? 'all'],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date, ...staffQuery }),
     enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
   });
 
   const rangeQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'range', tenantId, businessId, range?.from, range?.to],
-    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to }),
+    queryKey: ['dashboard', 'bookings', 'range', tenantId, businessId, range?.from, range?.to, staffId ?? 'all'],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to, ...staffQuery }),
     enabled: Boolean(auth.token) && Boolean(businessId) && Boolean(range),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
   });
 
   const upcomingQuery = useQuery<Booking[], Error>({
-    queryKey: ['dashboard', 'bookings', 'upcoming', tenantId, businessId, range?.from, range?.to],
-    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to }),
+    queryKey: ['dashboard', 'bookings', 'upcoming', tenantId, businessId, range?.from, range?.to, staffId ?? 'all'],
+    queryFn: () => listBookings(auth.token, tenantId, businessId, { date_from: range?.from, date_to: range?.to, ...staffQuery }),
     enabled: Boolean(auth.token) && Boolean(businessId) && Boolean(range),
     staleTime: 1000 * 60,
     refetchOnWindowFocus: true,
@@ -197,7 +199,7 @@ export function useBookingLists(date: string, range?: { from: string; to: string
   };
 }
 
-export function useBusinessLists() {
+export function useBusinessLists(staffId?: string | null) {
   const auth = useAuth();
   const workspace = useWorkspace();
   const businessId = workspace.businessId;
@@ -233,8 +235,22 @@ export function useBusinessLists() {
   });
 
   const availability = useQuery<AvailabilitySlot[], Error>({
-    queryKey: ['dashboard', 'availability', tenantId, businessId, new Date().toISOString().slice(0, 10)],
-    queryFn: () => getAvailability(auth.token, tenantId, businessId, new Date().toISOString().slice(0, 10)),
+    queryKey: [
+      'dashboard',
+      'availability',
+      tenantId,
+      businessId,
+      new Date().toISOString().slice(0, 10),
+      staffId ?? 'all',
+    ],
+    queryFn: () =>
+      getAvailability(
+        auth.token,
+        tenantId,
+        businessId,
+        new Date().toISOString().slice(0, 10),
+        staffId,
+      ),
     enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
@@ -334,9 +350,11 @@ export function deriveDashboardKpis(
 export function useDashboardSummary() {
   const client = useApiClient();
   const workspace = useWorkspace();
+  const { staffId } = useReportStaffFilter();
   return useQuery({
-    queryKey: ['dashboard', 'summary', workspace.tenantId, workspace.businessId],
-    queryFn: async () => (await client.analytics.dashboard.summary()).data,
+    queryKey: ['dashboard', 'summary', workspace.tenantId, workspace.businessId, staffId ?? 'all'],
+    queryFn: async () =>
+      (await client.analytics.dashboard.summary(staffId ? { staff_id: staffId } : undefined)).data,
     enabled: Boolean(workspace.businessId),
     staleTime: 1000 * 30,
     refetchOnWindowFocus: true,

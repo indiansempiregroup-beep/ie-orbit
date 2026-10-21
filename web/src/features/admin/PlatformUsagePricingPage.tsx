@@ -324,9 +324,9 @@ export function PlatformUsagePricingPage() {
         reason: smartReason,
       },
       {
-        onSuccess: () => setMessage('Orbit Mart Smart lookup settings saved.'),
+        onSuccess: () => setMessage('AI wallet settings saved.'),
         onError: (err) =>
-          setMessage(err instanceof Error ? err.message : "Couldn't save Smart lookup settings. Try again."),
+          setMessage(err instanceof Error ? err.message : "Couldn't save AI wallet settings. Try again."),
       },
     );
   }
@@ -513,12 +513,12 @@ export function PlatformUsagePricingPage() {
       <div className="admin-smart-lookup">
         <div className="admin-smart-lookup__hero">
           <div>
-            <p className="admin-smart-lookup__kicker">Orbit Mart add-on</p>
-            <h3 className="admin-smart-lookup__title">Smart product lookup</h3>
+            <p className="admin-smart-lookup__kicker">Shared prepaid wallet</p>
+            <h3 className="admin-smart-lookup__title">AI wallet</h3>
             <p className="admin-smart-lookup__lead">
-              Pack-photo AI fill when barcodes miss the free catalog. Enable{' '}
-              <strong>Smart product lookup</strong> on each Orbit Mart package&apos;s Features tab,
-              then control pass-through pricing here. Shops opt in and top up a prepaid wallet.
+              One wallet pays for pack-photo fill, vendor invoice scans, and automation drafts.
+              Turn the matching function on under each plan&apos;s Features tab, then set token
+              prices here. Shops top up before those calls run.
             </p>
           </div>
           <AdminStatus status={smartEnabled ? 'active' : 'inactive'} />
@@ -556,17 +556,18 @@ export function PlatformUsagePricingPage() {
           <header>
             <h4>Availability</h4>
             <p>
-              Master switch for all Orbit Mart businesses. Per-tenant override uses feature flag{' '}
-              <code>shopie_smart_lookup</code>.
+              Master switch for the shared wallet. Off blocks pack photos, invoice scans, and
+              automation drafts for every workspace. Per-tenant switches are{' '}
+              <code>shopie_smart_lookup</code> and <code>shopie_invoice_scan</code>.
             </p>
           </header>
           <FlagToggle
             on={smartEnabled}
-            title={smartEnabled ? 'Smart lookup is on' : 'Smart lookup is off'}
+            title={smartEnabled ? 'AI wallet is on' : 'AI wallet is off'}
             hint={
               smartEnabled
-                ? 'Businesses can enable pack-photo fill and debit wallets.'
-                : 'Pack-photo AI is blocked platform-wide.'
+                ? 'Workspaces can top up and run pack photos, invoice scans, and automation drafts.'
+                : 'Those Gemini calls are blocked platform-wide.'
             }
             onClick={() => setSmartEnabled((current) => !current)}
           />
@@ -723,13 +724,13 @@ export function PlatformUsagePricingPage() {
             disabled={busy}
             onClick={saveSmartLookupSettings}
           >
-            {smartLookupMutation.isPending ? 'Saving…' : 'Save Smart lookup'}
+            {smartLookupMutation.isPending ? 'Saving…' : 'Save AI wallet'}
           </button>
         </div>
 
         <section className="admin-smart-lookup__card admin-smart-lookup__card--wide">
           <h4>Wallet ledger</h4>
-          <p>All tenant credits and Smart fill debits. Filter by workspace, source, and date.</p>
+          <p>Wallet credits and debits for pack photos, invoice scans, and automation drafts.</p>
           <div className="admin-filter-row" style={{ marginTop: 12 }}>
             <AdminField label="Search">
               <input
@@ -871,9 +872,17 @@ export function PlatformUsagePricingPage() {
                       const entry =
                         row.source === 'wallet_top_up'
                           ? 'Top-up'
-                          : row.code
-                            ? `Smart fill · ${row.code}`
-                            : enrichLedgerSourceLabel(row.source);
+                          : row.source === 'gemini_automation'
+                            ? 'Automation draft'
+                            : row.source === 'gemini_invoice_error'
+                              ? 'Invoice scan (failed)'
+                              : row.source === 'gemini_invoice'
+                                ? row.code
+                                  ? `Invoice scan · ${row.code}`
+                                  : 'Invoice scan'
+                                : row.code
+                                  ? `Smart fill · ${row.code}`
+                                  : enrichLedgerSourceLabel(row.source);
                       return (
                         <tr key={row.id}>
                           <td>{new Date(row.created_at).toLocaleString()}</td>
@@ -937,7 +946,7 @@ export function PlatformUsagePricingPage() {
     <AdminPage>
       <AdminPageHeader
         title="Usage pricing"
-        description="Seat add-ons, Chat Assistant wallet, and Orbit Mart Smart product lookup — priced separately for India (INR) and international (USD)."
+        description="Seat add-ons, Chat Assistant wallet, and the shared AI wallet for pack photos, invoice scans, and automation drafts — priced separately for India (INR) and international (USD)."
         actions={
           <Link className="admin-btn admin-btn--ghost" to="/admin/packages">
             Plan packages
@@ -976,7 +985,7 @@ export function PlatformUsagePricingPage() {
           className={`admin-editor-tab${tab === 'smart' ? ' is-active' : ''}`}
           onClick={() => setTab('smart')}
         >
-          Smart lookup
+          AI wallet
         </button>
       </div>
 

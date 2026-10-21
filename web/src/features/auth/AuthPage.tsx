@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { KeyRound, Mail, Phone } from 'lucide-react';
 import { createApiClient } from '@ie-orbit/sdk';
@@ -11,9 +11,14 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { PostAuthRedirect } from '../../components/PostAuthRedirect';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { decodeGoogleIdToken, isGoogleAccountNotRegistered } from '../../lib/googleAuth';
+import { InviteAppDownload } from './InviteAppDownload';
 
 type OtpStep = 'idle' | 'code';
 type LoginChannel = 'email' | 'whatsapp';
+type AuthLocationState = {
+  message?: string;
+  email?: string;
+};
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -59,10 +64,12 @@ export function AuthPage() {
   const { t } = useTranslation();
   usePageMeta({ title: 'Sign in — IE Orbit' });
   const auth = useAuthContext();
+  const location = useLocation();
+  const inviteState = (location.state as AuthLocationState | null) ?? {};
   const [otpStep, setOtpStep] = useState<OtpStep>('idle');
   const [loginChannel, setLoginChannel] = useState<LoginChannel>('email');
   const [mobileOtpEnabled, setMobileOtpEnabled] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(inviteState.email ?? '');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [remember, setRemember] = useState(true);
@@ -160,7 +167,13 @@ export function AuthPage() {
   return (
     <>
       <h1 className="ops-login-title">{t('auth.welcomeBack')}</h1>
-      <p className="ops-login-subtitle">{t('auth.signIn')}</p>
+      {inviteState.message ? (
+        <p role="status" className="ops-login-notice">
+          {inviteState.message}
+        </p>
+      ) : (
+        <p className="ops-login-subtitle">{t('auth.signIn')}</p>
+      )}
 
       <div className="ops-login-form">
         {mobileOtpEnabled && otpStep === 'idle' ? (
@@ -327,6 +340,11 @@ export function AuthPage() {
             </Link>
           </div>
         ) : null}
+      </div>
+
+      <div className="auth-app-download">
+        <strong>Your shop, in your pocket</strong>
+        <InviteAppDownload />
       </div>
 
       <p className="ops-login-footer">

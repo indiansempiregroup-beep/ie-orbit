@@ -1,9 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
+import { StaffReportFilter } from '../../components/StaffReportFilter';
 import { usePageMeta } from '../../hooks/usePageMeta';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { formatMoney } from '../../lib/currency';
 import { useDashboardSummary } from '../dashboard/dashboardHooks';
+import { useStaffList } from '../management/managementHooks';
 import { StatCard } from '../bi/components/StatCard';
 import { useBIReportsQuery } from '../bi/biHooks';
 
@@ -20,6 +23,8 @@ function pct(value?: number | null) {
 export function ReportsPage() {
   usePageMeta({ title: 'Reports — Orbit Appoint' });
   const navigate = useNavigate();
+  const { staffId, setStaffId, canFilter } = useReportStaffFilter();
+  const staffQuery = useStaffList();
   const summaryQuery = useDashboardSummary();
   const reportsQuery = useBIReportsQuery();
   const summary = summaryQuery.data;
@@ -35,6 +40,11 @@ export function ReportsPage() {
           Today’s snapshot plus the last 30 days of Orbit Appoint activity. Open Business Intelligence for full
           charts and deeper breakdowns.
         </p>
+        {canFilter ? (
+          <div style={{ marginBottom: 16 }}>
+            <StaffReportFilter staff={staffQuery.data ?? []} staffId={staffId} onChange={setStaffId} />
+          </div>
+        ) : null}
         <Button variant="neutral" onClick={() => navigate('/bi/reports')}>
           Open Business Intelligence
         </Button>
@@ -47,7 +57,7 @@ export function ReportsPage() {
           label="Est. revenue · today"
           value={money(appointie?.estimated_revenue_today, summary?.currency)}
         />
-        <StatCard label="Active customers" value={appointie?.active_customers ?? 0} />
+        {staffId ? null : <StatCard label="Active customers" value={appointie?.active_customers ?? 0} />}
         {shopie ? (
           <>
             <StatCard label="Orders · today" value={shopie.orders_today} />
@@ -60,11 +70,11 @@ export function ReportsPage() {
         <h2 style={{ marginTop: 0 }}>Last 30 days</h2>
         <p style={{ color: 'var(--muted-foreground)', marginTop: 0 }}>From the operations report bundle.</p>
         <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-          <StatCard label="Bookings" value={reports?.summary.bookings ?? 0} />
-          <StatCard label="Completion" value={pct(reports?.summary.completion_rate)} />
+          <StatCard label="Bookings" value={reports?.summary?.bookings ?? 0} />
+          <StatCard label="Completion" value={pct(reports?.summary?.completion_rate)} />
           <StatCard
             label="Est. revenue"
-            value={money(reports?.revenue.estimated_revenue, reports?.revenue.currency ?? summary?.currency)}
+            value={money(reports?.revenue?.estimated_revenue, reports?.revenue?.currency ?? summary?.currency)}
           />
           <StatCard label="Repeat rate" value={pct(reports?.growth?.repeat_rate)} />
         </div>

@@ -197,6 +197,15 @@ class AuthenticationService:
     ) -> LoginResult:
         identity = verify_google_id_token(id_token)
         user = self._resolve_google_user(identity)
+        if client == "ops":
+            from apps.staff.services.invitations import (
+                PENDING_INVITE_LOGIN_MESSAGE,
+                pending_invitation_for_login,
+            )
+
+            pending = pending_invitation_for_login(channel="email", identifier=identity.email)
+            if pending and (user is None or not self._user_has_ops_workspace(user)):
+                raise exceptions.ValidationError({"id_token": PENDING_INVITE_LOGIN_MESSAGE})
         if user is None:
             if client != "customer" or not create_if_missing:
                 if client == "customer":

@@ -16,7 +16,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/',
     title: 'IE Orbit — White-label booking and retail apps for Indian businesses',
     description:
-      'Ship a customer app under your brand — not ours. Orbit Appoint for bookings, Orbit Mart for POS and GST. White-label included on Starter and Pro. 45-day full-Pro trial, UPI billing.',
+      'Ship a customer app under your brand — not ours. Orbit Appoint for bookings, Orbit Mart for POS and GST. AI assistant, automation creator, and invoice extraction. White-label on Starter and Pro. 45-day full-Pro trial, UPI billing.',
     index: true,
     schemas: ['organization', 'website', 'software'],
   },
@@ -24,7 +24,7 @@ export const MARKETING_PAGES: SeoPage[] = [
     path: '/features',
     title: 'Features — White-label app, Orbit Appoint, and Orbit Mart',
     description:
-      'Every plan includes a white-label customer app branded to your business. Orbit Appoint covers bookings and staff. Orbit Mart covers POS, catalog, online orders, GST books on Pro, and Grow.',
+      'Every plan includes a white-label customer app branded to your business. Orbit Appoint covers bookings and staff. Orbit Mart covers POS, catalog, online orders, GST books on Pro, and Grow. Includes an AI assistant, automation creator, and invoice extraction.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [

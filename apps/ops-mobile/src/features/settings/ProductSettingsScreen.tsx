@@ -782,20 +782,32 @@ export function ProductSettingsScreen() {
       row.product_code === 'shopie' &&
       ['trialing', 'active', 'past_due', 'soft_locked'].includes(row.status),
   );
+  const hasAppointie = (activeBusiness?.product_subscriptions ?? []).some(
+    (row) =>
+      row.product_code === 'appointie' &&
+      ['trialing', 'active', 'past_due', 'soft_locked'].includes(row.status),
+  );
+  const hasAiWallet = hasShopie || hasAppointie;
   const shopieSoftLocked = (activeBusiness?.product_subscriptions ?? []).some(
     (row) => row.product_code === 'shopie' && (row.status === 'soft_locked' || Boolean(snapshot?.soft_locked)),
+  );
+  const appointSoftLocked = (activeBusiness?.product_subscriptions ?? []).some(
+    (row) => row.product_code === 'appointie' && row.status === 'soft_locked',
   );
   const smartPlatformOk = smartDashboard?.platform_enabled !== false;
   const smartPlanOk = smartDashboard?.plan_enabled !== false;
   const smartEnabled = Boolean(smartDashboard?.business_enabled ?? smartDashboard?.smart_lookup_enabled);
   const canConfigureSmart = hasShopie && !shopieSoftLocked && smartPlatformOk && smartPlanOk;
+  const canTopUpAi =
+    smartPlatformOk &&
+    ((hasShopie && !shopieSoftLocked) || (hasAppointie && !appointSoftLocked));
   const smartTopUps =
     smartDashboard?.platform?.suggested_top_up_paise?.length
       ? smartDashboard.platform.suggested_top_up_paise
       : [5000, 10000, 25000, 50000];
 
   useEffect(() => {
-    if (!token || !tenantId || !businessId || !hasShopie) {
+    if (!token || !tenantId || !businessId || !hasAiWallet) {
       setSmartDashboard(null);
       setSmartHistory([]);
       setSmartHistoryTotal(0);
@@ -815,10 +827,10 @@ export function ProductSettingsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [token, tenantId, businessId, hasShopie, refreshing]);
+  }, [token, tenantId, businessId, hasAiWallet, refreshing]);
 
   useEffect(() => {
-    if (!token || !tenantId || !businessId || !hasShopie) return;
+    if (!token || !tenantId || !businessId || !hasAiWallet) return;
     let cancelled = false;
     setSmartHistoryLoading(true);
     const client = createScopedClient(token, tenantId, businessId);
@@ -870,7 +882,7 @@ export function ProductSettingsScreen() {
     token,
     tenantId,
     businessId,
-    hasShopie,
+    hasAiWallet,
     smartHistoryPage,
     smartHistoryKind,
     smartHistoryQ,
@@ -1970,13 +1982,13 @@ export function ProductSettingsScreen() {
           </FormSection>
 
           <FormSection
-            title="Smart product lookup"
-            subtitle="Pack-photo AI fill when barcodes miss the free catalog. Wallet debits at configured Gemini cost."
+            title="AI wallet"
+            subtitle="Pack photos, invoice scans, and automation drafts debit this wallet from the tokens Gemini reports."
           >
-            {!hasShopie ? (
+            {!hasAiWallet ? (
               <View style={styles.notice}>
                 <Text style={[styles.noticeTitle, styles.checkCopy]}>
-                  Start or renew Orbit Mart above to unlock Smart lookup and the prepaid wallet.
+                  Start or renew Orbit Mart or Orbit Appoint above to use the prepaid AI wallet.
                 </Text>
               </View>
             ) : !smartPlatformOk ? (
@@ -1985,15 +1997,17 @@ export function ProductSettingsScreen() {
                   Smart lookup is disabled by the platform. Contact IE support if you need pack-photo fill.
                 </Text>
               </View>
-            ) : !smartPlanOk ? (
-              <View style={styles.notice}>
-                <Text style={[styles.noticeTitle, styles.checkCopy]}>
-                  Smart product lookup is not on your current plan. Ask your platform admin to enable it on the
-                  package Features tab, or upgrade to a plan that includes it.
-                </Text>
-              </View>
             ) : (
               <View style={styles.stackTight}>
+                {hasShopie && !smartPlanOk ? (
+                  <View style={styles.notice}>
+                    <Text style={[styles.noticeTitle, styles.checkCopy]}>
+                      Pack-photo fill is not on your current plan. Invoice scan and automation drafts still use this
+                      wallet when those features are on your plan.
+                    </Text>
+                  </View>
+                ) : null}
+                {hasShopie ? (
                 <View style={styles.loyaltyToggleRow}>
                   <View style={styles.checkCopy}>
                     <Text style={styles.label}>Enable pack-photo auto-fill</Text>
@@ -2021,13 +2035,19 @@ export function ProductSettingsScreen() {
                     trackColor={{ false: colors.border, true: colors.primary }}
                   />
                 </View>
+                ) : null}
+                {!hasShopie ? (
+                  <Text style={styles.meta}>
+                    Wallet ₹{(smartDashboard?.balance_inr ?? 0).toFixed(2)}
+                  </Text>
+                ) : null}
                 <Text style={styles.kicker}>Top up with UPI</Text>
                 <View style={styles.chipRow}>
                   {smartTopUps.map((paise) => (
                     <Chip
                       key={paise}
                       label={`₹${(paise / 100).toFixed(0)}`}
-                      onPress={canConfigureSmart ? () => setSmartTopUpPaise(paise) : undefined}
+                      onPress={canTopUpAi ? () => setSmartTopUpPaise(paise) : undefined}
                     />
                   ))}
                 </View>
@@ -2038,13 +2058,13 @@ export function ProductSettingsScreen() {
                     value={smartCustomRupees}
                     onChangeText={setSmartCustomRupees}
                     unit="₹"
-                    editable={canConfigureSmart && !smartBusy}
+                    editable={canTopUpAi && !smartBusy}
                   />
                 </View>
                 <Button
                   label="Pay custom amount"
                   variant="outline"
-                  disabled={!canConfigureSmart || !smartCustomRupees.trim()}
+                  disabled={!canTopUpAi || !smartCustomRupees.trim()}
                   onPress={() => {
                     const rupees = Number(smartCustomRupees);
                     if (!Number.isFinite(rupees) || rupees < 1) {
@@ -2160,9 +2180,17 @@ export function ProductSettingsScreen() {
                       const title =
                         row.source === 'wallet_top_up'
                           ? 'Wallet top-up'
-                          : row.code
-                            ? `Smart fill · ${row.code}`
-                            : 'Smart fill';
+                          : row.source === 'gemini_automation'
+                            ? 'Automation draft'
+                          : row.source === 'gemini_invoice_error'
+                            ? 'Invoice scan (failed)'
+                            : row.source === 'gemini_invoice'
+                              ? row.code
+                                ? `Invoice scan · ${row.code}`
+                                : 'Invoice scan'
+                              : row.code
+                                ? `Smart fill · ${row.code}`
+                                : 'Smart fill';
                       const balanceAfter =
                         row.balance_after_paise == null
                           ? '—'

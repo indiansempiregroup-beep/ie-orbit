@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Camera, Pencil, Plus, Rows3 } from 'lucide-react';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct, ShopProductCategoryItem } from '@ie-orbit/sdk';
@@ -18,6 +18,7 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { ShopFilterBar } from './ShopFilterBar';
 import { uploadProductImage } from './uploadProductImage';
 import { ProductImageCropModal, type ProductImageCropResult } from './ProductImageCropModal';
+import { hasBiFeature } from '../../config/planFeatures';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { currencySelectOptions, ensureSelectOption } from '../../config/onboarding';
 import {
@@ -224,6 +225,9 @@ function officeStockFor(godowns: ShopGodown[], productId: string) {
 }
 
 export function ShopProductsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepProductId = searchParams.get('product');
+  const openedDeepProduct = useRef<string | null>(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
@@ -246,6 +250,7 @@ export function ShopProductsPage() {
     ];
   }, [billingQuery.data]);
   const canRemoveBackground = entitledFeatures.includes('shopie_product_bg_remove');
+  const canSeeProfit = hasBiFeature(billingQuery.data, 'profit', 'shopie');
   const scanInputRef = useRef<HTMLInputElement | null>(null);
   const packPhotoRef = useRef<HTMLInputElement | null>(null);
   const products = useShopProducts(search, status, category);
@@ -381,6 +386,34 @@ export function ShopProductsPage() {
     setMessage(null);
     dialog.show();
   }
+
+  function closeProductDialog() {
+    dialog.hide();
+    if (searchParams.has('product')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('product');
+      setSearchParams(next, { replace: true });
+      openedDeepProduct.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!deepProductId || openedDeepProduct.current === deepProductId || !client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await client.shop.getProduct(deepProductId);
+        if (cancelled || !response.data) return;
+        openedDeepProduct.current = deepProductId;
+        openEditDialog(response.data);
+      } catch {
+        snackbar.push("Couldn't open that product.", 'error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deepProductId, client]);
 
   async function runEnrich(payload: { code?: string; query?: string; image_url?: string; use_smart_lookup?: boolean }) {
     const code = (payload.code || '').trim();
@@ -675,11 +708,11 @@ export function ShopProductsPage() {
     try {
       if (editingId) {
         await update.mutateAsync({ productId: editingId, body: payload });
-        dialog.hide();
+        closeProductDialog();
         window.setTimeout(() => snackbar.push('Product details saved.', 'success'), 0);
       } else {
         await create.mutateAsync(payload);
-        dialog.hide();
+        closeProductDialog();
         window.setTimeout(() => snackbar.push('Product added.', 'success'), 0);
       }
       setForm({ ...emptyForm, images: emptyProductImageSlots() });
@@ -751,11 +784,13 @@ export function ShopProductsPage() {
           ]}
           action={
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Link to="/bi/profit">
-                <Button type="button" variant="neutral">
-                  BI Profit
-                </Button>
-              </Link>
+              {canSeeProfit ? (
+                <Link to="/bi/profit">
+                  <Button type="button" variant="neutral">
+                    BI Profit
+                  </Button>
+                </Link>
+              ) : null}
               <Link to="/shop/products/add-many">
                 <Button type="button" variant="neutral">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1116,7 +1151,7 @@ export function ShopProductsPage() {
 
       <Dialog
         open={dialog.open}
-        onClose={dialog.hide}
+        onClose={closeProductDialog}
         title={editingId ? 'Edit product' : 'Add product'}
         labelledBy="product-dialog"
         busy={saving || lookingUp || enrich.isPending || analyzing || uploadingIndex !== null}
@@ -1517,7 +1552,7 @@ export function ShopProductsPage() {
             <Button type="submit" variant="primary" disabled={saving}>
               {saving ? 'Saving…' : editingId ? 'Update product' : 'Save product'}
             </Button>
-            <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
+            <Button type="button" variant="neutral" onClick={closeProductDialog} disabled={saving}>
               Cancel
             </Button>
           </div>

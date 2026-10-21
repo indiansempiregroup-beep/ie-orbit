@@ -13,15 +13,18 @@ import {
 import { DashboardWidget } from './DashboardWidget';
 import { Button, IconButton } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { quickActionItems, filterNavigationByProduct } from '../../config/navigation';
+import { StaffReportFilter } from '../../components/StaffReportFilter';
 import { useAuth } from '../../hooks/useAuth';
+import { useProductNavigation } from '../../hooks/useProductNavigation';
+import { useRoleMenus } from '../../hooks/useRoleMenus';
+import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
 import { GettingStartedChecklist } from '../onboarding/GettingStartedChecklist';
 import { getProductName, getSubscribedProductIds } from '../../config/products';
 import { useShopOrders } from '../shop/shopHooks';
 import { useBIOverviewQuery } from '../bi/biHooks';
-import { canAccessReports } from '../../utils/roles';
+import { canAccessReports, isStaffOnly } from '../../utils/roles';
 import type { BIInsight } from '@ie-orbit/sdk';
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
@@ -83,14 +86,11 @@ export function DashboardPage() {
   const auth = useAuth();
   const workspace = useWorkspace();
   const queryClient = useQueryClient();
-  const activeProduct = workspace.activeProduct ?? workspace.activeBusiness?.selected_product ?? 'appointie';
+  const { quickActions } = useProductNavigation();
+  const { isEnabled } = useRoleMenus();
   const subscribedIds = useMemo(
     () => getSubscribedProductIds(workspace.activeBusiness?.product_subscriptions),
     [workspace.activeBusiness?.product_subscriptions],
-  );
-  const quickActions = useMemo(
-    () => filterNavigationByProduct(quickActionItems, activeProduct, auth.user, workspace.activeBusiness?.product_subscriptions),
-    [activeProduct, auth.user, workspace.activeBusiness?.product_subscriptions],
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -105,20 +105,33 @@ export function DashboardPage() {
   const settings = useDashboardSettings();
   const business = useBusinessProfile();
   const showReports = canAccessReports(auth.user);
-  const overviewQuery = useBIOverviewQuery(undefined, undefined, showReports);
+  const showBi = showReports && isEnabled('bi');
+  const { staffId, setStaffId, canFilter } = useReportStaffFilter();
+  const staffFilterActive = Boolean(staffId);
+  const overviewQuery = useBIOverviewQuery(undefined, undefined, showBi);
   const summaryQuery = useDashboardSummary();
   const summary = summaryQuery.data;
   const hasAppointie = Boolean(summary?.appointie) || (summary ? summary.products.includes('appointie') : subscribedIds.includes('appointie'));
   const hasShopie = Boolean(summary?.shopie) || (summary ? summary.products.includes('shopie') : subscribedIds.includes('shopie'));
   const hasPets = Boolean(summary?.pets) || Boolean(summary?.pets_pack_enabled);
+  const bookingStaffOnly = Boolean(summary?.viewer?.booking_staff);
+  const hideShopUntilKnown = isStaffOnly(auth.user) && !summary;
+  const showShopOps = hasShopie && !bookingStaffOnly && !hideShopUntilKnown && !staffFilterActive;
+  const showBookings = hasAppointie && (isEnabled('bookings') || isEnabled('calendar'));
+  const showOrders = showShopOps && isEnabled('orders');
+  const showBooks = showShopOps && isEnabled('books');
+  const showPetsWidgets = hasPets && isEnabled('pets') && !staffFilterActive;
+  const showCustomers = isEnabled('customers');
+  const showStaffKpi = isEnabled('staff') && !staffFilterActive;
+  const showReturns = showShopOps && isEnabled('returns');
 
-  const { customers, staff, notifications, availability } = useBusinessLists();
+  const { customers, staff, notifications, availability } = useBusinessLists(staffId);
   const todayKey = localDateKey(workspace.activeBusiness?.timezone);
   const weekKey = localDateKey(workspace.activeBusiness?.timezone, 6);
   const { todayBookings, refresh } = useBookingLists(todayKey, {
     from: todayKey,
     to: weekKey,
-  });
+  }, staffId);
   const shopOrders = useShopOrders();
   const searchResults = useSearchResults(searchTerm);
 
@@ -140,25 +153,27 @@ export function DashboardPage() {
   const schedule = todayBookings.data?.slice(0, 5) ?? [];
   const recentOrders = (shopOrders.data ?? []).slice(0, 5);
   const activity = [
-    ...(hasAppointie
+    ...(showBookings
       ? todayBookings.data?.slice(0, 3).map((booking) => ({
           id: booking.id,
           title: booking.booking_number ?? 'Booking',
           subtitle: booking.status ?? 'Status',
         })) ?? []
       : []),
-    ...(hasShopie
+    ...(showOrders
       ? recentOrders.slice(0, 3).map((order) => ({
           id: order.id,
           title: order.order_number ?? 'Order',
           subtitle: `${order.status ?? 'Status'} · ${formatAmount(Number(order.total ?? 0))}`,
         }))
       : []),
-    ...(customers.data?.slice(0, 2).map((customer) => ({
-      id: customer.id,
-      title: customer.full_name ?? 'Customer',
-      subtitle: customer.email ?? '',
-    })) ?? []),
+    ...(showCustomers
+      ? customers.data?.slice(0, 2).map((customer) => ({
+          id: customer.id,
+          title: customer.full_name ?? 'Customer',
+          subtitle: customer.email ?? '',
+        })) ?? []
+      : []),
   ];
 
   const welcomeSubtitle = useMemo(() => {
@@ -180,7 +195,7 @@ export function DashboardPage() {
     return status.replace(/_/g, ' ');
   }, [subscribedIds, workspace.activeBusiness?.product_subscriptions]);
 
-  const appointieKpis = summary?.appointie
+  const appointieKpis = summary?.appointie && showBookings
     ? [
         { label: "Today's Bookings", value: summary.appointie.today_bookings },
         { label: 'Upcoming (7 days)', value: summary.appointie.upcoming_7d },
@@ -188,31 +203,45 @@ export function DashboardPage() {
         { label: 'Cancelled Today', value: summary.appointie.today_cancelled },
         { label: 'Revenue Today', value: formatAmount(summary.appointie.estimated_revenue_today) },
         { label: 'Revenue This Month', value: formatAmount(summary.appointie.estimated_revenue_month) },
-        { label: 'Active Customers', value: summary.appointie.active_customers },
-        { label: 'New Customers', value: summary.appointie.new_customers_today },
-        { label: 'Staff On Duty', value: summary.appointie.staff_on_duty },
+        ...(showCustomers && !staffFilterActive
+          ? [
+              { label: 'Active Customers', value: summary.appointie.active_customers },
+              { label: 'New Customers', value: summary.appointie.new_customers_today },
+            ]
+          : []),
+        ...(showStaffKpi ? [{ label: 'Staff On Duty', value: summary.appointie.staff_on_duty }] : []),
       ]
     : [];
 
-  const shopieKpis = summary?.shopie
+  const shopieKpis = summary?.shopie && (showOrders || showBooks || (staffFilterActive && hasShopie && !bookingStaffOnly))
     ? [
-        { label: 'Orders Today', value: summary.shopie.orders_today },
-        { label: 'Orders This Month', value: summary.shopie.orders_month },
-        { label: 'GMV Today', value: formatAmount(summary.shopie.gmv_today) },
-        { label: 'GMV This Month', value: formatAmount(summary.shopie.gmv_month) },
-        { label: 'Open Orders', value: summary.shopie.open_orders },
-        { label: 'Pending Returns', value: summary.shopie.pending_returns },
-        { label: 'Delivery Fees (Month)', value: formatAmount(summary.shopie.delivery_fee_month) },
+        ...(showOrders || staffFilterActive
+          ? [
+              { label: 'Orders Today', value: summary.shopie.orders_today },
+              { label: 'Orders This Month', value: summary.shopie.orders_month },
+              { label: 'Open Orders', value: summary.shopie.open_orders },
+            ]
+          : []),
+        ...(showBooks || showBi || staffFilterActive
+          ? [
+              { label: 'GMV Today', value: formatAmount(summary.shopie.gmv_today) },
+              { label: 'GMV This Month', value: formatAmount(summary.shopie.gmv_month) },
+              { label: 'Delivery Fees (Month)', value: formatAmount(summary.shopie.delivery_fee_month) },
+            ]
+          : []),
+        ...(showReturns ? [{ label: 'Pending Returns', value: summary.shopie.pending_returns }] : []),
       ]
     : [];
 
-  const homeInsights = pickInsights([
-    overviewQuery.data?.appointie?.insights ?? overviewQuery.data?.insights,
-    overviewQuery.data?.shopie?.insights,
-    overviewQuery.data?.pets?.insights,
-  ]);
+  const homeInsights = showBi
+    ? pickInsights([
+        overviewQuery.data?.appointie?.insights ?? overviewQuery.data?.insights,
+        overviewQuery.data?.shopie?.insights,
+        overviewQuery.data?.pets?.insights,
+      ])
+    : [];
 
-  const petsKpis = summary?.pets
+  const petsKpis = summary?.pets && showPetsWidgets
     ? [
         { label: 'Pets enrolled', value: summary.pets.total },
         { label: 'Birthdays (7 days)', value: summary.pets.birthdays_next_7d },
@@ -227,8 +256,13 @@ export function DashboardPage() {
         <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Workspace</p>
-            <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1 }}>Welcome back, {businessName}</h1>
+            <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1 }}>
+              Welcome back, {auth.user?.full_name || auth.user?.first_name || businessName}
+            </h1>
             <p style={{ margin: 0, color: '#6b7280' }}>{welcomeSubtitle}</p>
+            {canFilter ? (
+              <StaffReportFilter staff={staff.data ?? []} staffId={staffId} onChange={setStaffId} />
+            ) : null}
           </div>
           <div className="dashboard-actions">
             {quickActions.map((action) => (
@@ -275,7 +309,7 @@ export function DashboardPage() {
               </Card>
             ) : null}
 
-            {showReports && homeInsights.length ? (
+            {showBi && homeInsights.length ? (
               <Card style={{ marginBottom: 24, padding: 20 }}>
                 <SectionHeading title="What to act on" subtitle="The strongest signals from the last 30 days." />
                 <div style={{ display: 'grid', gap: 12 }}>
@@ -326,7 +360,7 @@ export function DashboardPage() {
             ) : null}
 
             <div className="dashboard-widget-grid" style={{ marginBottom: 24 }}>
-              {hasAppointie ? (
+              {showBookings ? (
                 <DashboardWidget
                   title="Today's Schedule"
                   subtitle="Appointments for the current day"
@@ -346,7 +380,7 @@ export function DashboardPage() {
                 </DashboardWidget>
               ) : null}
 
-              {hasShopie ? (
+              {showOrders ? (
                 <DashboardWidget
                   title="Recent Orders"
                   subtitle="Latest shop activity"
@@ -405,7 +439,7 @@ export function DashboardPage() {
                 </div>
               </DashboardWidget>
 
-              {hasAppointie ? (
+              {showBookings && isEnabled('calendar') ? (
                 <DashboardWidget title="Calendar Preview" subtitle="Today & week" loading={availability.isLoading} error={availability.error as Error | null} empty={!availability.data?.length && !availability.isLoading}>
                   <div style={{ display: 'grid', gap: 12 }}>
                     <p style={{ margin: 0, fontWeight: 700 }}>Today&apos;s available capacity</p>
@@ -427,7 +461,7 @@ export function DashboardPage() {
                   <div style={{ display: 'grid', gap: 12 }}>
                     <p style={{ margin: 0, fontWeight: 700 }}>{businessName}</p>
                     <p style={{ margin: 0, color: '#6b7280' }}>{business.data.status ?? 'Status unavailable'}</p>
-                    {hasAppointie ? <p style={{ margin: 0, color: '#6b7280' }}>{staffOnDuty} staff active</p> : null}
+                    {showStaffKpi && hasAppointie ? <p style={{ margin: 0, color: '#6b7280' }}>{staffOnDuty} staff active</p> : null}
                     <p style={{ margin: 0, color: '#6b7280' }}>
                       Products:{' '}
                       {(summary?.products?.length ? summary.products : subscribedIds).map((id) => getProductName(id)).join(', ') || '—'}

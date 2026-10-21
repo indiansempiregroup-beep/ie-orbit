@@ -81,7 +81,7 @@ def test_otp_send_login_rejects_unregistered_email(api_client: APIClient) -> Non
         },
         format="json",
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "No account found" in str(response.json())
     assert len(mail.outbox) == 0
 
@@ -131,12 +131,13 @@ def test_otp_send_customer_login_rejects_user_without_shop_customer(api_client: 
         },
         format="json",
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "No account found for this shop" in str(response.json())
     assert len(mail.outbox) == 0
 
 
 @pytest.mark.django_db
+@override_settings(DEBUG=True)
 def test_otp_verify_customer_signup_creates_shop_customer(api_client: APIClient) -> None:
     from apps.businesses.models import Business
     from apps.customers.models import Customer

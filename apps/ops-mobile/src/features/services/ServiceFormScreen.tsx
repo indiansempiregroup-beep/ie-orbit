@@ -30,6 +30,13 @@ import {
 import type { RootStackParamList } from '../../navigation/types';
 import { ProductImageCropModal } from '../shop/ProductImageCropModal';
 
+const SERVICE_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'archived', label: 'Archived' },
+];
+
 export function ServiceFormScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ServiceForm'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -44,6 +51,7 @@ export function ServiceFormScreen() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [status, setStatus] = useState('active');
   const [duration, setDuration] = useState('30');
   const [price, setPrice] = useState('');
   const [loyaltyPointsEarn, setLoyaltyPointsEarn] = useState('0');
@@ -59,6 +67,7 @@ export function ServiceFormScreen() {
     if (!service) return;
     setName(service.name ?? '');
     setDescription(service.description ?? '');
+    setStatus(service.status || 'active');
     setDuration(String(serviceDurationMinutes(service, 30)));
     const amount = servicePriceAmount(service);
     setPrice(amount != null ? String(amount) : '');
@@ -128,6 +137,7 @@ export function ServiceFormScreen() {
                   name,
                   display_name: name,
                   description,
+                  status,
                   loyalty_points_earn: Math.max(0, Number(loyaltyPointsEarn) || 0),
                   default_duration: { duration_minutes: durationMinutes, is_default: true },
                   default_price: {
@@ -189,6 +199,14 @@ export function ServiceFormScreen() {
             error={fieldErrors.name}
           />
           <Input label="Description" optional value={description} onChangeText={setDescription} multiline />
+          <SelectField
+            label="Status"
+            required
+            value={status}
+            options={SERVICE_STATUS_OPTIONS}
+            onChange={setStatus}
+            searchable={false}
+          />
         </FormSection>
 
         <FormSection title="Duration & price">

@@ -42,6 +42,52 @@ def _pet(context: dict[str, Any]):
     return context.get("pet")
 
 
+def _as_decimal(value: Any) -> Decimal:
+    try:
+        return Decimal(str(value if value is not None else "0"))
+    except Exception:  # noqa: BLE001
+        return Decimal("0")
+
+
+def _fill(text: str, context: dict[str, Any]) -> str:
+    """Replace owner-facing placeholders in notification copy."""
+    customer = _customer(context)
+    pet = _pet(context)
+    product = context.get("product")
+    order = context.get("order")
+    quotation = context.get("quotation")
+    booking = context.get("booking")
+    customer_name = str(
+        getattr(customer, "display_name", None)
+        or getattr(customer, "full_name", None)
+        or context.get("party_name")
+        or "customer"
+    )
+    replacements = {
+        "{customer}": customer_name,
+        "{pet}": str(getattr(pet, "name", None) or "pet"),
+        "{product}": str(getattr(product, "name", None) or context.get("product_name") or "a product"),
+        "{stock}": str(context.get("stock_on_hand") if context.get("stock_on_hand") is not None else ""),
+        "{order}": str(getattr(order, "order_number", None) or context.get("order_number") or "the order"),
+        "{balance}": str(context.get("balance") or ""),
+        "{points}": str(context.get("points_after") or context.get("points") or ""),
+        "{quotation}": str(
+            getattr(quotation, "quotation_number", None) or context.get("quotation_number") or "the quotation"
+        ),
+        "{booking}": str(getattr(booking, "booking_number", None) or context.get("booking_number") or "the booking"),
+        "{party}": str(context.get("party_name") or customer_name),
+        "{age}": str(context.get("age_days") if context.get("age_days") is not None else ""),
+    }
+    rendered = text
+    for token, value in replacements.items():
+        if token in rendered:
+            rendered = rendered.replace(token, value)
+    return rendered
+
+
+_OCCASION_TRIGGERS = {"checkout.quote", "booking.quote", "schedule.daily", "calendar.date"}
+
+
 def _birthday_matches(dob: date | None, today: date) -> bool:
     if dob is None:
         return False
@@ -154,17 +200,8 @@ def notify_staff(params: dict[str, Any], context: dict[str, Any]) -> dict[str, A
     tenant = context.get("tenant")
     if business is None or tenant is None:
         return {"ok": False, "reason": "missing_business"}
-    subject = str(params.get("subject") or "Automation alert").strip() or "Automation alert"
-    body = str(params.get("body") or params.get("message") or subject).strip()
-    customer = _customer(context)
-    pet = _pet(context)
-    if customer is not None and "{customer}" in body:
-        body = body.replace(
-            "{customer}",
-            getattr(customer, "display_name", None) or str(customer),
-        )
-    if pet is not None and "{pet}" in body:
-        body = body.replace("{pet}", getattr(pet, "name", None) or "pet")
+    subject = _fill(str(params.get("subject") or "Automation alert").strip() or "Automation alert", context)
+    body = _fill(str(params.get("body") or params.get("message") or subject).strip(), context)
     try:
         from apps.notifications.services.staff_direct import StaffDirectNotifier
 
@@ -211,20 +248,26 @@ def notify_customer(params: dict[str, Any], context: dict[str, Any]) -> dict[str
     else:
         offer_text = offer_label or "a special birthday treat"
 
-    subject = str(
-        params.get("subject")
-        or (f"Happy birthday, {pet_name}! {offer_text} today" if pet else f"A special offer for you — {offer_text}")
+    trigger_key = str(context.get("trigger_key") or "")
+    occasion = trigger_key in _OCCASION_TRIGGERS or pet is not None or bool(discount_value)
+    shop_name = str(
+        getattr(business, "display_name", None) or getattr(business, "business_name", None) or "us"
     ).strip()
-    body = str(
-        params.get("body")
-        or params.get("message")
-        or (
+    if occasion:
+        default_subject = (
+            f"Happy birthday, {pet_name}! {offer_text} today" if pet else f"A special offer for you — {offer_text}"
+        )
+        default_body = (
             f"Hi {cust_name}, today is {pet_name}'s birthday! Enjoy {offer_text} "
-            f"on POS and online orders today from {(getattr(business, 'display_name', None) or getattr(business, 'business_name', None) or 'us')}."
+            f"on POS and online orders today from {shop_name}."
             if pet
             else f"Hi {cust_name}, you have a special offer today: {offer_text}."
         )
-    ).strip()
+    else:
+        default_subject = "Update from " + shop_name
+        default_body = f"Hi {cust_name}, there is an update from {shop_name}."
+    subject = _fill(str(params.get("subject") or default_subject).strip(), context)
+    body = _fill(str(params.get("body") or params.get("message") or default_body).strip(), context)
 
     raw_channels = params.get("channels") or params.get("channel") or "in_app,email"
     if isinstance(raw_channels, str):
@@ -236,22 +279,28 @@ def notify_customer(params: dict[str, Any], context: dict[str, Any]) -> dict[str
     if not channels:
         channels = ["in_app", "email"]
 
-    shop_name = str(
-        getattr(business, "display_name", None) or getattr(business, "business_name", None) or "our shop"
-    ).strip()
-    headline = str(params.get("headline") or (f"Happy birthday, {pet_name}!" if pet else "Your special offer")).strip()
+    headline = _fill(
+        str(
+            params.get("headline")
+            or (f"Happy birthday, {pet_name}!" if pet and occasion else subject)
+        ).strip(),
+        context,
+    )
     try:
         from apps.notifications.services.customer_direct import CustomerDirectNotifier
         from apps.notifications.services.providers.email import email_info_card
 
-        extra_html = email_info_card(
-            title=offer_label or "Today's birthday offer",
-            lines=[
+        if occasion:
+            card_lines = [
                 f"Offer: {offer_text}",
                 "Valid today at the counter (POS) and on online orders",
                 f"From {shop_name}",
-            ],
-        )
+            ]
+            card_title = offer_label or "Today's birthday offer"
+        else:
+            card_lines = [body, f"From {shop_name}"]
+            card_title = subject
+        extra_html = email_info_card(title=card_title, lines=card_lines)
         CustomerDirectNotifier().notify_customer(
             tenant=tenant,
             business=business,
@@ -279,8 +328,12 @@ def notify_customer(params: dict[str, Any], context: dict[str, Any]) -> dict[str
             StaffDirectNotifier().notify_managers(
                 tenant=tenant,
                 business=business,
-                subject=f"Birthday offer sent · {pet_name}" if pet else f"Offer sent · {cust_name}",
-                body=f"{cust_name} was notified: {offer_text}. {body}",
+                subject=(
+                    f"Birthday offer sent · {pet_name}"
+                    if pet and occasion
+                    else f"Customer notified · {cust_name}"
+                ),
+                body=f"{cust_name} was notified. {body}",
                 event_type="WorkflowAutomation",
                 channels=["in_app"],
                 headline="Automation alert",
@@ -406,3 +459,47 @@ def offer_staff_hint(params: dict[str, Any], context: dict[str, Any]) -> dict[st
     if isinstance(hints, list):
         hints.append(hint)
     return hint
+
+
+@register_condition("inventory.out_of_stock")
+def inventory_out_of_stock(params: dict[str, Any], context: dict[str, Any]) -> bool:
+    return _as_decimal(context.get("stock_on_hand")) <= 0
+
+
+@register_condition("inventory.below_threshold")
+def inventory_below_threshold(params: dict[str, Any], context: dict[str, Any]) -> bool:
+    stock = _as_decimal(context.get("stock_on_hand"))
+    raw_threshold = params.get("threshold")
+    if raw_threshold is None:
+        raw_threshold = context.get("threshold")
+    return stock <= _as_decimal(raw_threshold)
+
+
+@register_condition("party.balance_due")
+def party_balance_due(params: dict[str, Any], context: dict[str, Any]) -> bool:
+    balance = _as_decimal(context.get("balance"))
+    minimum = _as_decimal(params.get("min_amount") if params.get("min_amount") is not None else params.get("amount") or "0")
+    min_days = int(params.get("min_days") or params.get("days") or 0)
+    age = int(context.get("age_days") or 0)
+    if balance <= minimum:
+        return False
+    return age >= max(0, min_days)
+
+
+@register_condition("quotation.older_than_days")
+def quotation_older_than_days(params: dict[str, Any], context: dict[str, Any]) -> bool:
+    days = int(params.get("days") or 3)
+    return int(context.get("age_days") or 0) >= max(0, days)
+
+
+@register_condition("loyalty.crossed_points")
+def loyalty_crossed_points(params: dict[str, Any], context: dict[str, Any]) -> bool:
+    try:
+        target = int(params.get("points") or params.get("value") or 0)
+        before = int(context.get("points_before") or 0)
+        after = int(context.get("points_after") or context.get("points") or 0)
+    except (TypeError, ValueError):
+        return False
+    if target <= 0:
+        return False
+    return before < target <= after

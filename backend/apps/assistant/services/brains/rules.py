@@ -533,6 +533,43 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
             toolset.customer_party_statement(tenant=tenant, business=business, query=m.group(1).strip()),
             suggestions,
         )
+    if re.search(r"\b(open\s+quotations?|pending\s+quotations?|quotations?\s+expiring)\b", lowered):
+        return _ok(toolset.open_quotations(tenant=tenant, business=business), suggestions)
+    if re.search(r"\b(unpaid\s+invoices?|overdue\s+invoices?|invoices?\s+to\s+collect)\b", lowered):
+        return _ok(toolset.unpaid_invoices(tenant=tenant, business=business), suggestions)
+    if re.search(r"\b(overdue\s+supplier|supplier\s+bills?|overdue\s+purchases?)\b", lowered):
+        return _ok(toolset.overdue_supplier_dues(tenant=tenant, business=business), suggestions)
+    if re.search(r"\bopen\s+sale\s+orders?\b", lowered):
+        return _ok(
+            toolset.open_books_documents(tenant=tenant, business=business, doc_type="sale_order"),
+            suggestions,
+        )
+    if re.search(r"\bopen\s+purchase\s+orders?\b", lowered):
+        return _ok(
+            toolset.open_books_documents(tenant=tenant, business=business, doc_type="purchase_order"),
+            suggestions,
+        )
+    if re.search(r"\b(open\s+delivery\s+challans?|open\s+challans?|pending\s+challans?)\b", lowered):
+        return _ok(
+            toolset.open_books_documents(tenant=tenant, business=business, doc_type="delivery_challan"),
+            suggestions,
+        )
+    if re.search(r"\b(profit\s+today|today'?s?\s+profit|gross\s+profit\s+today)\b", lowered):
+        return _ok(toolset.profit_today(tenant=tenant, business=business), suggestions)
+    m_staff_sales = re.search(
+        r"\b(?:sales?\s+for|revenue\s+for)\s+(.+?)\s+today\b|^(.+?)(?:'|’)?s\s+sales?\s+today$",
+        lowered,
+    )
+    if m_staff_sales:
+        query = (m_staff_sales.group(1) or m_staff_sales.group(2) or "").strip()
+        if query and query not in {"today", "the"}:
+            return _ok(toolset.staff_sales_today(tenant=tenant, business=business, query=query), suggestions)
+    m_loyalty = re.search(r"\b(?:loyalty\s+activity|points?\s+history|recent\s+points?)\s+for\s+(.+)$", lowered)
+    if m_loyalty:
+        return _ok(
+            toolset.loyalty_activity(tenant=tenant, business=business, query=m_loyalty.group(1).strip()),
+            suggestions,
+        )
     if re.search(r"\b(cash\s+balance|bank\s+balance|how\s+much\s+cash|books?\s+cash|to\s+collect|to\s+pay|customer\s+dues|supplier\s+dues)\b", lowered):
         return _ok(toolset.books_cash_summary(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(list\s+cash\s+accounts?|cash\s+accounts?|bank\s+accounts?)\b", lowered):
@@ -759,6 +796,14 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
 
 
 def _handle_appoint(*, lowered: str, tenant, business, suggestions: list[str]) -> BrainResult | None:
+    m_staff_sales = re.search(
+        r"\b(?:sales?\s+for|revenue\s+for)\s+(.+?)\s+today\b|^(.+?)(?:'|’)?s\s+sales?\s+today$",
+        lowered,
+    )
+    if m_staff_sales:
+        query = (m_staff_sales.group(1) or m_staff_sales.group(2) or "").strip()
+        if query and query not in {"today", "the"}:
+            return _ok(toolset.staff_sales_today(tenant=tenant, business=business, query=query), suggestions)
     m_slots = re.search(
         r"\b(?:slots?|availability|available\s+slots?)\s+for\s+(.+?)\s+(today|tomorrow)\b|"
         r"\b(?:slots?|availability)\s+for\s+(.+)$|"

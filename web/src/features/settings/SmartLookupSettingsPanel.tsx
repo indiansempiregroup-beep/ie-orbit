@@ -24,6 +24,13 @@ function formatLedgerAmount(row: ShopSmartLookupLedgerEntry) {
 
 function ledgerLabel(row: ShopSmartLookupLedgerEntry) {
   if (row.entry_type === 'credit' || row.source === 'wallet_top_up') return 'Wallet top-up';
+  if (row.source === 'gemini_automation') return 'Automation draft';
+  if (row.source === 'gemini_invoice' || row.source === 'gemini_invoice_error') {
+    const meta = row.metadata || {};
+    const hint = row.code || String(meta.invoice_number || meta.supplier_name || '').trim();
+    if (row.source === 'gemini_invoice_error') return 'Invoice scan (failed)';
+    return hint ? `Invoice scan · ${hint}` : 'Invoice scan';
+  }
   if (row.entry_type === 'debit' || row.charged_paise > 0) {
     return row.code ? `Smart fill · ${row.code}` : 'Smart fill';
   }
@@ -42,6 +49,13 @@ export function SmartLookupSettingsPanel() {
   const hasShopie = Boolean(
     shopieSub && ['trialing', 'active', 'past_due', 'soft_locked'].includes(shopieSub.status),
   );
+  const appointSub = (workspace.activeBusiness?.product_subscriptions ?? []).find(
+    (row) => row.product_code === 'appointie',
+  );
+  const hasAppointie = Boolean(
+    appointSub && ['trialing', 'active', 'past_due', 'soft_locked'].includes(appointSub.status),
+  );
+  const hasAiWallet = hasShopie || hasAppointie;
   const [topUpPaise, setTopUpPaise] = useState<number | null>(null);
   const [customRupees, setCustomRupees] = useState('');
   const [historyKind, setHistoryKind] = useState<HistoryKind>('money');
@@ -54,7 +68,7 @@ export function SmartLookupSettingsPanel() {
 
   const dashboardQuery = useQuery({
     queryKey: ['shop-smart-lookup', businessId],
-    enabled: Boolean(businessId && hasShopie),
+    enabled: Boolean(businessId && hasAiWallet),
     queryFn: async () => {
       const response = await client.shop.getSmartLookup({ business_id: businessId });
       return response.data;
@@ -73,7 +87,7 @@ export function SmartLookupSettingsPanel() {
       historyDateTo,
       historyWindow,
     ],
-    enabled: Boolean(businessId && hasShopie),
+    enabled: Boolean(businessId && hasAiWallet),
     queryFn: async () => {
       const response = await client.shop.getSmartLookupHistory({
         business_id: businessId,
@@ -109,8 +123,12 @@ export function SmartLookupSettingsPanel() {
   const planOk = data?.plan_enabled !== false;
   const enabled = Boolean(data?.business_enabled ?? data?.smart_lookup_enabled);
   const balance = data?.balance_inr ?? 0;
-  const lowBalance = enabled && platformOk && planOk && balance < 1;
   const canConfigure = hasShopie && shopieSub?.status !== 'soft_locked' && platformOk && planOk;
+  const canTopUp =
+    platformOk &&
+    ((hasShopie && shopieSub?.status !== 'soft_locked') ||
+      (hasAppointie && appointSub?.status !== 'soft_locked'));
+  const lowBalance = canTopUp && balance < 1;
   const topUpOptions =
     data?.platform?.suggested_top_up_paise?.length
       ? data.platform.suggested_top_up_paise
@@ -168,16 +186,16 @@ export function SmartLookupSettingsPanel() {
               <Sparkles size={20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 18 }}>Smart product lookup</h2>
+              <h2 style={{ margin: 0, fontSize: 18 }}>AI wallet</h2>
               <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 14, lineHeight: 1.45 }}>
-                Free lookups use Open*Facts and the shared barcode catalog. When those miss, Smart lookup
-                reads a pack photo with AI and debits your prepaid wallet at actual Gemini cost (~₹0.03 per
-                unknown barcode) — no markup packs.
+                Pack-photo fill, invoice scan, and automation drafts debit this prepaid wallet from the
+                tokens Gemini reports on that call (input, output, and thinking), using the platform token
+                rates. Free barcode catalogs stay free.
               </p>
             </div>
           </div>
 
-          {!hasShopie ? (
+          {!hasAiWallet ? (
             <div
               role="status"
               style={{
@@ -243,6 +261,7 @@ export function SmartLookupSettingsPanel() {
             </div>
           ) : null}
 
+          {hasShopie ? (
           <label
             style={{
               display: 'flex',
@@ -276,6 +295,7 @@ export function SmartLookupSettingsPanel() {
             />
             <span style={{ fontSize: 14, fontWeight: 600 }}>Enable pack-photo auto-fill</span>
           </label>
+          ) : null}
 
           <div
             style={{
@@ -285,10 +305,10 @@ export function SmartLookupSettingsPanel() {
             }}
           >
             {[
-              { label: 'Wallet', value: hasShopie ? `₹${balance.toFixed(2)}` : '—', icon: true },
-              { label: 'Free this month', value: hasShopie ? String(data?.month.free_lookups ?? 0) : '—' },
-              { label: 'Paid lookups', value: hasShopie ? String(data?.month.paid_lookups ?? 0) : '—' },
-              { label: 'Spent', value: hasShopie ? `₹${(data?.month.spent_inr ?? 0).toFixed(2)}` : '—' },
+              { label: 'Wallet', value: hasAiWallet ? `₹${balance.toFixed(2)}` : '—', icon: true },
+              { label: 'Free this month', value: hasAiWallet ? String(data?.month.free_lookups ?? 0) : '—' },
+              { label: 'Paid lookups', value: hasAiWallet ? String(data?.month.paid_lookups ?? 0) : '—' },
+              { label: 'Spent', value: hasAiWallet ? `₹${(data?.month.spent_inr ?? 0).toFixed(2)}` : '—' },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -322,7 +342,7 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              Wallet is low. Top up below so pack-photo fills can continue.
+              Wallet is low. Top up below so pack photos, invoice scans, and automation drafts can continue.
             </div>
           ) : null}
 
@@ -334,7 +354,7 @@ export function SmartLookupSettingsPanel() {
                   key={paise}
                   type="button"
                   variant="neutral"
-                  disabled={!canConfigure}
+                  disabled={!canTopUp}
                   onClick={() => setTopUpPaise(paise)}
                 >
                   ₹{(paise / 100).toFixed(0)}
@@ -347,7 +367,7 @@ export function SmartLookupSettingsPanel() {
                 onChange={(event) => setCustomRupees(event.target.value)}
                 placeholder="Custom ₹"
                 inputMode="decimal"
-                disabled={!canConfigure}
+                disabled={!canTopUp}
                 style={{
                   width: 120,
                   padding: '10px 12px',
@@ -359,7 +379,7 @@ export function SmartLookupSettingsPanel() {
                 type="button"
                 variant="neutral"
                 onClick={openCustomTopUp}
-                disabled={!canConfigure || !customRupees.trim()}
+                disabled={!canTopUp || !customRupees.trim()}
               >
                 Pay
               </Button>
@@ -369,7 +389,7 @@ export function SmartLookupSettingsPanel() {
             </p>
           </div>
 
-          {hasShopie ? (
+          {hasAiWallet ? (
             <div style={{ display: 'grid', gap: 10 }}>
               <div
                 style={{

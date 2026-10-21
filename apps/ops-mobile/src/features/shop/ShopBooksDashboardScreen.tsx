@@ -21,7 +21,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { ShopBooksDashboard } from '@ie-orbit/sdk';
 import { formatMoney } from './shopBooksHelpers';
 import { PlanFeature } from '../../utils/planFeatures';
-import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { usePlanFeatures, useRoleMenus } from '../../hooks/useOpsExtended';
 
 export function ShopBooksDashboardScreen() {
   const { t } = useTranslation();
@@ -33,6 +33,7 @@ export function ShopBooksDashboardScreen() {
   const { isDesktop } = useBreakpoint();
   const { contentInset } = useTabBarLayout();
   const { has } = usePlanFeatures();
+  const { isEnabled } = useRoleMenus();
   const [dashboard, setDashboard] = useState<ShopBooksDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,10 +100,12 @@ export function ShopBooksDashboardScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {loading && !dashboard ? <Text style={styles.emptyAccounts}>Loading balances…</Text> : null}
 
+            {(has(PlanFeature.shopieBooksCash) && isEnabled('booksCash')) ||
+            (has(PlanFeature.shopieBooksParties) && isEnabled('booksParties')) ? (
             <View style={styles.counterCard}>
               <Text style={styles.counterTitle}>Cash &amp; payables</Text>
               <TileGrid>
-                {has(PlanFeature.shopieBooksCash) ? (
+                {has(PlanFeature.shopieBooksCash) && isEnabled('booksCash') ? (
                   <CounterTile
                     icon="dollar-sign"
                     label="Cash in hand"
@@ -110,7 +113,7 @@ export function ShopBooksDashboardScreen() {
                     onPress={() => navigation.navigate('ShopBooksCash')}
                   />
                 ) : null}
-                {has(PlanFeature.shopieBooksCash) ? (
+                {has(PlanFeature.shopieBooksCash) && isEnabled('booksCash') ? (
                   <CounterTile
                     icon="credit-card"
                     label="Bank balance"
@@ -118,7 +121,7 @@ export function ShopBooksDashboardScreen() {
                     onPress={() => navigation.navigate('ShopBooksCash')}
                   />
                 ) : null}
-                {has(PlanFeature.shopieBooksParties) ? (
+                {has(PlanFeature.shopieBooksParties) && isEnabled('booksParties') ? (
                   <CounterTile
                     icon="trending-up"
                     label="To collect"
@@ -128,7 +131,7 @@ export function ShopBooksDashboardScreen() {
                     onPress={() => navigation.navigate('ShopBooksParties')}
                   />
                 ) : null}
-                {has(PlanFeature.shopieBooksParties) ? (
+                {has(PlanFeature.shopieBooksParties) && isEnabled('booksParties') ? (
                   <CounterTile
                     icon="trending-down"
                     label="To pay"
@@ -140,8 +143,9 @@ export function ShopBooksDashboardScreen() {
                 ) : null}
               </TileGrid>
             </View>
+            ) : null}
 
-            {has(PlanFeature.shopieBooksCash) && dashboard?.accounts?.length ? (
+            {has(PlanFeature.shopieBooksCash) && isEnabled('booksCash') && dashboard?.accounts?.length ? (
               <View style={styles.accountsCard}>
                 <View style={styles.accountsHeader}>
                   <Text style={styles.sectionTitle}>Accounts</Text>
@@ -173,7 +177,7 @@ export function ShopBooksDashboardScreen() {
                   </Pressable>
                 ))}
               </View>
-            ) : has(PlanFeature.shopieBooksCash) ? (
+            ) : has(PlanFeature.shopieBooksCash) && isEnabled('booksCash') ? (
               <View style={styles.accountsCard}>
                 <Text style={styles.sectionTitle}>Accounts</Text>
                 <Text style={styles.emptyAccounts}>No cash or bank accounts yet. Add one under Cash &amp; bank.</Text>
@@ -184,199 +188,224 @@ export function ShopBooksDashboardScreen() {
             ) : null}
 
             <View style={styles.menu}>
-              {has(PlanFeature.shopieBooksSale) ||
-              has(PlanFeature.shopieBooksQuotations) ||
-              has(PlanFeature.shopieBooksNotes) ? (
-                <MenuSection title="Sales documents">
-                  {has(PlanFeature.shopieBooksSale) ? (
+              {booksMenuSections(has, isEnabled, t, navigation).map((section) => (
+                <MenuSection key={section.title} title={section.title}>
+                  {section.rows.map((row, index) => (
                     <MenuRow
-                      icon="arrow-up-right"
-                      label={t('nav.shopSale')}
-                      subtitle="Counter & GST sale bills (includes POS)"
-                      onPress={() => navigation.navigate('ShopBooksSale')}
+                      key={row.label}
+                      icon={row.icon}
+                      label={row.label}
+                      subtitle={row.subtitle}
+                      last={index === section.rows.length - 1}
+                      onPress={row.onPress}
                     />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksQuotations) ? (
-                    <MenuRow
-                      icon="file-text"
-                      label="Quotations"
-                      subtitle="Estimates & convert to sale"
-                      onPress={() => navigation.navigate('ShopBooksQuotations')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksNotes) ? (
-                    <MenuRow
-                      icon="file-minus"
-                      label="Credit / Debit notes"
-                      subtitle="Returns & adjustments (POS-style)"
-                      last
-                      onPress={() => navigation.navigate('ShopBooksNotes')}
-                    />
-                  ) : null}
+                  ))}
                 </MenuSection>
-              ) : null}
-
-              {has(PlanFeature.shopieBooksPurchase) || has(PlanFeature.shopieBooksExpense) ? (
-                <MenuSection title="Purchase & expense">
-                  {has(PlanFeature.shopieBooksPurchase) ? (
-                    <MenuRow
-                      icon="arrow-down-left"
-                      label={t('nav.shopPurchase')}
-                      subtitle="Supplier bills"
-                      onPress={() => navigation.navigate('ShopBooksPurchase')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksExpense) ? (
-                    <MenuRow
-                      icon="credit-card"
-                      label={t('nav.shopExpense')}
-                      subtitle="Expenses & other income"
-                      last
-                      onPress={() => navigation.navigate('ShopBooksExpense')}
-                    />
-                  ) : null}
-                </MenuSection>
-              ) : null}
-
-              {has(PlanFeature.shopieBooksStock) ? (
-                <MenuSection title="Stock">
-                  <MenuRow
-                    icon="package"
-                    label="Stock adjust"
-                    subtitle="Receive, damage & quantity corrections"
-                    last
-                    onPress={() => navigation.navigate('ShopStockAdjust')}
-                  />
-                </MenuSection>
-              ) : null}
-
-              {has(PlanFeature.shopieBooksCash) ? (
-                <MenuSection title="Cash & bank">
-                  <MenuRow
-                    icon="dollar-sign"
-                    label={t('nav.shopCashBank')}
-                    subtitle="Accounts, payment-in & payment-out"
-                    last
-                    onPress={() => navigation.navigate('ShopBooksCash')}
-                  />
-                </MenuSection>
-              ) : null}
-
-              {has(PlanFeature.shopieBooksParties) ||
-              has(PlanFeature.shopieGstReports) ||
-              has(PlanFeature.shopieEinvoice) ||
-              has(PlanFeature.shopieEway) ? (
-                <MenuSection title="Parties & reports">
-                  {has(PlanFeature.shopieBooksParties) ? (
-                    <MenuRow
-                      icon="users"
-                      label="Suppliers"
-                      subtitle="Vendor balances & statements"
-                      onPress={() => navigation.navigate('ShopBooksParties')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieGstReports) ? (
-                    <MenuRow
-                      icon="bar-chart-2"
-                      label={t('nav.shopBooksReports')}
-                      subtitle="Sales, purchase, GST & P&L"
-                      onPress={() => navigation.navigate('ShopBooksReports')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieEinvoice) || has(PlanFeature.shopieEway) ? (
-                    <MenuRow
-                      icon="shield"
-                      label={t('nav.shopCompliance')}
-                      subtitle="E-invoice (IRN) & e-way bill"
-                      last
-                      onPress={() => navigation.navigate('ShopBooksCompliance')}
-                    />
-                  ) : null}
-                </MenuSection>
-              ) : null}
-
-              {has(PlanFeature.shopieBooksQuotations) ||
-              has(PlanFeature.shopieBooksSaleOrder) ||
-              has(PlanFeature.shopieBooksPurchaseOrder) ||
-              has(PlanFeature.shopieBooksChallan) ||
-              has(PlanFeature.shopieBooksGodowns) ||
-              has(PlanFeature.shopieBooksCheques) ||
-              has(PlanFeature.shopieBooksLoans) ||
-              has(PlanFeature.shopieLoyalty) ? (
-                <MenuSection title="More documents">
-                  {has(PlanFeature.shopieBooksQuotations) ? (
-                    <MenuRow
-                      icon="file"
-                      label="Estimates / Proforma"
-                      subtitle="Estimates & convert to sale"
-                      onPress={() => navigation.navigate('ShopBooksQuotations')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksSaleOrder) ? (
-                    <MenuRow
-                      icon="file-text"
-                      label="Sale Order"
-                      subtitle="Customer sale orders"
-                      onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'sale_order' })}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksPurchaseOrder) ? (
-                    <MenuRow
-                      icon="clipboard"
-                      label="Purchase Order"
-                      subtitle="Supplier purchase orders"
-                      onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'purchase_order' })}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksChallan) ? (
-                    <MenuRow
-                      icon="truck"
-                      label="Delivery Challan"
-                      subtitle="Create → share → dispatch → invoice"
-                      onPress={() => navigation.navigate('ShopBooksDocuments', { docType: 'delivery_challan' })}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksGodowns) ? (
-                    <MenuRow
-                      icon="home"
-                      label="Godowns"
-                      subtitle="Warehouses & stock transfers"
-                      onPress={() => navigation.navigate('ShopGodowns')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksCheques) ? (
-                    <MenuRow
-                      icon="credit-card"
-                      label="Cheques"
-                      subtitle="Cheque in, out, clear & bounce"
-                      onPress={() => navigation.navigate('ShopBooksCheques')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieBooksLoans) ? (
-                    <MenuRow
-                      icon="percent"
-                      label="Loans"
-                      subtitle="Customer loans & repayments"
-                      onPress={() => navigation.navigate('ShopBooksLoans')}
-                    />
-                  ) : null}
-                  {has(PlanFeature.shopieLoyalty) ? (
-                    <MenuRow
-                      icon="award"
-                      label="Reward points"
-                      subtitle="Earn & redeem rules"
-                      last
-                      onPress={() => navigation.navigate('ShopLoyalty')}
-                    />
-                  ) : null}
-                </MenuSection>
-              ) : null}
+              ))}
             </View>
           </DesktopContent>
         </View>
       </RefreshableScrollView>
     </View>
   );
+}
+
+type BooksMenuRow = {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  subtitle: string;
+  onPress: () => void;
+};
+
+function booksMenuSections(
+  has: (feature: string) => boolean,
+  isEnabled: (key: string) => boolean,
+  t: (key: string) => string,
+  navigation: NativeStackNavigationProp<RootStackParamList>,
+): Array<{ title: string; rows: BooksMenuRow[] }> {
+  const allow = (feature: string, menuKey: string) => has(feature) && isEnabled(menuKey);
+  const sections: Array<{ title: string; rows: Array<BooksMenuRow | null> }> = [
+    {
+      title: 'Sales documents',
+      rows: [
+        allow(PlanFeature.shopieBooksSale, 'booksSale')
+          ? {
+              icon: 'arrow-up-right',
+              label: t('nav.shopSale'),
+              subtitle: 'Counter & GST sale bills (includes POS)',
+              onPress: () => navigation.navigate('ShopBooksSale'),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksQuotations, 'booksQuotations')
+          ? {
+              icon: 'file-text',
+              label: 'Estimates / Proforma',
+              subtitle: 'Estimates & convert to sale',
+              onPress: () => navigation.navigate('ShopBooksQuotations'),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksNotes, 'booksNotes')
+          ? {
+              icon: 'file-minus',
+              label: 'Credit / Debit notes',
+              subtitle: 'Returns & adjustments (POS-style)',
+              onPress: () => navigation.navigate('ShopBooksNotes'),
+            }
+          : null,
+      ],
+    },
+    {
+      title: 'Purchase & expense',
+      rows: [
+        allow(PlanFeature.shopieBooksPurchase, 'booksPurchase')
+          ? {
+              icon: 'arrow-down-left',
+              label: t('nav.shopPurchase'),
+              subtitle: 'Supplier bills',
+              onPress: () => navigation.navigate('ShopBooksPurchase'),
+            }
+          : null,
+        allow(PlanFeature.shopieInvoiceScan, 'booksInvoiceScan')
+          ? {
+              icon: 'camera',
+              label: 'Scan invoice',
+              subtitle: 'Photograph a supplier bill',
+              onPress: () => navigation.navigate('ShopInvoiceScan'),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksExpense, 'booksExpense')
+          ? {
+              icon: 'credit-card',
+              label: t('nav.shopExpense'),
+              subtitle: 'Expenses & other income',
+              onPress: () => navigation.navigate('ShopBooksExpense'),
+            }
+          : null,
+      ],
+    },
+    {
+      title: 'Stock',
+      rows: [
+        allow(PlanFeature.shopieBooksStock, 'booksStock')
+          ? {
+              icon: 'package',
+              label: 'Stock adjust',
+              subtitle: 'Receive, damage & quantity corrections',
+              onPress: () => navigation.navigate('ShopStockAdjust'),
+            }
+          : null,
+      ],
+    },
+    {
+      title: 'Cash & bank',
+      rows: [
+        allow(PlanFeature.shopieBooksCash, 'booksCash')
+          ? {
+              icon: 'dollar-sign',
+              label: t('nav.shopCashBank'),
+              subtitle: 'Accounts, payment-in & payment-out',
+              onPress: () => navigation.navigate('ShopBooksCash'),
+            }
+          : null,
+      ],
+    },
+    {
+      title: 'Parties & reports',
+      rows: [
+        allow(PlanFeature.shopieBooksParties, 'booksParties')
+          ? {
+              icon: 'users',
+              label: 'Suppliers',
+              subtitle: 'Vendor balances & statements',
+              onPress: () => navigation.navigate('ShopBooksParties'),
+            }
+          : null,
+        allow(PlanFeature.shopieGstReports, 'booksReports')
+          ? {
+              icon: 'bar-chart-2',
+              label: t('nav.shopBooksReports'),
+              subtitle: 'Sales, purchase, GST & P&L',
+              onPress: () => navigation.navigate('ShopBooksReports'),
+            }
+          : null,
+        (has(PlanFeature.shopieEinvoice) || has(PlanFeature.shopieEway)) && isEnabled('booksCompliance')
+          ? {
+              icon: 'shield',
+              label: t('nav.shopCompliance'),
+              subtitle: 'E-invoice (IRN) & e-way bill',
+              onPress: () => navigation.navigate('ShopBooksCompliance'),
+            }
+          : null,
+      ],
+    },
+    {
+      title: 'More documents',
+      rows: [
+        allow(PlanFeature.shopieBooksSaleOrder, 'booksSaleOrders')
+          ? {
+              icon: 'file-text',
+              label: 'Sale Order',
+              subtitle: 'Customer sale orders',
+              onPress: () => navigation.navigate('ShopBooksDocuments', { docType: 'sale_order' }),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksPurchaseOrder, 'booksPurchaseOrders')
+          ? {
+              icon: 'clipboard',
+              label: 'Purchase Order',
+              subtitle: 'Supplier purchase orders',
+              onPress: () => navigation.navigate('ShopBooksDocuments', { docType: 'purchase_order' }),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksChallan, 'booksChallans')
+          ? {
+              icon: 'truck',
+              label: 'Delivery Challan',
+              subtitle: 'Create → share → dispatch → invoice',
+              onPress: () => navigation.navigate('ShopBooksDocuments', { docType: 'delivery_challan' }),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksGodowns, 'booksGodowns')
+          ? {
+              icon: 'home',
+              label: 'Godowns',
+              subtitle: 'Warehouses & stock transfers',
+              onPress: () => navigation.navigate('ShopGodowns'),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksCheques, 'booksCheques')
+          ? {
+              icon: 'credit-card',
+              label: 'Cheques',
+              subtitle: 'Cheque in, out, clear & bounce',
+              onPress: () => navigation.navigate('ShopBooksCheques'),
+            }
+          : null,
+        allow(PlanFeature.shopieBooksLoans, 'booksLoans')
+          ? {
+              icon: 'percent',
+              label: 'Loans',
+              subtitle: 'Customer loans & repayments',
+              onPress: () => navigation.navigate('ShopBooksLoans'),
+            }
+          : null,
+        allow(PlanFeature.shopieLoyalty, 'booksLoyalty')
+          ? {
+              icon: 'award',
+              label: 'Reward points',
+              subtitle: 'Earn & redeem rules',
+              onPress: () => navigation.navigate('ShopLoyalty'),
+            }
+          : null,
+      ],
+    },
+  ];
+  return sections
+    .map((section) => ({
+      title: section.title,
+      rows: section.rows.filter((row): row is BooksMenuRow => row != null),
+    }))
+    .filter((section) => section.rows.length > 0);
 }
 
 function CounterTile({

@@ -4,21 +4,36 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Exists, Min, OuterRef, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.bookings.models import Booking, BookingLineItem, BookingStatus
+from apps.businesses.constants import PRODUCT_SHOPIE
 from apps.businesses.models import (
     Business,
     BusinessProductSubscriptionStatus,
 )
+from apps.common.utils.workspace_access import (
+    is_workspace_manager_or_above,
+    linked_staff_ids_for_user,
+    scope_bookings_queryset_for_user,
+)
 from apps.customers.models import Customer
 from apps.notifications.models import Notification
 from apps.services.models import Service, ServicePricing
-from apps.shopie.models import OrderStatus, ReturnStatus, ShopOrder, ShopPet, ShopReturn
+from apps.shopie.models import (
+    FulfillmentMode,
+    OrderStatus,
+    ReturnStatus,
+    ShopOrder,
+    ShopOrderLine,
+    ShopPet,
+    ShopReturn,
+)
 from apps.staff.models import EmploymentStatus, Staff
 
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -38,18 +53,21 @@ class AnalyticsService:
         business: Any,
         start_date: date | None = None,
         end_date: date | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
-        bookings = list(self._booking_queryset(tenant, business, start_date, end_date))
+        bookings = list(self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id))
         stats = self._status_counts(bookings)
         period_days = self._period_days(start_date, end_date) or 1
         comparison = None
         if start_date and end_date:
             prev_start, prev_end = self._previous_period(start_date, end_date)
-            prev_bookings = list(self._booking_queryset(tenant, business, prev_start, prev_end))
+            prev_bookings = list(
+                self._booking_queryset(tenant, business, prev_start, prev_end, staff_id=staff_id)
+            )
             prev_stats = self._status_counts(prev_bookings)
             prices = self._price_map(tenant, business)
-            curr_revenue = self._estimate_revenue(bookings, prices)
-            prev_revenue = self._estimate_revenue(prev_bookings, prices)
+            curr_revenue = self._estimate_revenue(bookings, prices, staff_id=staff_id)
+            prev_revenue = self._estimate_revenue(prev_bookings, prices, staff_id=staff_id)
             comparison = {
                 "bookings_change_pct": self._change_pct(stats["bookings"], prev_stats["bookings"]),
                 "completed_change_pct": self._change_pct(stats["completed"], prev_stats["completed"]),
@@ -82,9 +100,10 @@ class AnalyticsService:
         business: Any,
         start_date: date,
         end_date: date,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         rows_map: dict[str, dict[str, int | str]] = {}
-        bookings = self._booking_queryset(tenant, business, start_date, end_date)
+        bookings = self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id)
         for booking in bookings:
             key = booking.appointment_date.isoformat()
             row = rows_map.setdefault(key, {"day": key, "total": 0, "completed": 0, "cancelled": 0, "no_shows": 0})
@@ -105,8 +124,9 @@ class AnalyticsService:
         business: Business,
         start_date: date | None = None,
         end_date: date | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
-        bookings = list(self._booking_queryset(tenant, business, start_date, end_date))
+        bookings = list(self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id))
         prices = self._price_map(tenant, business)
         services = {
             str(service.id): service
@@ -119,7 +139,7 @@ class AnalyticsService:
         priced_bookings = 0
 
         for booking in bookings:
-            lines = self._iter_booking_revenue_lines(booking, prices)
+            lines = self._iter_booking_revenue_lines(booking, prices, staff_id=staff_id)
             if not lines:
                 continue
             priced_bookings += 1
@@ -172,8 +192,9 @@ class AnalyticsService:
         business: Business,
         start_date: date | None = None,
         end_date: date | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
-        bookings = list(self._booking_queryset(tenant, business, start_date, end_date))
+        bookings = list(self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id))
         prices = self._price_map(tenant, business)
         customer_ids = {str(booking.customer_id) for booking in bookings if booking.customer_id}
         if not customer_ids:
@@ -192,12 +213,11 @@ class AnalyticsService:
 
         prior_customer_ids: set[str] = set()
         if start_date:
-            prior_qs = (
-                Booking.objects.require_tenant(tenant)
-                .filter(business=business, appointment_date__lt=start_date, customer_id__in=customer_ids)
-                .values_list("customer_id", flat=True)
-                .distinct()
+            prior_qs = Booking.objects.require_tenant(tenant).filter(
+                business=business, appointment_date__lt=start_date, customer_id__in=customer_ids
             )
+            prior_qs = self._apply_staff_filter(prior_qs, staff_id)
+            prior_qs = prior_qs.values_list("customer_id", flat=True).distinct()
             prior_customer_ids = {str(customer_id) for customer_id in prior_qs}
 
         returning = len(customer_ids & prior_customer_ids)
@@ -210,7 +230,9 @@ class AnalyticsService:
                 continue
             cid = str(booking.customer_id)
             visits[cid] += 1
-            for _service_id, amount, _staff_id in self._iter_booking_revenue_lines(booking, prices):
+            for _service_id, amount, _staff_id in self._iter_booking_revenue_lines(
+                booking, prices, staff_id=staff_id
+            ):
                 revenue_by_customer[cid] += amount
 
         customers = {
@@ -258,10 +280,12 @@ class AnalyticsService:
         business: Business,
         start_date: date | None = None,
         end_date: date | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
-        bookings = list(self._booking_queryset(tenant, business, start_date, end_date))
+        bookings = list(self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id))
         prices = self._price_map(tenant, business)
         tz = self._business_tz(business)
+        filter_staff = self._coerce_staff_id(staff_id)
 
         by_staff_raw: dict[str, dict[str, float | int]] = {}
         by_weekday: dict[int, int] = defaultdict(int)
@@ -277,10 +301,12 @@ class AnalyticsService:
                 for line_item in line_rows:
                     if not line_item.staff_id:
                         continue
-                    staff_id = str(line_item.staff_id)
+                    if filter_staff and str(line_item.staff_id) != str(filter_staff):
+                        continue
+                    member_id = str(line_item.staff_id)
                     amount = self._line_item_amount(line_item, prices)
                     bucket = by_staff_raw.setdefault(
-                        staff_id,
+                        member_id,
                         {"bookings": 0, "completed": 0, "cancelled": 0, "no_shows": 0, "revenue": 0.0},
                     )
                     bucket["bookings"] = int(bucket["bookings"]) + 1
@@ -295,9 +321,11 @@ class AnalyticsService:
 
             if not booking.staff_id:
                 continue
-            staff_id = str(booking.staff_id)
+            if filter_staff and str(booking.staff_id) != str(filter_staff):
+                continue
+            member_id = str(booking.staff_id)
             bucket = by_staff_raw.setdefault(
-                staff_id,
+                member_id,
                 {"bookings": 0, "completed": 0, "cancelled": 0, "no_shows": 0, "revenue": 0.0},
             )
             bucket["bookings"] = int(bucket["bookings"]) + 1
@@ -307,7 +335,9 @@ class AnalyticsService:
                 bucket["cancelled"] = int(bucket["cancelled"]) + 1
             if booking.status == BookingStatus.NO_SHOW:
                 bucket["no_shows"] = int(bucket["no_shows"]) + 1
-            for _service_id, amount, _line_staff_id in self._iter_booking_revenue_lines(booking, prices):
+            for _service_id, amount, _line_staff_id in self._iter_booking_revenue_lines(
+                booking, prices, staff_id=staff_id
+            ):
                 if booking.status == BookingStatus.COMPLETED:
                     bucket["revenue"] = float(bucket["revenue"]) + amount
 
@@ -318,15 +348,15 @@ class AnalyticsService:
         by_staff = sorted(
             (
                 {
-                    "staff_id": staff_id,
-                    "staff_name": staff_map[staff_id].display_name if staff_id in staff_map else staff_id,
+                    "staff_id": member_id,
+                    "staff_name": staff_map[member_id].display_name if member_id in staff_map else member_id,
                     "bookings": int(values["bookings"]),
                     "completed": int(values["completed"]),
                     "cancelled": int(values["cancelled"]),
                     "no_shows": int(values["no_shows"]),
                     "revenue": round(float(values["revenue"]), 2),
                 }
-                for staff_id, values in by_staff_raw.items()
+                for member_id, values in by_staff_raw.items()
             ),
             key=lambda row: row["bookings"],
             reverse=True,
@@ -364,11 +394,14 @@ class AnalyticsService:
         tenant: Any,
         business: Business,
         horizon_days: int = 30,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         horizon_days = max(7, min(horizon_days, 90))
         end_date = self.business_local_date(business)
         start_date = end_date - timedelta(days=29)
-        trends = self.trends(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
+        trends = self.trends(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
         rows = trends["rows"]
         based_on_days = max((end_date - start_date).days + 1, 1)
         total_bookings = sum(int(row["total"]) for row in rows)
@@ -387,7 +420,9 @@ class AnalyticsService:
         blended_daily = (0.65 * recent_avg) + (0.35 * avg_daily)
         projected_bookings = int(round(blended_daily * horizon_days))
 
-        revenue = self.revenue(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
+        revenue = self.revenue(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
         avg_daily_revenue = revenue["estimated_revenue"] / based_on_days
         pace = (blended_daily / avg_daily) if avg_daily else 1.0
         return {
@@ -417,17 +452,30 @@ class AnalyticsService:
         start_date: date | None = None,
         end_date: date | None = None,
         include_forecast: bool = False,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         if start_date is None or end_date is None:
             end_date = self.business_local_date(business)
             start_date = end_date - timedelta(days=29)
 
-        summary = self.summary(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
-        revenue = self.revenue(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
-        trends = self.trends(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
-        growth = self.growth(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
-        operations = self.operations(tenant=tenant, business=business, start_date=start_date, end_date=end_date)
-        forecast = self.forecast(tenant=tenant, business=business) if include_forecast else None
+        summary = self.summary(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
+        revenue = self.revenue(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
+        trends = self.trends(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
+        growth = self.growth(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
+        operations = self.operations(
+            tenant=tenant, business=business, start_date=start_date, end_date=end_date, staff_id=staff_id
+        )
+        forecast = (
+            self.forecast(tenant=tenant, business=business, staff_id=staff_id) if include_forecast else None
+        )
         insights = self._build_insights(
             summary=summary,
             revenue=revenue,
@@ -447,12 +495,157 @@ class AnalyticsService:
             result["forecast"] = forecast
         return result
 
+    def appointie_profit(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        start_date: date,
+        end_date: date,
+        staff_id: Any | None = None,
+    ) -> dict[str, Any]:
+        """Booking earnings for Orbit Appoint — not shop stock margins."""
+        summary = self.summary(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        revenue = self.revenue(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        operations = self.operations(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        growth = self.growth(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        trends = self.trends(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        bookings = list(
+            self._booking_queryset(tenant, business, start_date, end_date, staff_id=staff_id)
+        )
+        prices = self._price_map(tenant, business)
+        series_map: dict[str, dict[str, float | int | str]] = {}
+        weekday_revenue = [0.0] * 7
+        lost_cancelled = 0.0
+        lost_no_shows = 0.0
+        for booking in bookings:
+            day = booking.appointment_date.isoformat()
+            bucket = series_map.setdefault(
+                day,
+                {"date": day, "estimated_revenue": 0.0, "completed_revenue": 0.0, "bookings": 0},
+            )
+            amount = sum(
+                line_amount
+                for _service_id, line_amount, _staff_id in self._iter_booking_revenue_lines(
+                    booking, prices, staff_id=staff_id
+                )
+            )
+            bucket["estimated_revenue"] = float(bucket["estimated_revenue"]) + amount
+            bucket["bookings"] = int(bucket["bookings"]) + 1
+            weekday_revenue[booking.appointment_date.weekday()] += amount
+            if booking.status == BookingStatus.COMPLETED:
+                bucket["completed_revenue"] = float(bucket["completed_revenue"]) + amount
+            elif booking.status == BookingStatus.CANCELLED:
+                lost_cancelled += amount
+            elif booking.status == BookingStatus.NO_SHOW:
+                lost_no_shows += amount
+        series = []
+        cursor = start_date
+        while cursor <= end_date:
+            key = cursor.isoformat()
+            bucket = series_map.get(key) or {
+                "date": key,
+                "estimated_revenue": 0.0,
+                "completed_revenue": 0.0,
+                "bookings": 0,
+            }
+            series.append(
+                {
+                    "date": key,
+                    "estimated_revenue": round(float(bucket["estimated_revenue"]), 2),
+                    "completed_revenue": round(float(bucket["completed_revenue"]), 2),
+                    "bookings": int(bucket["bookings"]),
+                }
+            )
+            cursor += timedelta(days=1)
+        weekday_rows = []
+        for row in operations.get("by_weekday") or []:
+            index = int(row.get("weekday") or 0)
+            weekday_rows.append(
+                {
+                    **row,
+                    "revenue": round(weekday_revenue[index] if 0 <= index < 7 else 0.0, 2),
+                }
+            )
+        estimated = float(revenue.get("estimated_revenue") or 0)
+        completed = float(revenue.get("completed_revenue") or 0)
+        lost_total = lost_cancelled + lost_no_shows
+        return {
+            "product": "appointie",
+            "currency": business.currency,
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+            "estimated_revenue": estimated,
+            "completed_revenue": completed,
+            "open_revenue": round(max(estimated - completed - lost_total, 0), 2),
+            "lost_cancelled": round(lost_cancelled, 2),
+            "lost_no_shows": round(lost_no_shows, 2),
+            "lost_total": round(lost_total, 2),
+            "avg_booking_value": revenue.get("avg_booking_value", 0),
+            "bookings": summary.get("bookings", 0),
+            "completed": summary.get("completed", 0),
+            "cancelled": summary.get("cancelled", 0),
+            "no_shows": summary.get("no_shows", 0),
+            "completion_rate": summary.get("completion_rate", 0),
+            "cancellation_rate": summary.get("cancellation_rate", 0),
+            "no_show_rate": summary.get("no_show_rate", 0),
+            "avg_bookings_per_day": summary.get("avg_bookings_per_day", 0),
+            "busiest_day": operations.get("busiest_day"),
+            "busiest_hour": operations.get("busiest_hour"),
+            "comparison": summary.get("comparison"),
+            "by_service": revenue.get("by_service") or [],
+            "by_staff": operations.get("by_staff") or [],
+            "by_weekday": weekday_rows,
+            "trends": trends.get("rows") or [],
+            "series": series,
+            "insights": self._build_insights(
+                summary=summary,
+                revenue=revenue,
+                growth=growth,
+                operations=operations,
+            ),
+        }
+
     def dashboard_summary(
         self,
         *,
         tenant: Any,
         business: Business | None,
         today_count: int | None = None,
+        user: Any | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         """Product-aware ops home snapshot. Omits sections for unsubscribed products."""
         today = self.business_local_date(business)
@@ -462,12 +655,15 @@ class AnalyticsService:
             "pets_pack_enabled": pets_pack_enabled,
             "currency": getattr(business, "currency", None) if business else None,
             "today_count": int(today_count or 0),
+            "viewer": self._viewer_context(tenant=tenant, business=business, user=user),
         }
         if business is None:
             return result
 
         if "appointie" in products:
-            appointie = self._appointie_dashboard(tenant=tenant, business=business, today=today)
+            appointie = self._appointie_dashboard(
+                tenant=tenant, business=business, today=today, user=user, staff_id=staff_id
+            )
             result["appointie"] = appointie
             if today_count is None:
                 result["today_count"] = appointie["today_bookings"]
@@ -475,9 +671,11 @@ class AnalyticsService:
                 result["today_count"] = int(today_count)
 
         if "shopie" in products:
-            result["shopie"] = self._shopie_dashboard(tenant=tenant, business=business, today=today)
+            result["shopie"] = self._shopie_dashboard(
+                tenant=tenant, business=business, today=today, staff_id=staff_id
+            )
 
-        if pets_pack_enabled:
+        if pets_pack_enabled and self._coerce_staff_id(staff_id) is None:
             result["pets"] = self._pets_snapshot(tenant=tenant, business=business, today=today)
 
         return result
@@ -489,9 +687,16 @@ class AnalyticsService:
         business: Business | None,
         start_date: date,
         end_date: date,
+        staff_id: Any | None = None,
+        product_codes: list[str] | None = None,
     ) -> dict[str, Any]:
         """BI overview with stacked product sections based on subscriptions."""
         products, pets_pack_enabled = self._subscribed_products(business)
+        if product_codes is not None:
+            allowed = {str(item).strip().lower() for item in product_codes}
+            products = [item for item in products if item in allowed]
+            if PRODUCT_SHOPIE not in allowed:
+                pets_pack_enabled = False
         result: dict[str, Any] = {
             "products": products,
             "pets_pack_enabled": pets_pack_enabled,
@@ -511,6 +716,7 @@ class AnalyticsService:
                 start_date=start_date,
                 end_date=end_date,
                 include_forecast=True,
+                staff_id=staff_id,
             )
             result["appointie"] = appointie
             # Backward-compatible top-level aliases for existing AppointIE clients.
@@ -524,9 +730,10 @@ class AnalyticsService:
                 business=business,
                 start_date=start_date,
                 end_date=end_date,
+                staff_id=staff_id,
             )
 
-        if pets_pack_enabled:
+        if pets_pack_enabled and self._coerce_staff_id(staff_id) is None:
             result["pets"] = self._pets_snapshot(
                 tenant=tenant,
                 business=business,
@@ -534,6 +741,29 @@ class AnalyticsService:
             )
 
         return result
+
+    def _viewer_context(
+        self,
+        *,
+        tenant: Any,
+        business: Business | None,
+        user: Any | None,
+    ) -> dict[str, Any]:
+        if user is None:
+            return {"is_bookable": False, "booking_staff": False}
+        manager = is_workspace_manager_or_above(user=user, tenant=tenant)
+        staff_ids = linked_staff_ids_for_user(tenant=tenant, user=user, business=business)
+        is_bookable = False
+        if staff_ids:
+            is_bookable = (
+                Staff.objects.require_tenant(tenant)
+                .filter(id__in=staff_ids, is_bookable=True, employment_status=EmploymentStatus.ACTIVE)
+                .exists()
+            )
+        return {
+            "is_bookable": is_bookable,
+            "booking_staff": bool(is_bookable and not manager),
+        }
 
     def _subscribed_products(self, business: Business | None) -> tuple[list[str], bool]:
         if business is None:
@@ -557,45 +787,65 @@ class AnalyticsService:
         tenant: Any,
         business: Business,
         today: date,
+        user: Any | None = None,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         month_start = today.replace(day=1)
         upcoming_end = today + timedelta(days=6)
         prices = self._price_map(tenant, business)
 
-        today_bookings = list(self._booking_queryset(tenant, business, today, today))
-        upcoming = list(self._booking_queryset(tenant, business, today, upcoming_end))
-        month_bookings = list(self._booking_queryset(tenant, business, month_start, today))
+        today_bookings = list(
+            self._booking_queryset(tenant, business, today, today, user=user, staff_id=staff_id)
+        )
+        upcoming = list(
+            self._booking_queryset(tenant, business, today, upcoming_end, user=user, staff_id=staff_id)
+        )
+        month_bookings = list(
+            self._booking_queryset(tenant, business, month_start, today, user=user, staff_id=staff_id)
+        )
 
         today_completed = sum(1 for b in today_bookings if b.status == BookingStatus.COMPLETED)
         today_cancelled = sum(1 for b in today_bookings if b.status == BookingStatus.CANCELLED)
 
-        active_customers = (
-            Customer.objects.require_tenant(tenant).filter(business=business).count()
+        if self._coerce_staff_id(staff_id) is not None:
+            customer_ids = {booking.customer_id for booking in month_bookings if booking.customer_id}
+            active_customers = len(customer_ids)
+            today_customer_ids = {booking.customer_id for booking in today_bookings if booking.customer_id}
+            new_customers = len(today_customer_ids)
+            staff_on_duty = 1 if today_bookings or upcoming or month_bookings else 0
+        else:
+            active_customers = (
+                Customer.objects.require_tenant(tenant).filter(business=business).count()
+            )
+            day_start, day_end = self._local_bounds(today, today, business)
+            new_customers = (
+                Customer.objects.require_tenant(tenant)
+                .filter(business=business, created_at__gte=day_start, created_at__lt=day_end)
+                .count()
+            )
+            staff_on_duty = (
+                Staff.objects.require_tenant(tenant)
+                .filter(business=business, employment_status=EmploymentStatus.ACTIVE)
+                .count()
+            )
+        unread_qs = Notification.objects.require_tenant(tenant).filter(
+            business=business, is_read=False
         )
-        day_start, day_end = self._local_bounds(today, today, business)
-        new_customers = (
-            Customer.objects.require_tenant(tenant)
-            .filter(business=business, created_at__gte=day_start, created_at__lt=day_end)
-            .count()
-        )
-        staff_on_duty = (
-            Staff.objects.require_tenant(tenant)
-            .filter(business=business, employment_status=EmploymentStatus.ACTIVE)
-            .count()
-        )
-        unread_notifications = (
-            Notification.objects.require_tenant(tenant)
-            .filter(business=business, is_read=False)
-            .count()
-        )
+        if user is not None and not getattr(user, "is_superuser", False):
+            unread_qs = unread_qs.filter(user_id=user.id)
+        unread_notifications = unread_qs.count()
 
         return {
             "today_bookings": len(today_bookings),
             "upcoming_7d": len(upcoming),
             "today_completed": today_completed,
             "today_cancelled": today_cancelled,
-            "estimated_revenue_today": round(self._estimate_revenue(today_bookings, prices), 2),
-            "estimated_revenue_month": round(self._estimate_revenue(month_bookings, prices), 2),
+            "estimated_revenue_today": round(
+                self._estimate_revenue(today_bookings, prices, staff_id=staff_id), 2
+            ),
+            "estimated_revenue_month": round(
+                self._estimate_revenue(month_bookings, prices, staff_id=staff_id), 2
+            ),
             "active_customers": active_customers,
             "new_customers_today": new_customers,
             "staff_on_duty": staff_on_duty,
@@ -608,10 +858,16 @@ class AnalyticsService:
         tenant: Any,
         business: Business,
         today: date,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         month_start = today.replace(day=1)
 
-        orders_qs = ShopOrder.objects.require_tenant(tenant).filter(business=business)
+        orders_qs = self._filter_orders_by_staff(
+            ShopOrder.objects.require_tenant(tenant).filter(business=business),
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+        )
         today_start, today_end = self._local_bounds(today, today, business)
         month_start_at, month_end = self._local_bounds(month_start, today, business)
         orders_today_qs = orders_qs.filter(created_at__gte=today_start, created_at__lt=today_end).exclude(
@@ -626,11 +882,14 @@ class AnalyticsService:
             gmv=Coalesce(Sum("total"), Decimal("0.00")),
         )
         delivery_fee_month = self._sum_delivery_fees(month_qs.only("metadata"))
-        pending_returns = (
-            ShopReturn.objects.require_tenant(tenant)
-            .filter(business=business, status=ReturnStatus.PENDING)
-            .count()
+        returns_qs = self._filter_orders_by_staff(
+            ShopReturn.objects.require_tenant(tenant).filter(business=business),
+            tenant=tenant,
+            business=business,
+            staff_id=staff_id,
+            via_order=True,
         )
+        pending_returns = returns_qs.filter(status=ReturnStatus.PENDING).count()
         open_orders = orders_qs.filter(
             status__in=[
                 OrderStatus.PENDING,
@@ -659,12 +918,18 @@ class AnalyticsService:
         business: Business,
         start_date: date,
         end_date: date,
+        staff_id: Any | None = None,
     ) -> dict[str, Any]:
         window_start, window_end = self._local_bounds(start_date, end_date, business)
         orders = list(
-            ShopOrder.objects.require_tenant(tenant)
-            .filter(business=business, created_at__gte=window_start, created_at__lt=window_end)
-            .only("id", "status", "total", "created_at", "metadata", "currency")
+            self._filter_orders_by_staff(
+                ShopOrder.objects.require_tenant(tenant).filter(
+                    business=business, created_at__gte=window_start, created_at__lt=window_end
+                ),
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+            ).only("id", "status", "total", "created_at", "metadata", "currency")
         )
         active_orders = [o for o in orders if o.status != OrderStatus.CANCELLED]
         cancelled = sum(1 for o in orders if o.status == OrderStatus.CANCELLED)
@@ -672,9 +937,15 @@ class AnalyticsService:
         delivery_fee_total = self._sum_delivery_fees(active_orders)
 
         returns = list(
-            ShopReturn.objects.require_tenant(tenant)
-            .filter(business=business, created_at__gte=window_start, created_at__lt=window_end)
-            .only("id", "status", "refund_total")
+            self._filter_orders_by_staff(
+                ShopReturn.objects.require_tenant(tenant).filter(
+                    business=business, created_at__gte=window_start, created_at__lt=window_end
+                ),
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+                via_order=True,
+            ).only("id", "status", "refund_total")
         )
         refund_total = float(sum((r.refund_total or Decimal("0")) for r in returns))
         pending_returns = sum(1 for r in returns if r.status == ReturnStatus.PENDING)
@@ -691,9 +962,14 @@ class AnalyticsService:
         prev_start, prev_end = self._previous_period(start_date, end_date)
         prev_window_start, prev_window_end = self._local_bounds(prev_start, prev_end, business)
         previous_orders = list(
-            ShopOrder.objects.require_tenant(tenant)
-            .filter(business=business, created_at__gte=prev_window_start, created_at__lt=prev_window_end)
-            .only("id", "status", "total")
+            self._filter_orders_by_staff(
+                ShopOrder.objects.require_tenant(tenant).filter(
+                    business=business, created_at__gte=prev_window_start, created_at__lt=prev_window_end
+                ),
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+            ).only("id", "status", "total")
         )
         previous_active = [o for o in previous_orders if o.status != OrderStatus.CANCELLED]
         previous_gmv = float(sum((o.total or Decimal("0")) for o in previous_active))
@@ -739,6 +1015,271 @@ class AnalyticsService:
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
             },
+        }
+
+    def shopie_revenue(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        start_date: date,
+        end_date: date,
+        staff_id: Any | None = None,
+    ) -> dict[str, Any]:
+        overview = self._shopie_overview(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        window_start, window_end = self._local_bounds(start_date, end_date, business)
+        orders = list(
+            self._filter_orders_by_staff(
+                ShopOrder.objects.require_tenant(tenant).filter(
+                    business=business, created_at__gte=window_start, created_at__lt=window_end
+                ),
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+            ).only("id", "status", "total", "fulfillment_mode")
+        )
+        active = [order for order in orders if order.status != OrderStatus.CANCELLED]
+        by_channel: dict[str, dict[str, float | int | str]] = {}
+        labels = dict(FulfillmentMode.choices)
+        for order in active:
+            key = str(order.fulfillment_mode or "pos")
+            bucket = by_channel.setdefault(
+                key,
+                {
+                    "channel": key,
+                    "label": labels.get(key, key.title()),
+                    "orders": 0,
+                    "gmv": 0.0,
+                },
+            )
+            bucket["orders"] = int(bucket["orders"]) + 1
+            bucket["gmv"] = round(float(bucket["gmv"]) + float(order.total or 0), 2)
+        by_category: dict[str, dict[str, float | int | str]] = {}
+        if active:
+            order_categories: dict[str, set[str]] = {}
+            for line in (
+                ShopOrderLine.objects.require_tenant(tenant)
+                .filter(order_id__in=[order.id for order in active])
+                .select_related("product")
+                .only("order_id", "line_total", "product__category")
+            ):
+                slug = str(getattr(line.product, "category", "") or "uncategorized")
+                bucket = by_category.setdefault(
+                    slug,
+                    {
+                        "category": slug,
+                        "label": slug.replace("_", " ").title(),
+                        "orders": 0,
+                        "gmv": 0.0,
+                    },
+                )
+                bucket["gmv"] = round(float(bucket["gmv"]) + float(line.line_total or 0), 2)
+                order_categories.setdefault(str(line.order_id), set()).add(slug)
+            for slugs in order_categories.values():
+                for slug in slugs:
+                    by_category[slug]["orders"] = int(by_category[slug]["orders"]) + 1
+        channel_rows = sorted(by_channel.values(), key=lambda row: float(row["gmv"]), reverse=True)
+        category_rows = sorted(by_category.values(), key=lambda row: float(row["gmv"]), reverse=True)
+        return {
+            "gmv": overview["gmv"],
+            "avg_order_value": overview["avg_order_value"],
+            "orders": overview["orders"],
+            "cancelled_orders": overview["cancelled_orders"],
+            "currency": overview["currency"],
+            "by_channel": channel_rows,
+            "by_category": category_rows[:12],
+            "trend": overview["trend"],
+            "period": overview["period"],
+        }
+
+    def shopie_growth(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        start_date: date,
+        end_date: date,
+        staff_id: Any | None = None,
+    ) -> dict[str, Any]:
+        window_start, window_end = self._local_bounds(start_date, end_date, business)
+        orders = list(
+            self._filter_orders_by_staff(
+                ShopOrder.objects.require_tenant(tenant).filter(
+                    business=business, created_at__gte=window_start, created_at__lt=window_end
+                ),
+                tenant=tenant,
+                business=business,
+                staff_id=staff_id,
+            )
+            .exclude(status=OrderStatus.CANCELLED)
+            .only("id", "customer_id", "total")
+        )
+        by_customer: dict[str, dict[str, float | int]] = {}
+        for order in orders:
+            if not order.customer_id:
+                continue
+            key = str(order.customer_id)
+            bucket = by_customer.setdefault(key, {"orders": 0, "revenue": 0.0})
+            bucket["orders"] = int(bucket["orders"]) + 1
+            bucket["revenue"] = float(bucket["revenue"]) + float(order.total or 0)
+        customer_ids = list(by_customer.keys())
+        first_map = {
+            str(row["customer_id"]): row["first_at"]
+            for row in ShopOrder.objects.require_tenant(tenant)
+            .filter(business=business, customer_id__in=customer_ids)
+            .exclude(status=OrderStatus.CANCELLED)
+            .values("customer_id")
+            .annotate(first_at=Min("created_at"))
+        }
+        customers = {
+            str(row.id): row
+            for row in Customer.objects.require_tenant(tenant).filter(id__in=customer_ids)
+        }
+        new_customers = 0
+        returning = 0
+        top_customers = []
+        for customer_id, values in by_customer.items():
+            first_at = first_map.get(customer_id)
+            is_new = first_at is not None and first_at >= window_start
+            if is_new:
+                new_customers += 1
+            else:
+                returning += 1
+            customer = customers.get(customer_id)
+            top_customers.append(
+                {
+                    "customer_id": customer_id,
+                    "customer_name": (customer.display_name if customer else customer_id),
+                    "orders": int(values["orders"]),
+                    "revenue": round(float(values["revenue"]), 2),
+                    "is_returning": not is_new,
+                }
+            )
+        top_customers.sort(key=lambda row: (row["orders"], row["revenue"]), reverse=True)
+        return {
+            "new_customers": new_customers,
+            "returning_customers": returning,
+            "customers_with_orders": len(customer_ids),
+            "repeat_rate": round(returning / len(customer_ids), 4) if customer_ids else 0,
+            "avg_orders_per_customer": round(len(orders) / len(customer_ids), 2) if customer_ids else 0,
+            "top_customers": top_customers[:8],
+            "period": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+        }
+
+    def shopie_forecast(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        horizon_days: int = 30,
+        staff_id: Any | None = None,
+    ) -> dict[str, Any]:
+        horizon_days = max(7, min(horizon_days, 90))
+        end_date = self.business_local_date(business)
+        start_date = end_date - timedelta(days=29)
+        overview = self._shopie_overview(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        rows = overview.get("trend") or []
+        based_on_days = max((end_date - start_date).days + 1, 1)
+        total_orders = sum(int(row.get("orders") or 0) for row in rows)
+        total_gmv = float(overview.get("gmv") or 0)
+        avg_daily = total_orders / based_on_days
+        recent_start = end_date - timedelta(days=13)
+        recent_orders = sum(
+            int(row.get("orders") or 0)
+            for row in rows
+            if str(row.get("day") or "") >= recent_start.isoformat()
+        )
+        prior_rows = [
+            row
+            for row in rows
+            if str(row.get("day") or "") < recent_start.isoformat()
+        ]
+        prior_orders = sum(int(row.get("orders") or 0) for row in prior_rows)
+        recent_avg = recent_orders / 14
+        prior_avg = prior_orders / max(len(prior_rows), 1)
+        momentum_pct = self._change_pct(recent_avg, prior_avg)
+        blended_daily = (0.65 * recent_avg) + (0.35 * avg_daily)
+        projected_orders = int(round(blended_daily * horizon_days))
+        avg_daily_revenue = total_gmv / based_on_days
+        pace = (blended_daily / avg_daily) if avg_daily else 1.0
+        return {
+            "horizon_days": horizon_days,
+            "projected_orders": projected_orders,
+            "projected_revenue": round(avg_daily_revenue * pace * horizon_days, 2),
+            "avg_daily_orders": round(avg_daily, 2),
+            "avg_daily_revenue": round(avg_daily_revenue, 2),
+            "currency": business.currency,
+            "based_on_days": based_on_days,
+            "based_on_orders": total_orders,
+            "momentum_pct": momentum_pct,
+            "note": self._forecast_note(
+                momentum_pct=momentum_pct,
+                based_on_bookings=total_orders,
+                prior_bookings=prior_orders,
+                projected_bookings=projected_orders,
+                horizon_days=horizon_days,
+                unit="orders",
+            ),
+        }
+
+    def shopie_reports(
+        self,
+        *,
+        tenant: Any,
+        business: Business,
+        start_date: date,
+        end_date: date,
+        staff_id: Any | None = None,
+    ) -> dict[str, Any]:
+        overview = self._shopie_overview(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        growth = self.shopie_growth(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        revenue = self.shopie_revenue(
+            tenant=tenant,
+            business=business,
+            start_date=start_date,
+            end_date=end_date,
+            staff_id=staff_id,
+        )
+        return {
+            "orders": overview["orders"],
+            "cancelled_orders": overview["cancelled_orders"],
+            "gmv": overview["gmv"],
+            "avg_order_value": overview["avg_order_value"],
+            "returns": overview["returns"],
+            "return_rate": overview["return_rate"],
+            "currency": overview["currency"],
+            "trend": overview["trend"],
+            "insights": overview.get("insights") or [],
+            "growth": growth,
+            "revenue": revenue,
+            "period": overview["period"],
         }
 
     def _pets_snapshot(
@@ -800,18 +1341,72 @@ class AnalyticsService:
                 next_bday = date(today.year + 1, 2, 28)
         return (next_bday - today).days
 
+    def _coerce_staff_id(self, staff_id: Any | None) -> UUID | None:
+        if staff_id is None or staff_id == "":
+            return None
+        if isinstance(staff_id, UUID):
+            return staff_id
+        try:
+            return UUID(str(staff_id))
+        except (TypeError, ValueError):
+            return None
+
+    def _staff_actor_user_id(self, *, tenant: Any, business: Business, staff_id: Any | None):
+        parsed = self._coerce_staff_id(staff_id)
+        if parsed is None:
+            return None
+        staff = (
+            Staff.objects.require_tenant(tenant)
+            .filter(id=parsed, business=business)
+            .only("user_id")
+            .first()
+        )
+        if staff is None:
+            return False
+        return staff.user_id
+
+    def _filter_orders_by_staff(
+        self,
+        queryset,
+        *,
+        tenant: Any,
+        business: Business,
+        staff_id: Any | None,
+        via_order: bool = False,
+    ):
+        if self._coerce_staff_id(staff_id) is None:
+            return queryset
+        user_id = self._staff_actor_user_id(tenant=tenant, business=business, staff_id=staff_id)
+        if user_id in (None, False):
+            return queryset.none()
+        if via_order:
+            return queryset.filter(order__created_by=user_id)
+        return queryset.filter(created_by=user_id)
+
+    def _apply_staff_filter(self, queryset, staff_id: Any | None):
+        parsed = self._coerce_staff_id(staff_id)
+        if parsed is None:
+            return queryset
+        line_match = BookingLineItem.objects.filter(booking_id=OuterRef("pk"), staff_id=parsed)
+        return queryset.filter(Q(staff_id=parsed) | Exists(line_match)).distinct()
+
     def _booking_queryset(
         self,
         tenant: Any,
         business: Any,
         start_date: date | None,
         end_date: date | None,
+        user: Any | None = None,
+        staff_id: Any | None = None,
     ):
         queryset = Booking.objects.require_tenant(tenant).filter(business=business)
         if start_date:
             queryset = queryset.filter(appointment_date__gte=start_date)
         if end_date:
             queryset = queryset.filter(appointment_date__lte=end_date)
+        if user is not None:
+            queryset = scope_bookings_queryset_for_user(queryset, tenant=tenant, user=user)
+        queryset = self._apply_staff_filter(queryset, staff_id)
         return queryset.prefetch_related("line_items").only(
             "id",
             "service_id",
@@ -850,10 +1445,17 @@ class AnalyticsService:
             "no_shows": no_shows,
         }
 
-    def _estimate_revenue(self, bookings: list[Booking], prices: dict[str, float]) -> float:
+    def _estimate_revenue(
+        self,
+        bookings: list[Booking],
+        prices: dict[str, float],
+        staff_id: Any | None = None,
+    ) -> float:
         total = 0.0
         for booking in bookings:
-            for _service_id, amount, _staff_id in self._iter_booking_revenue_lines(booking, prices):
+            for _service_id, amount, _staff_id in self._iter_booking_revenue_lines(
+                booking, prices, staff_id=staff_id
+            ):
                 total += amount
         return total
 
@@ -867,10 +1469,11 @@ class AnalyticsService:
         self,
         booking: Booking,
         prices: dict[str, float],
+        staff_id: Any | None = None,
     ) -> list[tuple[str, float, Any]]:
         line_items = list(booking.line_items.all()) if hasattr(booking, "line_items") else []
         if line_items:
-            return [
+            lines = [
                 (
                     str(line_item.service_id),
                     self._line_item_amount(line_item, prices),
@@ -878,15 +1481,21 @@ class AnalyticsService:
                 )
                 for line_item in line_items
             ]
-        if booking.service_id:
-            return [
+        elif booking.service_id:
+            lines = [
                 (
                     str(booking.service_id),
                     prices.get(str(booking.service_id), 0.0),
                     booking.staff_id,
                 )
             ]
-        return []
+        else:
+            lines = []
+        parsed = self._coerce_staff_id(staff_id)
+        if parsed is None:
+            return lines
+        target = str(parsed)
+        return [line for line in lines if line[2] is not None and str(line[2]) == target]
 
     def _period_days(self, start_date: date | None, end_date: date | None) -> int | None:
         if start_date and end_date:
@@ -959,11 +1568,12 @@ class AnalyticsService:
         projected_bookings: int,
         horizon_days: int,
         prior_bookings: int | None = None,
+        unit: str = "bookings",
     ) -> str:
         earlier = based_on_bookings if prior_bookings is None else prior_bookings
         if based_on_bookings < 8:
             return (
-                f"Only {based_on_bookings} bookings in the last 30 days, so {projected_bookings} "
+                f"Only {based_on_bookings} {unit} in the last 30 days, so {projected_bookings} "
                 f"over the next {horizon_days} days is a rough floor, not a plan."
             )
         if momentum_pct is None or earlier < 8:

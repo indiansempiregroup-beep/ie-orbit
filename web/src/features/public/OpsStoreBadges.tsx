@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { OPS_ANDROID_STORE_URL, OPS_IOS_STORE_URL } from '../../seo/config';
 import { trackEvent } from '../../seo/analytics';
+import { detectPreferredOpsStore, type PreferredOpsStore } from '../../lib/preferredOpsStore';
 
 const badges = [
   {
@@ -47,10 +48,21 @@ function PlayMark() {
   );
 }
 
-export function OpsStoreBadges({ className }: { className?: string }) {
+export function OpsStoreBadges({
+  className,
+  preferred,
+}: {
+  className?: string;
+  preferred?: PreferredOpsStore;
+}) {
+  const mode = preferred ?? detectPreferredOpsStore();
+  const ordered =
+    mode === 'android' ? [...badges].reverse() : badges;
+  const label =
+    mode === 'ios' ? 'Download on iPhone' : mode === 'android' ? 'Download on Android' : 'Download on iOS and Android';
   return (
-    <div className={`public-store-badges${className ? ` ${className}` : ''}`} aria-label="Download on iOS and Android">
-      {badges.map((badge) => {
+    <div className={`public-store-badges${className ? ` ${className}` : ''}`} aria-label={label}>
+      {ordered.map((badge) => {
         const Icon = badge.icon;
         const onClick = () =>
           trackEvent('select_content', { content_type: 'ops_app_download', item_id: badge.platform });
@@ -63,11 +75,13 @@ export function OpsStoreBadges({ className }: { className?: string }) {
             </span>
           </>
         );
+        const isAlt = mode !== 'both' && badge.platform !== mode;
+        const classNames = `public-store-badge${isAlt ? ' is-alt' : ''}`;
         if (isExternal(badge.href)) {
           return (
             <a
               key={badge.platform}
-              className="public-store-badge"
+              className={classNames}
               href={badge.href}
               target="_blank"
               rel="noopener noreferrer"
@@ -81,7 +95,7 @@ export function OpsStoreBadges({ className }: { className?: string }) {
         return (
           <Link
             key={badge.platform}
-            className="public-store-badge"
+            className={classNames}
             to={badge.href}
             aria-label={badge.label}
             onClick={onClick}

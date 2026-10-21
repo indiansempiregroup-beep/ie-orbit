@@ -610,6 +610,33 @@ class BookingService:
             BookingStatus.REJECTED,
         }:
             self._refund_loyalty_on_cancel(booking=booking)
+        if to_status == BookingStatus.NO_SHOW and from_status != BookingStatus.NO_SHOW:
+            try:
+                from apps.customers.models import Customer
+                from apps.workflow.services.emit_domain import emit_domain_on_commit
+
+                customer = (
+                    Customer.objects.require_tenant(booking.tenant).filter(id=booking.customer_id).first()
+                    if booking.customer_id
+                    else None
+                )
+                emit_domain_on_commit(
+                    tenant=booking.tenant,
+                    business=booking.business,
+                    event_key="booking.no_show",
+                    context={
+                        "customer": customer,
+                        "booking": booking,
+                        "booking_number": booking.booking_number,
+                        "party_name": getattr(customer, "display_name", None) or "Customer",
+                    },
+                    product_code="appointie",
+                    subject_type="booking",
+                    subject_id=str(booking.id),
+                    idempotency_prefix=f"booking.no_show:{booking.id}",
+                )
+            except Exception:  # noqa: BLE001 — a follow-up rule must not block the status change
+                pass
         return booking
 
     def _stamp_completion_payment(self, *, booking: Booking, payment: dict[str, Any] | None) -> None:
@@ -772,6 +799,21 @@ class BookingService:
                 referred=customer,
                 event="first_booking",
             )
+            points = LoyaltyService().credited_earn_for_booking(
+                tenant=booking.tenant, booking_id=booking.id
+            )
+            if points > 0:
+                metadata = dict(booking.metadata or {})
+                loyalty_meta = (
+                    dict(metadata.get("loyalty") or {})
+                    if isinstance(metadata.get("loyalty"), dict)
+                    else {}
+                )
+                loyalty_meta["points_earned"] = int(points)
+                loyalty_meta["earn_reversed"] = False
+                metadata["loyalty"] = loyalty_meta
+                booking.metadata = metadata
+                booking.save(update_fields=["metadata", "updated_at"])
         except Exception:
             logger.exception(
                 "Failed to award loyalty points",
@@ -785,15 +827,17 @@ class BookingService:
             customer = self._resolve_loyalty_customer(booking=booking)
             if customer is None:
                 return
+            loyalty = LoyaltyService()
             loyalty_meta = (booking.metadata or {}).get("loyalty") or {}
             points_redeemed = int(loyalty_meta.get("points_redeemed") or 0)
-            LoyaltyService().refund_for_booking(
+            loyalty.refund_for_booking(
                 tenant=booking.tenant,
                 business=booking.business,
                 customer=customer,
                 booking_id=booking.id,
                 points_redeemed=points_redeemed,
             )
+            booking.refresh_from_db(fields=["metadata", "updated_at"])
             metadata = dict(booking.metadata or {})
             loyalty_meta = dict(metadata.get("loyalty") or {})
             loyalty_meta["refunded"] = True
@@ -801,9 +845,55 @@ class BookingService:
             metadata["loyalty"] = loyalty_meta
             booking.metadata = metadata
             booking.save(update_fields=["metadata", "updated_at"])
+            self._stamp_booking_voucher_loyalty(booking=booking, loyalty_meta=loyalty_meta)
         except Exception:
             logger.exception(
                 "Failed to refund loyalty on booking cancel",
+                extra={"booking_id": str(booking.id)},
+            )
+
+    def _stamp_booking_voucher_loyalty(self, *, booking: Booking, loyalty_meta: dict) -> None:
+        try:
+            from apps.shopie.services.books import BooksService
+
+            voucher = BooksService.books_voucher_for_booking(
+                tenant=booking.tenant, business=booking.business, booking_id=booking.id
+            )
+            if voucher is None:
+                return
+            v_meta = dict(voucher.metadata or {})
+            v_loyalty = dict(v_meta.get("loyalty") or {}) if isinstance(v_meta.get("loyalty"), dict) else {}
+            v_loyalty.update(
+                {
+                    key: loyalty_meta[key]
+                    for key in (
+                        "points_earned",
+                        "points_reversed",
+                        "points_revoked",
+                        "reversal_reason",
+                        "earn_reversed",
+                        "refunded",
+                    )
+                    if key in loyalty_meta
+                }
+            )
+            v_meta["loyalty"] = v_loyalty
+            billing = dict(v_meta.get("billing") or {}) if isinstance(v_meta.get("billing"), dict) else {}
+            if "points_earned" in loyalty_meta:
+                billing["points_earned"] = int(loyalty_meta.get("points_earned") or 0)
+            if loyalty_meta.get("points_reversed") is not None or loyalty_meta.get("points_revoked") is not None:
+                billing["points_reversed"] = int(
+                    loyalty_meta.get("points_reversed") or loyalty_meta.get("points_revoked") or 0
+                )
+                billing["points_revoked"] = billing["points_reversed"]
+            if loyalty_meta.get("reversal_reason"):
+                billing["reversal_reason"] = loyalty_meta["reversal_reason"]
+            v_meta["billing"] = billing
+            voucher.metadata = v_meta
+            voucher.save(update_fields=["metadata", "updated_at"])
+        except Exception:
+            logger.exception(
+                "Failed to stamp booking invoice loyalty",
                 extra={"booking_id": str(booking.id)},
             )
 

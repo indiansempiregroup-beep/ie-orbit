@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts } from './shopHooks';
+import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts, useShopSuppliers } from './shopHooks';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { formatMoney } from '../../lib/currency';
@@ -68,15 +68,24 @@ export function ShopPosPage() {
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const isChallan = searchParams.get('mode') === 'delivery_challan';
+  const posMode = searchParams.get('mode') || 'sale';
+  const isChallan = posMode === 'delivery_challan';
+  const isSaleOrder = posMode === 'sale_order';
+  const isPurchaseOrder = posMode === 'purchase_order';
+  const isBooksDocument = isChallan || isSaleOrder || isPurchaseOrder;
+  const editDocumentId = isBooksDocument ? searchParams.get('document') || '' : '';
   const currency = workspace.activeBusiness?.currency;
   const money = (amount: number) => formatMoney(amount, currency);
   const showGstFields = hasSubscribedProduct(workspace.activeBusiness?.product_subscriptions, 'shopie');
   const products = useShopProducts('', 'active');
   const { lookup, lookupBulk, createOrder } = useShopProductMutations();
-  const { create: createDocument } = useShopBooksDocumentMutations();
+  const { create: createDocument, update: updateDocument } = useShopBooksDocumentMutations();
+  const editHydratedRef = useRef('');
+  const [documentNotes, setDocumentNotes] = useState('');
+  const suppliers = useShopSuppliers();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
   const [partyGstin, setPartyGstin] = useState('');
   const [scan, setScan] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
@@ -124,6 +133,53 @@ export function ShopPosPage() {
       }
     })();
   }, [client, workspace.businessId]);
+
+  useEffect(() => {
+    if (!editDocumentId || products.isLoading) return;
+    if (editHydratedRef.current === editDocumentId) return;
+    let cancelled = false;
+    void client.shop.getDocument(editDocumentId).then((response) => {
+      if (cancelled || !response.data) return;
+      const document = response.data;
+      editHydratedRef.current = editDocumentId;
+      setCustomerId(document.customer || '');
+      setSupplierId(document.supplier || '');
+      setDocumentNotes(document.notes || '');
+      const catalog = products.data ?? [];
+      const rows = Array.isArray(document.line_items) ? document.line_items : [];
+      setBasket(
+        rows.flatMap((raw) => {
+          const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+          if (!line) return [];
+          const productId = String(line.product_id || '').trim();
+          const quantity = Number(line.quantity ?? line.qty ?? 0);
+          if (!productId || !Number.isFinite(quantity) || quantity <= 0) return [];
+          const catalogProduct = catalog.find((product) => product.id === productId);
+          const rate = line.unit_price ?? line.rate ?? catalogProduct?.price ?? 0;
+          const gst = line.tax_rate ?? line.gst_rate ?? catalogProduct?.tax_rate ?? 0;
+          const product = catalogProduct
+            ? { ...catalogProduct, price: String(rate), tax_rate: String(gst) }
+            : ({
+                id: productId,
+                name: String(line.name || 'Item'),
+                price: String(rate),
+                tax_rate: String(gst),
+                stock_on_hand: 0,
+              } as ShopProduct);
+          return [{ product, quantity, discountType: '' as const, discountValue: 0 }];
+        }),
+      );
+    }).catch((error) => {
+      if (!cancelled) {
+        const text = error instanceof Error ? error.message : "Couldn't open this record on the counter.";
+        setMessage(text);
+        snackbar.push(text, 'error');
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, editDocumentId, products.data, products.isLoading, snackbar]);
 
   useEffect(() => {
     if (!paymentSheet || !['opening', 'waiting'].includes(paymentSheet.status)) return;
@@ -316,7 +372,7 @@ export function ShopPosPage() {
   );
   const payableAfterLoyalty = totals.payable;
   const tillPayment =
-    !isChallan &&
+    !isBooksDocument &&
     (paymentMethod === 'cash' ||
       paymentMethod === 'upi' ||
       paymentMethod === 'card' ||
@@ -432,7 +488,7 @@ export function ShopPosPage() {
 
   async function checkout() {
     if (!basket.length) return;
-    if (!isChallan && tillPayment && balanceDue > 0 && !customerId) {
+    if (!isBooksDocument && tillPayment && balanceDue > 0 && !customerId) {
       const text = 'Select a customer when the bill is not fully paid (partial or credit).';
       setMessage(text);
       snackbar.push(text, 'error');
@@ -447,38 +503,87 @@ export function ShopPosPage() {
     const resolvedGstin = gstinResult.gstin;
     setMessage(null);
     try {
-      if (isChallan) {
-        const challan = await createDocument.mutateAsync({
-          doc_type: 'delivery_challan',
-          customer_id: customerId || null,
-          notes: [
-            'Delivery challan from Sale counter',
-            resolvedGstin ? `Customer GSTIN ${resolvedGstin}` : '',
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          lines: basket.map((line) => ({
-            product_id: line.product.id,
-            quantity: line.quantity,
-            unit_price: line.product.price,
-            tax_rate: line.product.tax_rate,
-          })),
-        });
+      if (isBooksDocument) {
+        if (isPurchaseOrder && !supplierId) {
+          const text = 'Select a supplier for this purchase order.';
+          setMessage(text);
+          snackbar.push(text, 'error');
+          return;
+        }
+        const docType = isPurchaseOrder ? 'purchase_order' : isSaleOrder ? 'sale_order' : 'delivery_challan';
+        const label = isPurchaseOrder ? 'Purchase order' : isSaleOrder ? 'Sale order' : 'Challan';
+        const documentLines = basket.map((line) => ({
+          product_id: line.product.id,
+          quantity: line.quantity,
+          unit_price: line.product.price,
+          tax_rate: line.product.tax_rate,
+          tax_inclusive: Boolean(
+            line.product.tax_inclusive ??
+              (line.product.metadata &&
+                typeof line.product.metadata === 'object' &&
+                (line.product.metadata as { tax_inclusive?: boolean }).tax_inclusive),
+          ),
+        }));
+        const notes = editDocumentId
+          ? documentNotes.trim()
+          : [
+              documentNotes.trim() || `${label} from Sale counter`,
+              resolvedGstin ? `${isPurchaseOrder ? 'Supplier' : 'Customer'} GSTIN ${resolvedGstin}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ');
+        const saved = editDocumentId
+          ? await updateDocument.mutateAsync({
+              documentId: editDocumentId,
+              body: {
+                customer_id: isPurchaseOrder ? null : customerId || null,
+                supplier_id: isPurchaseOrder ? supplierId || null : null,
+                notes,
+                lines: documentLines,
+              },
+            })
+          : await createDocument.mutateAsync({
+              doc_type: docType,
+              customer_id: isPurchaseOrder ? null : customerId || null,
+              supplier_id: isPurchaseOrder ? supplierId : null,
+              notes,
+              lines: documentLines,
+            });
         setBasket([]);
         setBillDiscountType('');
         setBillDiscountValue('0');
         setPointsToRedeem(0);
-        snackbar.push(`Challan ${challan.document_number} created · ${money(totals.payable)}`, 'success');
-        setMessage(`Challan ${challan.document_number} created.`);
-        if (workspace.businessId) {
+        snackbar.push(
+          `${label} ${saved.document_number} ${editDocumentId ? 'updated' : 'created'} · ${money(totals.payable)}`,
+          'success',
+        );
+        setMessage(`${label} ${saved.document_number} ${editDocumentId ? 'updated' : 'created'}.`);
+        setDocumentNotes('');
+        if (editDocumentId) {
+          navigate(
+            isPurchaseOrder
+              ? `/shop/books/purchase-orders?document=${saved.id}`
+              : isSaleOrder
+                ? `/shop/books/sale-orders?document=${saved.id}`
+                : `/shop/books/delivery-challans?document=${saved.id}`,
+          );
+          return;
+        }
+        if (isChallan && workspace.businessId) {
           setDocActions({
             kind: 'delivery_challan',
-            id: challan.id,
-            number: challan.document_number,
+            id: saved.id,
+            number: saved.document_number,
             businessId: workspace.businessId,
           });
         } else {
-          navigate('/shop/books/delivery-challans');
+          navigate(
+            isPurchaseOrder
+              ? `/shop/books/purchase-orders?document=${saved.id}`
+              : isSaleOrder
+                ? `/shop/books/sale-orders?document=${saved.id}`
+                : '/shop/books/delivery-challans',
+          );
         }
         return;
       }
@@ -570,7 +675,14 @@ export function ShopPosPage() {
     <div className="page-stack">
       <DocumentActionsSheet
         open={Boolean(docActions)}
-        onClose={() => setDocActions(null)}
+        onClose={() => {
+          const createdId = docActions?.id;
+          const kind = docActions?.kind;
+          setDocActions(null);
+          if (kind === 'delivery_challan' && createdId) {
+            navigate(`/shop/books/delivery-challans?document=${createdId}`);
+          }
+        }}
         target={docActions}
         title={docActions?.kind === 'delivery_challan' ? 'Delivery challan ready' : 'Bill created'}
         allowNewBill={docActions?.kind === 'sale'}
@@ -580,7 +692,9 @@ export function ShopPosPage() {
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,0.9fr)' }}>
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <Card>
-            <h2 style={{ marginTop: 0 }}>{isChallan ? 'Add to challan' : 'Add to bill'}</h2>
+            <h2 style={{ marginTop: 0 }}>
+              {isChallan ? 'Add to challan' : isSaleOrder ? 'Add to sale order' : isPurchaseOrder ? 'Add to purchase order' : 'Add to bill'}
+            </h2>
             <form onSubmit={handleScan} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 autoFocus
@@ -655,7 +769,28 @@ export function ShopPosPage() {
         </div>
 
         <Card style={{ position: 'sticky', top: 16, alignSelf: 'start' }}>
-          <h2 style={{ marginTop: 0 }}>{isChallan ? 'Delivery challan' : 'Bill'}</h2>
+          <h2 style={{ marginTop: 0 }}>
+            {editDocumentId ? 'Edit ' : ''}
+            {isChallan ? 'Delivery challan' : isSaleOrder ? 'Sale order' : isPurchaseOrder ? 'Purchase order' : 'Bill'}
+          </h2>
+          {isPurchaseOrder ? (
+            <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Supplier</span>
+              <select
+                value={supplierId}
+                onChange={(event) => setSupplierId(event.target.value)}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+              >
+                <option value="">Select supplier</option>
+                {(suppliers.data ?? []).map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+          <>
           <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>Customer</span>
             <select
@@ -702,6 +837,20 @@ export function ShopPosPage() {
               </span>
             </label>
           ) : null}
+          </>
+          )}
+          {isBooksDocument ? (
+            <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Notes</span>
+              <textarea
+                rows={2}
+                value={documentNotes}
+                onChange={(event) => setDocumentNotes(event.target.value)}
+                placeholder="Optional note on this record"
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', resize: 'vertical' }}
+              />
+            </label>
+          ) : null}
 
           <div style={{ display: 'grid', gap: 10, maxHeight: 360, overflow: 'auto', marginBottom: 12 }}>
             {basket.map((line) => {
@@ -746,6 +895,7 @@ export function ShopPosPage() {
                     >
                       +
                     </Button>
+                    {!isBooksDocument ? (
                     <select
                       value={line.discountType}
                       onChange={(event) =>
@@ -763,7 +913,8 @@ export function ShopPosPage() {
                       <option value="percent">% off</option>
                       <option value="amount">Amount off</option>
                     </select>
-                    {line.discountType ? (
+                    ) : null}
+                    {!isBooksDocument && line.discountType ? (
                       <input
                         value={line.discountValue}
                         onChange={(event) =>
@@ -787,7 +938,7 @@ export function ShopPosPage() {
           </div>
 
           <div style={{ display: 'grid', gap: 14, marginBottom: 16 }}>
-            {customerId && !isChallan && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
+            {customerId && !isBooksDocument && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
               <div
                 style={{
                   display: 'grid',
@@ -884,7 +1035,7 @@ export function ShopPosPage() {
                 )}
               </div>
             ) : null}
-            {customerId && !isChallan && automationOffers.length > 0 ? (
+            {customerId && !isBooksDocument && automationOffers.length > 0 ? (
               <div
                 style={{
                   display: 'grid',
@@ -1018,8 +1169,10 @@ export function ShopPosPage() {
         }}
       >
         <Card>
-          <h2 style={{ marginTop: 0 }}>{isChallan ? 'Challan' : 'Payment'}</h2>
-          {!isChallan ? (
+          <h2 style={{ marginTop: 0 }}>
+            {isChallan ? 'Challan' : isSaleOrder ? 'Sale order' : isPurchaseOrder ? 'Purchase order' : 'Payment'}
+          </h2>
+          {!isBooksDocument ? (
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {(
@@ -1103,8 +1256,11 @@ export function ShopPosPage() {
             </div>
           ) : (
             <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
-              No payment now. Dispatch the challan from the list when goods leave — stock is deducted
-              then.
+              {isPurchaseOrder
+                ? 'No payment now. Convert this order into a purchase bill when the goods arrive.'
+                : isSaleOrder
+                  ? 'No payment now. Convert this order into a sale invoice when you bill the customer.'
+                  : 'No payment now. Dispatch the challan when goods leave — stock is deducted then. Create the invoice after that so stock is not deducted twice.'}
             </p>
           )}
         </Card>
@@ -1163,7 +1319,7 @@ export function ShopPosPage() {
               <span>Total</span>
               <span>{money(payableAfterLoyalty)}</span>
             </div>
-            {!isChallan && tillPayment ? (
+            {!isBooksDocument && tillPayment ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Received</span>
@@ -1187,14 +1343,18 @@ export function ShopPosPage() {
             type="button"
             variant="primary"
             onClick={() => void checkout()}
-            disabled={!basket.length || createOrder.isPending || createDocument.isPending}
+            disabled={!basket.length || createOrder.isPending || createDocument.isPending || updateDocument.isPending}
           >
-            {createDocument.isPending
-              ? 'Saving challan…'
+            {createDocument.isPending || updateDocument.isPending
+              ? 'Saving…'
               : createOrder.isPending
                 ? 'Creating bill…'
                 : isChallan
-                  ? `Save challan · ${money(totals.payable)}`
+                  ? `${editDocumentId ? 'Update' : 'Save'} challan · ${money(totals.payable)}`
+                  : isSaleOrder
+                    ? `${editDocumentId ? 'Update' : 'Save'} sale order · ${money(totals.payable)}`
+                    : isPurchaseOrder
+                      ? `${editDocumentId ? 'Update' : 'Save'} purchase order · ${money(totals.payable)}`
                   : paymentMethod === 'razorpay'
                     ? `Pay with Razorpay · ${money(payableAfterLoyalty)}`
                     : paymentMethod === 'cashfree'

@@ -465,14 +465,19 @@ export function ServicesPage() {
               />
             </label>
           </div>
-          <select
-            value={formState.status}
-            onChange={(event) => setFormState({ ...formState, status: event.target.value })}
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <label style={{ display: 'grid', gap: 8 }}>
+            Status
+            <select
+              value={formState.status}
+              onChange={(event) => setFormState({ ...formState, status: event.target.value })}
+              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
+            >
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="draft">Draft</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
           <textarea
             value={formState.short_description}
             onChange={(event) => setFormState({ ...formState, short_description: event.target.value })}

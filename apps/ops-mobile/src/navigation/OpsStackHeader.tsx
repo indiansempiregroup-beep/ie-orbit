@@ -40,7 +40,9 @@ export function OpsStackHeader({ navigation, options, back }: NativeStackHeaderP
       ]}
     >
       <View style={[styles.row, isDesktop && styles.rowDesktop]}>
-        {canGoBack ? (
+        {typeof options.headerLeft === 'function' ? (
+          options.headerLeft({ tintColor: colors.primary, canGoBack })
+        ) : canGoBack ? (
           <Pressable
             onPress={() => navigation.goBack()}
             style={({ pressed }) => [

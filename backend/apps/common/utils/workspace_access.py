@@ -18,10 +18,33 @@ def is_workspace_manager_or_above(*, user: Any, tenant: Any | None = None) -> bo
         return True
     if tenant is not None and getattr(tenant, "owner_id", None) == getattr(user, "id", None):
         return True
+    role_codes = WORKSPACE_MANAGER_ROLE_CODES
+    if tenant is not None:
+        # A business_owner of another tenant is not a manager here.
+        role_codes = WORKSPACE_MANAGER_ROLE_CODES - {"business_owner"}
     return user.user_roles.filter(
         role__is_active=True,
-        role__code__in=WORKSPACE_MANAGER_ROLE_CODES,
+        role__code__in=role_codes,
     ).exists()
+
+
+def manager_staff_id_from_request(request: Any) -> UUID | None:
+    """Staff UUID from query params, only when the caller is a manager/owner."""
+    query_params = getattr(request, "query_params", None)
+    raw = None
+    if query_params is not None:
+        raw = query_params.get("staff_id") or query_params.get("staff")
+    if not raw:
+        return None
+    try:
+        value = UUID(str(raw))
+    except (TypeError, ValueError):
+        return None
+    tenant = getattr(request, "current_tenant", None)
+    user = getattr(request, "user", None)
+    if not is_workspace_manager_or_above(user=user, tenant=tenant):
+        return None
+    return value
 
 
 def linked_staff_ids_for_user(
@@ -56,7 +79,12 @@ def scope_bookings_queryset_for_user(
     staff_ids = linked_staff_ids_for_user(tenant=tenant, user=user)
     if not staff_ids:
         return queryset.none()
-    return queryset.filter(staff_id__in=staff_ids)
+    from django.db.models import Exists, OuterRef, Q
+
+    from apps.bookings.models import BookingLineItem
+
+    line_match = BookingLineItem.objects.filter(booking_id=OuterRef("pk"), staff_id__in=staff_ids)
+    return queryset.filter(Q(staff_id__in=staff_ids) | Exists(line_match)).distinct()
 
 
 def resolve_business_manager_users(*, tenant: Any, business: Any) -> list[Any]:

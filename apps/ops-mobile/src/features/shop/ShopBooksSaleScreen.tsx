@@ -19,7 +19,12 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
-import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
+import { SheetHandle } from '../../components/SheetHandle';
+import {
+  ExpandableSheetView,
+  sheetBodyStyle,
+  useExpandableSheet,
+} from '../../hooks/useExpandableSheet';
 import { SelectField } from '../../components/SelectField';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
@@ -120,7 +125,10 @@ function ComplianceModal({
 }) {
   const client = useOpsClient();
   const toast = useToast();
-  const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.82);
+  const { lift, bottomPad, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
+    0.82,
+    visible && voucher?.id,
+  );
 
   const [loading, setLoading] = useState(true);
   const [einvoice, setEinvoice] = useState<ShopEInvoice | null>(null);
@@ -245,8 +253,18 @@ function ComplianceModal({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: bottomPad, marginBottom: lift, maxHeight }]}>
-          <View style={styles.handle} />
+        <ExpandableSheetView
+          onLayout={onSheetLayout}
+          style={[
+            styles.sheet,
+            {
+              paddingBottom: bottomPad,
+              marginBottom: lift,
+            },
+            sheetMotionStyle,
+          ]}
+        >
+          <SheetHandle {...handleProps} tone="muted" />
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.sheetTitle}>GST compliance</Text>
@@ -257,7 +275,11 @@ function ComplianceModal({
             </Pressable>
           </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: spacing.lg, paddingBottom: spacing.lg }}>
+          <ScrollView
+            style={driven ? sheetBodyStyle : undefined}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: spacing.lg, paddingBottom: spacing.lg }}
+          >
             {loading ? (
               <ActivityIndicator color={colors.primary} />
             ) : (
@@ -381,7 +403,7 @@ function ComplianceModal({
               </>
             )}
           </ScrollView>
-        </View>
+        </ExpandableSheetView>
       </View>
     </Modal>
   );
@@ -1040,14 +1062,6 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     shadowOffset: { width: 0, height: -8 },
     elevation: 16,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: radius.full,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.md,
   },
   sheetHeader: {
     flexDirection: 'row',

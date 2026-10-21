@@ -19,6 +19,18 @@ from apps.workflow.services.schema import ALLOWED_TRIGGERS, validate_workflow_pa
 
 logger = logging.getLogger("ie_orbit.workflow")
 
+
+def _with_wallet_note(exc: ValidationError, charge: dict[str, Any]) -> ValidationError:
+    note = str((charge or {}).get("message") or "").strip()
+    detail = getattr(exc, "detail", None)
+    if not note or not isinstance(detail, dict) or "prompt" not in detail:
+        return exc
+    current = detail["prompt"]
+    text = str(current[0] if isinstance(current, list) else current)
+    if note in text:
+        return exc
+    return ValidationError({**detail, "prompt": f"{text} {note}"})
+
 GEMINI_MODEL = (os.environ.get("GEMINI_MODEL") or "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
 
 
@@ -146,6 +158,20 @@ def explain_workflow(draft: dict[str, Any], *, product_code: str) -> dict[str, A
         when_bits.append("Once a day in the morning")
     elif trigger_type == "calendar.date":
         when_bits.append("On the scheduled calendar day")
+    elif trigger_type == "inventory.low_stock":
+        when_bits.append("When a product drops to its low-stock level or runs out")
+    elif trigger_type == "order.completed":
+        when_bits.append("When an order is completed or delivered")
+    elif trigger_type == "order.payment_received":
+        when_bits.append("When payment is received on an order")
+    elif trigger_type == "booking.no_show":
+        when_bits.append("When a booking is marked as a no-show")
+    elif trigger_type == "books.overdue":
+        when_bits.append("Each morning, for parties who still owe money")
+    elif trigger_type == "quotation.followup":
+        when_bits.append("Each morning, for quotations that have not been converted")
+    elif trigger_type == "loyalty.milestone":
+        when_bits.append("When a customer’s loyalty points cross a milestone")
     else:
         when_bits.append("When the automation trigger fires")
 
@@ -166,6 +192,19 @@ def explain_workflow(draft: dict[str, Any], *, product_code: str) -> dict[str, A
         elif ctype == "pet.birthday_in_days":
             days = raw.get("days") or 0
             when_bits.append(f"and a pet birthday is within {days} days")
+        elif ctype == "inventory.out_of_stock":
+            when_bits.append("and the product is out of stock")
+        elif ctype == "inventory.below_threshold":
+            when_bits.append("and stock is at or below the reorder level")
+        elif ctype == "party.balance_due":
+            days = raw.get("min_days") or raw.get("days") or 0
+            when_bits.append(f"and the balance is overdue by at least {days} days" if days else "and there is a balance due")
+        elif ctype == "quotation.older_than_days":
+            days = raw.get("days") or 3
+            when_bits.append(f"and the quotation is at least {days} days old")
+        elif ctype == "loyalty.crossed_points":
+            points = raw.get("points") or raw.get("value") or ""
+            when_bits.append(f"and points cross {points}" if points else "and points cross the milestone")
 
     then_bits: list[str] = []
     for raw in actions:
@@ -204,11 +243,21 @@ def explain_workflow(draft: dict[str, Any], *, product_code: str) -> dict[str, A
             "body": ("; ".join(then_bits) + ".") if then_bits else "Run the configured actions.",
         },
     ]
-    product_note = (
-        "Orbit Mart can apply this as a discount at checkout."
-        if product_code == "shopie"
-        else "Orbit Appoint shows this as a staff offer hint on booking."
-    )
+    operational = trigger_type in {
+        "inventory.low_stock",
+        "order.completed",
+        "order.payment_received",
+        "booking.no_show",
+        "books.overdue",
+        "quotation.followup",
+        "loyalty.milestone",
+    }
+    if operational:
+        product_note = "This runs on its own when the event happens and sends the notification you set."
+    elif product_code == "shopie":
+        product_note = "Orbit Mart can apply this as a discount at checkout."
+    else:
+        product_note = "Orbit Appoint shows this as a staff offer hint on booking."
     return {
         "title": name,
         "summary": str(draft.get("description") or "").strip() or name,
@@ -246,14 +295,28 @@ class GeminiAutomationCreator:
             "This business is Orbit Appoint. NEVER use discount.offer or coupon.ensure. "
             "Use offer.staff_hint for discount-like offers, plus notify.staff / notify.customer. "
             "Prefer booking.quote trigger for birthday / VIP offers. "
+            "No-show follow-ups use trigger booking.no_show and notify.customer with a body. "
+            "Loyalty milestones use trigger loyalty.milestone, condition loyalty.crossed_points "
+            "with points set to the threshold, and notify.customer. "
+            "Do not put offer.staff_hint on booking.no_show or loyalty.milestone. "
         )
         mart_rules = (
-            "This business is Orbit Mart. Use discount.offer (and optional coupon.ensure). "
-            "Do not use offer.staff_hint. Prefer checkout.quote for occasion discounts. "
+            "This business is Orbit Mart. Use discount.offer (and optional coupon.ensure) "
+            "only for occasion discounts. Do not use offer.staff_hint. "
+            "Prefer checkout.quote for occasion discounts. "
             "For POS and online bills set applies_to_pos and applies_to_online true on discount.offer, "
             "with discount_type percent|amount and discount_value. "
             "Do NOT attach notify.customer to checkout.quote (that spams on every bill preview). "
             "Birthday emails/alerts use schedule.daily + notify.customer with channels in_app,email. "
+            "Operational alerts must NOT include discount.offer or coupon.ensure. Use: "
+            "inventory.low_stock (+ inventory.out_of_stock when they want only zero stock) + notify.staff; "
+            "order.completed + notify.customer; "
+            "order.payment_received + notify.staff; "
+            "books.overdue + party.balance_due (min_days) + notify.staff; "
+            "quotation.followup + quotation.older_than_days (days) + notify.staff; "
+            "loyalty.milestone + loyalty.crossed_points (points) + notify.customer. "
+            "Notification body may use {customer} {product} {stock} {order} {balance} {points} "
+            "{quotation} {booking} {party}. "
         )
         product_rules = appoint_rules if product == "appointie" else mart_rules
 
@@ -292,6 +355,10 @@ class GeminiAutomationCreator:
             parts.append("Conversation so far:\n" + "\n".join(history_lines))
         user_prompt = "\n\n".join(parts)
 
+        from apps.shopie.services.gemini_billing import ensure_gemini_prepaid
+
+        ensure_gemini_prepaid(tenant=tenant, business=business)
+
         endpoint = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{GEMINI_MODEL}:generateContent?key={api_key}"
@@ -310,7 +377,55 @@ class GeminiAutomationCreator:
             logger.warning("gemini automation HTTP %s: %s", response.status_code, response.text[:400])
             raise ValidationError({"prompt": "Gemini rejected the request. Try a simpler description."})
 
+        from apps.shopie.services.gemini_billing import settle_gemini_usage, usage_from_gemini_payload
+
         payload = response.json()
+        token_usage = usage_from_gemini_payload(payload if isinstance(payload, dict) else {})
+        charge = settle_gemini_usage(
+            tenant=tenant,
+            business=business,
+            source="gemini_automation",
+            found=bool((payload or {}).get("candidates")) if isinstance(payload, dict) else False,
+            input_tokens=token_usage["input_tokens"],
+            output_tokens=token_usage["output_tokens"],
+            model=GEMINI_MODEL,
+            metadata={
+                "kind": "automation_draft",
+                "product_code": product,
+                "refined": bool(prior_draft),
+                "prompt": text[:200],
+            },
+        )
+        try:
+            return self._draft_from_payload(
+                tenant=tenant,
+                business=business,
+                user=user,
+                text=text,
+                product=product,
+                prior_draft=prior_draft,
+                save_draft=save_draft,
+                payload=payload if isinstance(payload, dict) else {},
+                token_usage=token_usage,
+                charge=charge,
+            )
+        except ValidationError as exc:
+            raise _with_wallet_note(exc, charge) from exc
+
+    def _draft_from_payload(
+        self,
+        *,
+        tenant: Tenant,
+        business: Business,
+        user: AbstractBaseUser | None,
+        text: str,
+        product: str,
+        prior_draft: dict[str, Any] | None,
+        save_draft: bool,
+        payload: dict[str, Any],
+        token_usage: dict[str, int],
+        charge: dict[str, Any],
+    ) -> dict[str, Any]:
         candidates = payload.get("candidates") or []
         parts_out = (((candidates[0] or {}).get("content") or {}).get("parts") or []) if candidates else []
         text_out = ""
@@ -379,10 +494,9 @@ class GeminiAutomationCreator:
             explanation["how_it_works"] = how_it_works_ai
             explanation["summary"] = how_it_works_ai
 
-        usage_meta = payload.get("usageMetadata") or {}
-        prompt_tokens = int(usage_meta.get("promptTokenCount") or 0)
-        completion_tokens = int(usage_meta.get("candidatesTokenCount") or 0)
-        total_tokens = int(usage_meta.get("totalTokenCount") or (prompt_tokens + completion_tokens))
+        prompt_tokens = int(token_usage.get("input_tokens") or 0)
+        completion_tokens = int(token_usage.get("output_tokens") or 0)
+        total_tokens = prompt_tokens + completion_tokens
         WorkflowUsage.objects.create(
             tenant=tenant,
             business=business,
@@ -392,7 +506,12 @@ class GeminiAutomationCreator:
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             source_prompt=text,
-            metadata={"product_code": product, "refined": bool(prior_draft)},
+            metadata={
+                "product_code": product,
+                "refined": bool(prior_draft),
+                "charged_paise": int(charge.get("charged_paise") or 0),
+                "usd_micros": int(charge.get("usd_micros") or 0),
+            },
         )
 
         definition = None
@@ -431,5 +550,9 @@ class GeminiAutomationCreator:
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens,
+                "charged_paise": int(charge.get("charged_paise") or 0),
+                "balance_after_paise": charge.get("balance_after_paise"),
+                "currency": charge.get("charge_currency") or "INR",
+                "message": charge.get("message") or "",
             },
         }

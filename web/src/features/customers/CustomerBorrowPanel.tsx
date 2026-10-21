@@ -127,7 +127,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
                 {entry.entry_type === 'payment'
                   ? 'Payment'
                   : entry.entry_type === 'charge'
-                    ? 'Borrow'
+                    ? 'Credit'
                     : entry.entry_type}{' '}
                 · {money(Number(entry.amount))}
                 {entry.order_number ? ` · ${entry.order_number}` : ''}

@@ -970,15 +970,27 @@ class CheckoutService:
         if total > 100_000_00:
             raise ValidationError({"amount_paise": "Maximum top-up is ₹1,00,000."})
 
+        from apps.businesses.constants import FEATURE_SHOPIE_INVOICE_SCAN, PRODUCT_SHOPIE
+        from apps.businesses.services.entitlements import EntitlementService
+        from apps.workflow.services.access import has_automations
+
         smart = SmartLookupService()
         if not smart.platform_allows(tenant=tenant):
             raise ValidationError({"smart_lookup": "Smart lookup is disabled by the platform."})
-        if not smart.plan_allows(business=business):
+        can_top_up = (
+            smart.plan_allows(business=business)
+            or EntitlementService().has_feature(
+                business=business,
+                feature=FEATURE_SHOPIE_INVOICE_SCAN,
+                product_code=PRODUCT_SHOPIE,
+            )
+            or has_automations(business=business)
+        )
+        if not can_top_up:
             raise ValidationError(
                 {
                     "smart_lookup": (
-                        "Smart product lookup is not included in the current plan. "
-                        "Ask your platform admin to enable it on the package Features tab."
+                        "AI wallet top-up needs Smart lookup, invoice scan, or automations on your plan."
                     )
                 }
             )

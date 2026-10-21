@@ -64,7 +64,7 @@ function RecapChip({
 export function BookingScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'Book'>>();
   const navigation = useNavigation<BookNavigation>();
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const { branding, bootstrap } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const toast = useToast();
@@ -382,6 +382,11 @@ export function BookingScreen() {
     const diffDays = Math.round((selected.getTime() - today.getTime()) / 86400000);
     if (diffDays > 13) setShowFullCalendar(true);
   }, [date]);
+
+  useEffect(() => {
+    if (step !== reviewStep) return;
+    void refreshProfile();
+  }, [step, reviewStep, refreshProfile]);
 
   const headerCopy =
     needsLocation && step === 0
@@ -749,6 +754,9 @@ export function BookingScreen() {
               multiline
               style={{ minHeight: 72, textAlignVertical: 'top' }}
             />
+            {!customerPhone.trim() ? (
+              <Text style={styles.error}>Add your phone number in Profile before booking.</Text>
+            ) : null}
           </>
         ) : null}
 

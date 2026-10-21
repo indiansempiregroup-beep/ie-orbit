@@ -1,7 +1,6 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -9,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -39,13 +38,22 @@ import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
+import { PurchaseInvoiceDetailModal } from './PurchaseInvoiceDetailModal';
+import { usePlanFeatures } from '../../hooks/useOpsExtended';
+import { PlanFeature } from '../../utils/planFeatures';
+import { confirmAction } from '../../utils/confirmAction';
+import { getApiErrorMessage } from '../../utils/format';
 
 export function ShopBooksPurchaseScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksPurchase'>>();
+  const openVoucherId = route.params?.voucherId;
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
+  const { has } = usePlanFeatures();
+  const canScan = has(PlanFeature.shopieInvoiceScan);
 
   const [vouchers, setVouchers] = useState<ShopBooksVoucher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,22 +63,36 @@ export function ShopBooksPurchaseScreen() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Pressable
-          onPress={() => navigation.navigate('ShopPos', { mode: 'purchase' })}
-          accessibilityRole="button"
-          accessibilityLabel="New purchase"
-          hitSlop={8}
-          style={styles.headerBtn}
-        >
-          <Feather name="plus" size={20} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {canScan ? (
+            <Pressable
+              onPress={() => navigation.navigate('ShopInvoiceScan')}
+              accessibilityRole="button"
+              accessibilityLabel="Scan invoice"
+              hitSlop={8}
+              style={styles.headerBtn}
+            >
+              <Feather name="camera" size={20} color={colors.primary} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => navigation.navigate('ShopPos', { mode: 'purchase' })}
+            accessibilityRole="button"
+            accessibilityLabel="New purchase"
+            hitSlop={8}
+            style={styles.headerBtn}
+          >
+            <Feather name="plus" size={20} color={colors.primary} />
+          </Pressable>
+        </View>
       ),
     });
-  }, [navigation]);
+  }, [canScan, navigation]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -92,7 +114,32 @@ export function ShopBooksPurchaseScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    if (!openVoucherId || !client) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await client.shop.getVoucher(openVoucherId);
+        if (!cancelled && response.data) setDetailVoucher(response.data);
+      } catch (err) {
+        if (!cancelled) {
+          toast.push(getApiErrorMessage(err, "Couldn't open that purchase bill."), 'error');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openVoucherId, client, toast]);
+
   const { refreshing, onRefresh } = usePullToRefresh(load);
+
+  function closeDetail() {
+    setDetailVoucher(null);
+    if (route.params?.voucherId) {
+      navigation.setParams({ voucherId: undefined });
+    }
+  }
 
   const filteredVouchers = useMemo(() => {
     const list = filterSaleVouchers(vouchers, {
@@ -120,22 +167,21 @@ export function ShopBooksPurchaseScreen() {
 
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
-    Alert.alert('Void purchase', `Void ${voucher.voucher_number}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Void',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await client.shop.voidVoucher(voucher.id);
-            toast.push('Purchase voided', 'success');
-            await load();
-          } catch (err) {
-            toast.push(err instanceof Error ? err.message : "Couldn't void this purchase. Try again.", 'error');
-          }
-        },
-      },
-    ]);
+    const ok = await confirmAction({
+      title: 'Void purchase',
+      message: `Void ${voucher.voucher_number}? This cannot be undone.`,
+      confirmLabel: 'Void',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await client.shop.voidVoucher(voucher.id);
+      toast.push('Purchase voided', 'success');
+      closeDetail();
+      await load();
+    } catch (err) {
+      toast.push(getApiErrorMessage(err, "Couldn't void this purchase. Try again."), 'error');
+    }
   }
 
   return (
@@ -224,8 +270,7 @@ export function ShopBooksPurchaseScreen() {
                 icon={voided ? 'slash' : 'truck'}
                 iconTone={voided ? 'rose' : paid ? 'green' : 'amber'}
                 dimmed={voided}
-                actionLabel={!voided ? 'Void' : undefined}
-                onAction={!voided ? () => void onVoid(item) : undefined}
+                onPress={() => setDetailVoucher(item)}
               />
             );
           }}
@@ -233,21 +278,32 @@ export function ShopBooksPurchaseScreen() {
             !loading ? (
               <EmptyState
                 icon="truck"
-                title={activeFilterCount ? 'No matching purchases' : 'No purchases yet'}
+                title={activeFilterCount || search.trim() ? 'No matching purchases' : 'No purchases yet'}
                 message={
-                  activeFilterCount
+                  activeFilterCount || search.trim()
                     ? 'Try clearing filters or adjusting period / payment.'
                     : 'Record supplier bills to track what you owe.'
                 }
-                actionLabel={activeFilterCount ? 'Clear filters' : 'Record a purchase'}
+                actionLabel={activeFilterCount || search.trim() ? 'Clear filters' : 'Record a purchase'}
                 onAction={
-                  activeFilterCount
+                  activeFilterCount || search.trim()
                     ? clearFilters
                     : () => navigation.navigate('ShopPos', { mode: 'purchase' })
                 }
               />
             ) : null
           }
+        />
+
+        <PurchaseInvoiceDetailModal
+          voucher={detailVoucher}
+          visible={Boolean(detailVoucher)}
+          onClose={closeDetail}
+          onVoid={(voucher) => void onVoid(voucher)}
+          onPaid={async (updated) => {
+            setDetailVoucher(updated);
+            await load();
+          }}
         />
       </View>
     </DesktopPage>
@@ -261,6 +317,7 @@ const styles = StyleSheet.create({
   searchFlex: { flex: 1 },
   resetRow: { alignSelf: 'flex-start', marginBottom: spacing.sm },
   clear: { color: colors.primary, fontFamily: fonts.bodySemi, fontSize: 13 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerBtn: {
     width: 40,
     height: 40,

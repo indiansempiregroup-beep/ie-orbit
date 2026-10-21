@@ -221,7 +221,9 @@ class BookingRepository:
         if params.get("customer"):
             queryset = queryset.filter(customer_id=params["customer"])
         if params.get("staff"):
-            queryset = queryset.filter(staff_id=params["staff"])
+            queryset = queryset.filter(
+                models.Q(staff_id=params["staff"]) | models.Q(line_items__staff_id=params["staff"])
+            ).distinct()
         if params.get("service"):
             queryset = queryset.filter(
                 models.Q(service_id=params["service"])

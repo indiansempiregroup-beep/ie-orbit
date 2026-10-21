@@ -46,6 +46,9 @@ export type ShopOrderBillBreakdown = {
   pointsEarned: number;
   /** Points that will credit when the bill is paid. */
   pointsToEarn: number;
+  /** Points taken back after cancel, return, or refund. */
+  pointsReversed: number;
+  reversalReason: string;
   deliveryFee: number;
   /** Taxable value after all discounts. */
   taxableSubtotal: number;
@@ -111,6 +114,11 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
   const rewardPoints = Math.max(0, Math.floor(num(loyalty.points_redeemed)));
   const awardLoyalty = pos.award_loyalty_points !== false;
   let pointsEarned = Math.max(0, Math.floor(num(loyalty.points_earned)));
+  const pointsReversed = Math.max(
+    0,
+    Math.floor(num(loyalty.points_reversed || loyalty.points_revoked)),
+  );
+  const reversalReason = String(loyalty.reversal_reason || '').trim();
   const expectedEarn = Math.max(0, Math.floor(num(pos.points_to_earn)));
   let pointsToEarn = 0;
 
@@ -188,6 +196,8 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
     rewardDiscount,
     pointsEarned,
     pointsToEarn,
+    pointsReversed,
+    reversalReason,
     deliveryFee,
     taxableSubtotal,
     taxTotal,
@@ -210,10 +220,20 @@ export function shopOrderBillBreakdown(order: ShopOrder): ShopOrderBillBreakdown
 }
 
 export function loyaltyBillHighlight(
-  bill: Pick<ShopOrderBillBreakdown, 'pointsEarned' | 'pointsToEarn' | 'rewardPoints'>,
+  bill: Pick<
+    ShopOrderBillBreakdown,
+    'pointsEarned' | 'pointsToEarn' | 'rewardPoints' | 'pointsReversed' | 'reversalReason'
+  >,
 ): string {
-  if (bill.pointsEarned > 0) return `+${bill.pointsEarned} loyalty points earned`;
-  if (bill.pointsToEarn > 0) return `${bill.pointsToEarn} points when this bill is paid`;
-  if (bill.rewardPoints > 0) return `${bill.rewardPoints} points used on this bill`;
-  return '';
+  const parts: string[] = [];
+  if (bill.pointsEarned > 0) parts.push(`+${bill.pointsEarned} points earned`);
+  else if (bill.pointsToEarn > 0) parts.push(`+${bill.pointsToEarn} points to earn when paid`);
+  if (bill.rewardPoints > 0) parts.push(`${bill.rewardPoints} points used`);
+  if (bill.pointsReversed > 0) {
+    parts.push(`−${bill.pointsReversed} reversed`);
+    if (bill.reversalReason) parts.push(bill.reversalReason);
+  } else if (bill.pointsEarned > 0) {
+    parts.push('Enjoy rewards on next visit!');
+  }
+  return parts.join(' · ');
 }

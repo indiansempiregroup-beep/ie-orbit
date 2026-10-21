@@ -68,6 +68,7 @@ const emptyForm = {
   price: '0',
   purchase_price: '0',
   tax_rate: '0',
+  hsn_sac: '',
   tax_inclusive: 'included' as 'included' | 'excluded',
   currency: 'INR',
   stock_on_hand: '0',
@@ -100,6 +101,7 @@ const IDENTITY_KEYS: FormKey[] = [
   'price',
   'purchase_price',
   'tax_rate',
+  'hsn_sac',
   'tax_inclusive',
 ];
 
@@ -117,6 +119,7 @@ function wipeIdentity(
     description: '',
     details_html: '',
     pack_size: '',
+    hsn_sac: '',
     category: '',
     images: emptyProductImageSlots(),
     barcode: code,
@@ -204,6 +207,7 @@ function applyEnrichment(
     pack_size: fill('pack_size', packSize),
     price: fill('price', usableMrp),
     tax_rate: fill('tax_rate', usableGst),
+    hsn_sac: fill('hsn_sac', data.hsn_sac),
     images: nextImages,
     barcode: fill('barcode', data.code),
     barcode_type: data.code && !touched.has('barcode_type') ? 'manufacturer' : current.barcode_type,
@@ -247,6 +251,7 @@ function formFromProduct(product: ShopProduct): FormState {
     price: String(product.price ?? '0'),
     purchase_price: String(product.purchase_price ?? '0'),
     tax_rate: String(product.tax_rate ?? product.gst_rate ?? '0'),
+    hsn_sac: product.hsn_sac || '',
     tax_inclusive: taxInclusive ? 'included' : 'excluded',
     currency: product.currency || 'INR',
     stock_on_hand: String(product.stock_on_hand ?? '0'),
@@ -837,6 +842,7 @@ export function ShopProductAddScreen() {
       purchase_price: form.purchase_price,
       tax_rate: form.tax_rate,
       gst_rate: form.tax_rate,
+      hsn_sac: form.hsn_sac.trim(),
       currency: form.currency,
       stock_on_hand: form.stock_on_hand,
       ...(godownId ? { godown_id: godownId } : {}),
@@ -1172,6 +1178,13 @@ export function ShopProductAddScreen() {
             value={form.tax_rate}
             onChangeText={(value) => setField('tax_rate', value)}
             keyboardType="decimal-pad"
+          />
+          <Input
+            label="HSN"
+            optional
+            value={form.hsn_sac}
+            onChangeText={(value) => setField('hsn_sac', value)}
+            hint="GST goods classification for invoices."
           />
         </FieldRow>
         <SelectField
