@@ -29,9 +29,10 @@ def test_seed_industry_showcase_is_idempotent_and_branded() -> None:
     first = seed_industry_showcase()
     second = seed_industry_showcase()
 
-    assert len(first) == 6
+    assert len(first) == 7
     assert [row["flavor_key"] for row in first] == [row["flavor_key"] for row in second]
     assert {row["industry_slug"] for row in first} == {
+        "salon-spa",
         "clinic-healthcare",
         "fitness-wellness",
         "professional-services",
@@ -39,6 +40,13 @@ def test_seed_industry_showcase_is_idempotent_and_branded() -> None:
         "education-training",
         "home-services",
     }
+
+    salon = next(row for row in first if row["industry_slug"] == "salon-spa")
+    assert salon["flavor_key"] == "showcase-salon-MAIN"
+    assert salon["services"] == 4
+    assert salon["catalog"] == 3
+    assert salon["bookings"] == 3
+    assert WhiteLabelProfile.objects.filter(flavor_key="showcase-salon-MAIN", app_name="Luxe Salon & Spa").exists()
 
     clinic = next(row for row in first if row["industry_slug"] == "clinic-healthcare")
     assert clinic["flavor_key"] == "showcase-clinic-MAIN"

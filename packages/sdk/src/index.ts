@@ -7110,6 +7110,17 @@ class ApiClient {
         addon_staff_price_paise: number;
         addon_office_price_paise: number;
         addon_pets_price_paise: number;
+        assistant_usage?: {
+          enabled: boolean;
+          message_price_paise: number;
+          confirm_price_paise: number;
+          daily_free_messages: number;
+          daily_free_confirms: number;
+        };
+        ai_wallet?: {
+          enabled: boolean;
+          min_charge_paise: number;
+        };
         plans: BillingPlanCatalogItem[];
       }>('/billing/public-plans', { method: 'GET', query, auth: false }),
     goLiveCheck: () => this.request<BillingGoLiveReport>('/billing/go-live-check', { method: 'GET' }),

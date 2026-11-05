@@ -92,6 +92,27 @@ class IndustryShowcase:
 
 SHOWCASES: tuple[IndustryShowcase, ...] = (
     IndustryShowcase(
+        slug="showcase-salon",
+        industry_slug="salon-spa",
+        display_name="Luxe Salon & Spa",
+        primary_color="#BE185D",
+        secondary_color="#111827",
+        products=("appointie", "shopie"),
+        staff_name=("Sana", "Kapoor"),
+        staff_role="Stylist",
+        services=(
+            ServiceSpec("haircut", "Signature Haircut", 45, 900, "Hair"),
+            ServiceSpec("color", "Hair Color", 90, 2500, "Hair"),
+            ServiceSpec("facial", "Glow Facial", 60, 1800, "Spa"),
+            ServiceSpec("manicure", "Gel Manicure", 40, 1100, "Nails"),
+        ),
+        catalog=(
+            ProductSpec("serum", "Hair Serum 100ml", "890.00", ProductCategory.PERSONAL_CARE, _photo("photo-1522335789203-aabd1fc54bc9")),
+            ProductSpec("mask", "Hydrating Face Mask", "650.00", ProductCategory.PERSONAL_CARE, _photo("photo-1570172619644-dfd903029f22")),
+            ProductSpec("oil", "Argan Hair Oil", "1200.00", ProductCategory.PERSONAL_CARE, _photo("photo-1608248543800-baa00bb63e58")),
+        ),
+    ),
+    IndustryShowcase(
         slug="showcase-clinic",
         industry_slug="clinic-healthcare",
         display_name="Nimbus Clinic",

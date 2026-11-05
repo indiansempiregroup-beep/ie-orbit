@@ -20,6 +20,15 @@ export const PRO_MONTHLY_INR = 799;
 export const STAFF_ADDON_INR = 199;
 export const OFFICE_ADDON_INR = 299;
 export const PETS_ADDON_INR = 500;
+/** Fallback Assistant overage (major units) when public catalog is unavailable. */
+export const ASSISTANT_MESSAGE_INR = 0.5;
+export const ASSISTANT_CONFIRM_INR = 1;
+export const ASSISTANT_MESSAGE_USD = 0.01;
+export const ASSISTANT_CONFIRM_USD = 0.02;
+export const AI_WALLET_MIN_INR = 0.01;
+export const AI_WALLET_MIN_USD = 0.01;
+export const ASSISTANT_DAILY_FREE_MESSAGES = 50;
+export const ASSISTANT_DAILY_FREE_CONFIRMS = 25;
 export const TRIAL_DAYS = 45;
 
 export function trimOrigin(value: string): string {

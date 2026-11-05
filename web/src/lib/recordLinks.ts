@@ -1,4 +1,22 @@
-const RECORD_KINDS = new Set(['booking', 'order', 'return', 'pet', 'ticket', 'customer', 'product', 'service', 'staff']);
+const RECORD_KINDS = new Set([
+  'booking',
+  'order',
+  'return',
+  'pet',
+  'ticket',
+  'customer',
+  'product',
+  'service',
+  'staff',
+  'screen',
+]);
+
+const SCREEN_PATHS: Record<string, string> = {
+  automations: '/automations',
+  invoice_scan: '/shop/books/purchase/scan',
+  books_compliance: '/shop/books/compliance',
+  pets: '/shop/pets',
+};
 
 export function staffRecordPath(
   kind: string,
@@ -14,6 +32,7 @@ export function staffRecordPath(
   if (kind === 'product') return `/shop/products`;
   if (kind === 'service') return `/services/${id}`;
   if (kind === 'staff') return `/staff/${id}`;
+  if (kind === 'screen') return SCREEN_PATHS[id] || '';
   return '';
 }
 

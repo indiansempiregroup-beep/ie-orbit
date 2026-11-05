@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'web/public/marketing');
+const LOCAL_BROWSERS = path.join(ROOT, '.playwright-browsers');
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync(LOCAL_BROWSERS)) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = LOCAL_BROWSERS;
+}
 const API = process.env.IE_API_BASE ?? 'http://localhost:8000/api/v1';
 const OPS_URL = process.env.IE_OPS_URL ?? 'http://localhost:8082';
 const CUSTOMER_URL = process.env.IE_CUSTOMER_URL ?? 'http://localhost:8083';
@@ -149,7 +153,14 @@ async function main() {
     throw new Error('Seed returned no showcase businesses.');
   }
   fs.mkdirSync(OUT, { recursive: true });
-  const browser = await chromium.launch({ headless: true });
+  // Prefer bundled Chromium; fall back to installed Google Chrome (common on macOS CI/dev).
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (err) {
+    console.warn('Bundled Chromium unavailable, trying channel=chrome:', err.message);
+    browser = await chromium.launch({ channel: 'chrome', headless: true });
+  }
 
   const opsTokens = await otpLogin('ops', OPS_EMAIL);
   const ops = await browser.newContext({
@@ -169,8 +180,10 @@ async function main() {
   await hideOverlays(opsPage);
 
   for (const row of rows) {
-    const dir = path.join(OUT, 'industries', row.industry_slug);
-    console.log('capturing', row.display_name, row.flavor_key);
+    // Salon & Spa uses root /marketing/*.png (see industryShots.ts); others use industries/{slug}/.
+    const dir =
+      row.industry_slug === 'salon-spa' ? OUT : path.join(OUT, 'industries', row.industry_slug);
+    console.log('capturing', row.display_name, row.flavor_key, '->', dir);
     await captureOps(opsPage, row, dir);
     await captureCustomer(browser, row, dir);
   }

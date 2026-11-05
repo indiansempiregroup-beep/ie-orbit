@@ -12,7 +12,7 @@ export function AboutPage() {
           <div>
             <p className="public-badge">Indians Empire Technologies</p>
             <h1>
-              Built for <span className="public-gradient-text">Indian businesses</span>
+              Built for <span className="public-gradient-text">businesses everywhere</span>
             </h1>
             <p className="public-lead">
               IE Orbit is the appointments-and-retail workspace from Indians Empire Technologies. The customer-facing

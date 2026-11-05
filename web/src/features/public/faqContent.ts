@@ -64,14 +64,14 @@ export const faqSections: FaqSection[] = [
   },
   {
     title: 'AI in the workspace',
-    description: 'Assistant, automations, and supplier-bill extraction.',
+    description: 'Assistant, automations, supplier bills, and prepaid AI usage.',
     items: [
       {
         q: 'What is the AI Assistant?',
         a: {
           paragraphs: [
-            'The Business Assistant lets owners and staff ask about bookings, orders, stock, and customers in plain language. A change does not run until you confirm it.',
-            'A free daily allowance comes first. Extra messages and confirms use the Assistant wallet. Business Assistant is on Pro for Orbit Appoint and Orbit Mart, and on the 45-day full-Pro trial.',
+            'The Business Assistant lets owners and staff ask about bookings, orders, stock, and customers in plain language. A message is one question you send. A confirm is when you approve a change it proposes — nothing updates until you say yes.',
+            'A free daily allowance of questions and approvals comes first. Extra messages and confirms use the prepaid Assistant wallet. Business Assistant is on Pro for Orbit Appoint and Orbit Mart, and on the 45-day full-Pro trial. Live free limits and overage amounts are on the Pricing page.',
           ],
         },
       },
@@ -87,6 +87,19 @@ export const faqSections: FaqSection[] = [
       {
         q: 'What is AI invoice extraction?',
         a: 'On Orbit Mart Pro — and during the 45-day full-Pro trial — photograph a supplier bill. Review the extracted lines, prices, and GST, then post a purchase that adds stock. Each scan uses the prepaid AI wallet.',
+      },
+      {
+        q: 'How does AI usage billing work?',
+        a: {
+          paragraphs: [
+            'Two prepaid wallets cover AI beyond the free daily Assistant allowance. Both are available on Pro and during the 45-day full-Pro trial.',
+          ],
+          bullets: [
+            'Assistant wallet — extra questions (messages) and approvals (confirms) after the free daily limit',
+            'AI wallet — pack-photo fill, supplier invoice scans, and automation drafts (usage-based, with a small minimum per call)',
+            'Current free daily limits, overage amounts, and wallet minimums are shown on the Pricing page for your region',
+          ],
+        },
       },
     ],
   },
@@ -220,8 +233,8 @@ export const faqSections: FaqSection[] = [
         q: 'Can I add extra staff, offices, or the Pets pack?',
         a: {
           paragraphs: [
-            'Starter can add 1 extra staff (₹199/month). Extra offices (₹299/month) are available on Pro.',
-            'Pets pack is a separate Orbit Mart add-on for pet records. See current add-on prices on the Pricing page.',
+            'Starter can add 1 extra staff. Extra offices are available on Pro. Pets pack is a separate Orbit Mart add-on for pet records.',
+            'Current monthly add-on prices are shown on the Pricing page for your region (India INR or international USD).',
           ],
         },
       },

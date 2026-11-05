@@ -107,5 +107,27 @@ export function openAssistantEntityLink(
     navigation.navigate('StaffDetail', { staffId: id });
     return true;
   }
+  if (kind === 'pet') {
+    navigation.navigate('ShopPetDetail', { petId: id });
+    return true;
+  }
+  if (kind === 'screen') {
+    if (id === 'automations') {
+      navigation.navigate('Automations');
+      return true;
+    }
+    if (id === 'invoice_scan') {
+      navigation.navigate('ShopInvoiceScan');
+      return true;
+    }
+    if (id === 'books_compliance') {
+      navigation.navigate('ShopBooksCompliance');
+      return true;
+    }
+    if (id === 'pets') {
+      navigation.navigate('ShopPets', undefined);
+      return true;
+    }
+  }
   return false;
 }

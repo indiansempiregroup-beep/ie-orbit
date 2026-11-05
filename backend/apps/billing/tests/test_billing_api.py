@@ -107,6 +107,10 @@ def test_public_plan_catalog_unauthenticated(api_client: APIClient) -> None:
     assert payload["trial_days"] >= 1
     assert payload["addon_staff_price_paise"] > 0
     assert payload["addon_office_price_paise"] > 0
+    assert payload["assistant_usage"]["message_price_paise"] > 0
+    assert payload["assistant_usage"]["confirm_price_paise"] > 0
+    assert payload["assistant_usage"]["daily_free_messages"] >= 1
+    assert payload["ai_wallet"]["min_charge_paise"] >= 0
 
 
 @pytest.mark.django_db

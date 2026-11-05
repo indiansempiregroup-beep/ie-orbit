@@ -35,6 +35,58 @@ from apps.tenancy.models import Tenant
 logger = logging.getLogger("ie_orbit.billing.checkout")
 
 
+def _public_ai_usage_pricing(*, currency: str) -> dict[str, Any]:
+    """Public Assistant + AI wallet unit prices for the marketing catalog."""
+
+    code = str(currency or "INR").strip().upper()
+    if code not in {"INR", "USD"}:
+        code = "INR"
+    assistant = {
+        "enabled": True,
+        "message_price_paise": 50 if code == "INR" else 1,
+        "confirm_price_paise": 100 if code == "INR" else 2,
+        "daily_free_messages": 50,
+        "daily_free_confirms": 25,
+    }
+    ai_wallet = {
+        "enabled": True,
+        "min_charge_paise": 1,
+    }
+    try:
+        from apps.assistant.services.access import (
+            assistant_daily_confirm_limit,
+            assistant_daily_message_limit,
+        )
+        from apps.assistant.services.wallet import (
+            assistant_prices_for_currency,
+            get_platform_assistant_row,
+        )
+        from apps.shopie.services.smart_lookup import (
+            get_platform_smart_lookup_row,
+            smart_lookup_prices_for_currency,
+        )
+
+        assistant_row = get_platform_assistant_row()
+        assistant_prices = assistant_prices_for_currency(code)
+        assistant = {
+            "enabled": bool(assistant_row.enabled),
+            "message_price_paise": int(assistant_prices["message"]),
+            "confirm_price_paise": int(assistant_prices["confirm"]),
+            "daily_free_messages": int(assistant_daily_message_limit()),
+            "daily_free_confirms": int(assistant_daily_confirm_limit()),
+        }
+        smart_row = get_platform_smart_lookup_row()
+        smart_prices = smart_lookup_prices_for_currency(code, row=smart_row)
+        ai_wallet = {
+            "enabled": bool(smart_row.enabled),
+            "min_charge_paise": int(smart_prices["min_charge"]),
+        }
+    except Exception:
+        # Catalog page must stay up even if usage tables are missing in a test/bootstrap.
+        logger.debug("public AI usage pricing unavailable; using defaults", exc_info=True)
+    return {"assistant_usage": assistant, "ai_wallet": ai_wallet}
+
+
 class CheckoutService:
     def __init__(
         self,
@@ -508,6 +560,7 @@ class CheckoutService:
         plans = [plan for plan in plans if plan.get("is_public", True)]
         addon_prices = get_addon_prices(currency=saas_currency)
         trial_days = max((int(plan.get("trial_days") or 0) for plan in plans), default=DEFAULT_TRIAL_DAYS)
+        usage = _public_ai_usage_pricing(currency=saas_currency)
         return {
             "trial_days": trial_days or DEFAULT_TRIAL_DAYS,
             "currency": saas_currency,
@@ -515,6 +568,8 @@ class CheckoutService:
             "addon_office_price_paise": addon_prices["office_price_paise"],
             "addon_pets_price_paise": addon_prices["pets_price_paise"],
             "addon_prices_minor": get_addon_prices_minor(),
+            "assistant_usage": usage["assistant_usage"],
+            "ai_wallet": usage["ai_wallet"],
             "plans": plans,
         }
 

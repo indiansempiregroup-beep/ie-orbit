@@ -210,6 +210,7 @@ playwright-report/
 # Playwright
 ############################################################
 
+.playwright-browsers/
 test-results/
 e2e/.env
 .maestro/reports/

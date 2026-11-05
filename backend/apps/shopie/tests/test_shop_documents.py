@@ -12,9 +12,81 @@ from apps.shopie.services.shop_documents import (
     LAYOUT_THERMAL,
     ShopDocumentService,
     _format_address_parts,
+    _loyalty_highlight_text,
     _pos_bill_summary_from_payload,
     _reconcile_discount_parts,
 )
+
+
+def test_loyalty_points_text_wraps_in_a4_and_thermal_pdf():
+    """Long reversal reasons must wrap, not truncate, on A4 and thermal PDFs."""
+    reason = "Reversed earn for return RET-RUPALI-S-20261019044212"
+    full = _loyalty_highlight_text(
+        points_earned=1,
+        points_to_earn=0,
+        points_balance=0,
+        points_reversed=1,
+        reversal_reason=reason,
+    )
+    compact = _loyalty_highlight_text(
+        points_earned=1,
+        points_to_earn=0,
+        points_balance=0,
+        points_reversed=1,
+        reversal_reason=reason,
+        compact=True,
+    )
+    assert reason in full
+    assert reason in compact
+
+    payload = {
+        "kind": "sale",
+        "document_type_label": "TAX INVOICE",
+        "number": "SV-TEST-1",
+        "date": "2026-10-19",
+        "currency": "INR",
+        "seller": {"name": "Rupali Business", "phone": "1", "email": "a@b.c", "address": "Addr"},
+        "buyer": {"name": "Sanket"},
+        "lines": [
+            {
+                "name": "Mobile cover",
+                "qty": "1",
+                "rate": "100",
+                "discount": "0",
+                "tax": "15.25",
+                "total": "100",
+                "taxable": "84.75",
+            }
+        ],
+        "subtotal": "100",
+        "taxable_value": "84.75",
+        "merchandise_gross": "100",
+        "cgst_total": "7.63",
+        "sgst_total": "7.63",
+        "igst_total": "0",
+        "tax_total": "15.25",
+        "total": "100",
+        "amount_paid": "0",
+        "amount_due": "100",
+        "amount_in_words": "Rupees One Hundred only",
+        "points_earned": 1,
+        "points_to_earn": 0,
+        "points_balance": 0,
+        "points_reversed": 1,
+        "reversal_reason": reason,
+        # Historical bills still show points even if the program is off.
+        "loyalty_enabled": False,
+        "notes": "",
+        "irn": "",
+    }
+    docs = ShopDocumentService()
+    a4 = docs.build_pdf(payload, layout="a4")
+    thermal = docs.build_pdf(payload, layout=LAYOUT_THERMAL)
+    assert a4.startswith(b"%PDF")
+    assert thermal.startswith(b"%PDF")
+    assert b"RET-RUPALI" in a4 and b"20261019044212" in a4
+    assert b"+1 pts" in thermal or b"+1 points" in thermal
+    assert b"RET-RUPALI" in thermal and b"20261019044212" in thermal
 
 
 def test_format_address_strips_plus_code_and_avoids_duplicates():

@@ -16,6 +16,7 @@ from apps.businesses.constants import (
     FEATURE_APPOINTIE_REVIEWS,
     FEATURE_APPOINTIE_SERVICES,
     FEATURE_APPOINTIE_STAFF,
+    FEATURE_AUTOMATIONS,
     FEATURE_SHOPIE_BOOKS_CASH,
     FEATURE_SHOPIE_BOOKS_CHALLAN,
     FEATURE_SHOPIE_BOOKS_EXPENSE,
@@ -27,6 +28,10 @@ from apps.businesses.constants import (
     FEATURE_SHOPIE_BOOKS_SALE,
     FEATURE_SHOPIE_BOOKS_SALE_ORDER,
     FEATURE_SHOPIE_COUPONS,
+    FEATURE_SHOPIE_EINVOICE,
+    FEATURE_SHOPIE_EWAY,
+    FEATURE_SHOPIE_GST_REPORTS,
+    FEATURE_SHOPIE_INVOICE_SCAN,
     FEATURE_SHOPIE_LOYALTY,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_PRODUCTS,
@@ -135,14 +140,16 @@ def suggestion_chips(*, access: AssistantAccess, business: Business) -> list[str
     chips: list[str] = []
     if access.mart_enabled:
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
-            chips.extend(["Today overview", "Orders today", "Open orders", "Payments to confirm", "Sales today"])
+            chips.extend(["Today overview", "Orders today", "Open orders", "Out for delivery", "Sales today"])
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
             chips.extend(["List products", "Low stock", "Out of stock"])
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
-            chips.append("Pending returns")
+            chips.append("Returns awaiting pickup")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_CASH, product_code=PRODUCT_SHOPIE):
             chips.append("Cash balance")
-        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_GST_REPORTS, product_code=PRODUCT_SHOPIE):
+            chips.append("GST summary this month")
+        elif has_domain_feature(business=business, feature=FEATURE_SHOPIE_BOOKS_SALE, product_code=PRODUCT_SHOPIE):
             chips.append("Daybook today")
             chips.append("Unpaid invoices")
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
@@ -229,6 +236,15 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
             add("Orbit Mart", "Orders", "Orders for customer", "orders for [customer name]", compose=True)
             add("Orbit Mart", "Orders", "Profit today", "Profit today")
             add("Orbit Mart", "Orders", "Sales for staff", "sales for [staff name] today", compose=True)
+            add("Orbit Mart", "Orders", "Out for delivery", "Out for delivery")
+            add("Orbit Mart", "Orders", "Failed deliveries", "Failed deliveries")
+            add(
+                "Orbit Mart",
+                "Orders",
+                "Track order",
+                "tracking for order [order number]",
+                compose=True,
+            )
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_PRODUCTS, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Products", "List products", "List products")
             add("Orbit Mart", "Products", "Low stock", "Low stock")
@@ -244,6 +260,28 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
             )
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Returns", "Pending returns", "Pending returns")
+            add("Orbit Mart", "Returns", "Returns awaiting pickup", "Returns awaiting pickup")
+            add(
+                "Orbit Mart",
+                "Returns",
+                "Pickup fee",
+                "pickup fee for return [return number]",
+                compose=True,
+            )
+            add(
+                "Orbit Mart",
+                "Returns",
+                "Accept pickup fee",
+                "accept pickup fee for return [return number]",
+                compose=True,
+            )
+            add(
+                "Orbit Mart",
+                "Returns",
+                "Decline pickup fee",
+                "decline pickup fee for return [return number]",
+                compose=True,
+            )
             add("Orbit Mart", "Returns", "Complete return", "complete return [return number]", compose=True)
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_COUPONS, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Coupons", "Active coupons", "Active coupons")
@@ -298,6 +336,39 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
             )
         if has_domain_feature(business=business, feature=FEATURE_SHOPIE_LOYALTY, product_code=PRODUCT_SHOPIE):
             add("Orbit Mart", "Loyalty", "Loyalty points", "loyalty points for [customer name]", compose=True)
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_GST_REPORTS, product_code=PRODUCT_SHOPIE
+        ):
+            add("Orbit Mart", "GST", "GST summary this month", "GST summary this month")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_EINVOICE, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "GST", "Pending e-invoices", "Pending e-invoices")
+        if has_domain_feature(business=business, feature=FEATURE_SHOPIE_EWAY, product_code=PRODUCT_SHOPIE):
+            add("Orbit Mart", "GST", "E-way needed", "E-way needed")
+        try:
+            from apps.shopie.services.pets import PetsService
+
+            pets_ok = PetsService().has_pets_entitlement(business=business)
+        except Exception:
+            pets_ok = False
+        if pets_ok:
+            add("Orbit Mart", "Pets", "Upcoming pet birthdays", "Upcoming pet birthdays")
+            add(
+                "Orbit Mart",
+                "Pets",
+                "Pets for customer",
+                "pets for [customer name]",
+                compose=True,
+            )
+        if has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_INVOICE_SCAN, product_code=PRODUCT_SHOPIE
+        ):
+            add("Orbit Mart", "AI tools", "Scan invoice", "Scan invoice")
+        if has_domain_feature(
+            business=business, feature=FEATURE_AUTOMATIONS, product_code=PRODUCT_SHOPIE
+        ) or has_domain_feature(
+            business=business, feature=FEATURE_AUTOMATIONS, product_code=PRODUCT_APPOINTIE
+        ):
+            add("Orbit Mart", "AI tools", "Create automation", "Create automation")
         if mart_count == 0:
             lines.append("")
             lines.append("Orbit Mart — nothing unlocked yet on this product.")
@@ -324,6 +395,13 @@ def help_text(*, access: AssistantAccess, business: Business) -> dict[str, Any]:
         if has_domain_feature(business=business, feature=FEATURE_APPOINTIE_REVIEWS, product_code=PRODUCT_APPOINTIE):
             add("Orbit Appoint", "Reviews", "Recent reviews", "Recent reviews")
             add("Orbit Appoint", "Reviews", "Low ratings", "low ratings")
+        if (
+            not access.mart_enabled
+            and has_domain_feature(
+                business=business, feature=FEATURE_AUTOMATIONS, product_code=PRODUCT_APPOINTIE
+            )
+        ):
+            add("Orbit Appoint", "AI tools", "Create automation", "Create automation")
         if appoint_count == 0:
             lines.append("")
             lines.append("Orbit Appoint — nothing unlocked yet on this product.")
@@ -515,10 +593,13 @@ def count_orders_today(*, tenant: Tenant, business: Business, offset: int = 0) -
 
 
 def _order_detail_pack(order: ShopOrder) -> dict[str, Any]:
+    from apps.assistant.services.tools_ops import _order_tracking_bits
+
     customer = _customer_label(order.customer)
     phone = getattr(order.customer, "phone_number", None) or "—"
     tag = _fulfillment_tag(order)
     chips = _next_order_status_chips(order, short=True)
+    tracking_bits = _order_tracking_bits(order)
     lines = [
         f"Order {order.order_number}",
         f"Type: {tag}",
@@ -527,12 +608,18 @@ def _order_detail_pack(order: ShopOrder) -> dict[str, Any]:
         f"Total: {_money(order.total)}",
         f"Created: {timezone.localtime(order.created_at).strftime('%Y-%m-%d %H:%M')}",
     ]
+    lines.extend(tracking_bits)
     if not chips:
         lines.append("No further status changes from here.")
+    suggestions = list(chips)
+    if order.fulfillment_mode == FulfillmentMode.DELIVERY or tracking_bits:
+        track_chip = f"tracking for order {order.order_number}"
+        if track_chip not in suggestions:
+            suggestions.append(track_chip)
     return pack_reply(
         "\n".join(lines),
         links=[_order_link(order, action="open", open_label=True)],
-        suggestions=chips,
+        suggestions=suggestions,
         flow=_order_status_flow(order) if chips else None,
     )
 
@@ -1257,18 +1344,32 @@ def get_return(*, tenant: Tenant, business: Business, number: str) -> dict[str, 
     if item is None:
         return f"No return found for {number}."
     order_no = item.order.order_number if item.order_id else "—"
-    text = "\n".join(
-        [
-            f"Return {item.return_number}",
-            f"Order: {order_no}",
-            f"Customer: {_customer_label(item.customer)}",
-            f"Status: {item.status}",
-            f"Refund: {_money(item.refund_total)}",
-        ]
-        + ([f"Reason: {item.reason}"] if item.reason else [])
-    )
+    lines = [
+        f"Return {item.return_number}",
+        f"Order: {order_no}",
+        f"Customer: {_customer_label(item.customer)}",
+        f"Status: {item.status}",
+        f"Method: {str(item.return_method or '—').replace('_', ' ')}",
+        f"Refund: {_money(item.refund_total)}",
+    ]
+    if item.reason:
+        lines.append(f"Reason: {item.reason}")
+    meta = item.metadata if isinstance(item.metadata, dict) else {}
+    charge = meta.get("pickup_charge") if isinstance(meta.get("pickup_charge"), dict) else None
+    chips: list[str] = []
+    if charge:
+        fee = charge.get("fee") or charge.get("quoted_fee")
+        fee_status = str(charge.get("status") or "—")
+        lines.append(f"Pickup fee: {_money(fee) if fee is not None else '—'} ({fee_status})")
+        if fee_status == "proposed" and item.status == ReturnStatus.AWAITING_CUSTOMER:
+            chips = [
+                f"accept pickup fee for return {item.return_number}",
+                f"decline pickup fee for return {item.return_number}",
+            ]
+    if item.pickup_tracking_number:
+        lines.append(f"Pickup tracking: {item.pickup_tracking_number}")
     return pack_reply(
-        text,
+        "\n".join(lines),
         links=[
             entity_link(
                 kind="return",
@@ -1279,6 +1380,7 @@ def get_return(*, tenant: Tenant, business: Business, number: str) -> dict[str, 
                 action="open",
             )
         ],
+        suggestions=chips or None,
     )
 
 
@@ -1833,6 +1935,13 @@ def continue_paged_list(*, tenant: Tenant, business: Business, flow: dict[str, A
         return list_customers(tenant=tenant, business=business, offset=offset)
     if list_key == "list_products":
         return list_products(tenant=tenant, business=business, offset=offset)
+    if list_key == "deliveries_with_tracking":
+        from apps.assistant.services.tools_ops import deliveries_with_tracking
+
+        status = str(flow.get("status") or OrderStatus.OUT_FOR_DELIVERY)
+        return deliveries_with_tracking(
+            tenant=tenant, business=business, status=status, offset=offset
+        )
     return "Nothing more to show."
 
 
@@ -2036,10 +2145,13 @@ from apps.assistant.services.tools_ops import (  # noqa: E402
     customer_borrow_ledger,
     customer_party_statement,
     customer_upcoming_bookings,
+    deliveries_with_tracking,
+    eway_needed,
     find_coupon,
     get_customer_detail,
     get_service_detail,
     godown_stock_of_product,
+    gst_summary_this_month,
     list_cash_accounts,
     list_godowns,
     list_orders_awaiting_payment,
@@ -2048,12 +2160,20 @@ from apps.assistant.services.tools_ops import (  # noqa: E402
     low_rating_reviews,
     loyalty_activity,
     loyalty_points_for_customer,
+    open_ai_bridge,
     open_books_documents,
     open_quotations,
+    order_tracking,
     overdue_supplier_dues,
+    pending_einvoices,
+    pets_for_customer,
     profit_today,
+    propose_return_pickup_fee,
+    return_pickup_fee,
+    returns_awaiting_pickup,
     staff_sales_today,
     unpaid_invoices,
+    upcoming_pet_birthdays,
     orders_for_customer,
     price_of_product,
     propose_borrow_payment,

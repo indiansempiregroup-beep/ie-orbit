@@ -16,6 +16,7 @@ from apps.businesses.constants import (
     FEATURE_APPOINTIE_REVIEWS,
     FEATURE_APPOINTIE_SERVICES,
     FEATURE_APPOINTIE_STAFF,
+    FEATURE_AUTOMATIONS,
     FEATURE_SHOPIE_BOOKS_CASH,
     FEATURE_SHOPIE_BOOKS_CHALLAN,
     FEATURE_SHOPIE_BOOKS_EXPENSE,
@@ -27,9 +28,14 @@ from apps.businesses.constants import (
     FEATURE_SHOPIE_BOOKS_SALE,
     FEATURE_SHOPIE_BOOKS_SALE_ORDER,
     FEATURE_SHOPIE_COUPONS,
+    FEATURE_SHOPIE_EINVOICE,
+    FEATURE_SHOPIE_EWAY,
+    FEATURE_SHOPIE_GST_REPORTS,
+    FEATURE_SHOPIE_INVOICE_SCAN,
     FEATURE_SHOPIE_LOYALTY,
     FEATURE_SHOPIE_ORDERS,
     FEATURE_SHOPIE_PRODUCTS,
+    FEATURE_SHOPIE_RETURNS,
     PRODUCT_APPOINTIE,
     PRODUCT_SHOPIE,
 )
@@ -44,8 +50,12 @@ from apps.services.models import Service, ServiceDuration, ServicePricing, Servi
 from apps.shopie.models import (
     BooksDocumentStatus,
     BooksDocumentType,
+    EInvoiceStatus,
+    EWayBillStatus,
     OrderStatus,
     QuotationStatus,
+    ReturnMethod,
+    ReturnStatus,
     ShopBooksDocument,
     ShopBooksVoucher,
     ShopCashAccount,
@@ -55,6 +65,7 @@ from apps.shopie.models import (
     ShopOrder,
     ShopProduct,
     ShopQuotation,
+    ShopReturn,
     ShopSaleProfitFact,
     VoucherStatus,
     VoucherType,
@@ -62,6 +73,8 @@ from apps.shopie.models import (
 from apps.shopie.services.books import BooksService
 from apps.shopie.services.catalog import CatalogService
 from apps.shopie.services.orders import OrderService
+from apps.shopie.services.returns import ReturnService
+from apps.shopie.services.shipment import ShipmentService
 from apps.staff.models import EmploymentStatus, Staff
 from apps.assistant.services.links import entity_link, looks_like_uuid, pack_reply
 from apps.tenancy.models import Tenant
@@ -1266,6 +1279,584 @@ def loyalty_activity(*, tenant: Tenant, business: Business, query: str) -> dict 
     )
 
 
+def _order_tracking_bits(order: ShopOrder) -> list[str]:
+    """Human lines for courier AWB / instant-delivery rider tracking."""
+    bits: list[str] = []
+    shipment = ShipmentService().get_shipment(order=order)
+    if shipment is not None:
+        carrier = shipment.carrier_label or shipment.carrier or "Courier"
+        bits.append(f"Carrier: {carrier}")
+        if shipment.tracking_number:
+            bits.append(f"AWB: {shipment.tracking_number}")
+        bits.append(f"Shipment: {shipment.status}")
+        if shipment.tracking_url:
+            bits.append(f"Track: {shipment.tracking_url}")
+        if shipment.estimated_delivery_at:
+            bits.append(f"ETA date: {shipment.estimated_delivery_at}")
+    delivery = dict((order.metadata or {}).get("delivery") or {})
+    if delivery:
+        provider = str(delivery.get("provider") or delivery.get("partner") or "").strip()
+        if provider:
+            bits.append(f"Rider: {provider}")
+        partner_status = str(delivery.get("partner_status") or "").strip()
+        if partner_status:
+            bits.append(f"Live status: {partner_status}")
+        rider = dict(delivery.get("rider") or {})
+        rider_name = str(rider.get("name") or "").strip()
+        if rider_name:
+            bits.append(f"Rider name: {rider_name}")
+        eta = delivery.get("eta_minutes")
+        if eta is not None and str(eta).strip() != "":
+            bits.append(f"ETA: {eta} min")
+        track_url = str(delivery.get("tracking_url") or "").strip()
+        if track_url and not any(track_url in b for b in bits):
+            bits.append(f"Track: {track_url}")
+        booking_id = str(delivery.get("booking_id") or "").strip()
+        if booking_id:
+            bits.append(f"Dispatch id: {booking_id}")
+    return bits
+
+
+def _tracking_subtitle(order: ShopOrder) -> str:
+    shipment = ShipmentService().get_shipment(order=order)
+    if shipment is not None:
+        awb = shipment.tracking_number or ""
+        label = shipment.carrier_label or shipment.carrier or "Courier"
+        if awb:
+            return f"{label} · {awb} · {shipment.status}"
+        return f"{label} · {shipment.status}"
+    delivery = dict((order.metadata or {}).get("delivery") or {})
+    if delivery:
+        status = str(delivery.get("partner_status") or "").strip() or "dispatched"
+        provider = str(delivery.get("provider") or "").strip() or "Rider"
+        return f"{provider} · {status}"
+    return ""
+
+
+def order_tracking(*, tenant: Tenant, business: Business, number: str) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
+        return "Online orders are not enabled on your Orbit Mart plan."
+    from apps.assistant.services.tools import find_order
+
+    order = find_order(tenant=tenant, business=business, number=number)
+    if order is None:
+        return f"No order found for #{number}."
+    lines = [
+        f"Tracking for order {order.order_number}",
+        f"Order status: {order.status}",
+    ]
+    bits = _order_tracking_bits(order)
+    if bits:
+        lines.extend(bits)
+    else:
+        lines.append("No shipment or rider tracking yet.")
+    chips = ["Out for delivery", "Failed deliveries"]
+    if order.status == OrderStatus.OUT_FOR_DELIVERY:
+        chips = ["Mark order as delivered", "Failed deliveries"]
+    return pack_reply(
+        "\n".join(lines),
+        links=[
+            entity_link(
+                kind="order",
+                id=str(order.id),
+                label=f"Open {order.order_number}",
+                subtitle=_tracking_subtitle(order) or order.status,
+                action="open",
+            )
+        ],
+        suggestions=chips,
+    )
+
+
+def deliveries_with_tracking(
+    *, tenant: Tenant, business: Business, status: str, offset: int = 0
+) -> dict | str:
+    """List delivery-status orders and attach AWB / rider metadata when present."""
+    from apps.assistant.services.links import slice_page
+    from apps.assistant.services.tools import _fulfillment_tag, _money as money
+
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_ORDERS, product_code=PRODUCT_SHOPIE):
+        return "Online orders are not enabled on your Orbit Mart plan."
+    all_rows = list(
+        ShopOrder.objects.require_tenant(tenant)
+        .filter(business=business, status=status)
+        .select_related("customer", "shipment")
+        .order_by("-created_at")[:200]
+    )
+    label = {
+        OrderStatus.OUT_FOR_DELIVERY: "out for delivery",
+        OrderStatus.DELIVERY_FAILED: "failed delivery",
+    }.get(status, status.replace("_", " "))
+    if not all_rows:
+        return f"No {label} orders."
+    rows, page = slice_page(all_rows, offset=offset)
+    start = page["offset"]
+    total = len(all_rows)
+    lines = [
+        f"{total} {label} order{'s' if total != 1 else ''} — showing {start + 1}–{start + len(rows)}:"
+    ]
+    links = []
+    for order in rows:
+        track = _tracking_subtitle(order)
+        customer = _customer_label(order.customer)
+        tag = _fulfillment_tag(order)
+        suffix = f" — {track}" if track else ""
+        lines.append(
+            f"• {order.order_number} — [{tag}] — {customer} — {money(order.total)}{suffix}"
+        )
+        links.append(
+            entity_link(
+                kind="order",
+                id=str(order.id),
+                label=order.order_number,
+                subtitle=track or f"{customer} · {order.status}",
+                action="preview",
+                select_text=f"tracking for order {order.order_number}",
+            )
+        )
+    page.update(
+        {
+            "list": "deliveries_with_tracking",
+            "status": status,
+            "more_label": f"Show more {label} orders",
+        }
+    )
+    return pack_reply(
+        "\n".join(lines),
+        links=links,
+        page=page,
+        suggestions=[f"tracking for order {rows[0].order_number}"] if rows else None,
+    )
+
+
+def _pickup_charge_dict(shop_return: ShopReturn) -> dict[str, Any]:
+    meta = shop_return.metadata if isinstance(shop_return.metadata, dict) else {}
+    charge = meta.get("pickup_charge")
+    return charge if isinstance(charge, dict) else {}
+
+
+def returns_awaiting_pickup(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
+        return "Returns are not enabled on your Orbit Mart plan."
+    rows = list(
+        ShopReturn.objects.require_tenant(tenant)
+        .filter(business=business)
+        .filter(
+            Q(status=ReturnStatus.AWAITING_CUSTOMER)
+            | Q(
+                status=ReturnStatus.APPROVED,
+                return_method__in=[ReturnMethod.REVERSE_PICKUP, ReturnMethod.INSTANT_PICKUP],
+            )
+        )
+        .select_related("order", "customer")
+        .order_by("-created_at")[:15]
+    )
+    if not rows:
+        return "No returns awaiting pickup or pickup-fee decision."
+    lines = [f"{len(rows)} return{'s' if len(rows) != 1 else ''} awaiting pickup / fee decision:"]
+    links = []
+    chips: list[str] = []
+    for item in rows:
+        order_no = item.order.order_number if item.order_id else "—"
+        charge = _pickup_charge_dict(item)
+        fee_bit = ""
+        if charge:
+            fee = charge.get("fee") or charge.get("quoted_fee")
+            fee_status = str(charge.get("status") or "")
+            if fee is not None:
+                fee_bit = f" — pickup fee {_money(fee)} ({fee_status or '—'})"
+        method = str(item.return_method or "—").replace("_", " ")
+        lines.append(
+            f"• {item.return_number} — order {order_no} — {_customer_label(item.customer)} — "
+            f"{item.status} — {method}{fee_bit}"
+        )
+        links.append(
+            entity_link(
+                kind="return",
+                id=str(item.id),
+                label=item.return_number,
+                subtitle=f"Order {order_no} · {item.status}",
+                order_id=str(item.order_id) if item.order_id else None,
+            )
+        )
+        if item.status == ReturnStatus.AWAITING_CUSTOMER:
+            chips.append(f"pickup fee for return {item.return_number}")
+    return pack_reply("\n".join(lines), links=links, suggestions=chips[:5] or None)
+
+
+def return_pickup_fee(*, tenant: Tenant, business: Business, number: str) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
+        return "Returns are not enabled on your Orbit Mart plan."
+    item = (
+        ShopReturn.objects.require_tenant(tenant)
+        .filter(business=business)
+        .filter(Q(return_number__iexact=number) | Q(return_number__icontains=number))
+        .select_related("order", "customer")
+        .first()
+    )
+    if item is None and looks_like_uuid(number):
+        item = (
+            ShopReturn.objects.require_tenant(tenant)
+            .filter(business=business, id=number)
+            .select_related("order", "customer")
+            .first()
+        )
+    if item is None:
+        return f"No return found for {number}."
+    order_no = item.order.order_number if item.order_id else "—"
+    charge = _pickup_charge_dict(item)
+    lines = [
+        f"Return {item.return_number} pickup fee",
+        f"Order: {order_no}",
+        f"Customer: {_customer_label(item.customer)}",
+        f"Status: {item.status}",
+        f"Method: {str(item.return_method or '—').replace('_', ' ')}",
+    ]
+    chips: list[str] = []
+    if not charge:
+        lines.append("No pickup fee has been proposed yet.")
+    else:
+        fee = charge.get("fee") or charge.get("quoted_fee")
+        bearer = str(charge.get("charge_bearer") or "—")
+        fee_status = str(charge.get("status") or "—")
+        lines.append(f"Fee: {_money(fee) if fee is not None else '—'}")
+        lines.append(f"Bearer: {bearer}")
+        lines.append(f"Fee status: {fee_status}")
+        net = charge.get("net_refund")
+        if net is not None:
+            lines.append(f"Net refund after fee: {_money(net)}")
+        if fee_status == "proposed" and item.status == ReturnStatus.AWAITING_CUSTOMER:
+            chips = [
+                f"accept pickup fee for return {item.return_number}",
+                f"decline pickup fee for return {item.return_number}",
+            ]
+            lines.append("Customer decision pending — you can accept or decline for them after Confirm.")
+    return pack_reply(
+        "\n".join(lines),
+        links=[
+            entity_link(
+                kind="return",
+                id=str(item.id),
+                label=f"Open {item.return_number}",
+                subtitle=f"Order {order_no}",
+                order_id=str(item.order_id) if item.order_id else None,
+                action="open",
+            )
+        ],
+        suggestions=chips or ["Returns awaiting pickup"],
+    )
+
+
+def _find_return(*, tenant: Tenant, business: Business, number: str) -> ShopReturn | None:
+    item = (
+        ShopReturn.objects.require_tenant(tenant)
+        .filter(business=business)
+        .filter(Q(return_number__iexact=number) | Q(return_number__icontains=number))
+        .first()
+    )
+    if item is None and looks_like_uuid(number):
+        item = ShopReturn.objects.require_tenant(tenant).filter(business=business, id=number).first()
+    return item
+
+
+def propose_return_pickup_fee(
+    *, tenant: Tenant, business: Business, number: str, decision: str
+) -> dict[str, Any]:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_RETURNS, product_code=PRODUCT_SHOPIE):
+        raise ValidationError({"detail": "Returns are not enabled on your Orbit Mart plan."})
+    decision_key = decision.strip().lower()
+    if decision_key not in {"accept", "decline"}:
+        raise ValidationError({"detail": "Pickup fee decision must be accept or decline."})
+    item = _find_return(tenant=tenant, business=business, number=number)
+    if item is None:
+        raise ValidationError({"detail": f"No return found for {number}."})
+    if item.status != ReturnStatus.AWAITING_CUSTOMER:
+        raise ValidationError(
+            {"detail": f"Return {item.return_number} is not waiting for a pickup-fee decision."}
+        )
+    charge = _pickup_charge_dict(item)
+    if not charge or str(charge.get("status") or "") != "proposed":
+        raise ValidationError({"detail": f"No proposed pickup fee on return {item.return_number}."})
+    fee = charge.get("fee") or charge.get("quoted_fee") or "0"
+    action = "return.accept_pickup_fee" if decision_key == "accept" else "return.decline_pickup_fee"
+    verb = "Accept" if decision_key == "accept" else "Decline"
+    consequence = (
+        f"accept the {_money(fee)} pickup fee and continue pickup"
+        if decision_key == "accept"
+        else f"decline the {_money(fee)} pickup fee and reject the return"
+    )
+    return {
+        "action_type": action,
+        "summary": f"{verb} pickup fee for return {item.return_number} ({consequence}).",
+        "payload": {
+            "return_id": str(item.id),
+            "return_number": item.return_number,
+            "decision": decision_key,
+            "fee": str(fee),
+        },
+    }
+
+
+def gst_summary_this_month(*, tenant: Tenant, business: Business) -> str:
+    if not has_domain_feature(
+        business=business, feature=FEATURE_SHOPIE_GST_REPORTS, product_code=PRODUCT_SHOPIE
+    ):
+        return "GST reports are not enabled on your Orbit Mart plan."
+    today = timezone.localdate()
+    date_from = today.replace(day=1)
+    summary = BooksService().gstr3b_summary(
+        tenant=tenant, business=business, date_from=date_from, date_to=today
+    )
+    output = summary.get("output_tax") or {}
+    credit = summary.get("input_tax_credit") or {}
+    net = summary.get("net_tax_payable") or {}
+    return "\n".join(
+        [
+            f"GST summary {date_from.strftime('%b %Y')} (1–{today.day}):",
+            f"• Outward taxable: {_money(summary.get('outward_taxable_supplies'))}",
+            f"• Output tax: {_money(output.get('total'))} "
+            f"(CGST {_money(output.get('cgst'))} · SGST {_money(output.get('sgst'))} · "
+            f"IGST {_money(output.get('igst'))})",
+            f"• Inward supplies: {_money(summary.get('inward_supplies'))}",
+            f"• Input credit: {_money(credit.get('total'))}",
+            f"• Net payable: {_money(net.get('total'))}",
+        ]
+    )
+
+
+def pending_einvoices(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_EINVOICE, product_code=PRODUCT_SHOPIE):
+        return "E-invoice is not enabled on your Orbit Mart plan."
+    from apps.shopie.services.einvoice.service import GstComplianceService
+
+    rows = list(
+        GstComplianceService()
+        .list_einvoices(tenant=tenant, business=business, status=EInvoiceStatus.PENDING)
+        .order_by("-created_at")[:15]
+    )
+    failed = list(
+        GstComplianceService()
+        .list_einvoices(tenant=tenant, business=business, status=EInvoiceStatus.FAILED)
+        .order_by("-created_at")[:10]
+    )
+    if not rows and not failed:
+        return "No pending or failed e-invoices."
+    lines = []
+    links = [
+        entity_link(
+            kind="screen",
+            id="books_compliance",
+            label="Open e-invoice & e-way",
+            subtitle="Compliance",
+            action="open",
+        )
+    ]
+    if rows:
+        lines.append(f"{len(rows)} pending e-invoice{'s' if len(rows) != 1 else ''}:")
+        for row in rows:
+            voucher_no = row.voucher.voucher_number if row.voucher_id else "—"
+            lines.append(f"• {voucher_no} — pending")
+    if failed:
+        lines.append(f"{len(failed)} failed e-invoice{'s' if len(failed) != 1 else ''}:")
+        for row in failed:
+            voucher_no = row.voucher.voucher_number if row.voucher_id else "—"
+            lines.append(f"• {voucher_no} — failed")
+    return pack_reply("\n".join(lines), links=links)
+
+
+def eway_needed(*, tenant: Tenant, business: Business) -> dict | str:
+    if not has_domain_feature(business=business, feature=FEATURE_SHOPIE_EWAY, product_code=PRODUCT_SHOPIE):
+        return "E-way bills are not enabled on your Orbit Mart plan."
+    from apps.shopie.services.einvoice.service import GstComplianceService
+
+    service = GstComplianceService()
+    drafts = list(
+        service.list_eway_bills(tenant=tenant, business=business, status=EWayBillStatus.DRAFT).order_by(
+            "-created_at"
+        )[:10]
+    )
+    failed = list(
+        service.list_eway_bills(tenant=tenant, business=business, status=EWayBillStatus.FAILED).order_by(
+            "-created_at"
+        )[:10]
+    )
+    if not drafts and not failed:
+        return "No draft or failed e-way bills needing attention."
+    lines = ["E-way bills needing attention:"]
+    for row in drafts + failed:
+        voucher_no = row.voucher.voucher_number if row.voucher_id else "—"
+        lines.append(f"• {voucher_no} — {row.status}")
+    return pack_reply(
+        "\n".join(lines),
+        links=[
+            entity_link(
+                kind="screen",
+                id="books_compliance",
+                label="Open e-invoice & e-way",
+                subtitle="Compliance",
+                action="open",
+            )
+        ],
+    )
+
+
+def pets_for_customer(*, tenant: Tenant, business: Business, query: str) -> dict | str:
+    from apps.shopie.services.pets import PetsService
+
+    pets_svc = PetsService()
+    if not pets_svc.has_pets_entitlement(business=business):
+        return "Pets pack is not subscribed for this business."
+    customer = _resolve_customer(tenant=tenant, business=business, query=query)
+    if isinstance(customer, dict):
+        return customer
+    if customer is None:
+        return f"No customer matching “{query}”."
+    try:
+        pets = list(pets_svc.list_pets(tenant=tenant, business=business, customer_id=customer.id))
+    except Exception as exc:  # pragma: no cover - entitlement edge
+        return str(getattr(exc, "message", None) or exc) or "Pets pack is not available."
+    label = _customer_label(customer)
+    if not pets:
+        return pack_reply(
+            f"{label} has no pets on file.",
+            links=[
+                entity_link(kind="customer", id=str(customer.id), label=label, subtitle="Customer"),
+                entity_link(
+                    kind="screen",
+                    id="pets",
+                    label="Open pets",
+                    subtitle="Pets list",
+                    action="open",
+                ),
+            ],
+        )
+    lines = [f"{label} — {len(pets)} pet{'s' if len(pets) != 1 else ''}:"]
+    links = [entity_link(kind="customer", id=str(customer.id), label=label, subtitle="Customer")]
+    for pet in pets:
+        species = pet.species or "pet"
+        birthday = pet.birthday.isoformat() if pet.birthday else "no birthday"
+        lines.append(f"• {pet.name} — {species} — {birthday}")
+        links.append(
+            entity_link(
+                kind="pet",
+                id=str(pet.id),
+                label=pet.name,
+                subtitle=f"{species} · {label}",
+                action="open",
+            )
+        )
+    return pack_reply("\n".join(lines), links=links)
+
+
+def _days_until_birthday(birthday, *, today) -> int | None:
+    if birthday is None:
+        return None
+    try:
+        next_bday = birthday.replace(year=today.year)
+    except ValueError:
+        # Feb 29 → Feb 28 on non-leap years
+        next_bday = birthday.replace(year=today.year, day=28)
+    if next_bday < today:
+        try:
+            next_bday = birthday.replace(year=today.year + 1)
+        except ValueError:
+            next_bday = birthday.replace(year=today.year + 1, day=28)
+    return (next_bday - today).days
+
+
+def upcoming_pet_birthdays(*, tenant: Tenant, business: Business, within_days: int = 7) -> dict | str:
+    from apps.shopie.services.pets import PetsService
+
+    pets_svc = PetsService()
+    if not pets_svc.has_pets_entitlement(business=business):
+        return "Pets pack is not subscribed for this business."
+    try:
+        pets = list(pets_svc.list_pets(tenant=tenant, business=business))
+    except Exception as exc:  # pragma: no cover
+        return str(getattr(exc, "message", None) or exc) or "Pets pack is not available."
+    today = timezone.localdate()
+    upcoming = []
+    for pet in pets:
+        days = _days_until_birthday(pet.birthday, today=today)
+        if days is None:
+            continue
+        if 0 <= days <= max(0, int(within_days)):
+            upcoming.append((days, pet))
+    upcoming.sort(key=lambda row: (row[0], row[1].name.lower()))
+    if not upcoming:
+        return f"No pet birthdays in the next {within_days} day{'s' if within_days != 1 else ''}."
+    lines = [f"Pet birthdays in the next {within_days} days:"]
+    links = [
+        entity_link(
+            kind="screen",
+            id="pets",
+            label="Open pets",
+            subtitle="Pets list",
+            action="open",
+        )
+    ]
+    for days, pet in upcoming[:15]:
+        when = "today" if days == 0 else ("tomorrow" if days == 1 else f"in {days} days")
+        owner = _customer_label(pet.customer)
+        lines.append(f"• {pet.name} — {owner} — {when}")
+        links.append(
+            entity_link(
+                kind="pet",
+                id=str(pet.id),
+                label=pet.name,
+                subtitle=f"{owner} · {when}",
+                action="open",
+            )
+        )
+    return pack_reply("\n".join(lines), links=links)
+
+
+def open_ai_bridge(*, tenant: Tenant, business: Business, target: str) -> dict | str:
+    """Deep-link reply that opens Automation Creator or Invoice Scan screens."""
+    del tenant  # business entitlements are enough for screen bridges
+    key = target.strip().lower()
+    if key in {"automation", "automations", "automation_creator", "creator"}:
+        has_auto = has_domain_feature(
+            business=business, feature=FEATURE_AUTOMATIONS, product_code=PRODUCT_SHOPIE
+        ) or has_domain_feature(
+            business=business, feature=FEATURE_AUTOMATIONS, product_code=PRODUCT_APPOINTIE
+        )
+        if not has_auto:
+            return "Automations are not enabled on your plan."
+        return pack_reply(
+            "Open Automation Creator to draft a rule from one sentence — nothing is turned on until you save it there.",
+            links=[
+                entity_link(
+                    kind="screen",
+                    id="automations",
+                    label="Open Automation Creator",
+                    subtitle="Automations",
+                    action="open",
+                )
+            ],
+            suggestions=["What can you do?"],
+        )
+    if key in {"invoice_scan", "scan_invoice", "invoice", "scan"}:
+        if not has_domain_feature(
+            business=business, feature=FEATURE_SHOPIE_INVOICE_SCAN, product_code=PRODUCT_SHOPIE
+        ):
+            return "Invoice scan is not enabled on your Orbit Mart plan."
+        return pack_reply(
+            "Open Invoice Scan to photograph a supplier bill, review lines, and post the purchase.",
+            links=[
+                entity_link(
+                    kind="screen",
+                    id="invoice_scan",
+                    label="Open Invoice Scan",
+                    subtitle="Purchase scan",
+                    action="open",
+                )
+            ],
+            suggestions=["Purchases today", "What can you do?"],
+        )
+    return "I can open Automation Creator or Invoice Scan from here."
+
+
 def execute_extra_action(
     *,
     tenant: Tenant,
@@ -1274,6 +1865,25 @@ def execute_extra_action(
     payload: dict[str, Any],
     actor,
 ) -> dict[str, Any] | None:
+    if action_type in {"return.accept_pickup_fee", "return.decline_pickup_fee"}:
+        shop_return = ShopReturn.objects.require_tenant(tenant).get(
+            business=business, id=payload["return_id"]
+        )
+        if action_type == "return.accept_pickup_fee":
+            updated = ReturnService().accept_pickup_charge(
+                tenant=tenant, business=business, shop_return=shop_return
+            )
+            decision = "accepted"
+        else:
+            updated = ReturnService().decline_pickup_charge(
+                tenant=tenant, business=business, shop_return=shop_return
+            )
+            decision = "declined"
+        return {
+            "return_number": updated.return_number,
+            "status": updated.status,
+            "decision": decision,
+        }
     if action_type == "product.set_price":
         product = ShopProduct.objects.require_tenant(tenant).get(business=business, id=payload["product_id"])
         CatalogService().update_product(

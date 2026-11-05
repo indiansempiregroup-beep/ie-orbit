@@ -772,3 +772,131 @@ def test_rules_brain_answers_new_books_and_profit_questions(monkeypatch):
     assert "₹80" in brain.handle(text="profit today", context=context).reply
     assert "Riya" in brain.handle(text="sales for Riya today", context=context).reply
     assert "120" in brain.handle(text="loyalty activity for Asha", context=context).reply
+
+
+def test_rules_brain_delivery_tracking_and_returns_logistics(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=False)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    monkeypatch.setattr(
+        toolset,
+        "order_tracking",
+        lambda **kwargs: f"Tracking for order {kwargs['number']}\nAWB: SR123",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "deliveries_with_tracking",
+        lambda **kwargs: f"1 out for delivery order — AWB SR123 (status={kwargs['status']})",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "returns_awaiting_pickup",
+        lambda **kwargs: "1 return awaiting pickup / fee decision:\n• R-1",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "return_pickup_fee",
+        lambda **kwargs: f"Return {kwargs['number']} pickup fee\nFee: ₹40.00",
+    )
+
+    def fake_propose(*, tenant, business, number, decision):
+        return {
+            "action_type": f"return.{decision}_pickup_fee",
+            "summary": f"{decision} pickup fee for return {number}",
+            "payload": {"return_number": number, "decision": decision},
+        }
+
+    monkeypatch.setattr(toolset, "propose_return_pickup_fee", fake_propose)
+
+    context = {"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access}
+    assert "SR123" in brain.handle(text="tracking for order SO-1", context=context).reply
+    assert "out for delivery" in brain.handle(text="out for delivery", context=context).reply.lower()
+    assert "R-1" in brain.handle(text="returns awaiting pickup", context=context).reply
+    assert "₹40" in brain.handle(text="pickup fee for return R-9", context=context).reply
+    accept = brain.handle(text="accept pickup fee for return R-9", context=context)
+    assert accept.proposal is not None
+    assert accept.proposal["payload"]["decision"] == "accept"
+    decline = brain.handle(text="decline pickup fee for return R-9", context=context)
+    assert decline.proposal is not None
+    assert decline.proposal["payload"]["decision"] == "decline"
+
+
+def test_rules_brain_gst_pets_and_ai_bridges(monkeypatch):
+    brain = RulesBrain()
+    access = AssistantAccess(mart_enabled=True, appoint_enabled=True)
+    monkeypatch.setattr(toolset, "suggestion_chips", lambda **kwargs: [])
+    monkeypatch.setattr(
+        toolset,
+        "gst_summary_this_month",
+        lambda **kwargs: "GST summary Oct 2026:\n• Net payable: ₹120.00",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "pending_einvoices",
+        lambda **kwargs: "1 pending e-invoice:\n• SV-1 — pending",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "eway_needed",
+        lambda **kwargs: "E-way bills needing attention:\n• SV-2 — draft",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "pets_for_customer",
+        lambda **kwargs: f"Pets for {kwargs['query']}:\n• Bruno — dog",
+    )
+    monkeypatch.setattr(
+        toolset,
+        "upcoming_pet_birthdays",
+        lambda **kwargs: "Pet birthdays in the next 7 days:\n• Bruno — tomorrow",
+    )
+
+    def fake_bridge(*, tenant, business, target):
+        return f"Open bridge:{target}"
+
+    monkeypatch.setattr(toolset, "open_ai_bridge", fake_bridge)
+
+    context = {"tenant": SimpleNamespace(), "business": SimpleNamespace(), "access": access}
+    assert "₹120" in brain.handle(text="GST summary this month", context=context).reply
+    assert "SV-1" in brain.handle(text="pending e-invoices", context=context).reply
+    assert "SV-2" in brain.handle(text="e-way needed", context=context).reply
+    assert "Bruno" in brain.handle(text="pets for Asha", context=context).reply
+    assert "Bruno" in brain.handle(text="upcoming pet birthdays", context=context).reply
+    assert "automations" in brain.handle(text="create automation", context=context).reply
+    assert "invoice_scan" in brain.handle(text="scan invoice", context=context).reply
+
+
+def test_open_ai_bridge_entitlement_gate(monkeypatch):
+    from apps.assistant.services import tools_ops as ops
+
+    business = SimpleNamespace()
+    monkeypatch.setattr(ops, "has_domain_feature", lambda **kwargs: False)
+    assert "not enabled" in ops.open_ai_bridge(
+        tenant=SimpleNamespace(), business=business, target="automations"
+    ).lower()
+    assert "not enabled" in ops.open_ai_bridge(
+        tenant=SimpleNamespace(), business=business, target="invoice_scan"
+    ).lower()
+
+
+def test_propose_return_pickup_fee_requires_awaiting_customer(monkeypatch):
+    from apps.assistant.services import tools_ops as ops
+    from rest_framework.exceptions import ValidationError
+
+    business = SimpleNamespace()
+    monkeypatch.setattr(ops, "has_domain_feature", lambda **kwargs: True)
+
+    class FakeReturn:
+        status = "pending"
+        return_number = "R-1"
+        id = "11111111-1111-1111-1111-111111111111"
+        metadata = {"pickup_charge": {"status": "proposed", "fee": "40"}}
+
+    monkeypatch.setattr(ops, "_find_return", lambda **kwargs: FakeReturn())
+    try:
+        ops.propose_return_pickup_fee(
+            tenant=SimpleNamespace(), business=business, number="R-1", decision="accept"
+        )
+        assert False, "expected ValidationError"
+    except ValidationError as exc:
+        assert "not waiting" in str(exc.detail).lower() or "not waiting" in str(exc).lower()

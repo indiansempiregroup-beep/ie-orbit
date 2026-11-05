@@ -581,9 +581,73 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
     if re.search(r"\b(payments?\s+to\s+confirm|orders?\s+awaiting\s+payment|awaiting\s+payment|unconfirmed\s+payments?)\b", lowered):
         return _ok(toolset.list_orders_awaiting_payment(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(failed\s+deliver(?:y|ies)|delivery\s+failed)\b", lowered):
-        return _ok(toolset.list_orders_by_status(
+        return _ok(
+            toolset.deliveries_with_tracking(
                 tenant=tenant, business=business, status=OrderStatus.DELIVERY_FAILED
-            ), suggestions)
+            ),
+            suggestions,
+        )
+    m = re.search(
+        r"\b(?:tracking\s+for|track|where\s+is|where'?s)\s+(?:order\s+)?#?\s*([A-Za-z0-9\-]+)\b",
+        lowered,
+    )
+    if m and ("track" in lowered or "where" in lowered):
+        return _ok(
+            toolset.order_tracking(tenant=tenant, business=business, number=m.group(1)),
+            suggestions,
+        )
+    if re.search(
+        r"\b(returns?\s+awaiting\s+pickup|awaiting\s+pickup|pickup\s+returns?|returns?\s+for\s+pickup)\b",
+        lowered,
+    ):
+        return _ok(toolset.returns_awaiting_pickup(tenant=tenant, business=business), suggestions)
+    m = re.search(
+        r"\b(?:accept|decline)\s+pickup\s+fee\s+(?:for\s+)?(?:return\s+)?#?\s*([A-Za-z0-9\-]+)\b",
+        lowered,
+    )
+    if m:
+        decision = "accept" if "accept" in lowered else "decline"
+        try:
+            proposal = toolset.propose_return_pickup_fee(
+                tenant=tenant, business=business, number=m.group(1), decision=decision
+            )
+        except ValidationError as exc:
+            return BrainResult(reply=validation_message(exc), suggestions=suggestions)
+        return _propose(proposal, suggestions)
+    m = re.search(
+        r"\b(?:pickup\s+fee|return\s+pickup\s+fee)\s+(?:for\s+)?(?:return\s+)?#?\s*([A-Za-z0-9\-]+)\b",
+        lowered,
+    )
+    if m:
+        return _ok(
+            toolset.return_pickup_fee(tenant=tenant, business=business, number=m.group(1)),
+            suggestions,
+        )
+    if re.search(r"\b(gst\s+summary(?:\s+this\s+month)?|this\s+month'?s?\s+gst|gstr?\s*3b)\b", lowered):
+        return _ok(toolset.gst_summary_this_month(tenant=tenant, business=business), suggestions)
+    if re.search(r"\b(pending\s+e-?invoices?|e-?invoices?\s+pending)\b", lowered):
+        return _ok(toolset.pending_einvoices(tenant=tenant, business=business), suggestions)
+    if re.search(r"\b(e-?way\s+needed|pending\s+e-?way|e-?way\s+bills?\s+needed)\b", lowered):
+        return _ok(toolset.eway_needed(tenant=tenant, business=business), suggestions)
+    m = re.search(r"\b(?:pets?\s+for|list\s+pets?\s+for)\s+(.+)$", lowered)
+    if m:
+        return _ok(
+            toolset.pets_for_customer(tenant=tenant, business=business, query=m.group(1).strip()),
+            suggestions,
+        )
+    if re.search(
+        r"\b(upcoming\s+pet\s+birthdays?|pet\s+birthdays?(?:\s+upcoming)?|pets?\s+birthdays?\s+this\s+week)\b",
+        lowered,
+    ):
+        return _ok(toolset.upcoming_pet_birthdays(tenant=tenant, business=business), suggestions)
+    if re.search(
+        r"\b(scan\s+invoice|invoice\s+scan|scan\s+supplier\s+bill|open\s+invoice\s+scan)\b",
+        lowered,
+    ):
+        return _ok(
+            toolset.open_ai_bridge(tenant=tenant, business=business, target="invoice_scan"),
+            suggestions,
+        )
     if re.search(r"\b(list\s+godowns?|godowns?|warehouses?)\b", lowered) and "stock" not in lowered:
         return _ok(toolset.list_godowns(tenant=tenant, business=business), suggestions)
     m = re.search(r"\b(?:godown\s+stock\s+(?:of\s+)?|stock\s+(?:of\s+)?(.+?)\s+in\s+godown)\b", lowered)
@@ -675,9 +739,12 @@ def _handle_mart(*, lowered: str, tenant, business, suggestions: list[str]) -> B
                 tenant=tenant, business=business, status=OrderStatus.READY
             ), suggestions)
     if re.search(r"\b(out\s+for\s+delivery|ofd)\b", lowered):
-        return _ok(toolset.list_orders_by_status(
+        return _ok(
+            toolset.deliveries_with_tracking(
                 tenant=tenant, business=business, status=OrderStatus.OUT_FOR_DELIVERY
-            ), suggestions)
+            ),
+            suggestions,
+        )
     if re.search(r"\blow\s+stock\b", lowered):
         return _ok(toolset.low_stock_products(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(out\s+of\s+stock|zero\s+stock)\b", lowered):
@@ -937,6 +1004,14 @@ def _handle_appoint(*, lowered: str, tenant, business, suggestions: list[str]) -
 
 def _handle_shared(*, lowered: str, raw: str = "", tenant=None, business=None, suggestions: list[str] | None = None) -> BrainResult | None:
     suggestions = suggestions or []
+    if re.search(
+        r"\b(create\s+automation|automation\s+creator|new\s+automation|open\s+automations?)\b",
+        lowered,
+    ):
+        return _ok(
+            toolset.open_ai_bridge(tenant=tenant, business=business, target="automations"),
+            suggestions,
+        )
     if re.search(r"\b(new\s+customers?\s+today|customers?\s+today)\b", lowered):
         return _ok(toolset.new_customers_today(tenant=tenant, business=business), suggestions)
     if re.search(r"\b(customer\s+count|how\s+many\s+customers?|total\s+customers?)\b", lowered):

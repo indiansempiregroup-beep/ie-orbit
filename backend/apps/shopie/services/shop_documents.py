@@ -1207,6 +1207,8 @@ def _loyalty_highlight_text(
             parts.append(f"+{pending} pts on pay")
         if reversed_pts > 0:
             parts.append(f"−{reversed_pts} reversed")
+            if why:
+                parts.append(why)
         if balance > 0 and reversed_pts <= 0:
             parts.append(f"{balance} total")
         return " · ".join(parts)
@@ -1769,7 +1771,7 @@ class ShopDocumentService:
       box-shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 24px rgba(16,24,40,.06);
     }}
     .head {{
-      display:grid; grid-template-columns:1.35fr 1fr; gap:12px; align-items:center;
+      display:grid; grid-template-columns:minmax(0, 1.35fr) minmax(0, 1fr); gap:12px; align-items:center;
       padding:14px 20px; background:linear-gradient(135deg, #0f766e 0%, #0b5a55 100%);
       color:#fff;
     }}
@@ -1804,21 +1806,26 @@ class ShopDocumentService:
     }}
     .thermal-head .gst-badge {{ margin:0; font-size:10px; }}
     .thermal-doc-meta {{ font-size:11px; opacity:.95; line-height:1.35; }}
-    .doc-meta {{ text-align:right; display:grid; justify-items:end; gap:3px; }}
+    .doc-meta {{
+      text-align:right; display:grid; justify-items:end; gap:3px; min-width:0;
+    }}
     .doc-meta .label {{
       display:inline-block; font-size:10px; font-weight:700; letter-spacing:.08em;
       text-transform:uppercase; color:#fff; background:rgba(255,255,255,.18);
       padding:2px 8px; border-radius:999px;
     }}
-    .doc-number {{ margin:0; font-size:18px; letter-spacing:-.02em; font-weight:700; line-height:1.15; }}
+    .doc-number {{
+      margin:0; font-size:18px; letter-spacing:-.02em; font-weight:700; line-height:1.15;
+      max-width:100%; overflow-wrap:anywhere; word-break:break-word;
+    }}
     .doc-sub {{ font-size:12px; opacity:.95; }}
     .badge {{
       display:inline-flex; align-items:center; border-radius:999px; padding:2px 7px;
-      font-size:10px; font-weight:700; margin-left:6px; vertical-align:middle;
+      font-size:10px; font-weight:700; margin-left:6px; vertical-align:middle; flex:0 0 auto;
     }}
     .badge-paid {{ background:#dcfce7; color:#166534; }}
     .badge-due {{ background:#fef3c7; color:#92400e; }}
-    .body {{ padding:14px 20px 22px; }}
+    .body {{ padding:14px 20px 22px; overflow-x:clip; }}
     .sheet.thermal .body {{ padding:10px 12px 14px; }}
     .parties {{
       display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;
@@ -1826,7 +1833,7 @@ class ShopDocumentService:
     .thermal-parties {{ grid-template-columns:1fr; margin-bottom:10px; }}
     .party {{
       border:1px solid var(--line); border-radius:8px; padding:8px 10px;
-      background:#fbfcfd;
+      background:#fbfcfd; min-width:0;
     }}
     .sheet.thermal .party {{ padding:8px 10px; border-radius:6px; }}
     .party-line {{
@@ -1838,11 +1845,11 @@ class ShopDocumentService:
     }}
     .party .party-name {{ font-size:13px; font-weight:700; margin:0; }}
     .contact-row {{
-      display:grid; grid-template-columns:52px 1fr; gap:6px; align-items:baseline;
+      display:grid; grid-template-columns:52px minmax(0, 1fr); gap:6px; align-items:baseline;
       margin-top:3px; font-size:12px; line-height:1.35;
     }}
     .contact-row-address {{ align-items:start; }}
-    .sheet.thermal .contact-row {{ grid-template-columns:48px 1fr; font-size:11.5px; }}
+    .sheet.thermal .contact-row {{ grid-template-columns:48px minmax(0, 1fr); font-size:11.5px; }}
     .contact-label {{
       color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.05em;
       text-transform:uppercase;
@@ -1888,26 +1895,29 @@ class ShopDocumentService:
     .amount {{ font-weight:700; }}
     .muted {{ color:var(--muted); font-size:11.5px; margin-top:3px; }}
     .summary {{
-      display:grid; grid-template-columns:1.15fr .85fr; gap:20px; align-items:start;
+      display:grid; grid-template-columns:minmax(0, 1.15fr) minmax(0, .85fr);
+      gap:20px; align-items:start; width:100%;
     }}
-    .sheet.thermal .summary {{ grid-template-columns:1fr; gap:12px; }}
+    .summary > * {{ min-width:0; }}
+    .sheet.thermal .summary {{ grid-template-columns:minmax(0, 1fr); gap:12px; }}
     .words {{
       font-size:12.5px; color:var(--muted); line-height:1.5; padding:12px 14px;
       background:var(--brand-soft); border-radius:8px; border-left:3px solid var(--brand);
+      overflow-wrap:anywhere;
     }}
     .sheet.thermal .words {{ font-size:11.5px; padding:10px 12px; }}
     .words strong {{ color:var(--ink); }}
     .totals {{
       font-size:13.5px; border:1px solid var(--line); border-radius:10px; padding:12px 14px;
-      background:#fbfcfd;
+      background:#fbfcfd; width:100%; max-width:100%; box-sizing:border-box;
     }}
     .sheet.thermal .totals {{ font-size:12.5px; padding:10px 12px; border-radius:8px; }}
-    .tot-row {{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; gap:12px; }}
+    .tot-row {{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; gap:12px; min-width:0; }}
     .tot-row span:first-child {{
       min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }}
     .tot-row span:last-child {{
-      flex:0 0 auto; min-width:6.75em; white-space:nowrap; text-align:right;
+      flex:0 0 auto; white-space:nowrap; text-align:right;
       font-variant-numeric:tabular-nums;
     }}
     .tot-row.grand {{
@@ -1917,18 +1927,18 @@ class ShopDocumentService:
     .sheet.thermal .tot-row.grand {{ font-size:15px; }}
     .pay-card {{
       margin-top:12px; border-radius:10px; padding:14px; background:#fffbeb;
-      border:1px solid #f5e0b0; text-align:center;
+      border:1px solid #f5e0b0; text-align:center; max-width:100%;
     }}
     .pay-title {{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#92400e; font-weight:700; }}
     .pay-amount {{ font-size:22px; font-weight:800; margin:6px 0 10px; color:#78350f; }}
-    .qr-img {{ width:140px; height:140px; border-radius:8px; background:#fff; padding:6px; border:1px solid #f5e0b0; }}
+    .qr-img {{ width:140px; height:140px; max-width:100%; border-radius:8px; background:#fff; padding:6px; border:1px solid #f5e0b0; }}
     .sheet.thermal .qr-img {{ width:120px; height:120px; }}
     .loyalty-highlight {{
-      margin-top:10px; display:flex; flex-wrap:nowrap; align-items:baseline; justify-content:center;
+      margin-top:10px; display:flex; flex-wrap:wrap; align-items:baseline; justify-content:center;
       gap:6px; text-align:center; padding:10px 12px; border-radius:10px;
       background:linear-gradient(135deg, #ecfdf5 0%, #e8f6f4 100%);
-      border:1px solid #a7f3d0; color:#065f46; white-space:nowrap;
-      overflow:hidden; text-overflow:ellipsis;
+      border:1px solid #a7f3d0; color:#065f46; white-space:normal;
+      overflow-wrap:anywhere; word-break:break-word; max-width:100%;
       -webkit-print-color-adjust:exact; print-color-adjust:exact;
     }}
     .loyalty-highlight.pending {{
@@ -1939,15 +1949,19 @@ class ShopDocumentService:
       background:linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%);
       border-color:#fecdd3; color:#be123c;
     }}
-    .loyalty-value {{ font-size:14px; font-weight:800; letter-spacing:-.01em; }}
+    .loyalty-value {{
+      font-size:14px; font-weight:800; letter-spacing:-.01em;
+      overflow-wrap:anywhere; word-break:break-word; white-space:normal;
+    }}
     .sheet.thermal .loyalty-highlight {{ margin-top:8px; padding:8px 10px; border-radius:8px; }}
     .sheet.thermal .loyalty-value {{ font-size:12.5px; }}
-    .footer {{ margin-top:14px; font-size:11.5px; color:var(--muted); line-height:1.5; }}
+    .footer {{ margin-top:14px; font-size:11.5px; color:var(--muted); line-height:1.5; overflow-wrap:anywhere; }}
     .sheet.thermal .footer {{ font-size:11px; text-align:center; }}
     .break {{ word-break:break-all; }}
     @media screen and (max-width:720px) {{
       .head:not(.thermal-head), .body {{ padding:18px; }}
-      .head:not(.thermal-head), .parties:not(.thermal-parties), .summary {{ grid-template-columns:1fr; }}
+      .head:not(.thermal-head), .parties:not(.thermal-parties),
+      .summary {{ grid-template-columns:minmax(0, 1fr); }}
       .doc-meta {{ text-align:left; justify-items:start; }}
       .hide-sm {{ display:none; }}
     }}
@@ -1960,21 +1974,21 @@ class ShopDocumentService:
       .sheet.thermal {{ max-width:80mm; margin:0 auto; }}
       .head:not(.thermal-head) {{
         display:grid !important;
-        grid-template-columns:1.2fr 1fr !important;
+        grid-template-columns:minmax(0, 1.2fr) minmax(0, 1fr) !important;
         -webkit-print-color-adjust:exact;
         print-color-adjust:exact;
       }}
       .doc-meta {{ text-align:right !important; justify-items:end !important; }}
       .parties:not(.thermal-parties) {{
         display:grid !important;
-        grid-template-columns:1fr 1fr !important;
+        grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) !important;
         gap:8px !important;
       }}
       .summary {{
         display:grid !important;
-        grid-template-columns:1.15fr .85fr !important;
+        grid-template-columns:minmax(0, 1.15fr) minmax(0, .85fr) !important;
       }}
-      .sheet.thermal .summary {{ grid-template-columns:1fr !important; }}
+      .sheet.thermal .summary {{ grid-template-columns:minmax(0, 1fr) !important; }}
       .hide-sm {{ display:table-cell !important; }}
       .sheet.thermal .hide-sm {{ display:none !important; }}
     }}
@@ -2478,22 +2492,34 @@ class ShopDocumentService:
                 loyalty_ink = (0.573, 0.251, 0.055)
                 loyalty_border = (0.992, 0.906, 0.541)
         if loyalty_line:
-            loyalty_h = 26.0
+            loyalty_pad_x = 10.0
+            loyalty_pad_y = 8.0
+            loyalty_line_h = 11.0
+            loyalty_size = 9.0
+            loyalty_chunks = _pdf_wrap_to_width(
+                loyalty_line,
+                size=loyalty_size,
+                max_w=max(40.0, words_w - (loyalty_pad_x * 2)),
+                bold=True,
+            ) or [loyalty_line]
+            loyalty_h = loyalty_pad_y * 2 + (loyalty_line_h * len(loyalty_chunks)) - 2.0
             loyalty_gap = 8.0
             loyalty_top = words_bottom - loyalty_gap
             loyalty_bottom = loyalty_top - loyalty_h
             fill_rect(margin_x, loyalty_bottom, words_w, loyalty_h, loyalty_fill)
             stroke_rect(margin_x, loyalty_bottom, words_w, loyalty_h, loyalty_border)
-            line_text = fit_width(loyalty_line, size=9, max_w=words_w - 20, bold=True)
-            text_w = _pdf_text_width(line_text, 9, bold=True)
-            text_at(
-                margin_x + max(10.0, (words_w - text_w) / 2),
-                loyalty_top - 17,
-                line_text,
-                size=9,
-                bold=True,
-                rgb=loyalty_ink,
-            )
+            ly = loyalty_top - loyalty_pad_y - 7.0
+            for chunk in loyalty_chunks:
+                text_w = _pdf_text_width(chunk, loyalty_size, bold=True)
+                text_at(
+                    margin_x + max(loyalty_pad_x, (words_w - text_w) / 2),
+                    ly,
+                    chunk,
+                    size=loyalty_size,
+                    bold=True,
+                    rgb=loyalty_ink,
+                )
+                ly -= loyalty_line_h
 
         # Left-column footer flows under loyalty / amount-in-words (do not jump
         # down to totals_bottom — that left a large gap above Notes).
@@ -2578,10 +2604,22 @@ class ShopDocumentService:
             estimated += 20
         # Amount in words + optional loyalty callout under it.
         estimated += 40
-        if payload.get("loyalty_enabled") and (
-            int(payload.get("points_earned") or 0) > 0 or int(payload.get("points_to_earn") or 0) > 0
-        ):
-            estimated += 20
+        thermal_loyalty_preview = _loyalty_highlight_text(
+            points_earned=int(payload.get("points_earned") or 0),
+            points_to_earn=int(payload.get("points_to_earn") or 0),
+            points_balance=int(payload.get("points_balance") or 0),
+            points_reversed=int(payload.get("points_reversed") or 0),
+            reversal_reason=str(payload.get("reversal_reason") or ""),
+            compact=True,
+        )
+        if thermal_loyalty_preview:
+            loyalty_wraps = _pdf_wrap_to_width(
+                thermal_loyalty_preview,
+                size=8,
+                max_w=thermal_text_w,
+                bold=True,
+            )
+            estimated += 6 + max(1, len(loyalty_wraps)) * 10
         if payload.get("notes"):
             estimated += 16
         height = float(max(420, min(estimated, 1600)))
@@ -2770,24 +2808,25 @@ class ShopDocumentService:
         for chunk in _pdf_wrap_to_width(words_block, size=7, max_w=right - left)[:4]:
             text_at(left, y, chunk, size=7)
             y -= 9
-        if bill.get("loyalty_enabled"):
-            loyalty_line = _loyalty_highlight_text(
-                points_earned=int(bill.get("points_earned") or 0),
-                points_to_earn=int(bill.get("points_to_earn") or 0),
-                points_balance=int(bill.get("points_balance") or 0),
-                points_reversed=int(bill.get("points_reversed") or 0),
-                reversal_reason=str(bill.get("reversal_reason") or ""),
-                compact=True,
-            )
-            if loyalty_line:
-                y -= 2
-                text_center(
-                    y,
-                    fit_thermal(loyalty_line, size=8, max_w=right - left, bold=True),
-                    size=8,
-                    bold=True,
-                )
-                y -= 12
+        loyalty_line = _loyalty_highlight_text(
+            points_earned=int(bill.get("points_earned") or 0),
+            points_to_earn=int(bill.get("points_to_earn") or 0),
+            points_balance=int(bill.get("points_balance") or 0),
+            points_reversed=int(bill.get("points_reversed") or 0),
+            reversal_reason=str(bill.get("reversal_reason") or ""),
+            compact=True,
+        )
+        if loyalty_line:
+            y -= 2
+            for chunk in _pdf_wrap_to_width(
+                loyalty_line,
+                size=8,
+                max_w=right - left,
+                bold=True,
+            ):
+                text_center(y, chunk, size=8, bold=True)
+                y -= 10
+            y -= 2
         y -= 2
         text_center(y, "Thank you!", size=9, bold=True)
         y -= 12

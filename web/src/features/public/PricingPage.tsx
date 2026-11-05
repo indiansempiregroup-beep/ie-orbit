@@ -11,6 +11,14 @@ import { PublicBackLink } from './PublicBackLink';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import {
+  AI_WALLET_MIN_INR,
+  AI_WALLET_MIN_USD,
+  ASSISTANT_CONFIRM_INR,
+  ASSISTANT_CONFIRM_USD,
+  ASSISTANT_DAILY_FREE_CONFIRMS,
+  ASSISTANT_DAILY_FREE_MESSAGES,
+  ASSISTANT_MESSAGE_INR,
+  ASSISTANT_MESSAGE_USD,
   OFFICE_ADDON_INR,
   PETS_ADDON_INR,
   PRO_MONTHLY_INR,
@@ -19,6 +27,19 @@ import {
   TRIAL_DAYS,
 } from '../../seo/config';
 import { trackEvent } from '../../seo/analytics';
+
+type PublicAssistantUsage = {
+  enabled?: boolean;
+  message_price_paise?: number;
+  confirm_price_paise?: number;
+  daily_free_messages?: number;
+  daily_free_confirms?: number;
+};
+
+type PublicAiWallet = {
+  enabled?: boolean;
+  min_charge_paise?: number;
+};
 
 const PRODUCT_LABELS: Record<string, string> = {
   appointie: 'Orbit Appoint',
@@ -49,16 +70,180 @@ function guessPricingRegion(): PricingRegion {
 function formatSaaSMoney(minor?: number | null, currency: 'INR' | 'USD' = 'INR') {
   if (minor == null) return '—';
   const amount = Math.round(minor) / 100;
+  const needsCents = Math.abs(amount - Math.round(amount)) > 0.0001;
   try {
     return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
       style: 'currency',
       currency,
-      minimumFractionDigits: 0,
+      minimumFractionDigits: needsCents ? 2 : 0,
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
     return currency === 'INR' ? `₹${amount}` : `$${amount}`;
   }
+}
+
+function fallbackAssistantUsage(currency: 'INR' | 'USD'): PublicAssistantUsage {
+  return {
+    enabled: true,
+    message_price_paise: Math.round((currency === 'INR' ? ASSISTANT_MESSAGE_INR : ASSISTANT_MESSAGE_USD) * 100),
+    confirm_price_paise: Math.round((currency === 'INR' ? ASSISTANT_CONFIRM_INR : ASSISTANT_CONFIRM_USD) * 100),
+    daily_free_messages: ASSISTANT_DAILY_FREE_MESSAGES,
+    daily_free_confirms: ASSISTANT_DAILY_FREE_CONFIRMS,
+  };
+}
+
+function fallbackAiWallet(currency: 'INR' | 'USD'): PublicAiWallet {
+  return {
+    enabled: true,
+    min_charge_paise: Math.round((currency === 'INR' ? AI_WALLET_MIN_INR : AI_WALLET_MIN_USD) * 100),
+  };
+}
+
+function PricingExtrasSection({
+  currency,
+  staffAddon,
+  officeAddon,
+  petsAddon,
+  yearlyNote,
+  assistant,
+  aiWallet,
+}: {
+  currency: 'INR' | 'USD';
+  staffAddon: number;
+  officeAddon: number;
+  petsAddon?: number | null;
+  yearlyNote: string;
+  assistant?: PublicAssistantUsage | null;
+  aiWallet?: PublicAiWallet | null;
+}) {
+  const usage = assistant ?? fallbackAssistantUsage(currency);
+  const wallet = aiWallet ?? fallbackAiWallet(currency);
+  const freeMessages = Math.max(1, Number(usage.daily_free_messages) || ASSISTANT_DAILY_FREE_MESSAGES);
+  const freeConfirms = Math.max(1, Number(usage.daily_free_confirms) || ASSISTANT_DAILY_FREE_CONFIRMS);
+  const messagePrice = formatSaaSMoney(
+    usage.message_price_paise ?? fallbackAssistantUsage(currency).message_price_paise,
+    currency,
+  );
+  const confirmPrice = formatSaaSMoney(
+    usage.confirm_price_paise ?? fallbackAssistantUsage(currency).confirm_price_paise,
+    currency,
+  );
+  const minCharge = formatSaaSMoney(
+    wallet.min_charge_paise ?? fallbackAiWallet(currency).min_charge_paise,
+    currency,
+  );
+
+  return (
+    <section className="public-pricing-extras" aria-labelledby="pricing-extras-title">
+      <div className="public-pricing-extras__intro">
+        <p className="public-kicker">Beyond the base plan</p>
+        <h2 id="pricing-extras-title">
+          Add seats when you grow. <em>Pay for AI as you use it.</em>
+        </h2>
+        <p>{yearlyNote}</p>
+      </div>
+
+      <div className="public-pricing-extras__grid">
+        <article className="public-pricing-extras__panel">
+          <p className="public-kicker">Seat & pack add-ons</p>
+          <h3>Monthly extras</h3>
+          <p className="public-pricing-extras__lead">
+            Add capacity on top of Starter or Pro. Charged with your subscription.
+          </p>
+          <dl className="public-pricing-extras__rows">
+            <div>
+              <dt>
+                Extra staff
+                <span>Starter (max 1) and Pro</span>
+              </dt>
+              <dd>
+                {formatSaaSMoney(staffAddon, currency)}
+                <span>/month</span>
+              </dd>
+            </div>
+            <div>
+              <dt>
+                Extra office
+                <span>Pro only</span>
+              </dt>
+              <dd>
+                {formatSaaSMoney(officeAddon, currency)}
+                <span>/month</span>
+              </dd>
+            </div>
+            {petsAddon ? (
+              <div>
+                <dt>
+                  Pets pack
+                  <span>Optional Orbit Mart add-on for pet records</span>
+                </dt>
+                <dd>
+                  {formatSaaSMoney(petsAddon, currency)}
+                  <span>/month</span>
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </article>
+
+        <article className="public-pricing-extras__panel public-pricing-extras__panel--ai">
+          <p className="public-kicker">AI usage</p>
+          <h3>Prepaid wallets on Pro</h3>
+          <p className="public-pricing-extras__lead">
+            Ask the Assistant about bookings, orders, stock, or customers in plain language. A{' '}
+            <strong>message</strong> is one question you send. A <strong>confirm</strong> is when you approve a change
+            it proposes — nothing updates until you say yes. Free daily allowance first, then top up only if you need
+            more.
+          </p>
+          <dl className="public-pricing-extras__rows">
+            <div>
+              <dt>
+                Free each day
+                <span>Included before any wallet charge</span>
+              </dt>
+              <dd className="public-pricing-extras__dd-stack">
+                <strong>{freeMessages}</strong>
+                <span>questions</span>
+                <strong>{freeConfirms}</strong>
+                <span>approvals</span>
+              </dd>
+            </div>
+            {usage.enabled === false ? null : (
+              <>
+                <div>
+                  <dt>
+                    Extra question
+                    <span>One Assistant message after the free daily limit</span>
+                  </dt>
+                  <dd>{messagePrice}</dd>
+                </div>
+                <div>
+                  <dt>
+                    Extra approval
+                    <span>One confirm after the free daily limit</span>
+                  </dt>
+                  <dd>{confirmPrice}</dd>
+                </div>
+              </>
+            )}
+            {wallet.enabled === false ? null : (
+              <div>
+                <dt>
+                  AI wallet calls
+                  <span>Pack-photo fill, invoice scans, automation drafts</span>
+                </dt>
+                <dd>
+                  {minCharge}
+                  <span>min / call</span>
+                </dd>
+              </div>
+            )}
+          </dl>
+        </article>
+      </div>
+    </section>
+  );
 }
 
 function yearlyMonthsFromPlans(plans: BillingPlanCatalogItem[]) {
@@ -222,26 +407,20 @@ export function PricingPage() {
                     productLabel={PRODUCT_LABELS[section.id]}
                     currency={saasCurrency}
                   />
-                  <p className="public-plan-features-note">
-                    Function lists follow the live plan catalog. If a platform admin turns a function on or off, this
-                    page updates with it.
-                  </p>
                 </section>
               ))}
-            <p className="public-lead" style={{ marginTop: 28 }}>
-              Extra staff {formatSaaSMoney(staffAddon, saasCurrency)}/month on Starter (max 1) and Pro. Extra offices{' '}
-              {formatSaaSMoney(officeAddon, saasCurrency)}/month on Pro only
-              {petsAddon ? ` · Pets pack ${formatSaaSMoney(petsAddon, saasCurrency)}/month` : ''}. {yearlyCopy.note}
-            </p>
-            {petsAddon ? (
-              <p className="public-lead" style={{ marginTop: 8 }}>
-                Pets pack is an optional Orbit Mart add-on for pet records. It is not included in the base Orbit Mart
-                plan.
-              </p>
-            ) : null}
+            <PricingExtrasSection
+              currency={saasCurrency}
+              staffAddon={staffAddon}
+              officeAddon={officeAddon}
+              petsAddon={petsAddon}
+              yearlyNote={yearlyCopy.note}
+              assistant={catalog?.assistant_usage}
+              aiWallet={catalog?.ai_wallet}
+            />
           </>
         ) : (
-          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} />
+          <PricingFallback trialDays={trialDays} yearlyMonths={yearlyMonths} currency={saasCurrency} />
         )}
       </div>
       <PublicCtaBand title="Start with full Pro access" />
@@ -308,10 +487,13 @@ function PricingFallback({
           <p>Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. {yearlyCopy.note}</p>
         </article>
       </div>
-      <p className="public-lead" style={{ marginTop: 28 }}>
-        Extra staff {formatSaaSMoney(staff, currency)}/month on Starter (max 1) and Pro. Extra offices{' '}
-        {formatSaaSMoney(office, currency)}/month on Pro only · Pets pack {formatSaaSMoney(pets, currency)}/month.
-      </p>
+      <PricingExtrasSection
+        currency={currency}
+        staffAddon={staff}
+        officeAddon={office}
+        petsAddon={pets}
+        yearlyNote={yearlyCopy.note}
+      />
     </section>
   );
 }
