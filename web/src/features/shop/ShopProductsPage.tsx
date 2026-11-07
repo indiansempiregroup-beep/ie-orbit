@@ -254,6 +254,7 @@ export function ShopProductsPage() {
     ];
   }, [billingQuery.data]);
   const canRemoveBackground = entitledFeatures.includes('shopie_product_bg_remove');
+  const canScanInvoice = entitledFeatures.includes('shopie_invoice_scan');
   const canSeeProfit = hasBiFeature(billingQuery.data, 'profit', 'shopie');
   const scanInputRef = useRef<HTMLInputElement | null>(null);
   const packPhotoRef = useRef<HTMLInputElement | null>(null);
@@ -813,6 +814,16 @@ export function ShopProductsPage() {
                   </Button>
                 </Link>
               ) : null}
+              {canScanInvoice ? (
+                <Link to="/shop/books/purchase/scan">
+                  <Button type="button" variant="neutral">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <Camera size={16} aria-hidden="true" />
+                      Scan invoice
+                    </span>
+                  </Button>
+                </Link>
+              ) : null}
               <Link to="/shop/products/add-many">
                 <Button type="button" variant="neutral">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1025,6 +1036,16 @@ export function ShopProductsPage() {
                     </span>
                   </Button>
                 </Link>
+                {canScanInvoice ? (
+                  <Link to="/shop/books/purchase/scan">
+                    <Button type="button" variant="neutral">
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Camera size={16} aria-hidden="true" />
+                        Scan invoice
+                      </span>
+                    </Button>
+                  </Link>
+                ) : null}
               </div>
             </div>
           ) : null}

@@ -37,11 +37,17 @@ export function applyEnrichmentToScanLine(line: ShopInvoiceScanLine, data: ShopB
   const image = String(data.front_image_url || data.local_image_url || data.image_url || '').trim();
   const mrp = String(data.mrp || '').replace(/[₹,]/g, '').trim();
   const mrpAmount = Number(mrp);
+  const catalogName = String(data.name || '').trim();
+  const invoiceName = String(line.name || '').trim();
+  const catalogNameDiffers =
+    Boolean(catalogName) && Boolean(invoiceName) && catalogName.toLowerCase() !== invoiceName.toLowerCase();
   return {
     ...line,
     barcode: line.barcode || code,
     sku: line.sku || data.sku || code || '',
-    name: line.name || data.name || '',
+    // Keep invoice OCR / shortened name; surface catalog title separately when it differs.
+    name: line.name || catalogName || '',
+    catalog_name: catalogNameDiffers ? catalogName : undefined,
     brand: line.brand || data.brand || '',
     pack_size: line.pack_size || data.pack_size || '',
     category: line.category || data.category || guessShopProductCategory(data.categories) || '',

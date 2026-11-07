@@ -2,6 +2,7 @@ name: ie-orbit
 
 services:
   backend:
+    image: ie-orbit-backend:dev
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -167,6 +168,7 @@ services:
           - redis
 
   celery-worker:
+    image: ie-orbit-backend:dev
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -239,6 +241,7 @@ services:
           - celery-worker
 
   celery-beat:
+    image: ie-orbit-backend:dev
     build:
       context: .
       dockerfile: backend/Dockerfile

@@ -36,12 +36,17 @@ corepack pnpm web
 
 Open **http://localhost:8082**. Sign in with a **business owner** or **invited staff** account.
 
-Phone / emulator:
+Phone / emulator (same Wi‑Fi):
 
 ```bash
 cd apps/ops-mobile
-corepack pnpm start -- --clear
+export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
+export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/api/v1"
+export EXPO_NO_METRO_WORKSPACE_ROOT="1"
+corepack pnpm start -- --lan
 ```
+
+Wait for `Metro waiting on exp://…` before scanning. Use `--clear` only when Metro is corrupted or deps changed. If the phone browser cannot open `http://<mac-lan-ip>:8082`, fix LAN/firewall or start with `--tunnel` instead.
 
 Shell overrides still work when you need a device-reachable API host, e.g. `EXPO_PUBLIC_API_BASE_URL=http://172.x.x.x:8000/api/v1`.
 

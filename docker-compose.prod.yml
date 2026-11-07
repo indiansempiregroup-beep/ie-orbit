@@ -139,6 +139,7 @@ services:
     cpus: 0.20
 
   backend:
+    image: ie-orbit-backend:prod
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -177,6 +178,7 @@ services:
     cpus: 0.50
 
   celery-worker:
+    image: ie-orbit-backend:prod
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -213,6 +215,7 @@ services:
     cpus: 0.25
 
   celery-beat:
+    image: ie-orbit-backend:prod
     build:
       context: .
       dockerfile: backend/Dockerfile

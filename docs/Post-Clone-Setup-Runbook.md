@@ -124,6 +124,10 @@ Ops app (`apps/ops-mobile`): project `b897b310-e21b-49ab-b58f-56b8da1867f3`
 
 ### Local dev on phone (same Wi‑Fi)
 
+Everyday start uses `--lan` only. Wait until Metro prints `Metro waiting on exp://…` before scanning the QR (scanning during a cold rebuild is the usual reason the first scan fails). Skip `--clear` unless Metro is corrupted or deps just changed.
+
+If the QR still flakes: force-close Expo Go, then from the phone browser open `http://<mac-lan-ip>:8083` (customer) or `:8082` (ops). If that URL does not load, fix Wi‑Fi client isolation / firewall first. When LAN stays unreliable, swap `--lan` for `--tunnel`.
+
 ```bash
 cd mobile
 export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"   # macOS; use ip addr on Linux
@@ -131,7 +135,9 @@ export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/a
 export EXPO_PUBLIC_FLAVOR_KEY="<your-flavor-key>"
 export EXPO_PUBLIC_APP_NAME="<your-app-name>"
 export EXPO_NO_METRO_WORKSPACE_ROOT="1"
-corepack pnpm exec expo start --port 8083 --clear --lan
+corepack pnpm exec expo start --port 8083 --lan
+# only when needed:  ... --clear --lan
+# LAN flaky:         ... --tunnel
 ```
 
 Replace flavor key / app name from [`mobile/flavors/manifest.json`](../mobile/flavors/manifest.json) or [`docs/New-Tenant-Onboarding-Runbook.md`](New-Tenant-Onboarding-Runbook.md).

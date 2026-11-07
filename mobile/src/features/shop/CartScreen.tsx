@@ -1040,8 +1040,18 @@ export function CartScreen() {
             </GroupedList>
 
             {automationOffers.length > 0 ? (
-              <View style={styles.specialOffers}>
-                <Text style={styles.specialOffersTitle}>Special for you</Text>
+              <View style={[styles.specialOffers, { borderColor: `${primary}33`, backgroundColor: `${primary}0A` }]}>
+                <View style={styles.specialOffersHeader}>
+                  <View style={[styles.specialOffersIcon, { backgroundColor: `${primary}18` }]}>
+                    <Feather name="gift" size={16} color={primary} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.specialOffersEyebrow, { color: primary }]}>Just for you</Text>
+                    <Text style={styles.specialOffersTitle}>
+                      {automationOffers.length === 1 ? 'Special offer' : 'Special offers'}
+                    </Text>
+                  </View>
+                </View>
                 {automationOffers.map((offer) => {
                   const active =
                     appliedAutomation != null &&
@@ -1053,7 +1063,12 @@ export function CartScreen() {
                   return (
                     <Pressable
                       key={offerKey(offer)}
-                      style={[styles.specialOfferCard, active ? { borderColor: primary } : null]}
+                      style={[
+                        styles.specialOfferCard,
+                        active
+                          ? { borderColor: primary, backgroundColor: `${primary}12` }
+                          : null,
+                      ]}
                       onPress={() => {
                         if (active) {
                           setAppliedAutomation(null);
@@ -1062,8 +1077,20 @@ export function CartScreen() {
                         applyAutomation(offer);
                       }}
                     >
-                      <View style={[styles.specialOfferBadge, { backgroundColor: `${primary}14` }]}>
-                        <Text style={[styles.specialOfferBadgeText, { color: primary }]}>
+                      <View
+                        style={[
+                          styles.specialOfferBadge,
+                          active
+                            ? { backgroundColor: primary }
+                            : { backgroundColor: `${primary}14`, borderColor: `${primary}33`, borderWidth: 1 },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.specialOfferBadgeText,
+                            { color: active ? colors.primaryForeground : primary },
+                          ]}
+                        >
                           {couponHeadline(offer, currency)}
                         </Text>
                       </View>
@@ -1071,18 +1098,18 @@ export function CartScreen() {
                         <Text style={styles.specialOfferLabel} numberOfLines={2}>
                           {offer.label || offer.name || 'Special offer'}
                         </Text>
-                        <Text style={styles.meta}>
+                        <Text style={[styles.meta, active ? { color: colors.success, fontWeight: '600' } : null]}>
                           {active
-                            ? `Applied · save ${formatShopMoney(automationDiscount, currency)}`
+                            ? `Applied · you save ${formatShopMoney(automationDiscount, currency)}`
                             : savings > 0
                               ? `Tap to save ${formatShopMoney(savings, currency)}`
                               : 'Tap to apply'}
                         </Text>
                       </View>
                       <Feather
-                        name={active ? 'check-circle' : 'chevron-right'}
-                        size={18}
-                        color={active ? colors.success : colors.mutedForeground}
+                        name={active ? 'check-circle' : 'plus-circle'}
+                        size={20}
+                        color={active ? colors.success : primary}
                       />
                     </Pressable>
                   );
@@ -2160,12 +2187,33 @@ const styles = StyleSheet.create({
   specialOffers: {
     marginTop: spacing.lg,
     gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+  },
+  specialOffersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: 2,
+  },
+  specialOffersIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialOffersEyebrow: {
+    ...typography.tiny,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   specialOffersTitle: {
     ...typography.label,
     fontWeight: '700',
     color: colors.foreground,
-    marginBottom: 2,
   },
   specialOfferCard: {
     flexDirection: 'row',
@@ -2178,11 +2226,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   specialOfferBadge: {
+    minWidth: 78,
     borderRadius: radius.md,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  specialOfferBadgeText: { ...typography.caption, fontWeight: '800' },
+  specialOfferBadgeText: { ...typography.caption, fontWeight: '800', textAlign: 'center' },
   specialOfferLabel: { ...typography.label, fontWeight: '700', color: colors.foreground },
   couponEntry: {
     marginTop: spacing.lg,

@@ -47,6 +47,8 @@ type FormState = {
   maxRedemptions: string;
   perCustomer: string;
   firstOrderOnly: boolean;
+  appliesToOnline: boolean;
+  appliesToPos: boolean;
   isActive: boolean;
 };
 
@@ -63,6 +65,8 @@ const EMPTY_FORM: FormState = {
   maxRedemptions: '',
   perCustomer: '',
   firstOrderOnly: false,
+  appliesToOnline: true,
+  appliesToPos: true,
   isActive: true,
 };
 
@@ -98,8 +102,19 @@ function couponToForm(coupon: ShopCoupon): FormState {
     perCustomer:
       coupon.max_redemptions_per_customer != null ? String(coupon.max_redemptions_per_customer) : '',
     firstOrderOnly: Boolean(coupon.first_order_only),
+    appliesToOnline: coupon.applies_to_online !== false,
+    appliesToPos: Boolean(coupon.applies_to_pos),
     isActive: coupon.is_active !== false,
   };
+}
+
+function channelLabel(coupon: ShopCoupon) {
+  const online = coupon.applies_to_online !== false;
+  const pos = Boolean(coupon.applies_to_pos);
+  if (online && pos) return 'Online + POS';
+  if (pos) return 'POS only';
+  if (online) return 'Online only';
+  return 'No channel';
 }
 
 function discountLabel(coupon: ShopCoupon, currency?: string | null) {
@@ -223,6 +238,8 @@ export function ShopCouponsScreen() {
         max_redemptions: optionalNumber(form.maxRedemptions),
         max_redemptions_per_customer: optionalNumber(form.perCustomer),
         first_order_only: form.firstOrderOnly,
+        applies_to_online: form.appliesToOnline,
+        applies_to_pos: form.appliesToPos,
         is_active: form.isActive,
       };
       if (editingId) {
@@ -266,27 +283,34 @@ export function ShopCouponsScreen() {
     return (
       <FormScreen
         footer={
-          <View style={styles.footer}>
-            <Button
-              label={busy ? 'Saving…' : editingId ? 'Update coupon' : 'Save coupon'}
-              fullWidth
-              size="lg"
-              loading={busy}
-              onPress={() => void save()}
-            />
+          <View style={[styles.footer, editingId ? styles.footerRow : null]}>
             {editingId ? (
-              <Button
-                label="Delete coupon"
-                variant="destructive"
-                fullWidth
-                onPress={() => void confirmDelete()}
-              />
+              <View style={styles.footerBtn}>
+                <Button
+                  label="Delete"
+                  variant="destructive"
+                  fullWidth
+                  size="lg"
+                  onPress={() => void confirmDelete()}
+                />
+              </View>
             ) : null}
+            <View style={editingId ? styles.footerBtnPrimary : undefined}>
+              <Button
+                label={busy ? 'Saving…' : editingId ? 'Update coupon' : 'Save coupon'}
+                fullWidth
+                size="lg"
+                loading={busy}
+                onPress={() => void save()}
+              />
+            </View>
           </View>
         }
       >
         <Text style={styles.formTitle}>{editingId ? 'Edit coupon' : 'Add coupon'}</Text>
-        <Text style={styles.help}>Codes customers can apply on pickup and delivery checkout.</Text>
+        <Text style={styles.help}>
+          Codes for online checkout and/or the sale counter. Turn on POS to show them on the sale page.
+        </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Input
           label="Code"
@@ -389,6 +413,26 @@ export function ShopCouponsScreen() {
           />
         </View>
         <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={styles.switchLabel}>Online orders</Text>
+            <Text style={styles.switchHint}>Pickup and delivery checkout</Text>
+          </View>
+          <Switch
+            value={form.appliesToOnline}
+            onValueChange={(appliesToOnline) => setForm((current) => ({ ...current, appliesToOnline }))}
+          />
+        </View>
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1, paddingRight: spacing.md }}>
+            <Text style={styles.switchLabel}>Sale counter (POS)</Text>
+            <Text style={styles.switchHint}>Show and apply on the sale page</Text>
+          </View>
+          <Switch
+            value={form.appliesToPos}
+            onValueChange={(appliesToPos) => setForm((current) => ({ ...current, appliesToPos }))}
+          />
+        </View>
+        <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Active</Text>
           <Switch
             value={form.isActive}
@@ -432,7 +476,7 @@ export function ShopCouponsScreen() {
             <BooksDocumentRow
               title={item.code}
               amount={discountLabel(item, currency)}
-              meta={`${item.name} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ${formatMoney(item.min_order_total, currency)}` : ''}`}
+              meta={`${item.name} · ${channelLabel(item)} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ${formatMoney(item.min_order_total, currency)}` : ''}`}
               badge={item.is_active === false ? 'Inactive' : 'Active'}
               badgeKind={item.is_active === false ? 'void' : 'paid'}
               icon="tag"
@@ -449,7 +493,7 @@ export function ShopCouponsScreen() {
                 message={
                   coupons.length
                     ? 'Try another search or clear filters.'
-                    : 'Create a code for customers to apply on online checkout.'
+                    : 'Create a code for online checkout and the sale counter.'
                 }
                 actionLabel={coupons.length ? undefined : 'Add coupon'}
                 onAction={coupons.length ? undefined : openCreate}
@@ -479,9 +523,13 @@ const styles = StyleSheet.create({
   help: { color: colors.mutedForeground, marginBottom: spacing.sm },
   error: { color: colors.destructive, marginBottom: spacing.sm },
   footer: { gap: spacing.sm },
+  footerRow: { flexDirection: 'row', alignItems: 'center' },
+  footerBtn: { flexShrink: 0, minWidth: 110 },
+  footerBtnPrimary: { flex: 1, minWidth: 0 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   switchLabel: { color: colors.foreground, fontWeight: '600' },
+  switchHint: { color: colors.mutedForeground, fontSize: 12, marginTop: 2 },
   row: {
     backgroundColor: colors.card,
     borderRadius: radius.md,

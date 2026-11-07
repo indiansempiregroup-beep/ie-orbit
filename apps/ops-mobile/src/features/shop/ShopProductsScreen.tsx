@@ -27,9 +27,9 @@ import { colors, fonts, iconTones, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ShopProduct } from '@ie-orbit/sdk';
 import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
-import { hasBiFeature } from '../../utils/planFeatures';
+import { hasBiFeature, PlanFeature } from '../../utils/planFeatures';
 import { canWriteShopCatalog } from '../../utils/roles';
-import { useBusinessBillingSnapshot } from '../../hooks/useOpsExtended';
+import { useBusinessBillingSnapshot, usePlanFeatures } from '../../hooks/useOpsExtended';
 import { getPersistentItem, setPersistentItem } from '../../utils/persistentStore';
 import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { primaryProductImageUrl } from './productImages';
@@ -76,7 +76,9 @@ export function ShopProductsScreen() {
   const { lift, maxHeight, bottomPad } = useSheetKeyboardLayout(0.82);
   const canWrite = canWriteShopCatalog(user);
   const { billing } = useBusinessBillingSnapshot();
+  const { has } = usePlanFeatures();
   const canSeeProfit = hasBiFeature(billing, 'profit', 'shopie');
+  const canScanInvoice = has(PlanFeature.shopieInvoiceScan);
   const [items, setItems] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +123,29 @@ export function ShopProductsScreen() {
               {isDesktop ? <Text style={styles.headerTextBtnLabel}>BI Profit</Text> : null}
             </Pressable>
           ) : null}
+          {canScanInvoice ? (
+            isDesktop ? (
+              <Pressable
+                onPress={() => navigation.navigate('ShopInvoiceScan')}
+                accessibilityRole="button"
+                accessibilityLabel="Scan invoice"
+                style={styles.headerTextBtn}
+              >
+                <Feather name="camera" size={16} color={colors.primary} />
+                <Text style={styles.headerTextBtnLabel}>Scan invoice</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => navigation.navigate('ShopInvoiceScan')}
+                accessibilityRole="button"
+                accessibilityLabel="Scan invoice"
+                hitSlop={8}
+                style={styles.headerBtn}
+              >
+                <Feather name="camera" size={18} color={colors.primary} />
+              </Pressable>
+            )
+          ) : null}
           {canWrite ? (
             <>
               {isDesktop ? (
@@ -158,7 +183,7 @@ export function ShopProductsScreen() {
         </View>
       ),
     });
-  }, [canSeeProfit, canWrite, isDesktop, navigation]);
+  }, [canScanInvoice, canSeeProfit, canWrite, isDesktop, navigation]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;

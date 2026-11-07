@@ -131,11 +131,17 @@ To run the OPS-Mobile (phone on same Wi-Fi / hotspot — use your PC LAN IP, not
 # cd "D:\Indians Empire\IE Orbit\ie-orbit"
 # corepack pnpm install --filter @ie-orbit/ops-mobile...
 
+# Everyday: --lan only. Wait for "Metro waiting on exp://…" before scanning.
+# Phone browser LAN check: http://192.168.1.11:8082 — if it fails, fix firewall/Wi-Fi isolation first.
+# Use --clear only when Metro is corrupted / deps changed. Use --tunnel if LAN stays flaky.
+
 cd "D:\Indians Empire\IE Orbit\ie-orbit\apps\ops-mobile"
 $env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
 $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_NO_METRO_WORKSPACE_ROOT="1"
-pnpm.cmd start -- --clear --lan
+pnpm.cmd start -- --lan
+# only when needed: pnpm.cmd start -- --clear --lan
+# LAN flaky:     pnpm.cmd start -- --tunnel
 
 
 
@@ -164,7 +170,9 @@ $env:REACT_NATIVE_PACKAGER_HOSTNAME="192.168.1.11"
 $env:EXPO_PUBLIC_API_BASE_URL="http://192.168.1.11:8000/api/v1"
 $env:EXPO_PUBLIC_FLAVOR_KEY="enjoy-pet-hub-and-kennels-enjoy-pet-hub-and-kennels"
 $env:EXPO_PUBLIC_APP_NAME="Enjoy pet hub and kennels"
-pnpm.cmd exec expo start --port 8083 --clear --lan
+pnpm.cmd exec expo start --port 8083 --lan
+# only when needed: pnpm.cmd exec expo start --port 8083 --clear --lan
+# LAN flaky:     pnpm.cmd exec expo start --port 8083 --tunnel
 
 
 
@@ -216,11 +224,11 @@ pnpm.cmd exec expo start --port 8083 --clear --lan
 
 
 
-# If LAN still fails, use tunnel instead:
+# If LAN still fails (phone browser cannot open :8082/:8083), use tunnel instead:
 
 
 
-# pnpm.cmd exec expo start --port 8083 --clear --tunnel
+# pnpm.cmd exec expo start --port 8083 --tunnel
 
 
 
@@ -258,11 +266,20 @@ Role
 platform_admin (auto-assigned)
 
 
+# Expo phone (macOS) — everyday start: --lan only (skip --clear unless Metro is corrupted / deps changed).
+# Wait until the terminal prints "Metro waiting on exp://…" before scanning the QR.
+# If the first scan fails: force-close Expo Go, then scan once more.
+# LAN check from phone Safari/Chrome: http://$REACT_NATIVE_PACKAGER_HOSTNAME:8082 (ops) or :8083 (customer).
+#   If that URL does not load, fix Wi-Fi isolation / Mac firewall — it is not an Expo QR bug.
+# Tunnel fallback when LAN stays flaky: swap --lan for --tunnel (slower; bypasses device-to-device Wi-Fi blocks).
+
 cd apps/ops-mobile
 export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
 export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/api/v1"
 export EXPO_NO_METRO_WORKSPACE_ROOT="1"
-corepack pnpm start -- --clear --lan
+corepack pnpm start -- --lan
+# only when needed: corepack pnpm start -- --clear --lan
+# LAN flaky:     corepack pnpm start -- --tunnel
 
 cd mobile
 export REACT_NATIVE_PACKAGER_HOSTNAME="$(ipconfig getifaddr en0)"
@@ -270,7 +287,9 @@ export EXPO_PUBLIC_API_BASE_URL="http://${REACT_NATIVE_PACKAGER_HOSTNAME}:8000/a
 export EXPO_PUBLIC_FLAVOR_KEY="rupali-s-business-rupali-s-business"
 export EXPO_PUBLIC_APP_NAME="Rupali Sirsat"
 export EXPO_NO_METRO_WORKSPACE_ROOT="1"
-corepack pnpm exec expo start --port 8083 --clear --lan
+corepack pnpm exec expo start --port 8083 --lan
+# only when needed: corepack pnpm exec expo start --port 8083 --clear --lan
+# LAN flaky:     corepack pnpm exec expo start --port 8083 --tunnel
 
 
 # Live Interserver APK (no Play / Apple account)

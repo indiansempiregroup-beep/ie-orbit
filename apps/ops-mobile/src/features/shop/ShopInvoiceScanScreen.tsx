@@ -495,7 +495,27 @@ export function ShopInvoiceScanScreen() {
                   ) : null}
                 </View>
               </View>
-              <Input label="Name" value={line.name} onChangeText={(value) => patchLine(index, { name: value })} />
+              <Input
+                label="Name"
+                value={line.name}
+                onChangeText={(value) => patchLine(index, { name: value, catalog_name: undefined })}
+              />
+              {line.catalog_name ? (
+                <View style={styles.catalogNameRow}>
+                  <Text style={styles.catalogNameHint} numberOfLines={2}>
+                    Catalog: {line.catalog_name}
+                  </Text>
+                  <Pressable
+                    onPress={() =>
+                      patchLine(index, { name: line.catalog_name || line.name, catalog_name: undefined })
+                    }
+                    hitSlop={8}
+                    accessibilityLabel="Use catalog name"
+                  >
+                    <Text style={styles.skip}>Use catalog name</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               <View style={styles.barcodeRow}>
                 <View style={styles.lineField}>
                   <Input
@@ -729,6 +749,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   barcodeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  catalogNameRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: -spacing.xs,
+  },
+  catalogNameHint: {
+    flex: 1,
+    color: colors.mutedForeground,
+    fontFamily: fonts.body,
+    fontSize: 12,
+  },
   iconBtn: {
     width: 44,
     height: 44,

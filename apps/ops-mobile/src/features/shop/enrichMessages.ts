@@ -11,7 +11,7 @@ type EnrichMessageInput = {
 };
 
 const TECHNICAL_SOURCE_RE =
-  /platform_gtin|gemini_text|gemini_vision|open_food|open_pet|open_product|open_beauty|openmrp|datakick|barcode_lookup|shop_catalog|image_hint|public_go_upc|commercial_|_barcode|_search/i;
+  /platform_gtin|gemini_text|gemini_vision|gemini_name_expand|open_food|open_pet|open_product|open_beauty|openmrp|datakick|barcode_lookup|shop_catalog|image_hint|public_go_upc|commercial_|_barcode|_search/i;
 
 function formatInrFromPaise(paise: number): string {
   return `₹${(paise / 100).toFixed(2)}`;
@@ -40,6 +40,8 @@ export function enrichSourceLabel(source?: string | null): string {
       return 'pack photo';
     case 'gemini_text':
       return 'Smart lookup';
+    case 'gemini_name_expand':
+      return 'Smart name expand';
     case 'openmrp':
       return 'India product registry';
     case 'barcode_lookup':
@@ -63,7 +65,8 @@ export function enrichSuccessMessage(
 ): string {
   const charged = Math.max(0, Number(data.charged_paise || 0) || 0);
   const sourceKey = (data.source || '').trim();
-  const isSmart = sourceKey === 'gemini_text' || sourceKey === 'gemini_vision';
+  const isSmart =
+    sourceKey === 'gemini_text' || sourceKey === 'gemini_vision' || sourceKey === 'gemini_name_expand';
   const billing = billingNote(charged, { isSmart });
   const source = enrichSourceLabel(data.source);
 
@@ -113,6 +116,8 @@ export function enrichLedgerSourceLabel(source?: string | null): string {
       return 'Pack photo fill';
     case 'gemini_text':
       return 'Smart fill';
+    case 'gemini_name_expand':
+      return 'Name expand';
     case 'gemini_invoice':
       return 'Invoice scan';
     case 'gemini_invoice_error':

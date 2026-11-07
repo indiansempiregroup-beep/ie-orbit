@@ -27,6 +27,12 @@ from apps.shopie.services.catalog_import.normalize import (
 )
 from apps.shopie.services.categories import CategoryService
 from apps.shopie.services.openmrp import lookup_openmrp_barcode
+from apps.shopie.services.query_normalize import (
+    brand_tokens_match,
+    query_brand_tokens,
+    search_query_variants,
+    token_matches,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +193,18 @@ class ProductEnrichmentService:
                 message = f"Filled from pack photo. No wallet charge. Review carefully, then save."
             else:
                 message = existing or "Could not read the pack photo clearly. Try again or fill details manually."
+        elif source == "gemini_name_expand":
+            if found:
+                billing = billing_note if charged_paise > 0 else free_note
+                message = (
+                    existing
+                    or (
+                        f"Matched catalog after Smart expanded the invoice name.{billing} "
+                        "Review carefully, then save."
+                    )
+                )
+            else:
+                message = existing or "Could not expand that product name. Try a barcode or pack photo."
         elif source == "gemini_text":
             if found:
                 billing = billing_note if charged_paise > 0 else " No wallet charge."
@@ -203,7 +221,7 @@ class ProductEnrichmentService:
             else:
                 message = (
                     existing
-                    or "Smart lookup could not identify this barcode. Take a pack photo or enter details manually."
+                    or "Smart lookup could not identify this product. Take a pack photo or enter details manually."
                 )
         elif source.endswith("_barcode") or source.startswith("open_"):
             message = (
@@ -544,7 +562,11 @@ class ProductEnrichmentService:
         lowered = (text or "").lower()
         if any(token in lowered for token in ("dog", "cat", "puppy", "kitten", "pet food", "petfood")):
             return True
-        return any(brand in lowered for brand in PET_BRAND_HINTS)
+        if any(brand in lowered for brand in PET_BRAND_HINTS):
+            return True
+        # Common invoice abbreviation for Pedigree (token "ped", not substring of other words).
+        tokens = set(re.findall(r"[a-z0-9]+", lowered))
+        return "ped" in tokens
 
     @staticmethod
     def is_plausible_barcode(code: str) -> bool:
@@ -749,17 +771,23 @@ class ProductEnrichmentService:
         }
 
     def _search(self, query: str, *, prefer_pet: bool) -> dict[str, Any]:
-        for catalog in self._catalogs(prefer_pet=prefer_pet):
-            product = self._search_catalog(catalog, query)
-            if product:
-                mapped = self._map_product(
-                    code=str(product.get("code") or ""),
-                    product=product,
-                    source=f"{catalog['name']}_search",
-                )
-                mapped["query"] = query
-                mapped["confidence"] = "medium"
-                return mapped
+        prefer_pet = prefer_pet or self.looks_like_pet_query(query)
+        variants = search_query_variants(query, prefer_pet=prefer_pet, max_variants=3)
+        if not variants:
+            variants = [query.strip()] if (query or "").strip() else []
+
+        for variant in variants:
+            for catalog in self._catalogs(prefer_pet=prefer_pet):
+                product = self._search_catalog(catalog, variant)
+                if product:
+                    mapped = self._map_product(
+                        code=str(product.get("code") or ""),
+                        product=product,
+                        source=f"{catalog['name']}_search",
+                    )
+                    mapped["query"] = variant
+                    mapped["confidence"] = "medium"
+                    return mapped
         return {
             "found": False,
             "code": "",
@@ -774,7 +802,7 @@ class ProductEnrichmentService:
             params = urllib_parse.urlencode(
                 {
                     "q": query,
-                    "page_size": 5,
+                    "page_size": 10,
                     "fields": "code,product_name,product_name_en,generic_name,brands,quantity,"
                     "serving_size,image_front_url,image_url,ingredients_text,ingredients_text_en,categories",
                 }
@@ -790,7 +818,7 @@ class ProductEnrichmentService:
                     "search_simple": 1,
                     "action": "process",
                     "json": 1,
-                    "page_size": 5,
+                    "page_size": 10,
                 }
             )
             payload = self._http_get_json(f"{catalog['search_url']}?{params}")
@@ -802,7 +830,7 @@ class ProductEnrichmentService:
             fallback_params = urllib_parse.urlencode(
                 {
                     "brands_tags": query.lower().replace(" ", "-"),
-                    "page_size": 5,
+                    "page_size": 10,
                     "fields": "code,product_name,brands,quantity,serving_size,image_front_url,"
                     "ingredients_text,categories",
                 }
@@ -814,6 +842,7 @@ class ProductEnrichmentService:
 
     def _best_search_hit(self, hits: list[Any], query: str) -> dict[str, Any] | None:
         query_tokens = {token for token in re.findall(r"[a-z0-9]+", query.lower()) if len(token) > 2}
+        brand_tokens = query_brand_tokens(query)
         ranked: list[tuple[int, dict[str, Any]]] = []
         for hit in hits:
             if not isinstance(hit, dict):
@@ -827,14 +856,47 @@ class ProductEnrichmentService:
                     str(product.get("generic_name") or ""),
                 ]
             ).lower()
-            score = sum(1 for token in query_tokens if token in haystack)
+            haystack_tokens = {token for token in re.findall(r"[a-z0-9]+", haystack) if token}
+            # Reject generic token overlap without brand agreement (Pedigree query ≠ Authority hit).
+            if not brand_tokens_match(brand_tokens, haystack, haystack_tokens):
+                continue
+            exact = 0
+            soft = 0
+            for token in query_tokens:
+                # Token-boundary exact only — never raw substring (str⊂industrie).
+                if token in haystack_tokens:
+                    exact += 1
+                elif token_matches(token, haystack, haystack_tokens):
+                    soft += 1
+            score = exact + soft
             if score <= 0 and query_tokens:
+                continue
+            # Multi-token invoice queries need ≥2 overlapping tokens.
+            min_score = 2 if len(query_tokens) >= 2 else 1
+            # Soft-only hits always need ≥2 to avoid weak brand / prefix noise.
+            if soft and exact == 0:
+                min_score = max(min_score, 2)
+            if score < min_score:
                 continue
             ranked.append((score, product))
         if not ranked:
             return None
         ranked.sort(key=lambda item: item[0], reverse=True)
         return ranked[0][1]
+
+    def catalog_agrees_with_query(self, result: dict[str, Any], query: str) -> bool:
+        """Post-expand guard: catalog row must share brand identity with the query."""
+        if not result.get("found"):
+            return False
+        haystack = " ".join(
+            [
+                str(result.get("name") or ""),
+                str(result.get("brand") or ""),
+                str(result.get("brands") or ""),
+            ]
+        ).lower()
+        haystack_tokens = {token for token in re.findall(r"[a-z0-9]+", haystack) if token}
+        return brand_tokens_match(query_brand_tokens(query), haystack, haystack_tokens)
 
     def _attach_category(self, result: dict[str, Any]) -> dict[str, Any]:
         categories_raw = str(result.get("categories") or "")

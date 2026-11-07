@@ -9,6 +9,7 @@ __pycache__/
 *.sqlite3
 *.egg-info/
 node_modules/
+**/node_modules
 dist/
 build/
 .vscode/
@@ -24,3 +25,9 @@ backups/
 .tmp-*
 .pytest_cache/
 .ruff_cache/
+
+# Shared with web/nginx builds (same repo-root context) — do not ignore web/, apps/, or mobile/.
+docs/
+design/
+e2e/
+playwright-report/

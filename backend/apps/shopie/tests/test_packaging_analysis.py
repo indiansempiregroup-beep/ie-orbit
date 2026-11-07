@@ -33,4 +33,5 @@ def test_catalog_match_requires_overlap() -> None:
 
 def test_looks_like_pet_query() -> None:
     assert ProductEnrichmentService.looks_like_pet_query("Pedigree Adult 3kg")
+    assert ProductEnrichmentService.looks_like_pet_query("PED PRO STR Large RP1520")
     assert not ProductEnrichmentService.looks_like_pet_query("Amul Taaza Milk")

@@ -4144,6 +4144,8 @@ export type ShopInvoiceScanLine = {
   match?: string;
   create?: boolean;
   skip?: boolean;
+  /** Catalog title from Fetch — kept separate so invoice OCR name is not overwritten. */
+  catalog_name?: string;
 };
 
 export type ShopInvoiceScanDraft = {

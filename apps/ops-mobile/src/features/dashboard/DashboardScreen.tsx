@@ -254,6 +254,22 @@ export function DashboardScreen() {
   }
 
   const showHomeTabs = showBookings && showOrders;
+  const showOrdersTodayTile =
+    showOrders || (staffFilterActive && shopieEnabled && !bookingStaffOnly && Boolean(shopie));
+  const showGmvTile = (showBooksHub || showBi || staffFilterActive) && shopieEnabled && Boolean(shopie);
+  const showSaleReport = has(PlanFeature.shopieGstReports) && isEnabled('booksReports');
+  const showReportsSection = showSaleReport || showPos || showBi;
+  const showCustomersAction =
+    (has(PlanFeature.appointieCustomers) || shopieEnabled) && isEnabled('customers');
+  const showQuickActions =
+    (hasAppointie && isEnabled('bookings')) ||
+    showPos ||
+    showCustomersAction ||
+    showAssistant ||
+    (hasAppointie && has(PlanFeature.appointieServices) && isEnabled('services')) ||
+    showBooksHub ||
+    showPets ||
+    (showStaff && hasAppointie && has(PlanFeature.appointieStaff) && isEnabled('staff'));
 
   const bookingsPanel = (
     <TodayBookingsPanel
@@ -320,7 +336,6 @@ export function DashboardScreen() {
               ) : null}
 
               <View style={styles.operationsCard}>
-                <Text style={styles.sectionTitle}>Today</Text>
                 {showHomeTabs ? (
                   <HomeOpsTabs
                     bookingsCount={upcomingAll.length}
@@ -380,15 +395,25 @@ export function DashboardScreen() {
                 />
               ) : null}
 
-              {showBookings || showOrders || showBooksHub || showReturns || (staffFilterActive && shopieEnabled && shopie) ? (
+              {showBookings || showOrdersTodayTile || showGmvTile || (showPartyTiles && books) || showReturns ? (
                 <TileGrid gap={spacing.md}>
                   {showBookings ? (
                     <StatTile
-                      label="Today"
+                      label="Bookings today"
                       value={String(appointie?.today_bookings ?? todayCount)}
                       hint={`${upcomingAll.length} still ahead`}
                       icon="calendar"
                       iconTone="blue"
+                    />
+                  ) : null}
+                  {showOrdersTodayTile ? (
+                    <StatTile
+                      label="Orders today"
+                      value={String(shopie?.orders_today ?? 0)}
+                      hint={`${shopie?.open_orders ?? 0} open`}
+                      icon="shopping-bag"
+                      iconTone="green"
+                      onPress={showOrders ? () => navigation.navigate('ShopOrders') : undefined}
                     />
                   ) : null}
                   {showBookings ? (
@@ -401,17 +426,7 @@ export function DashboardScreen() {
                       onPress={showBi ? () => navigation.navigate('BI', { tab: 'revenue' }) : undefined}
                     />
                   ) : null}
-                  {showOrders || (staffFilterActive && shopieEnabled && !bookingStaffOnly && shopie) ? (
-                    <StatTile
-                      label="Orders today"
-                      value={String(shopie?.orders_today ?? 0)}
-                      hint={`${shopie?.open_orders ?? 0} open`}
-                      icon="shopping-bag"
-                      iconTone="green"
-                      onPress={showOrders ? () => navigation.navigate('ShopOrders') : undefined}
-                    />
-                  ) : null}
-                  {(showBooksHub || showBi || staffFilterActive) && shopieEnabled && shopie ? (
+                  {showGmvTile ? (
                     <StatTile
                       label="GMV this month"
                       value={formatMoney(shopie?.gmv_month, summary?.currency)}
@@ -450,7 +465,7 @@ export function DashboardScreen() {
                 bookings={bookings}
                 shopOrders={shopOrders}
                 hasAppointie={showBookings}
-                shopieEnabled={Boolean(bi?.shopie) || showOrders || showBooksHub}
+                shopieEnabled={Boolean(bi?.shopie) || showOrders || showBooksHub || showPos}
                 petsEnabled={showPets}
                 showCashTiles={showCashTiles}
                 showPartyTiles={showPartyTiles}
@@ -459,72 +474,86 @@ export function DashboardScreen() {
                 onOpenBI={() => navigation.navigate('BI', { tab: 'overview' })}
               />
 
-              <View style={isDesktop ? styles.desktopSplit : undefined}>
-                <View style={isDesktop ? styles.desktopCol : undefined}>
-                  <Text style={styles.sectionLabel}>Quick actions</Text>
-                  <TileGrid columns={isDesktop ? 4 : 2} gap={spacing.md}>
-                    {hasAppointie && isEnabled('bookings') ? (
-                      <QuickAction icon="plus-circle" label="Booking" onPress={() => navigation.navigate('CreateBooking', {})} />
+              {showQuickActions || showReportsSection ? (
+                <View style={isDesktop ? styles.desktopSplit : undefined}>
+                  <View style={isDesktop ? styles.desktopCol : undefined}>
+                    {showQuickActions ? (
+                      <>
+                        <Text style={styles.sectionLabel}>Quick actions</Text>
+                        <TileGrid columns={isDesktop ? 4 : 2} gap={spacing.md}>
+                          {hasAppointie && isEnabled('bookings') ? (
+                            <QuickAction
+                              icon="plus-circle"
+                              label="Booking"
+                              onPress={() => navigation.navigate('CreateBooking', {})}
+                            />
+                          ) : null}
+                          {showPos ? (
+                            <QuickAction icon="shopping-cart" label="Sale" onPress={() => navigation.navigate('ShopPos')} />
+                          ) : null}
+                          {showCustomersAction ? (
+                            <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
+                          ) : null}
+                          {showAssistant ? (
+                            <QuickAction
+                              icon="message-circle"
+                              label="Assistant"
+                              onPress={() => navigation.navigate('Assistant')}
+                            />
+                          ) : null}
+                          {hasAppointie && has(PlanFeature.appointieServices) && isEnabled('services') ? (
+                            <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
+                          ) : null}
+                          {showBooksHub ? (
+                            <QuickAction icon="layers" label="Books" onPress={() => navigation.navigate('ShopBooks')} />
+                          ) : null}
+                          {showPets ? (
+                            <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
+                          ) : null}
+                          {showStaff && hasAppointie && has(PlanFeature.appointieStaff) && isEnabled('staff') ? (
+                            <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
+                          ) : null}
+                        </TileGrid>
+                      </>
                     ) : null}
-                    {showPos ? (
-                      <QuickAction icon="shopping-cart" label="Sale" onPress={() => navigation.navigate('ShopPos')} />
-                    ) : null}
-                    {(has(PlanFeature.appointieCustomers) || shopieEnabled) && isEnabled('customers') ? (
-                      <QuickAction icon="users" label="Customers" onPress={() => navigation.navigate('Customers')} />
-                    ) : null}
-                    {showAssistant ? (
-                      <QuickAction icon="message-circle" label="Assistant" onPress={() => navigation.navigate('Assistant')} />
-                    ) : null}
-                    {hasAppointie && has(PlanFeature.appointieServices) && isEnabled('services') ? (
-                      <QuickAction icon="package" label="Services" onPress={() => navigation.navigate('Services')} />
-                    ) : null}
-                    {showBooksHub ? (
-                      <QuickAction icon="layers" label="Books" onPress={() => navigation.navigate('ShopBooks')} />
-                    ) : null}
-                    {petsEnabled && isEnabled('pets') ? (
-                      <QuickAction icon="heart" label="Pets" onPress={() => navigation.navigate('ShopPets', undefined)} />
-                    ) : null}
-                    {showStaff && hasAppointie && has(PlanFeature.appointieStaff) && isEnabled('staff') ? (
-                      <QuickAction icon="user-check" label="Staff" onPress={() => navigation.navigate('StaffList')} />
-                    ) : null}
-                  </TileGrid>
 
-                  {(showBooksHub || showPos || showBi) && (
-                    <View style={styles.reportsCard}>
-                      <Text style={styles.sectionLabel}>Reports</Text>
-                      <TileGrid gap={spacing.md}>
-                        {has(PlanFeature.shopieGstReports) && isEnabled('booksReports') ? (
-                          <ReportLink
-                            icon="bar-chart-2"
-                            tone="violet"
-                            label="Sale report"
-                            hint="GST, P&L and books"
-                            onPress={() => navigation.navigate('ShopBooksReports')}
-                          />
-                        ) : null}
-                        {showPos ? (
-                          <ReportLink
-                            icon="shopping-cart"
-                            tone="green"
-                            label="Sale (POS)"
-                            hint="Open the counter"
-                            onPress={() => navigation.navigate('ShopPos')}
-                          />
-                        ) : null}
-                        {showBi ? (
-                          <ReportLink
-                            icon="pie-chart"
-                            tone="blue"
-                            label="Intelligence"
-                            hint="Overview & growth"
-                            onPress={() => navigation.navigate('BI', { tab: 'overview' })}
-                          />
-                        ) : null}
-                      </TileGrid>
-                    </View>
-                  )}
+                    {showReportsSection ? (
+                      <View style={styles.reportsCard}>
+                        <Text style={styles.sectionLabel}>Reports</Text>
+                        <TileGrid gap={spacing.md}>
+                          {showSaleReport ? (
+                            <ReportLink
+                              icon="bar-chart-2"
+                              tone="violet"
+                              label="Sale report"
+                              hint="GST, P&L and books"
+                              onPress={() => navigation.navigate('ShopBooksReports')}
+                            />
+                          ) : null}
+                          {showPos ? (
+                            <ReportLink
+                              icon="shopping-cart"
+                              tone="green"
+                              label="Sale (POS)"
+                              hint="Open the counter"
+                              onPress={() => navigation.navigate('ShopPos')}
+                            />
+                          ) : null}
+                          {showBi ? (
+                            <ReportLink
+                              icon="pie-chart"
+                              tone="blue"
+                              label="Intelligence"
+                              hint="Overview & growth"
+                              onPress={() => navigation.navigate('BI', { tab: 'overview' })}
+                            />
+                          ) : null}
+                        </TileGrid>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
+              ) : null}
             </View>
           </DesktopContent>
         </View>
@@ -665,11 +694,6 @@ const styles = StyleSheet.create({
   desktopSplit: { flexDirection: 'row', gap: spacing.xl, alignItems: 'flex-start' },
   desktopCol: { flex: 1, gap: spacing.lg, minWidth: 0 },
   operationsCard: { gap: spacing.md },
-  sectionTitle: {
-    ...typography.title,
-    color: colors.foreground,
-    fontSize: 19,
-  },
   insightCard: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
