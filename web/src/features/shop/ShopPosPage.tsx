@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
@@ -67,6 +68,11 @@ export function ShopPosPage() {
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const tp = useCallback(
+    (key: string, options?: Record<string, unknown>) => String(t(`shop.pos.${key}`, options)),
+    [t],
+  );
   const [searchParams] = useSearchParams();
   const posMode = searchParams.get('mode') || 'sale';
   const isChallan = posMode === 'delivery_challan';
@@ -171,7 +177,7 @@ export function ShopPosPage() {
       );
     }).catch((error) => {
       if (!cancelled) {
-        const text = error instanceof Error ? error.message : "Couldn't open this record on the counter.";
+        const text = error instanceof Error ? error.message : tp('couldntOpenRecord');
         setMessage(text);
         snackbar.push(text, 'error');
       }
@@ -179,7 +185,7 @@ export function ShopPosPage() {
     return () => {
       cancelled = true;
     };
-  }, [client, editDocumentId, products.data, products.isLoading, snackbar]);
+  }, [client, editDocumentId, products.data, products.isLoading, snackbar, tp]);
 
   useEffect(() => {
     if (!paymentSheet || !['opening', 'waiting'].includes(paymentSheet.status)) return;
@@ -199,7 +205,7 @@ export function ShopPosPage() {
 
   async function openRazorpay(checkoutData: MerchantRazorpayCheckout) {
     const loaded = await loadRazorpayCheckout();
-    if (!loaded || !window.Razorpay) throw new Error('Unable to load secure Razorpay Checkout.');
+    if (!loaded || !window.Razorpay) throw new Error(tp('razorpayLoadFailed'));
     setPaymentSheet({
       orderId: checkoutData.shop_order_id,
       orderNumber: checkoutData.order_number,
@@ -215,7 +221,7 @@ export function ShopPosPage() {
         name: checkoutData.business_name,
         description: `Bill ${checkoutData.order_number}`,
         handler: resolve,
-        modal: { ondismiss: () => reject(new Error('Payment window closed. The unpaid bill is saved.')) },
+        modal: { ondismiss: () => reject(new Error(tp('paymentWindowClosed'))) },
         theme: { color: '#2563eb' },
       });
       checkout.open();
@@ -227,7 +233,7 @@ export function ShopPosPage() {
 
   async function openCashfree(checkoutData: MerchantCashfreeCheckout) {
     const loaded = await loadCashfreeCheckout();
-    if (!loaded || !window.Cashfree) throw new Error('Unable to load Cashfree Checkout.');
+    if (!loaded || !window.Cashfree) throw new Error(tp('cashfreeLoadFailed'));
     setPaymentSheet({
       orderId: checkoutData.shop_order_id,
       orderNumber: checkoutData.order_number,
@@ -452,10 +458,10 @@ export function ShopPosPage() {
         addProduct(product, trimmed);
         setScan('');
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'Barcode not found.');
+        setMessage(error instanceof Error ? error.message : tp('barcodeNotFound'));
       }
     },
-    [lookup],
+    [lookup, tp],
   );
 
   async function handleScan(event: React.FormEvent) {
@@ -480,22 +486,24 @@ export function ShopPosPage() {
         }
       }
       setBulkCodes('');
-      setMessage(`Resolved ${result.found_count}/${codes.length} codes · added ${added}.`);
+      setMessage(
+        tp('bulkResolved', { found: result.found_count, total: codes.length, added }),
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Bulk lookup failed.');
+      setMessage(error instanceof Error ? error.message : tp('bulkLookupFailed'));
     }
   }
 
   async function checkout() {
     if (!basket.length) return;
     if (!isBooksDocument && tillPayment && balanceDue > 0 && !customerId) {
-      const text = 'Select a customer when the bill is not fully paid (partial or credit).';
+      const text = tp('selectCustomerPartial');
       setMessage(text);
       snackbar.push(text, 'error');
       return;
     }
     const gstinResult = showGstFields ? validateGstin(partyGstin) : { ok: true as const, gstin: '' };
-    if (!gstinResult.ok) {
+    if (gstinResult.ok === false) {
       setMessage(gstinResult.message);
       snackbar.push(gstinResult.message, 'error');
       return;
@@ -505,13 +513,17 @@ export function ShopPosPage() {
     try {
       if (isBooksDocument) {
         if (isPurchaseOrder && !supplierId) {
-          const text = 'Select a supplier for this purchase order.';
+          const text = tp('selectSupplierPo');
           setMessage(text);
           snackbar.push(text, 'error');
           return;
         }
         const docType = isPurchaseOrder ? 'purchase_order' : isSaleOrder ? 'sale_order' : 'delivery_challan';
-        const label = isPurchaseOrder ? 'Purchase order' : isSaleOrder ? 'Sale order' : 'Challan';
+        const label = isPurchaseOrder
+          ? tp('labelPurchaseOrder')
+          : isSaleOrder
+            ? tp('labelSaleOrder')
+            : tp('labelChallan');
         const documentLines = basket.map((line) => ({
           product_id: line.product.id,
           quantity: line.quantity,
@@ -554,10 +566,16 @@ export function ShopPosPage() {
         setBillDiscountValue('0');
         setPointsToRedeem(0);
         snackbar.push(
-          `${label} ${saved.document_number} ${editDocumentId ? 'updated' : 'created'} · ${money(totals.payable)}`,
+          tp(editDocumentId ? 'docUpdatedTotal' : 'docCreatedTotal', {
+            label,
+            number: saved.document_number,
+            total: money(totals.payable),
+          }),
           'success',
         );
-        setMessage(`${label} ${saved.document_number} ${editDocumentId ? 'updated' : 'created'}.`);
+        setMessage(
+          tp(editDocumentId ? 'docUpdated' : 'docCreated', { label, number: saved.document_number }),
+        );
         setDocumentNotes('');
         if (editDocumentId) {
           navigate(
@@ -645,17 +663,19 @@ export function ShopPosPage() {
       setPointsToRedeem(0);
       setAmountReceivedTouched(false);
       setAmountReceived('');
-      const dueLabel =
+      const billSnack =
         paymentMethod === 'razorpay' || paymentMethod === 'cashfree'
-          ? ' · Paid online'
+          ? tp('billCreatedOnline', { number: order.order_number, total: money(totals.payable) })
           : balanceDue > 0
-            ? ` · Paid ${money(receivedAmount)} · Due ${money(balanceDue)}`
-            : '';
-      snackbar.push(
-        `Bill ${order.order_number} created${dueLabel} · ${money(totals.payable)}`,
-        'success',
-      );
-      setMessage(`Bill ${order.order_number} created.`);
+            ? tp('billCreatedDue', {
+                number: order.order_number,
+                paid: money(receivedAmount),
+                due: money(balanceDue),
+                total: money(totals.payable),
+              })
+            : tp('billCreatedTotal', { number: order.order_number, total: money(totals.payable) });
+      snackbar.push(billSnack, 'success');
+      setMessage(tp('billCreated', { number: order.order_number }));
       if (workspace.businessId && order.books_voucher_id) {
         setDocActions({
           kind: 'sale',
@@ -665,11 +685,19 @@ export function ShopPosPage() {
         });
       }
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't create this bill. Try again.";
+      const text = error instanceof Error ? error.message : tp('couldntCreateBill');
       setMessage(text);
       snackbar.push(text, 'error');
     }
   }
+
+  const docTitle = isChallan
+    ? tp('titleChallan')
+    : isSaleOrder
+      ? tp('titleSaleOrder')
+      : isPurchaseOrder
+        ? tp('titlePurchaseOrder')
+        : tp('titleBill');
 
   return (
     <div className="page-stack">
@@ -684,7 +712,7 @@ export function ShopPosPage() {
           }
         }}
         target={docActions}
-        title={docActions?.kind === 'delivery_challan' ? 'Delivery challan ready' : 'Bill created'}
+        title={docActions?.kind === 'delivery_challan' ? tp('challanReady') : tp('billCreatedTitle')}
         allowNewBill={docActions?.kind === 'sale'}
         onNewBill={() => setDocActions(null)}
       />
@@ -693,21 +721,27 @@ export function ShopPosPage() {
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
           <Card>
             <h2 style={{ marginTop: 0 }}>
-              {isChallan ? 'Add to challan' : isSaleOrder ? 'Add to sale order' : isPurchaseOrder ? 'Add to purchase order' : 'Add to bill'}
+              {isChallan
+                ? tp('addToChallan')
+                : isSaleOrder
+                  ? tp('addToSaleOrder')
+                  : isPurchaseOrder
+                    ? tp('addToPurchaseOrder')
+                    : tp('addToBill')}
             </h2>
             <form onSubmit={handleScan} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 autoFocus
                 value={scan}
                 onChange={(event) => setScan(event.target.value)}
-                placeholder="Scan barcode / RFID (HID wedge, camera, or type)"
+                placeholder={tp('scanPlaceholder')}
                 style={{ flex: 1, minWidth: 220, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
               <Button type="submit" disabled={lookup.isPending}>
-                Add
+                {tp('add')}
               </Button>
               <Button type="button" onClick={() => setCameraOpen((open) => !open)}>
-                {cameraOpen ? 'Hide camera' : 'Camera'}
+                {cameraOpen ? tp('hideCamera') : tp('camera')}
               </Button>
             </form>
             <BarcodeCameraPanel
@@ -722,12 +756,12 @@ export function ShopPosPage() {
                 value={bulkCodes}
                 onChange={(event) => setBulkCodes(event.target.value)}
                 rows={3}
-                placeholder="Bulk barcodes / EPC (one per line)"
+                placeholder={tp('bulkPlaceholder')}
                 style={{ width: '100%', padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
               <div style={{ marginTop: 8 }}>
                 <Button type="button" onClick={handleBulk} disabled={lookupBulk.isPending}>
-                  Resolve bulk
+                  {tp('resolveBulk')}
                 </Button>
               </div>
             </div>
@@ -735,11 +769,11 @@ export function ShopPosPage() {
           </Card>
 
           <Card>
-            <h2 style={{ marginTop: 0 }}>Catalog</h2>
+            <h2 style={{ marginTop: 0 }}>{tp('catalog')}</h2>
             <input
               value={productQuery}
               onChange={(event) => setProductQuery(event.target.value)}
-              placeholder="Search products…"
+              placeholder={tp('searchProducts')}
               style={{ width: '100%', marginBottom: 12, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
             <div style={{ display: 'grid', gap: 8, maxHeight: 480, overflow: 'auto' }}>
@@ -758,30 +792,29 @@ export function ShopPosPage() {
                 >
                   <strong>{product.name}</strong>
                   <div style={{ opacity: 0.75 }}>
-                    {money(Number(product.price))} · stock {product.stock_on_hand}
+                    {tp('productMeta', { price: money(Number(product.price)), stock: product.stock_on_hand })}
                     {product.category ? ` · ${product.category}` : ''}
                   </div>
                 </button>
               ))}
-              {!filteredProducts.length ? <p>No matching products.</p> : null}
+              {!filteredProducts.length ? <p>{tp('noMatching')}</p> : null}
             </div>
           </Card>
         </div>
 
         <Card style={{ position: 'sticky', top: 16, alignSelf: 'start' }}>
           <h2 style={{ marginTop: 0 }}>
-            {editDocumentId ? 'Edit ' : ''}
-            {isChallan ? 'Delivery challan' : isSaleOrder ? 'Sale order' : isPurchaseOrder ? 'Purchase order' : 'Bill'}
+            {editDocumentId ? tp('editTitle', { title: docTitle }) : docTitle}
           </h2>
           {isPurchaseOrder ? (
             <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Supplier</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('supplier')}</span>
               <select
                 value={supplierId}
                 onChange={(event) => setSupplierId(event.target.value)}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               >
-                <option value="">Select supplier</option>
+                <option value="">{tp('selectSupplier')}</option>
                 {(suppliers.data ?? []).map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}
@@ -792,7 +825,7 @@ export function ShopPosPage() {
           ) : (
           <>
           <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Customer</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('customer')}</span>
             <select
               value={customerId}
               onChange={(event) => {
@@ -801,7 +834,7 @@ export function ShopPosPage() {
               }}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
-              <option value="">Walk-in customer</option>
+              <option value="">{tp('walkIn')}</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.full_name ||
@@ -816,12 +849,12 @@ export function ShopPosPage() {
           </label>
           {showGstFields ? (
             <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Customer GSTIN</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('customerGstin')}</span>
               <input
                 value={partyGstin}
                 onChange={(event) => setPartyGstin(normalizeGstin(event.target.value))}
                 maxLength={15}
-                placeholder="29AABCU9603R1ZJ (optional for B2C)"
+                placeholder={tp('gstinPlaceholder')}
                 style={{
                   padding: 12,
                   borderRadius: 12,
@@ -830,10 +863,10 @@ export function ShopPosPage() {
               />
               <span style={{ fontSize: 12, color: partyGstin && !billGstinCheck.ok ? '#dc2626' : '#6b7280' }}>
                 {partyGstin.length === 0
-                  ? 'Leave blank for B2C. Enter a valid GSTIN for B2B GST invoices.'
-                  : !billGstinCheck.ok
+                  ? tp('gstinBlank')
+                  : billGstinCheck.ok === false
                     ? billGstinCheck.message
-                    : 'Valid GSTIN — bill will be posted as B2B for GSTR-1 / e-invoice.'}
+                    : tp('gstinValid')}
               </span>
             </label>
           ) : null}
@@ -841,12 +874,12 @@ export function ShopPosPage() {
           )}
           {isBooksDocument ? (
             <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Notes</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('notes')}</span>
               <textarea
                 rows={2}
                 value={documentNotes}
                 onChange={(event) => setDocumentNotes(event.target.value)}
-                placeholder="Optional note on this record"
+                placeholder={tp('notesPlaceholder')}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', resize: 'vertical' }}
               />
             </label>
@@ -866,7 +899,7 @@ export function ShopPosPage() {
                       <div style={{ opacity: 0.75, fontSize: 13 }}>
                         {money(Number(line.product.price))} × {line.quantity}
                         {priced && priced.discountAmount > 0
-                          ? ` · disc. -${money(priced.discountAmount)}`
+                          ? ` · ${tp('lineDiscount', { amount: money(priced.discountAmount) })}`
                           : ''}
                       </div>
                     </div>
@@ -909,9 +942,9 @@ export function ShopPosPage() {
                       }
                       style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
                     >
-                      <option value="">No discount</option>
-                      <option value="percent">% off</option>
-                      <option value="amount">Amount off</option>
+                      <option value="">{tp('noDiscount')}</option>
+                      <option value="percent">{tp('percentOff')}</option>
+                      <option value="amount">{tp('amountOff')}</option>
                     </select>
                     ) : null}
                     {!isBooksDocument && line.discountType ? (
@@ -926,14 +959,14 @@ export function ShopPosPage() {
                       />
                     ) : null}
                     <Button type="button" variant="ghost" onClick={() => updateLine(line.product.id, { quantity: 0 })}>
-                      Remove
+                      {tp('remove')}
                     </Button>
                   </div>
                 </div>
               );
             })}
             {!basket.length ? (
-              <p>{isChallan ? 'Scan or pick products to start the challan.' : 'Scan or pick products to start the bill.'}</p>
+              <p>{isChallan ? tp('emptyChallan') : tp('emptyBill')}</p>
             ) : null}
           </div>
 
@@ -960,9 +993,9 @@ export function ShopPosPage() {
                         color: 'var(--primary)',
                       }}
                     >
-                      Customer rewards
+                      {tp('customerRewards')}
                     </div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>Reward points</div>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{tp('rewardPoints')}</div>
                   </div>
                   <div
                     style={{
@@ -976,11 +1009,15 @@ export function ShopPosPage() {
                     <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.1 }}>
                       {selectedCustomer?.loyalty_points ?? 0}
                     </div>
-                    <div style={{ fontSize: 11, opacity: 0.7 }}>pts</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>{tp('pts')}</div>
                   </div>
                 </div>
                 <div style={{ fontSize: 13, opacity: 0.75 }}>
-                  {loyaltyPrefs.points_per_currency_unit} pts = {money(1)} · redeem up to {loyaltyMaxPoints} pts
+                  {tp('redeemInfo', {
+                    rate: loyaltyPrefs.points_per_currency_unit,
+                    value: money(1),
+                    max: loyaltyMaxPoints,
+                  })}
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Button
@@ -998,7 +1035,7 @@ export function ShopPosPage() {
                   </Button>
                   <div style={{ minWidth: 72, textAlign: 'center' }}>
                     <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{pointsToRedeem}</div>
-                    <div style={{ fontSize: 11, opacity: 0.7 }}>pts</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>{tp('pts')}</div>
                   </div>
                   <Button
                     type="button"
@@ -1014,7 +1051,7 @@ export function ShopPosPage() {
                     +
                   </Button>
                   <Button type="button" onClick={() => setPointsToRedeem(loyaltyMaxPoints)}>
-                    Max
+                    {tp('max')}
                   </Button>
                 </div>
                 {pointsToRedeem > 0 ? (
@@ -1028,10 +1065,10 @@ export function ShopPosPage() {
                       fontWeight: 600,
                     }}
                   >
-                    Saves {money(loyaltyDiscount)} on this bill
+                    {tp('saves', { amount: money(loyaltyDiscount) })}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 13, opacity: 0.7 }}>Tap + to redeem points on this bill</div>
+                  <div style={{ fontSize: 13, opacity: 0.7 }}>{tp('tapToRedeem')}</div>
                 )}
               </div>
             ) : null}
@@ -1056,9 +1093,9 @@ export function ShopPosPage() {
                       color: 'var(--primary)',
                     }}
                   >
-                    Special for this customer
+                    {tp('specialForCustomer')}
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>Automation offers</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{tp('automationOffers')}</div>
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
                   {automationOffers.map((offer) => {
@@ -1068,8 +1105,8 @@ export function ShopPosPage() {
                       String(Number(billDiscountValue) || 0) === String(Number(offer.discount_value) || 0);
                     const badge =
                       dtype === 'amount'
-                        ? `${money(Number(offer.discount_value) || 0)} off`
-                        : `${Number(offer.discount_value) || 0}% off`;
+                        ? tp('badgeAmountOff', { value: money(Number(offer.discount_value) || 0) })
+                        : tp('badgePercentOff', { value: Number(offer.discount_value) || 0 });
                     return (
                       <button
                         key={`${offer.label}-${offer.discount_value}`}
@@ -1113,7 +1150,7 @@ export function ShopPosPage() {
                         <span style={{ flex: 1 }}>
                           <strong style={{ display: 'block', fontSize: 14 }}>{offer.label}</strong>
                           <span style={{ fontSize: 12, opacity: 0.7 }}>
-                            {active ? 'Applied to bill' : 'Tap to apply'}
+                            {active ? tp('applied') : tp('tapToApply')}
                           </span>
                         </span>
                       </button>
@@ -1133,7 +1170,7 @@ export function ShopPosPage() {
               }}
             >
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Bill discount</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('billDiscount')}</span>
                 <select
                   value={billDiscountType}
                   onChange={(event) => {
@@ -1143,9 +1180,9 @@ export function ShopPosPage() {
                   }}
                   style={{ padding: 8, borderRadius: 8, border: '1px solid #e5e7eb' }}
                 >
-                  <option value="">None</option>
-                  <option value="percent">% off</option>
-                  <option value="amount">Amount off</option>
+                  <option value="">{tp('none')}</option>
+                  <option value="percent">{tp('percentOff')}</option>
+                  <option value="amount">{tp('amountOff')}</option>
                 </select>
                 {billDiscountType ? (
                   <input
@@ -1170,22 +1207,28 @@ export function ShopPosPage() {
       >
         <Card>
           <h2 style={{ marginTop: 0 }}>
-            {isChallan ? 'Challan' : isSaleOrder ? 'Sale order' : isPurchaseOrder ? 'Purchase order' : 'Payment'}
+            {isChallan
+              ? tp('challan')
+              : isSaleOrder
+                ? tp('titleSaleOrder')
+                : isPurchaseOrder
+                  ? tp('titlePurchaseOrder')
+                  : tp('payment')}
           </h2>
           {!isBooksDocument ? (
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {(
                   [
-                    { value: 'cash', label: 'Cash' },
-                    { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' },
-                    { value: 'borrow', label: 'Borrow' },
+                    { value: 'cash', label: tp('methodCash') },
+                    { value: 'upi', label: tp('methodUpi') },
+                    { value: 'card', label: tp('methodCard') },
+                    { value: 'borrow', label: tp('methodBorrow') },
                     ...(razorpayConnected
-                      ? [{ value: 'razorpay' as const, label: 'Pay with Razorpay' }]
+                      ? [{ value: 'razorpay' as const, label: tp('methodRazorpay') }]
                       : []),
                     ...(cashfreeConnected
-                      ? [{ value: 'cashfree' as const, label: 'Pay with Cashfree' }]
+                      ? [{ value: 'cashfree' as const, label: tp('methodCashfree') }]
                       : []),
                   ] as const
                 ).map((method) => (
@@ -1205,7 +1248,7 @@ export function ShopPosPage() {
               {tillPayment ? (
                 <label style={{ display: 'grid', gap: 6 }}>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>
-                    {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                    {paymentMethod === 'borrow' ? tp('amountPaidNow') : tp('amountReceived')}
                   </span>
                   <input
                     type="number"
@@ -1230,99 +1273,96 @@ export function ShopPosPage() {
                   />
                   <span style={{ fontSize: 12, color: '#6b7280' }}>
                     {balanceDue > 0
-                      ? `Balance due ${money(balanceDue)} will be added to the customer’s credit.`
-                      : 'Bill will be marked fully paid.'}
+                      ? tp('balanceDueCredit', { amount: money(balanceDue) })
+                      : tp('fullyPaid')}
                   </span>
                 </label>
               ) : null}
               {paymentMethod === 'borrow' ? (
                 <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
-                  Borrow / credit: unpaid balance stays on the customer account. Customer required (not
-                  Walk-in) when anything is due.
+                  {tp('borrowNote')}
                 </p>
               ) : null}
               {paymentMethod === 'razorpay' ? (
                 <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
-                  Secure Razorpay Checkout opens after the bill is created. The bill stays unpaid until
-                  Razorpay confirms it.
+                  {tp('razorpayNote')}
                 </p>
               ) : null}
               {paymentMethod === 'cashfree' ? (
                 <p style={{ margin: 0, fontSize: 13, color: '#1d4ed8' }}>
-                  Cashfree Checkout opens after the bill is created. The bill stays unpaid until
-                  Cashfree confirms it.
+                  {tp('cashfreeNote')}
                 </p>
               ) : null}
             </div>
           ) : (
             <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
               {isPurchaseOrder
-                ? 'No payment now. Convert this order into a purchase bill when the goods arrive.'
+                ? tp('noPaymentPurchaseOrder')
                 : isSaleOrder
-                  ? 'No payment now. Convert this order into a sale invoice when you bill the customer.'
-                  : 'No payment now. Dispatch the challan when goods leave — stock is deducted then. Create the invoice after that so stock is not deducted twice.'}
+                  ? tp('noPaymentSaleOrder')
+                  : tp('noPaymentChallan')}
             </p>
           )}
         </Card>
 
         <Card>
           <div style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
-            <strong>{isChallan ? 'Challan summary' : 'Bill summary'}</strong>
+            <strong>{isChallan ? tp('challanSummary') : tp('billSummary')}</strong>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Items</span>
+              <span>{tp('items')}</span>
               <span>{money(totals.merchandiseGross)}</span>
             </div>
             {totals.lineDiscountTotal > 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Product discounts</span>
+                <span>{tp('productDiscounts')}</span>
                 <span>-{money(totals.lineDiscountTotal)}</span>
               </div>
             ) : null}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Subtotal</span>
+              <span>{tp('subtotal')}</span>
               <span>{money(totals.merchandiseAfterLineDiscount)}</span>
             </div>
             {totals.billDiscountAmount > 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Bill discount</span>
+                <span>{tp('billDiscount')}</span>
                 <span>-{money(totals.billDiscountAmount)}</span>
               </div>
             ) : null}
             {totals.loyaltyDiscountAmount > 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Reward points</span>
+                <span>{tp('rewardPoints')}</span>
                 <span>-{money(totals.loyaltyDiscountAmount)}</span>
               </div>
             ) : null}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Taxable</span>
+              <span>{tp('taxable')}</span>
               <span>{money(totals.subtotal)}</span>
             </div>
             {totals.taxTotal > 0 ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>CGST</span>
+                  <span>{tp('cgst')}</span>
                   <span>{money(Math.round((totals.taxTotal / 2) * 100) / 100)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>SGST</span>
+                  <span>{tp('sgst')}</span>
                   <span>{money(totals.taxTotal - Math.round((totals.taxTotal / 2) * 100) / 100)}</span>
                 </div>
               </>
             ) : (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Tax</span>
+                <span>{tp('tax')}</span>
                 <span>{money(totals.taxTotal)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 18 }}>
-              <span>Total</span>
+              <span>{tp('total')}</span>
               <span>{money(payableAfterLoyalty)}</span>
             </div>
             {!isBooksDocument && tillPayment ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Received</span>
+                  <span>{tp('received')}</span>
                   <span>{money(receivedAmount)}</span>
                 </div>
                 <div
@@ -1333,7 +1373,7 @@ export function ShopPosPage() {
                     color: balanceDue > 0 ? '#b45309' : undefined,
                   }}
                 >
-                  <span>Balance due</span>
+                  <span>{tp('balanceDue')}</span>
                   <span>{money(balanceDue)}</span>
                 </div>
               </>
@@ -1346,22 +1386,24 @@ export function ShopPosPage() {
             disabled={!basket.length || createOrder.isPending || createDocument.isPending || updateDocument.isPending}
           >
             {createDocument.isPending || updateDocument.isPending
-              ? 'Saving…'
+              ? tp('saving')
               : createOrder.isPending
-                ? 'Creating bill…'
+                ? tp('creatingBill')
                 : isChallan
-                  ? `${editDocumentId ? 'Update' : 'Save'} challan · ${money(totals.payable)}`
+                  ? tp(editDocumentId ? 'updateChallan' : 'saveChallan', { amount: money(totals.payable) })
                   : isSaleOrder
-                    ? `${editDocumentId ? 'Update' : 'Save'} sale order · ${money(totals.payable)}`
+                    ? tp(editDocumentId ? 'updateSaleOrder' : 'saveSaleOrder', { amount: money(totals.payable) })
                     : isPurchaseOrder
-                      ? `${editDocumentId ? 'Update' : 'Save'} purchase order · ${money(totals.payable)}`
-                  : paymentMethod === 'razorpay'
-                    ? `Pay with Razorpay · ${money(payableAfterLoyalty)}`
-                    : paymentMethod === 'cashfree'
-                      ? `Pay with Cashfree · ${money(payableAfterLoyalty)}`
-                      : balanceDue > 0
-                        ? `Create Bill · Pay ${money(receivedAmount)} · Due ${money(balanceDue)}`
-                        : `Create Bill · ${money(payableAfterLoyalty)}`}
+                      ? tp(editDocumentId ? 'updatePurchaseOrder' : 'savePurchaseOrder', {
+                          amount: money(totals.payable),
+                        })
+                      : paymentMethod === 'razorpay'
+                        ? tp('payRazorpay', { amount: money(payableAfterLoyalty) })
+                        : paymentMethod === 'cashfree'
+                          ? tp('payCashfree', { amount: money(payableAfterLoyalty) })
+                          : balanceDue > 0
+                            ? tp('createBillPartial', { paid: money(receivedAmount), due: money(balanceDue) })
+                            : tp('createBill', { amount: money(payableAfterLoyalty) })}
           </Button>
         </Card>
       </div>
@@ -1370,7 +1412,7 @@ export function ShopPosPage() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Online payment status"
+          aria-label={tp('onlinePaymentStatus')}
           style={{
             position: 'fixed',
             inset: 0,
@@ -1387,18 +1429,18 @@ export function ShopPosPage() {
             </div>
             <h2 style={{ margin: '0 0 8px' }}>
               {paymentSheet.status === 'paid'
-                ? 'Payment received'
+                ? tp('paymentReceived')
                 : paymentSheet.status === 'failed'
-                  ? 'Payment failed'
-                  : 'Waiting for payment'}
+                  ? tp('paymentFailed')
+                  : tp('waitingForPayment')}
             </h2>
-            <p style={{ margin: '0 0 4px', color: '#6b7280' }}>Bill {paymentSheet.orderNumber}</p>
+            <p style={{ margin: '0 0 4px', color: '#6b7280' }}>{tp('billNumber', { number: paymentSheet.orderNumber })}</p>
             <strong style={{ display: 'block', fontSize: 28, margin: '12px 0 20px' }}>
               {money(paymentSheet.amount)}
             </strong>
             {paymentSheet.status !== 'paid' ? (
               <p style={{ color: '#6b7280' }}>
-                Complete the secure Razorpay window. This status also updates automatically from the webhook.
+                {tp('completeRazorpay')}
               </p>
             ) : null}
             <Button
@@ -1406,7 +1448,7 @@ export function ShopPosPage() {
               variant={paymentSheet.status === 'paid' ? 'primary' : 'neutral'}
               onClick={() => setPaymentSheet(null)}
             >
-              {paymentSheet.status === 'paid' ? 'Done' : 'Close — keep bill unpaid'}
+              {paymentSheet.status === 'paid' ? tp('done') : tp('closeKeepUnpaid')}
             </Button>
           </Card>
         </div>

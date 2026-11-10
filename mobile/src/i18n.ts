@@ -28,6 +28,6 @@ export const i18n = createAppI18n({
 
 void readStoredLanguage().then((stored) => {
   if (stored) {
-    void i18n.changeLanguage(normalizeLanguageCode(stored) === 'hi' ? 'hi' : 'en');
+    void i18n.changeLanguage(normalizeLanguageCode(stored));
   }
 });

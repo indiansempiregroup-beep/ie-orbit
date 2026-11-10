@@ -15,6 +15,7 @@ export {
   setActiveIntlLocale,
   subscribeActiveIntlLocale,
 } from './localeBridge';
+export { isRtlLanguage, syncDocumentLocale, toHtmlLang } from './documentLocale';
 export { default as enCatalog } from './locales/en.json';
 export { default as hiCatalog } from './locales/hi.json';
 export { default as deCatalog } from './locales/de.json';

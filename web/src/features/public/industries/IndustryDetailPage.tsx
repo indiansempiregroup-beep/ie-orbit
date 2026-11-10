@@ -1,19 +1,26 @@
+import { useMemo } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import { Button } from '../../../components/Button';
 import { PublicCtaBand } from '../PublicCtaBand';
 import { PublicBreadcrumbs } from '../PublicBreadcrumbs';
-import { industryBySlug, INDUSTRIES } from './content';
+import type { TranslateFn } from '../translate';
+import { getIndustries, industryProductLabel } from './content';
 import { REGISTER_FRESH_START_STATE } from '../../onboarding/registerNavigation';
 import { registerStartPath } from '../../onboarding/affiliateCode';
 
 export function IndustryDetailPage() {
   const { slug = '' } = useParams();
-  const industry = industryBySlug(slug);
+  const { t, i18n } = useTranslation();
+  const translate = t as unknown as TranslateFn;
+  const industries = useMemo(() => getIndustries(translate), [translate, i18n.language]);
+  const industry = industries.find((item) => item.slug === slug);
   if (!industry) return <Navigate to="/industries" replace />;
 
-  const related = INDUSTRIES.filter((item) => industry.related.includes(item.slug));
+  const related = industries.filter((item) => industry.related.includes(item.slug));
   const pricingProduct =
     industry.products.includes('mart') && !industry.products.includes('appoint') ? 'shopie' : 'appointie';
+  const pricingPath = `/pricing?product=${pricingProduct}`;
 
   return (
     <>
@@ -25,13 +32,13 @@ export function IndustryDetailPage() {
             <p className="public-lead">{industry.lead}</p>
             <div className="public-hero-actions">
               <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
-                <Button variant="primary">Create account</Button>
+                <Button variant="primary">{t('public.createAccount')}</Button>
               </Link>
               <Link to="/features">
-                <Button variant="neutral">Features</Button>
+                <Button variant="neutral">{t('public.products')}</Button>
               </Link>
-              <Link to={`/pricing?product=${pricingProduct}`}>
-                <Button variant="neutral">Pricing</Button>
+              <Link to={pricingPath}>
+                <Button variant="neutral">{t('public.nav.pricing')}</Button>
               </Link>
             </div>
           </div>
@@ -56,8 +63,8 @@ export function IndustryDetailPage() {
             <h2>{industry.featuresTitle}</h2>
           </div>
           <div className="public-grid">
-            {industry.features.map((feature) => (
-              <article key={feature.title} className="public-card">
+            {industry.features.map((feature, index) => (
+              <article key={`${index}-${feature.title}`} className="public-card">
                 <h3>{feature.title}</h3>
                 <p style={{ marginBottom: 0 }}>{feature.body}</p>
               </article>
@@ -70,7 +77,7 @@ export function IndustryDetailPage() {
           </div>
           <div className="public-steps">
             {industry.workflow.map((step, index) => (
-              <article key={step.title} className="public-card public-step">
+              <article key={`${index}-${step.title}`} className="public-card public-step">
                 <span className="public-step__index">{index + 1}</span>
                 <h3>{step.title}</h3>
                 <p style={{ marginBottom: 0 }}>{step.body}</p>
@@ -83,8 +90,8 @@ export function IndustryDetailPage() {
             <h2>{industry.benefitsTitle}</h2>
           </div>
           <ul className="public-list">
-            {industry.benefits.map((benefit) => (
-              <li key={benefit}>{benefit}</li>
+            {industry.benefits.map((benefit, index) => (
+              <li key={`${index}-${benefit}`}>{benefit}</li>
             ))}
           </ul>
         </section>
@@ -102,11 +109,11 @@ export function IndustryDetailPage() {
         </section>
         <section className="public-section">
           <div className="public-section__head">
-            <h2>Frequently asked questions</h2>
+            <h2>{t('public.industries.detail.faqTitle')}</h2>
           </div>
           <div className="public-faq-list">
-            {industry.faqs.map((item) => (
-              <div key={item.q} className="public-faq">
+            {industry.faqs.map((item, index) => (
+              <div key={`${index}-${item.q}`} className="public-faq">
                 <details>
                   <summary>{item.q}</summary>
                   <p>{item.a}</p>
@@ -117,22 +124,37 @@ export function IndustryDetailPage() {
         </section>
         <section className="public-section">
           <div className="public-section__head">
-            <h2>Related industries</h2>
+            <h2>{t('public.industries.detail.relatedTitle')}</h2>
           </div>
           <p className="public-lead">
-            Also see <Link to="/features">features</Link>, <Link to={`/pricing?product=${pricingProduct}`}>pricing</Link>, and the{' '}
-            <Link to="/faq">FAQ</Link>.
+            <Trans
+              i18nKey="public.industries.detail.alsoSee"
+              components={{
+                products: <Link to="/features" />,
+                pricing: <Link to={pricingPath} />,
+                faq: <Link to="/faq" />,
+              }}
+            />
           </p>
-          <div className="public-chip-row">
-            {related.map((item) => (
-              <Link key={item.slug} className="public-chip" to={item.path}>
-                {item.name}
+          <div className="public-product-grid" style={{ marginTop: 28 }}>
+            {related.map((item, index) => (
+              <Link key={item.slug} to={item.path} className="public-card-link">
+                <article className={`public-card public-card--media public-card--${['peach', 'blue', 'yellow', 'purple'][index % 4]}`}>
+                  <div className="public-card-media">
+                    <img src={item.cardGif} alt="" />
+                  </div>
+                  <div className="public-card-body">
+                    <p className="public-kicker">{industryProductLabel(item.products, translate)}</p>
+                    <h2>{item.name}</h2>
+                    <p style={{ marginBottom: 0 }}>{item.lead}</p>
+                  </div>
+                </article>
               </Link>
             ))}
           </div>
         </section>
       </div>
-      <PublicCtaBand title="Start a 45-day full-Pro trial" />
+      <PublicCtaBand title={t('public.industries.detail.ctaTitle')} />
     </>
   );
 }

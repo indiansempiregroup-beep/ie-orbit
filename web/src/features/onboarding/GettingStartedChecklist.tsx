@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { GETTING_STARTED_ITEMS } from '../../config/onboarding';
@@ -13,6 +14,7 @@ type GettingStartedChecklistProps = {
 };
 
 export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistProps) {
+  const { t } = useTranslation();
   const businessQuery = useBusinessProfileQuery();
   const customersQuery = useCustomerList();
   const servicesQuery = useServiceList();
@@ -80,14 +82,19 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
         <div>
           <p className="public-kicker">Welcome wizard</p>
           <h2 id="getting-started-title" style={{ margin: '4px 0' }}>
-            Getting started
+            {t('dashboard.gettingStarted')}
           </h2>
           <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
-            {loading ? 'Checking your setup…' : `${progress}% complete`}
+            {loading ? t('common.loading') : `${progress}% complete`}
           </p>
         </div>
-        <Button variant="ghost" type="button" onClick={handleDismiss} aria-label="Dismiss getting started checklist">
-          Dismiss
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={handleDismiss}
+          aria-label={t('dashboard.welcomeDismiss')}
+        >
+          {t('dashboard.welcomeDismiss')}
         </Button>
       </div>
       <div

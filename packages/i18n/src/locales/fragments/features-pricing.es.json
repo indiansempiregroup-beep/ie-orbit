@@ -1,0 +1,298 @@
+{
+  "public": {
+    "plans": {
+      "tryFirst": "Pruébalo primero",
+      "free": "Gratis",
+      "trialDays": "{{days}} días",
+      "mostPopular": "Más popular",
+      "kickerStarter": "Autónomos y microempresas",
+      "kickerPro": "Equipos en crecimiento",
+      "perMonth": "/mes",
+      "appointName": "Orbit Appoint",
+      "martName": "Orbit Mart",
+      "bothName": "Orbit Appoint + Orbit Mart",
+      "trialBullets": {
+        "fullPro": "Todas las funciones Pro de {{product}} durante la prueba",
+        "whiteLabel": "App de clientes de marca blanca con tu marca",
+        "noCard": "No hace falta tarjeta de crédito para empezar",
+        "upgrade": "Mejora tu plan cuando quieras para conservar tus datos"
+      },
+      "combinedTrialBullets": {
+        "fullPro": "Orbit Appoint y Orbit Mart Pro completos durante la prueba",
+        "oneApp": "Una sola app de marca blanca para reservar y comprar",
+        "sharedCustomers": "Clientes compartidos en un único espacio de trabajo",
+        "noCard": "No hace falta tarjeta de crédito para empezar"
+      },
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (se factura por producto)"
+    },
+    "features": {
+      "createAccount": "Crear cuenta",
+      "howKicker": "Cómo funciona",
+      "howAria": "Cómo funciona",
+      "benefitsKicker": "Ventajas",
+      "benefitsAria": "Ventajas",
+      "pricingKicker": "Precios",
+      "pricingAria": "Precios",
+      "seeFullPricing": "Ver todos los precios",
+      "ctaTitle": "Prueba la app de marca blanca durante {{days}} días",
+      "appoint": {
+        "kicker": "Orbit Appoint",
+        "title": "Reservas sin idas y venidas.",
+        "body": "Ofrece a tus clientes una forma estupenda de ver la disponibilidad, reservar al instante y volver. Starter incluye una ubicación. Pro añade recordatorios por WhatsApp, pagos, una segunda oficina y una app sin anuncios.",
+        "features": {
+          "f1": "App de clientes de marca blanca para que reserven con tu marca",
+          "f2": "Disponibilidad inteligente y calendarios del personal",
+          "f3": "Recordatorios automáticos por correo; WhatsApp con Pro",
+          "f4": "Pro añade segunda oficina, pagos, BI completo, puntos de recompensa y una app de clientes sin anuncios",
+          "f5": "Asistente de IA para preguntas sobre el día en lenguaje natural",
+          "f6": "Automation Creator con Pro para recordatorios y sugerencias de ofertas al personal"
+        },
+        "howTitle": "Cómo funciona Orbit Appoint",
+        "howLead": "Los clientes reservan en tu app con tu marca. Tu equipo gestiona el día desde un solo calendario.",
+        "how": {
+          "s1": {
+            "title": "Publica servicios y personal",
+            "body": "Define la duración de los servicios, el personal, las salas y los horarios para que la disponibilidad sea siempre real."
+          },
+          "s2": {
+            "title": "Los clientes reservan en línea",
+            "body": "Eligen una hora en tu app de marca blanca o en la reserva web en lugar de llamar a recepción."
+          },
+          "s3": {
+            "title": "Gestiona y haz seguimiento",
+            "body": "El personal ve el calendario en vivo, envía recordatorios y guarda el historial del cliente en un solo lugar."
+          }
+        },
+        "benefitsTitle": "Por qué las empresas eligen Orbit Appoint",
+        "benefitsLead": "Menos citas perdidas, menos llamadas de ida y vuelta y una app de clientes que parece tu marca.",
+        "benefits": {
+          "b1": {
+            "title": "App de reservas de marca blanca",
+            "body": "Tus clientes instalan tu marca —no una ficha genérica de IE Orbit— en iOS y Android."
+          },
+          "b2": {
+            "title": "Un calendario compartido",
+            "body": "Olvídate de agendas y chats de WhatsApp. Todos ven quién está libre y qué está reservado."
+          },
+          "b3": {
+            "title": "Recordatorios que funcionan",
+            "body": "Recordatorios por correo en todos los planes; recordatorios por WhatsApp con Pro para reducir las ausencias."
+          },
+          "b4": {
+            "title": "Crece sin caos",
+            "body": "Añade una segunda oficina, pagos, BI completo y una app sin anuncios cuando pases a Pro."
+          }
+        },
+        "pricingTitle": "Precios de Orbit Appoint",
+        "pricingLead": "Prueba Pro completa de {{days}} días y después Starter {{starter}} o Pro {{pro}} al mes. La app de clientes de marca blanca está incluida en todos los planes.",
+        "starter": {
+          "f1": "App de reservas para clientes de marca blanca",
+          "f2": "Una ubicación con calendario del personal",
+          "f3": "Recordatorios por correo",
+          "f4": "Resumen de BI",
+          "f5": "Fichas de clientes y reseñas"
+        },
+        "pro": {
+          "f1": "Todo lo de Starter",
+          "f2": "Recordatorios por WhatsApp",
+          "f3": "Pagos y puntos de recompensa",
+          "f4": "Segunda oficina",
+          "f5": "BI completo y app de clientes sin anuncios",
+          "f6": "Automation Creator"
+        }
+      },
+      "mart": {
+        "kicker": "Orbit Mart",
+        "title": "Tus productos, en su bolsillo.",
+        "body": "Crea una tienda donde tus productos sean fáciles de explorar, comprar y recordar, con TPV y contabilidad GST en el mismo espacio de trabajo. Starter es el mostrador más pedidos en línea y devoluciones; Pro desbloquea la entrega inmediata con Porter/Shiprocket, la factura electrónica GST y Grow.",
+        "features": {
+          "f1": "App de clientes de marca blanca para que compren con tu marca",
+          "f2": "TPV, catálogo, pedidos en línea y devoluciones con Starter",
+          "f3": "Entrega inmediata con Porter/Shiprocket con Pro",
+          "f4": "Libro diario con Starter; informes GST, factura electrónica, Grow y e-way con Pro",
+          "f5": "Extracción de facturas con IA con Pro: fotografía la factura del proveedor, revisa las líneas y añade el stock",
+          "f6": "Automation Creator con Pro para reglas de cumpleaños, ocasiones y VIP"
+        },
+        "howTitle": "Cómo funciona Orbit Mart",
+        "howLead": "Vende en el mostrador y en línea con tu marca, con la contabilidad en el mismo espacio de trabajo.",
+        "how": {
+          "s1": {
+            "title": "Crea tu catálogo",
+            "body": "Añade productos, precios y stock para que el mostrador y la app de clientes estén siempre sincronizados."
+          },
+          "s2": {
+            "title": "Vende donde sea",
+            "body": "Cobra a los clientes en tienda con el TPV y recibe pedidos en línea desde tu app de tienda de marca blanca."
+          },
+          "s3": {
+            "title": "Cierra las cuentas",
+            "body": "Sigue las ventas en el libro diario con Starter; desbloquea informes GST, factura electrónica y herramientas Grow con Pro."
+          }
+        },
+        "benefitsTitle": "Por qué los comercios eligen Orbit Mart",
+        "benefitsLead": "Un solo espacio de trabajo para el mostrador, la tienda en línea y una contabilidad lista para GST.",
+        "benefits": {
+          "b1": {
+            "title": "App de tienda de marca blanca",
+            "body": "Los clientes exploran y piden en una app que parece tu tienda, no un marketplace."
+          },
+          "b2": {
+            "title": "Mostrador y catálogo juntos",
+            "body": "El TPV, las devoluciones y los pedidos en línea comparten los mismos productos y la misma lista de clientes."
+          },
+          "b3": {
+            "title": "GST cuando lo necesites",
+            "body": "Libro diario con Starter. Informes GST, factura electrónica y e-way bill con Pro."
+          },
+          "b4": {
+            "title": "Entrega y marketing con Pro",
+            "body": "Entrega inmediata con Porter/Shiprocket y asistentes Grow para promociones y fichas de producto."
+          }
+        },
+        "pricingTitle": "Precios de Orbit Mart",
+        "pricingLead": "Prueba Pro completa de {{days}} días y después Starter {{starter}} o Pro {{pro}} al mes. La app de clientes de marca blanca está incluida en todos los planes.",
+        "starter": {
+          "f1": "App de tienda para clientes de marca blanca",
+          "f2": "TPV, catálogo, pedidos en línea y devoluciones",
+          "f3": "Libro diario",
+          "f4": "Resumen de BI",
+          "f5": "Lista de clientes compartida"
+        },
+        "pro": {
+          "f1": "Todo lo de Starter",
+          "f2": "Entrega inmediata con Porter/Shiprocket",
+          "f3": "Informes GST, factura electrónica y e-way",
+          "f4": "Asistentes de marketing Grow",
+          "f5": "Extracción de facturas con IA",
+          "f6": "App de clientes sin anuncios"
+        }
+      },
+      "both": {
+        "kicker": "Orbit Appoint + Orbit Mart",
+        "title": "Una marca. Todas las formas de comprar.",
+        "body": "La versión más completa de IE Orbit: citas y comercio electrónico con una única relación con el cliente.",
+        "features": {
+          "f1": "Una sola app de marca blanca para reservar y comprar",
+          "f2": "Perfiles de cliente unificados",
+          "f3": "Venta cruzada de reservas y productos",
+          "f4": "Una prueba de {{days}} días, un espacio de trabajo, facturación por UPI",
+          "f5": "Asistente de IA y Automation Creator en reservas y tienda"
+        },
+        "howTitle": "Cómo trabajan juntos Appoint + Mart",
+        "howLead": "Un espacio de trabajo, una lista de clientes y una app con tu marca para reservas y compras.",
+        "how": {
+          "s1": {
+            "title": "Activa ambos productos",
+            "body": "Suscríbete a Orbit Appoint y Orbit Mart en el mismo negocio para que el personal y los clientes estén unificados."
+          },
+          "s2": {
+            "title": "Los clientes reservan y compran",
+            "body": "Tu app de marca blanca gestiona citas y pedidos de productos bajo una sola marca."
+          },
+          "s3": {
+            "title": "Gestiona servicios y comercio a la vez",
+            "body": "El calendario del local y el mostrador comparten clientes, historial y facturación con un único acceso."
+          }
+        },
+        "benefitsTitle": "Por qué los equipos usan ambos",
+        "benefitsLead": "Deja de repartir reservas y ventas entre herramientas que nunca se hablan.",
+        "benefits": {
+          "b1": {
+            "title": "Una app de clientes con tu marca",
+            "body": "Reserva un servicio y compra un producto sin salir de la experiencia de tu marca."
+          },
+          "b2": {
+            "title": "Clientes compartidos",
+            "body": "El historial de visitas, los pedidos de la tienda y los seguimientos viven en la misma ficha de cliente."
+          },
+          "b3": {
+            "title": "Venta cruzada natural",
+            "body": "Ofrece productos para llevar tras un servicio o reserva la próxima visita desde la tienda."
+          },
+          "b4": {
+            "title": "Una prueba, una vía de facturación",
+            "body": "Prueba Pro completa de {{days}} días en el espacio de trabajo y después facturación por UPI según el plan de cada producto."
+          }
+        },
+        "pricingTitle": "Precios si usas ambos",
+        "starter": {
+          "f1": "Orbit Appoint Starter {{price}}/mes + Orbit Mart Starter {{price}}/mes",
+          "f2": "Una sola app de marca blanca para reservar y comprar",
+          "f3": "Clientes compartidos entre reservas y comercio",
+          "f4": "Calendario del personal, TPV, catálogo y libro diario",
+          "f5": "Recordatorios por correo y resumen de BI en ambos productos"
+        },
+        "pro": {
+          "f1": "Orbit Appoint Pro {{price}}/mes + Orbit Mart Pro {{price}}/mes",
+          "f2": "Todo lo de Starter",
+          "f3": "Recordatorios por WhatsApp, pagos y segunda oficina en Appoint",
+          "f4": "Entrega inmediata, factura electrónica GST/e-way y Grow en Mart",
+          "f5": "BI completo, Automation Creator y app de clientes sin anuncios"
+        }
+      }
+    },
+    "pricing": {
+      "products": {
+        "appointie": {
+          "kicker": "Orbit Appoint",
+          "title": "Reservas, calendario, personal y clientes",
+          "lead": "Agenda individual con Starter. Recordatorios por WhatsApp, pagos y segunda oficina con Pro."
+        },
+        "shopie": {
+          "kicker": "Orbit Mart",
+          "title": "Comercio, contabilidad y GST",
+          "lead": "Mostrador, pedidos en línea y devoluciones con Starter. Entrega inmediata, contabilidad GST y Grow con Pro."
+        },
+        "both": {
+          "kicker": "Orbit Appoint + Orbit Mart",
+          "title": "Un espacio de trabajo para reservar y comprar",
+          "lead": "Starter o Pro en ambos productos. Cada producto se factura por separado; los totales de abajo muestran el coste mensual combinado."
+        }
+      },
+      "regionIn": "India (₹)",
+      "regionIntl": "Internacional ($)",
+      "billingUpi": "Facturación por UPI",
+      "billingCard": "Pago con tarjeta (USD)",
+      "yearly": {
+        "chip": "Anual = {{months}}× mensual",
+        "noteFreeOne": "La facturación anual equivale a {{months}}× la mensual ({{free}} mes gratis).",
+        "noteFreeMany": "La facturación anual equivale a {{months}}× la mensual ({{free}} meses gratis).",
+        "noteNoFree": "La facturación anual equivale a {{months}}× la mensual.",
+        "planLine": "o {{price}}/año ({{months}}× mensual)"
+      },
+      "fallback": {
+        "freeBlurb": "Acceso Pro completo durante la prueba y después bloqueo parcial hasta que mejores tu plan.",
+        "starterBlurb": "Operaciones básicas, resumen de BI, una ubicación y una app de clientes de marca blanca.",
+        "starterBlurbBoth": "Appoint Starter + Mart Starter en un espacio de trabajo, facturados por producto.",
+        "proBlurb": "BI completo, segunda oficina, herramientas de WhatsApp o GST y una app de marca blanca sin anuncios. {{note}}",
+        "proBlurbBoth": "Appoint Pro + Mart Pro con BI completo y app sin anuncios."
+      },
+      "extras": {
+        "kicker": "Complementos e IA",
+        "titleBefore": "Personal, oficinas, pack Pets y",
+        "titleEm": "uso de IA",
+        "seatKicker": "Complementos de puestos y packs",
+        "monthlyExtras": "Extras mensuales",
+        "extraStaff": "Personal adicional",
+        "extraStaffNote": "Starter (máx. 1) y Pro",
+        "extraOffice": "Oficina adicional",
+        "extraOfficeNote": "Solo Pro",
+        "petsPack": "Pack Pets",
+        "petsPackNote": "Complemento opcional de Orbit Mart",
+        "aiKicker": "Uso de IA",
+        "aiTitle": "Monederos de prepago con Pro",
+        "freeEachDay": "Gratis cada día",
+        "freeEachDayNote": "Incluido antes de los cargos del monedero",
+        "questions": "preguntas",
+        "approvals": "aprobaciones",
+        "extraQuestion": "Pregunta adicional",
+        "extraApproval": "Aprobación adicional",
+        "afterFreeLimit": "Tras el límite diario gratuito",
+        "walletCalls": "Llamadas del monedero de IA",
+        "walletCallsNote": "Escaneo de facturas, borradores de automatización",
+        "minPerCall": "mín. / llamada"
+      },
+      "ctaTitle": "Empieza con acceso Pro completo"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { applyAppLanguage, setActiveIntlLocale } from '@ie-orbit/i18n';
+import { applyAppLanguage, setActiveIntlLocale, syncDocumentLocale } from '@ie-orbit/i18n';
 import { useAuth } from '../hooks/useAuth';
 import { persistLanguagePreference } from '../i18n';
 
@@ -13,9 +13,7 @@ export function LanguageSync({ children }: { children: React.ReactNode }) {
     setActiveIntlLocale(language);
     persistLanguagePreference(language);
     void applyAppLanguage(language);
-    if (typeof document !== 'undefined') {
-      document.documentElement.lang = language;
-    }
+    syncDocumentLocale(language);
   }, [user?.language]);
 
   return <>{children}</>;

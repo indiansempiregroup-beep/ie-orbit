@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { INDUSTRY_SHOTS, type IndustryShotSet } from './industryShots';
+import { useTranslation } from 'react-i18next';
+import { getIndustryShots, type IndustryShotSet } from './industryShots';
 
 const INTERVAL_MS = 5000;
 
 type IndustryShotContextValue = {
   index: number;
   industry: IndustryShotSet;
+  shots: IndustryShotSet[];
   reducedMotion: boolean;
   pause: () => void;
   resume: () => void;
@@ -27,6 +29,8 @@ function usePrefersReducedMotion() {
 }
 
 export function IndustryShotRotationProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const shots = useMemo(() => getIndustryShots(t), [t]);
   const reducedMotion = usePrefersReducedMotion();
   const [index, setIndexState] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -35,28 +39,29 @@ export function IndustryShotRotationProvider({ children }: { children: ReactNode
     if (reducedMotion || paused) return undefined;
     const tick = () => {
       if (document.visibilityState === 'hidden') return;
-      setIndexState((current) => (current + 1) % INDUSTRY_SHOTS.length);
+      setIndexState((current) => (current + 1) % shots.length);
     };
     const timer = window.setInterval(tick, INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [paused, reducedMotion]);
+  }, [paused, reducedMotion, shots.length]);
 
   const setIndex = useCallback((next: number) => {
-    const length = INDUSTRY_SHOTS.length;
+    const length = shots.length;
     setIndexState(((next % length) + length) % length);
-  }, []);
+  }, [shots.length]);
 
   const value = useMemo<IndustryShotContextValue>(() => {
     const resolvedIndex = reducedMotion ? 0 : index;
     return {
       index: resolvedIndex,
-      industry: INDUSTRY_SHOTS[resolvedIndex],
+      industry: shots[resolvedIndex],
+      shots,
       reducedMotion,
       pause: () => setPaused(true),
       resume: () => setPaused(false),
       setIndex,
     };
-  }, [index, reducedMotion, setIndex]);
+  }, [index, reducedMotion, setIndex, shots]);
 
   return <IndustryShotContext.Provider value={value}>{children}</IndustryShotContext.Provider>;
 }

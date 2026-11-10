@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 
 export type ShopFilterOption = {
@@ -36,7 +37,7 @@ const controlStyle: React.CSSProperties = {
 export function ShopFilterBar({
   search,
   onSearchChange,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder,
   filters = [],
   onClear,
   action,
@@ -46,6 +47,8 @@ export function ShopFilterBar({
   onDateToChange,
   hideSearch,
 }: Props) {
+  const { t } = useTranslation();
+  const searchLabel = searchPlaceholder ?? t('common.searchEllipsis');
   const showDates = Boolean(onDateFromChange && onDateToChange);
 
   return (
@@ -63,8 +66,8 @@ export function ShopFilterBar({
         type="search"
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
-        placeholder={searchPlaceholder}
-        aria-label={searchPlaceholder}
+        placeholder={searchLabel}
+        aria-label={searchLabel}
         style={{
           flex: '1 1 220px',
           minWidth: 200,
@@ -94,17 +97,17 @@ export function ShopFilterBar({
       {showDates ? (
         <>
           <label style={{ display: 'grid', gap: 4, minWidth: 140 }}>
-            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>From</span>
+            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t('common.from')}</span>
             <input type="date" value={dateFrom} onChange={(event) => onDateFromChange?.(event.target.value)} style={controlStyle} />
           </label>
           <label style={{ display: 'grid', gap: 4, minWidth: 140 }}>
-            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>To</span>
+            <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{t('common.to')}</span>
             <input type="date" value={dateTo} onChange={(event) => onDateToChange?.(event.target.value)} style={controlStyle} />
           </label>
         </>
       ) : null}
       <Button type="button" variant="ghost" onClick={onClear}>
-        Clear
+        {t('common.clear')}
       </Button>
       {action ? <div style={{ marginLeft: 'auto' }}>{action}</div> : null}
     </div>

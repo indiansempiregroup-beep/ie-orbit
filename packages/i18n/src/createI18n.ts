@@ -6,6 +6,7 @@ import fr from './locales/fr.json';
 import es from './locales/es.json';
 import pt from './locales/pt.json';
 import ar from './locales/ar.json';
+import { syncDocumentLocale } from './documentLocale';
 import { DEFAULT_LANGUAGE, toI18nLanguage } from './languages';
 
 export type CreateI18nOptions = {
@@ -62,5 +63,6 @@ export async function applyAppLanguage(language?: string | null): Promise<string
   if (instance.language !== next) {
     await instance.changeLanguage(next);
   }
+  syncDocumentLocale(language ?? next);
   return next;
 }

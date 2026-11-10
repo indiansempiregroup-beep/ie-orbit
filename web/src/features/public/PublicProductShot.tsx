@@ -1,4 +1,6 @@
-import { INDUSTRY_SHOTS, slidesForSlot, type ProductShotSlot } from './industryShots';
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { slidesForSlot, type ProductShotSlot } from './industryShots';
 import { useIndustryShot } from './IndustryShotRotation';
 
 type PublicProductShotProps = {
@@ -8,8 +10,9 @@ type PublicProductShotProps = {
 };
 
 export function PublicProductShot({ slot, className, loading = 'lazy' }: PublicProductShotProps) {
-  const { index, industry, reducedMotion, pause, resume, setIndex } = useIndustryShot();
-  const slides = slidesForSlot(slot);
+  const { t } = useTranslation();
+  const { index, industry, shots, reducedMotion, pause, resume, setIndex } = useIndustryShot();
+  const slides = useMemo(() => slidesForSlot(slot, shots, t), [slot, shots, t]);
   const current = slides[index];
   const variant = current.variant;
 
@@ -47,8 +50,8 @@ export function PublicProductShot({ slot, className, loading = 'lazy' }: PublicP
         </div>
       </figure>
       {reducedMotion ? null : (
-        <div className="public-device__dots" role="tablist" aria-label="Industry screenshots">
-          {INDUSTRY_SHOTS.map((entry, slideIndex) => (
+        <div className="public-device__dots" role="tablist" aria-label={t('public.industries.shots.dotsLabel')}>
+          {shots.map((entry, slideIndex) => (
             <button
               key={entry.slug}
               type="button"

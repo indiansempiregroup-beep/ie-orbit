@@ -1,242 +1,1968 @@
 {
   "common": {
-    "save": "Save",
-    "saveChanges": "Save changes",
-    "cancel": "Cancel",
-    "loading": "Loading…",
-    "error": "Something went wrong",
-    "retry": "Retry",
-    "back": "Back",
-    "search": "Search",
-    "done": "Done",
-    "yes": "Yes",
-    "no": "No",
-    "language": "Language",
-    "timezone": "Timezone",
-    "phone": "Phone",
-    "email": "Email",
-    "firstName": "First name",
-    "lastName": "Last name",
-    "profilePhoto": "Profile photo",
-    "saving": "Saving…",
-    "account": "Account",
-    "today": "Today",
-    "all": "All",
-    "new": "New",
-    "workspace": "Workspace",
-    "overview": "Overview",
-    "user": "User"
+    "save": "Salvar",
+    "saveChanges": "Salvar alterações",
+    "cancel": "Cancelar",
+    "loading": "Carregando…",
+    "error": "Algo deu errado",
+    "retry": "Tentar novamente",
+    "back": "Voltar",
+    "search": "Pesquisar",
+    "done": "Concluído",
+    "yes": "Sim",
+    "no": "Não",
+    "language": "Idioma",
+    "timezone": "Fuso horário",
+    "phone": "Telefone",
+    "email": "E-mail",
+    "firstName": "Nome",
+    "lastName": "Sobrenome",
+    "profilePhoto": "Foto de perfil",
+    "saving": "Salvando…",
+    "account": "Conta",
+    "today": "Hoje",
+    "all": "Todos",
+    "new": "Novo",
+    "workspace": "Espaço de trabalho",
+    "overview": "Visão geral",
+    "user": "Usuário",
+    "refresh": "Atualizar",
+    "refreshAria": "Atualizar {{title}}",
+    "unableToLoad": "Não foi possível carregar",
+    "noDataYet": "Ainda não há dados disponíveis.",
+    "errorTitle": "Erro",
+    "clear": "Limpar",
+    "from": "De",
+    "to": "Até",
+    "searchEllipsis": "Pesquisar…",
+    "and": "e",
+    "status": "Status",
+    "currency": "Moeda",
+    "business": "Negócio",
+    "products": "Produtos",
+    "active": "Ativo",
+    "softLock": {
+      "reviewTitle": "Pagamento em análise",
+      "reviewBody": "{{names}} foi enviado. O acesso é restabelecido após a confirmação da IE (geralmente no mesmo dia).",
+      "yourPayment": "Seu pagamento",
+      "renewTitle": "Renovar {{names}}",
+      "renewBody": "Você ainda pode ver os dados. Novos agendamentos, equipe e escritórios ficam bloqueados até você pagar este período.",
+      "renewNow": "Renovar agora",
+      "thisProduct": "este produto"
+    }
   },
   "auth": {
-    "signIn": "Sign in",
-    "signOut": "Sign out",
-    "password": "Password",
-    "forgotPassword": "Forgot password?",
-    "createAccount": "Create account",
-    "welcomeBack": "Welcome back",
-    "emailPlaceholder": "Email address",
-    "passwordPlaceholder": "Password",
-    "signingIn": "Signing in…",
-    "rememberMe": "Remember me on this device",
-    "signOutConfirm": "Are you sure you want to sign out?",
-    "emailNotVerified": "Email not verified"
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "password": "Senha",
+    "forgotPassword": "Esqueceu a senha?",
+    "createAccount": "Criar conta",
+    "welcomeBack": "Bem-vindo de volta",
+    "emailPlaceholder": "Endereço de e-mail",
+    "passwordPlaceholder": "Senha",
+    "signingIn": "Entrando…",
+    "rememberMe": "Lembrar de mim neste dispositivo",
+    "signOutConfirm": "Tem certeza de que deseja sair?",
+    "emailNotVerified": "E-mail não verificado",
+    "verifyBanner": {
+      "title": "Verifique seu endereço de e-mail",
+      "body": "Enviamos um link de verificação quando seu espaço de trabalho foi criado. Confirme seu e-mail para proteger sua conta.",
+      "sending": "Enviando…",
+      "sent": "E-mail enviado",
+      "resend": "Reenviar e-mail",
+      "help": "Ajuda com a verificação",
+      "needEmail": "Informe seu e-mail ou entre para reenviar o e-mail de verificação.",
+      "sentDebug": "E-mail de verificação enviado. Código local: {{code}}",
+      "sentMessage": "E-mail de verificação enviado. Verifique sua caixa de entrada para ver o código de 6 dígitos.",
+      "resendFailed": "Não foi possível reenviar o e-mail de verificação."
+    }
   },
   "profile": {
-    "title": "Profile",
-    "editTitle": "Edit profile",
-    "editSubtitle": "Your name, photo, and regional defaults.",
-    "personalInfo": "Personal Information",
-    "contactRegion": "Contact & region",
-    "identity": "Identity",
-    "languageHint": "App language for menus and labels.",
-    "updated": "Profile saved.",
-    "updateFailed": "Couldn't save your profile. Try again.",
-    "photoHelper": "Tap to take a photo or choose from your gallery.",
-    "sharedAccountNote": "Name, photo, and phone here are only for this shop. Your email is shared for OTP sign-in across shop apps that use the same account.",
-    "saveProfile": "Save profile",
-    "eyebrow": "Personal profile",
-    "editLead": "Update your photo, personal details, and notification preferences.",
-    "editProfile": "Edit profile",
-    "changePassword": "Account security",
-    "sessions": "Sessions",
-    "verifyEmail": "Verify email",
-    "security": "Security",
-    "session": "Session",
-    "notificationPreferences": "Notification Preferences",
-    "paymentMethods": "Payment Methods",
-    "privacySecurity": "Privacy & Security",
-    "myReviews": "My Reviews",
-    "completed": "Completed",
-    "loyaltyPts": "Reward points",
-    "rewardPoints": "Reward points",
-    "rewardPointsHint": "Use them when you book a service or check out in the shop."
+    "title": "Perfil",
+    "editTitle": "Editar perfil",
+    "editSubtitle": "Seu nome, foto e padrões regionais.",
+    "personalInfo": "Informações pessoais",
+    "contactRegion": "Contato e região",
+    "identity": "Identidade",
+    "languageHint": "Idioma do app para menus e rótulos.",
+    "updated": "Perfil salvo.",
+    "updateFailed": "Não foi possível salvar seu perfil. Tente novamente.",
+    "photoHelper": "Toque para tirar uma foto ou escolher da galeria.",
+    "sharedAccountNote": "Nome, foto e telefone valem apenas para esta loja. Seu e-mail é compartilhado para o login por OTP nos apps de loja que usam a mesma conta.",
+    "saveProfile": "Salvar perfil",
+    "eyebrow": "Perfil pessoal",
+    "editLead": "Atualize sua foto, seus dados pessoais e suas preferências de notificação.",
+    "editProfile": "Editar perfil",
+    "changePassword": "Segurança da conta",
+    "sessions": "Sessões",
+    "verifyEmail": "Verificar e-mail",
+    "security": "Segurança",
+    "session": "Sessão",
+    "notificationPreferences": "Preferências de notificação",
+    "paymentMethods": "Formas de pagamento",
+    "privacySecurity": "Privacidade e segurança",
+    "myReviews": "Minhas avaliações",
+    "completed": "Concluído",
+    "loyaltyPts": "Pontos de recompensa",
+    "rewardPoints": "Pontos de recompensa",
+    "rewardPointsHint": "Use-os ao agendar um serviço ou ao finalizar a compra na loja."
   },
   "referral": {
-    "menu": "Invite friends",
-    "title": "Invite & earn",
-    "heroTitle": "Earn {{points}} points per friend",
-    "earnOnSignup": "You get points when your friend creates an account with your code.",
-    "earnOnBooking": "You get points when your friend completes their first booking.",
-    "earnOnOrder": "You get points when your friend completes their first paid order.",
-    "invited": "Invited",
-    "pending": "Pending",
-    "earned": "Points earned",
-    "yourCode": "Your invite code",
-    "codeHint": "Share this code. Friends enter it when they join.",
-    "copy": "Copy code",
-    "copied": "Copied!",
-    "share": "Share invite",
-    "downloadApp": "Download the app",
-    "shareMessage": "Join me on {{appName}} and use my invite code {{code}}. I earn {{points}} reward points when you get started.",
-    "haveCode": "Have an invite code?",
-    "friendCode": "Friend's code",
-    "friendCodeRequired": "Friend's code is required",
-    "friendCodeHint": "Optional. You can also add this later from Profile.",
-    "apply": "Apply code",
-    "appliedTitle": "Code applied",
-    "appliedBody": "You're linked to your friend's invite. Points are awarded when the business's success step is complete.",
-    "youJoinedWith": "You joined with",
-    "history": "Your invites",
-    "emptyHistory": "No friends have used your code yet. Share it to start earning.",
-    "aFriend": "A friend",
-    "unavailable": "Invites are not available for this business right now.",
-    "loadError": "Couldn't load your invite details. Pull to retry.",
-    "applyError": "That invite code couldn't be applied.",
-    "homeTitle": "Invite a friend",
-    "homeSubtitle": "Share your code and earn reward points.",
+    "menu": "Convidar amigos",
+    "title": "Convide e ganhe",
+    "heroTitle": "Ganhe {{points}} pontos por amigo",
+    "earnOnSignup": "Você recebe pontos quando seu amigo cria uma conta com seu código.",
+    "earnOnBooking": "Você recebe pontos quando seu amigo conclui o primeiro agendamento.",
+    "earnOnOrder": "Você recebe pontos quando seu amigo conclui o primeiro pedido pago.",
+    "invited": "Convidados",
+    "pending": "Pendente",
+    "earned": "Pontos ganhos",
+    "yourCode": "Seu código de convite",
+    "codeHint": "Compartilhe este código. Seus amigos o inserem ao entrar.",
+    "copy": "Copiar código",
+    "copied": "Copiado!",
+    "share": "Compartilhar convite",
+    "downloadApp": "Baixar o app",
+    "shareMessage": "Entre comigo no {{appName}} e use meu código de convite {{code}}. Eu ganho {{points}} pontos de recompensa quando você começar.",
+    "haveCode": "Tem um código de convite?",
+    "friendCode": "Código do amigo",
+    "friendCodeRequired": "O código do amigo é obrigatório",
+    "friendCodeHint": "Opcional. Você também pode adicioná-lo depois em Perfil.",
+    "apply": "Aplicar código",
+    "appliedTitle": "Código aplicado",
+    "appliedBody": "Você está vinculado ao convite do seu amigo. Os pontos são concedidos quando a etapa de sucesso do negócio for concluída.",
+    "youJoinedWith": "Você entrou com",
+    "history": "Seus convites",
+    "emptyHistory": "Nenhum amigo usou seu código ainda. Compartilhe para começar a ganhar.",
+    "aFriend": "Um amigo",
+    "unavailable": "Os convites não estão disponíveis para este negócio no momento.",
+    "loadError": "Não foi possível carregar os detalhes do seu convite. Puxe para tentar novamente.",
+    "applyError": "Não foi possível aplicar esse código de convite.",
+    "homeTitle": "Convidar um amigo",
+    "homeSubtitle": "Compartilhe seu código e ganhe pontos de recompensa.",
     "status": {
-      "pending": "Waiting",
-      "qualified": "Qualified",
-      "rewarded": "Points awarded",
-      "void": "Void"
+      "pending": "Aguardando",
+      "qualified": "Qualificado",
+      "rewarded": "Pontos concedidos",
+      "void": "Anulado"
     }
   },
   "shop": {
-    "myOrders": "My Orders",
-    "returns": "Returns",
-    "myPets": "My Pets",
-    "addresses": "Addresses"
+    "myOrders": "Meus pedidos",
+    "returns": "Devoluções",
+    "myPets": "Meus pets",
+    "addresses": "Endereços",
+    "orders": {
+      "searchPlaceholder": "Pesquisar número do pedido, produto, status…",
+      "fulfillment": "Atendimento",
+      "allStatuses": "Todos os status",
+      "allModes": "Todos os modos",
+      "statuses": {
+        "pending": "Pendente",
+        "confirmed": "Confirmado",
+        "ready": "Pronto",
+        "out_for_delivery": "Saiu para entrega",
+        "delivery_failed": "Falha na entrega",
+        "completed": "Concluído",
+        "returned": "Devolvido",
+        "cancelled": "Cancelado"
+      },
+      "modes": {
+        "pos": "POS",
+        "pickup": "Retirada",
+        "delivery": "Entrega"
+      },
+      "openPos": "Abrir POS",
+      "deliverNow": "Entregar agora",
+      "standardDelivery": "Entrega padrão",
+      "counterSale": "Venda no balcão",
+      "recordPayment": "Registrar pagamento no cliente",
+      "confirm": "Confirmar",
+      "markReady": "Pronto",
+      "complete": "Concluir",
+      "markOutForDelivery": "Marcar como saiu para entrega",
+      "markDelivered": "Marcar como entregue",
+      "open": "Abrir",
+      "empty": "Nenhum pedido da loja corresponde a esses filtros.",
+      "etaMinutes": "Chegada em {{minutes}} min",
+      "partnerStatuses": {
+        "packing": "Preparando a entrega",
+        "finding_rider": "Buscando entregador",
+        "rider_assigned": "Entregador atribuído",
+        "at_pickup": "Entregador na loja",
+        "picked_up": "A caminho",
+        "out_for_delivery": "Saiu para entrega",
+        "nearby": "Por perto",
+        "delivered": "Entregue",
+        "failed": "Falha na entrega",
+        "cancelled": "Entrega cancelada"
+      }
+    },
+    "pos": {
+      "addToBill": "Adicionar à fatura",
+      "addToChallan": "Adicionar à guia de remessa",
+      "addToSaleOrder": "Adicionar à encomenda de venda",
+      "addToPurchaseOrder": "Adicionar à encomenda de compra",
+      "scanPlaceholder": "Leia código de barras / RFID (leitor HID, câmara ou escreva)",
+      "add": "Adicionar",
+      "camera": "Câmara",
+      "hideCamera": "Ocultar câmara",
+      "bulkPlaceholder": "Códigos de barras / EPC em lote (um por linha)",
+      "resolveBulk": "Resolver em lote",
+      "catalog": "Catálogo",
+      "searchProducts": "Pesquisar produtos…",
+      "noMatching": "Nenhum produto correspondente.",
+      "productMeta": "{{price}} · stock {{stock}}",
+      "titleBill": "Fatura",
+      "titleChallan": "Guia de remessa",
+      "titleSaleOrder": "Encomenda de venda",
+      "titlePurchaseOrder": "Encomenda de compra",
+      "editTitle": "Editar: {{title}}",
+      "supplier": "Fornecedor",
+      "selectSupplier": "Selecionar fornecedor",
+      "customer": "Cliente",
+      "walkIn": "Cliente de balcão",
+      "customerGstin": "GSTIN do cliente",
+      "gstinPlaceholder": "29AABCU9603R1ZJ (opcional para B2C)",
+      "gstinBlank": "Deixe em branco para B2C. Introduza um GSTIN válido para faturas GST B2B.",
+      "gstinValid": "GSTIN válido — a fatura será registada como B2B para GSTR-1 / e-fatura.",
+      "notes": "Notas",
+      "notesPlaceholder": "Nota opcional sobre este registo",
+      "remove": "Remover",
+      "noDiscount": "Sem desconto",
+      "percentOff": "% de desconto",
+      "amountOff": "Desconto em valor",
+      "none": "Nenhum",
+      "lineDiscount": "desc. -{{amount}}",
+      "emptyBill": "Leia ou escolha produtos para iniciar a fatura.",
+      "emptyChallan": "Leia ou escolha produtos para iniciar a guia de remessa.",
+      "customerRewards": "Recompensas do cliente",
+      "rewardPoints": "Pontos de recompensa",
+      "pts": "pts",
+      "redeemInfo": "{{rate}} pts = {{value}} · resgate até {{max}} pts",
+      "max": "Máx.",
+      "saves": "Poupa {{amount}} nesta fatura",
+      "tapToRedeem": "Toque em + para resgatar pontos nesta fatura",
+      "specialForCustomer": "Especial para este cliente",
+      "automationOffers": "Ofertas automáticas",
+      "badgeAmountOff": "{{value}} de desconto",
+      "badgePercentOff": "{{value}}% de desconto",
+      "applied": "Aplicado à fatura",
+      "tapToApply": "Toque para aplicar",
+      "billDiscount": "Desconto da fatura",
+      "payment": "Pagamento",
+      "challan": "Guia de remessa",
+      "methodCash": "Dinheiro",
+      "methodUpi": "UPI",
+      "methodCard": "Cartão",
+      "methodBorrow": "Fiado",
+      "methodRazorpay": "Pagar com Razorpay",
+      "methodCashfree": "Pagar com Cashfree",
+      "amountPaidNow": "Valor pago agora (opcional)",
+      "amountReceived": "Valor recebido",
+      "balanceDueCredit": "O saldo em dívida de {{amount}} será adicionado ao crédito do cliente.",
+      "fullyPaid": "A fatura será marcada como totalmente paga.",
+      "borrowNote": "Fiado / crédito: o saldo por pagar fica na conta do cliente. É necessário um cliente (não de balcão) quando houver valor em dívida.",
+      "razorpayNote": "O pagamento seguro Razorpay abre depois de criar a fatura. A fatura fica por pagar até o Razorpay a confirmar.",
+      "cashfreeNote": "O pagamento Cashfree abre depois de criar a fatura. A fatura fica por pagar até o Cashfree a confirmar.",
+      "noPaymentPurchaseOrder": "Sem pagamento agora. Converta esta encomenda numa fatura de compra quando a mercadoria chegar.",
+      "noPaymentSaleOrder": "Sem pagamento agora. Converta esta encomenda numa fatura de venda quando faturar ao cliente.",
+      "noPaymentChallan": "Sem pagamento agora. Despache a guia de remessa quando a mercadoria sair — o stock é deduzido nessa altura. Crie a fatura depois para não deduzir o stock duas vezes.",
+      "challanSummary": "Resumo da guia de remessa",
+      "billSummary": "Resumo da fatura",
+      "items": "Artigos",
+      "productDiscounts": "Descontos de produtos",
+      "subtotal": "Subtotal",
+      "taxable": "Base tributável",
+      "cgst": "CGST",
+      "sgst": "SGST",
+      "tax": "Imposto",
+      "total": "Total",
+      "received": "Recebido",
+      "balanceDue": "Saldo em dívida",
+      "saving": "A guardar…",
+      "creatingBill": "A criar fatura…",
+      "saveChallan": "Guardar guia de remessa · {{amount}}",
+      "updateChallan": "Atualizar guia de remessa · {{amount}}",
+      "saveSaleOrder": "Guardar encomenda de venda · {{amount}}",
+      "updateSaleOrder": "Atualizar encomenda de venda · {{amount}}",
+      "savePurchaseOrder": "Guardar encomenda de compra · {{amount}}",
+      "updatePurchaseOrder": "Atualizar encomenda de compra · {{amount}}",
+      "payRazorpay": "Pagar com Razorpay · {{amount}}",
+      "payCashfree": "Pagar com Cashfree · {{amount}}",
+      "createBillPartial": "Criar fatura · Pago {{paid}} · Em dívida {{due}}",
+      "createBill": "Criar fatura · {{amount}}",
+      "barcodeNotFound": "Código de barras não encontrado.",
+      "bulkLookupFailed": "Falha na pesquisa em lote.",
+      "bulkResolved": "{{found}}/{{total}} códigos resolvidos · {{added}} adicionados.",
+      "selectCustomerPartial": "Selecione um cliente quando a fatura não estiver totalmente paga (parcial ou crédito).",
+      "selectSupplierPo": "Selecione um fornecedor para esta encomenda de compra.",
+      "labelChallan": "Guia de remessa",
+      "labelSaleOrder": "Encomenda de venda",
+      "labelPurchaseOrder": "Encomenda de compra",
+      "docCreated": "Criado: {{label}} {{number}}.",
+      "docUpdated": "Atualizado: {{label}} {{number}}.",
+      "docCreatedTotal": "Criado: {{label}} {{number}} · {{total}}",
+      "docUpdatedTotal": "Atualizado: {{label}} {{number}} · {{total}}",
+      "billCreated": "Fatura {{number}} criada.",
+      "billCreatedTotal": "Fatura {{number}} criada · {{total}}",
+      "billCreatedOnline": "Fatura {{number}} criada · Paga online · {{total}}",
+      "billCreatedDue": "Fatura {{number}} criada · Pago {{paid}} · Em dívida {{due}} · {{total}}",
+      "challanReady": "Guia de remessa pronta",
+      "billCreatedTitle": "Fatura criada",
+      "couldntOpenRecord": "Não foi possível abrir este registo no balcão.",
+      "couldntCreateBill": "Não foi possível criar esta fatura. Tente novamente.",
+      "razorpayLoadFailed": "Não foi possível carregar o pagamento seguro Razorpay.",
+      "cashfreeLoadFailed": "Não foi possível carregar o pagamento Cashfree.",
+      "paymentWindowClosed": "Janela de pagamento fechada. A fatura por pagar está guardada.",
+      "onlinePaymentStatus": "Estado do pagamento online",
+      "paymentReceived": "Pagamento recebido",
+      "paymentFailed": "Pagamento falhado",
+      "waitingForPayment": "A aguardar pagamento",
+      "billNumber": "Fatura {{number}}",
+      "completeRazorpay": "Conclua a janela segura do Razorpay. Este estado também é atualizado automaticamente pelo webhook.",
+      "done": "Concluído",
+      "closeKeepUnpaid": "Fechar — manter a fatura por pagar"
+    }
   },
   "nav": {
-    "home": "Home",
-    "dashboard": "Dashboard",
-    "bookings": "Bookings",
-    "calendar": "Calendar",
-    "alerts": "Alerts",
-    "more": "More",
-    "profile": "Profile",
-    "discover": "Discover",
-    "book": "Book",
-    "settings": "Settings",
-    "admin": "Platform admin",
-    "customers": "Customers",
-    "services": "Services",
-    "staff": "Staff",
-    "reports": "Reports",
+    "home": "Início",
+    "dashboard": "Painel",
+    "bookings": "Agendamentos",
+    "calendar": "Calendário",
+    "alerts": "Alertas",
+    "more": "Mais",
+    "profile": "Perfil",
+    "discover": "Descobrir",
+    "book": "Agendar",
+    "settings": "Configurações",
+    "admin": "Administração da plataforma",
+    "customers": "Clientes",
+    "services": "Serviços",
+    "staff": "Equipe",
+    "reports": "Relatórios",
     "bi": "BI",
-    "notifications": "Notifications",
-    "pos": "Sale",
-    "shopProducts": "Products",
-    "shopProductProfit": "Product profit",
-    "shopLoyalty": "Reward points",
-    "shopMasterFiles": "Master Files",
-    "shopOrders": "Online orders",
-    "shopBilling": "Billing",
-    "shopReturns": "Returns",
-    "shopDeliveryZones": "Delivery zones",
-    "shopInstantDelivery": "Instant delivery",
-    "shopCoupons": "Coupons",
-    "automations": "Automations",
+    "notifications": "Notificações",
+    "pos": "Venda",
+    "shopProducts": "Produtos",
+    "shopProductProfit": "Lucro por produto",
+    "shopLoyalty": "Pontos de recompensa",
+    "shopMasterFiles": "Arquivos mestres",
+    "shopOrders": "Pedidos online",
+    "shopBilling": "Faturamento",
+    "shopReturns": "Devoluções",
+    "shopDeliveryZones": "Zonas de entrega",
+    "shopInstantDelivery": "Entrega imediata",
+    "shopCoupons": "Cupons",
+    "automations": "Automações",
     "shopPets": "Pets",
-    "shopBooks": "Books",
-    "shopSale": "Sale invoice",
-    "shopPurchase": "Purchase",
-    "shopExpense": "Expense",
-    "shopCashBank": "Cash & bank",
-    "shopParties": "Parties",
-    "shopBooksReports": "Books reports",
-    "shopEstimates": "Estimates / Proforma",
-    "shopSaleOrders": "Sale orders",
-    "shopPurchaseOrders": "Purchase orders",
-    "shopDeliveryChallans": "Delivery challans",
-    "shopCompliance": "GST compliance",
-    "shopGodowns": "Godowns",
-    "shopGodowns": "Godowns",
-    "shop": "Shop",
-    "cart": "Cart",
-    "scanBarcode": "Scan barcode",
-    "primary": "Primary navigation",
-    "newBooking": "New Booking",
-    "addCustomer": "Add Customer",
-    "addService": "Add Service",
-    "addStaff": "Add Staff",
-    "viewCalendar": "View Calendar",
-    "businessProfile": "Business Profile",
-    "businessIntelligence": "Business intelligence",
-    "newBookingShort": "New booking",
-    "weeklySchedule": "Weekly schedule",
-    "staffAvailability": "Staff availability",
-    "editBusiness": "Edit business",
-    "last30Days": "Last 30 days"
+    "shopBooks": "Contabilidade",
+    "shopSale": "Fatura de venda",
+    "shopPurchase": "Compra",
+    "shopExpense": "Despesa",
+    "shopCashBank": "Caixa e banco",
+    "shopParties": "Parceiros",
+    "shopBooksReports": "Relatórios contábeis",
+    "shopEstimates": "Orçamentos / Proforma",
+    "shopSaleOrders": "Pedidos de venda",
+    "shopPurchaseOrders": "Pedidos de compra",
+    "shopDeliveryChallans": "Guias de entrega",
+    "shopCompliance": "Conformidade GST",
+    "shopGodowns": "Armazéns",
+    "shop": "Loja",
+    "cart": "Carrinho",
+    "scanBarcode": "Escanear código de barras",
+    "primary": "Navegação principal",
+    "newBooking": "Novo agendamento",
+    "addCustomer": "Adicionar cliente",
+    "addService": "Adicionar serviço",
+    "addStaff": "Adicionar membro da equipe",
+    "viewCalendar": "Ver calendário",
+    "businessProfile": "Perfil do negócio",
+    "businessIntelligence": "Inteligência de negócios",
+    "newBookingShort": "Novo agendamento",
+    "weeklySchedule": "Agenda semanal",
+    "staffAvailability": "Disponibilidade da equipe",
+    "editBusiness": "Editar negócio",
+    "last30Days": "Últimos 30 dias"
   },
   "bookings": {
-    "title": "Bookings",
-    "create": "Create booking",
-    "empty": "No bookings yet.",
-    "detail": "Booking detail",
+    "title": "Agendamentos",
+    "create": "Criar agendamento",
+    "empty": "Ainda não há agendamentos.",
+    "detail": "Detalhes do agendamento",
     "status": "Status",
-    "customer": "Customer",
-    "service": "Service",
-    "staff": "Staff",
-    "when": "When",
-    "todaySchedule": "Today's schedule",
-    "allBookings": "All bookings",
-    "search": "Search bookings",
-    "myAppointments": "My Appointments",
-    "appointment": "Appointment",
-    "upcoming": "Upcoming",
-    "past": "Past",
-    "emptyTitle": "No bookings",
-    "emptyToday": "Nothing scheduled for today yet.",
-    "emptyFiltered": "No bookings match these filters."
+    "customer": "Cliente",
+    "service": "Serviço",
+    "staff": "Equipe",
+    "when": "Quando",
+    "todaySchedule": "Agenda de hoje",
+    "allBookings": "Todos os agendamentos",
+    "search": "Pesquisar agendamentos",
+    "myAppointments": "Meus compromissos",
+    "appointment": "Compromisso",
+    "upcoming": "Próximos",
+    "past": "Anteriores",
+    "emptyTitle": "Nenhum agendamento",
+    "emptyToday": "Nada agendado para hoje ainda.",
+    "emptyFiltered": "Nenhum agendamento corresponde a esses filtros."
   },
   "settings": {
-    "title": "Settings",
-    "productsBilling": "Products & billing",
-    "business": "Business",
-    "team": "Team",
-    "languageRegion": "Language & region",
-    "customers": "Customers",
-    "reviews": "Reviews",
-    "services": "Services",
-    "offices": "Offices",
-    "overview": "Overview",
-    "businessProfile": "Business Profile",
-    "products": "Products",
-    "productsPlans": "Products & plans",
-    "teamInvitations": "Team & invitations",
-    "workspaceConfig": "Workspace configuration",
-    "navigation": "Settings navigation"
+    "title": "Configurações",
+    "productsBilling": "Produtos e faturamento",
+    "business": "Negócio",
+    "team": "Equipe",
+    "languageRegion": "Idioma e região",
+    "customers": "Clientes",
+    "reviews": "Avaliações",
+    "services": "Serviços",
+    "offices": "Escritórios",
+    "overview": "Visão geral",
+    "businessProfile": "Perfil do negócio",
+    "products": "Produtos",
+    "productsPlans": "Produtos e planos",
+    "teamInvitations": "Equipe e convites",
+    "workspaceConfig": "Configuração do espaço de trabalho",
+    "navigation": "Navegação das configurações"
   },
   "bi": {
-    "title": "Business Intelligence",
-    "overview": "Overview",
-    "profit": "Profit",
-    "growth": "Growth",
-    "revenue": "Revenue",
-    "forecast": "Forecast",
-    "reports": "Reports",
+    "title": "Inteligência de negócios",
+    "overview": "Visão geral",
+    "profit": "Lucro",
+    "growth": "Crescimento",
+    "revenue": "Receita",
+    "forecast": "Previsão",
+    "reports": "Relatórios",
     "pro": "Pro"
   },
   "help": {
-    "title": "Help & Support",
-    "contactSupport": "Contact support",
-    "articles": "Help articles",
-    "submitTicket": "Submit ticket",
-    "subject": "Subject",
-    "details": "Details",
-    "noArticles": "No published articles yet.",
-    "ticketSubmitted": "Ticket submitted. Our team will follow up by email.",
-    "faqs": "FAQs"
+    "title": "Ajuda e suporte",
+    "contactSupport": "Falar com o suporte",
+    "articles": "Artigos de ajuda",
+    "submitTicket": "Enviar chamado",
+    "subject": "Assunto",
+    "details": "Detalhes",
+    "noArticles": "Ainda não há artigos publicados.",
+    "ticketSubmitted": "Chamado enviado. Nossa equipe entrará em contato por e-mail.",
+    "faqs": "Perguntas frequentes"
+  },
+  "public": {
+    "skipToContent": "Saltar para o conteúdo",
+    "homeAria": "Início IE Orbit",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "mainNav": "Navegação principal",
+    "products": "Produtos",
+    "socialNav": "Redes sociais",
+    "productsDownloads": "Produtos e transferências",
+    "signIn": "Entrar",
+    "createAccount": "Criar conta",
+    "seePricing": "Ver preços",
+    "seeHowItWorks": "Ver como funciona",
+    "getStarted": "Começar",
+    "startTrial": "Iniciar teste de {{days}} dias",
+    "tryDays": "Experimentar {{days}} dias",
+    "starter": "Inicial",
+    "pro": "Pro",
+    "perMonth": "₹{{amount}}/mês",
+    "seePlans": "Ver planos {{name}}",
+    "nav": {
+      "home": "Início",
+      "industries": "Indústrias",
+      "pricing": "Preços",
+      "integrations": "Integrações",
+      "about": "Sobre",
+      "contact": "Contacto",
+      "faq": "Perguntas frequentes",
+      "features": "Funcionalidades",
+      "apps": "Aplicativos",
+      "privacy": "Privacidade",
+      "terms": "Termos",
+      "cookies": "Cookies",
+      "appoint": "Orbit Appoint",
+      "mart": "Orbit Mart",
+      "both": "Orbit Appoint + Mart"
+    },
+    "footer": {
+      "blurb": "Apps de cliente white-label para negócios indianos — Orbit Mart retalho e Orbit Appoint reservas, com a sua marca.",
+      "startWith": "Comece com o que precisa",
+      "appointTitle": "Reservas sem vai-e-vem",
+      "martTitle": "Uma loja que parece sua",
+      "bothTitle": "Uma marca para reservar e comprar",
+      "onDevices": "Em iOS e Android",
+      "onDevicesBody": "Donos e equipa gerem o workspace a partir do telemóvel.",
+      "product": "Produto",
+      "company": "Empresa",
+      "legal": "Jurídico",
+      "copyright": "© {{year}} Indians Empire Technologies"
+    },
+    "cta": {
+      "aria": "Criar conta",
+      "title": "A sua marca no bolso deles",
+      "body": "Cada plano inclui app white-label. O teste inclui automações IA e extração de faturas. Sem cartão. Pague depois com UPI.",
+      "h1": "App white-label",
+      "h2": "IA no teste",
+      "h3": "Sem cartão",
+      "h4": "Faturação UPI"
+    },
+    "ai": {
+      "kicker": "IA no workspace",
+      "titleBefore": "Diga ao Orbit o que precisa.",
+      "titleEm": "Ele escreve.",
+      "lead": "Um assistente para o dia, um criador que transforma uma frase numa regra, e extração de faturas de fornecedor.",
+      "askOrbit": "Perguntar ao Orbit",
+      "seePlans": "Como a IA encaixa nos planos",
+      "assistantKicker": "Assistente IA",
+      "assistantTitle": "Pergunte ao negócio. Salte os menus.",
+      "assistantPrompt": "Quem está reservado depois das 16 e que slots estão livres?",
+      "assistantBody": "Consulte reservas, encomendas, stock e clientes em linguagem simples. Nada muda até confirmar.",
+      "assistantMeta": "No Pro para Orbit Appoint e Orbit Mart, e no teste de 45 dias · mensagens grátis por dia, depois carteira do Assistente",
+      "autoKicker": "Criador de automações",
+      "autoTitle": "Uma regra numa frase.",
+      "autoPrompt": "Enviar oferta de aniversário de 10% no dia anterior.",
+      "autoBody": "Rascunhe regras de ocasião, aniversário e VIP, pré-visualize e ative. Mart pode descontar. Appoint pode lembrar e sugerir ofertas.",
+      "autoMeta": "No Pro e no teste Pro completo de 45 dias · rascunhos usam a carteira IA",
+      "invoiceKicker": "Extração de faturas IA",
+      "invoiceTitle": "Uma foto torna-se uma compra.",
+      "invoicePrompt": "Ler esta fatura de fornecedor e alinhar o stock.",
+      "invoiceBody": "Fotografe a fatura, reveja quantidade, preço e GST, e registe a compra para atualizar o stock.",
+      "invoiceMeta": "Orbit Mart Pro e no teste · cada scan usa a carteira IA"
+    },
+    "home": {
+      "eyebrow": "App white-label de cliente incluída",
+      "titleBefore": "A sua marca no bolso deles.",
+      "titleEm": "Não a nossa.",
+      "lead": "Cada plano Starter e Pro inclui uma app móvel white-label com o seu nome. Os clientes reservam e compram consigo — não IE Orbit nem um marketplace. Orbit Appoint para serviços, Orbit Mart para retalho.",
+      "heroNote": "App white-label em cada plano · assistente IA, automações e extração de faturas · teste Pro 45 dias · UPI · Sem cartão",
+      "tagOne": "Uma experiência ligada",
+      "tagTwo": "A sua marca em todo o lado",
+      "pathsKicker": "Comece pelo que importa",
+      "pathsTitleBefore": "Um orbit.",
+      "pathsTitleEm": "À sua maneira.",
+      "pathsLead": "Escolha o impulso de que precisa hoje. Adicione o resto quando quiser.",
+      "pathsAria": "Produtos",
+      "pathBookingsKicker": "Preciso de reservas",
+      "pathBookingsTitle": "Marcações que se organizam sozinhas.",
+      "pathBookingsBody": "Deixe os clientes encontrar hora, serviço e motivo para voltar.",
+      "pathShopKicker": "Preciso de ecommerce",
+      "pathShopTitle": "Uma loja que parece sua.",
+      "pathShopBody": "Transforme os produtos num canal sempre aberto.",
+      "pathBothKicker": "Preciso de ambos",
+      "pathBothTitle": "A experiência completa do cliente.",
+      "pathBothBody": "Reservas e encomendas sob uma marca memorável.",
+      "platformKicker": "Plataforma",
+      "platformTitle": "Integrado em cada workspace",
+      "platformAria": "Benefícios da plataforma",
+      "benefitWhitelabelTitle": "App white-label de cliente",
+      "benefitWhitelabelBody": "A razão para escolher Orbit em vez de só faturação. Os clientes reservam, compram e acompanham numa app com a sua imagem.",
+      "benefitBiTitle": "Inteligência de negócios",
+      "benefitBiBody": "Overview no Starter. Growth, Revenue, Forecast e Reports no Pro.",
+      "benefitUpiTitle": "Faturação UPI",
+      "benefitUpiBody": "Pague com UPI e reclame no workspace. Sem cartão para começar.",
+      "benefitGrowTitle": "Cresça quando precisar",
+      "benefitGrowBody": "Adicione staff e escritórios. Anual custa menos que 12 meses — tipicamente dois meses grátis.",
+      "howKicker": "Como funciona",
+      "howTitle": "Da ideia ao seu orbit",
+      "howAria": "Como funciona",
+      "step1Title": "Escolha o ponto de partida",
+      "step1Body": "Diga-nos como cresce hoje — reservas, produtos ou ambos.",
+      "step2Title": "Torne-o seu",
+      "step2Body": "Perfil, serviços ou catálogo, e convide a equipa.",
+      "step3Title": "Mantenha os clientes perto",
+      "step3Body": "Reservam e compram na sua app. Você gere no workspace ops.",
+      "pricingKicker": "Preços",
+      "pricingTitle": "Pacotes simples por produto",
+      "pricingAria": "Preços",
+      "pricingLead": "Teste Pro de {{days}} dias, depois Starter ₹{{starter}} ou Pro ₹{{pro}} por produto/mês. App white-label em cada plano.",
+      "productAppointKicker": "Reservas",
+      "productAppointBody": "Agendamento, calendário da equipa e clientes com a sua app de reservas.",
+      "productMartKicker": "Retalho",
+      "productMartBody": "POS, catálogo, encomendas online e livros GST com a sua app de loja."
+    },
+    "about": {
+      "eyebrow": "Sobre a IE Orbit",
+      "title": "Software com a sua marca",
+      "lead": "Indians Empire Technologies cria ferramentas white-label de reservas e retalho para negócios indianos possuírem a relação com o cliente.",
+      "cta": "Criar conta"
+    },
+    "contact": {
+      "eyebrow": "Contacto",
+      "title": "Fale connosco",
+      "lead": "Perguntas sobre planos, onboarding ou demo — envie uma mensagem.",
+      "name": "Nome",
+      "email": "E-mail",
+      "message": "Mensagem",
+      "topic": "Assunto",
+      "topicGeneral": "Pergunta geral",
+      "topicDemo": "Marcar demo",
+      "topicSupport": "Suporte",
+      "send": "Enviar mensagem",
+      "sending": "A enviar…",
+      "success": "Obrigado — responderemos por e-mail.",
+      "error": "Não foi possível enviar. Tente novamente."
+    },
+    "download": {
+      "eyebrow": "Aplicativos",
+      "title": "Gira o Orbit a partir do telemóvel",
+      "lead": "Donos e equipa usam a app ops em iOS e Android. Os clientes recebem a sua app white-label após o lançamento.",
+      "opsTitle": "Workspace ops",
+      "opsBody": "Reservas, POS, encomendas e ferramentas de equipa em movimento."
+    },
+    "integrations": {
+      "eyebrow": "Integrações",
+      "title": "Ligado onde importa",
+      "lead": "Pagamentos, mensagens e ferramentas que já usa — no Orbit, sem uma segunda stack.",
+      "items": [
+        {
+          "title": "UPI e pedidos de confirmação de pagamento",
+          "body": "A sua assinatura do IE Orbit é cobrada em INR. Pague com UPI a partir do espaço de trabalho e depois envie um UTR ou uma captura de ecrã para que a equipa confirme o pagamento."
+        },
+        {
+          "title": "Razorpay",
+          "body": "Nos planos Orbit Mart Pro elegíveis, ligue a sua própria conta Razorpay para que os clientes lhe paguem os pedidos da loja. A cobrança da assinatura da plataforma continua a ser feita por confirmações UPI."
+        },
+        {
+          "title": "Cashfree",
+          "body": "O Cashfree está disponível como método de pagamento nas flags de funcionalidades do produto e nas opções de pagamento do POS, quando ativado para o espaço de trabalho."
+        },
+        {
+          "title": "Login com Google",
+          "body": "Os proprietários podem continuar com o Google durante o registo. O mesmo cliente OAuth Web é usado no site público e nas apps de operações."
+        },
+        {
+          "title": "Google Maps e Places",
+          "body": "Os endereços de escritórios e negócios usam os seletores do Google Maps / Places para guardar as localizações com um marcador no mapa."
+        },
+        {
+          "title": "Google Agenda",
+          "body": "As ligações de agenda sincronizam os fluxos de reserva elegíveis com o Google Agenda quando o espaço de trabalho tem uma conta ligada."
+        },
+        {
+          "title": "Google Analytics",
+          "body": "As páginas públicas de marketing podem carregar o Google Analytics 4 quando um ID de medição está configurado. O Analytics não é carregado na administração da plataforma, no início de sessão nem nas rotas da app do espaço de trabalho."
+        },
+        {
+          "title": "Google Ads (AdMob)",
+          "body": "Os planos Starter podem mostrar Google Ads (AdMob) na app de clientes em marca branca. O Pro não tem anúncios. O AdMob não é usado na app de operações dos proprietários e da equipa."
+        },
+        {
+          "title": "Firebase Cloud Messaging",
+          "body": "As notificações push usam o Firebase Cloud Messaging nas apps com permissão de notificações — a app de operações e, quando configurada, a app de clientes em marca branca."
+        },
+        {
+          "title": "WhatsApp (Grow)",
+          "body": "O Orbit Mart Pro Grow inclui uma mensagem de WhatsApp predefinida e links de partilha para que as lojas enviem mensagens a partir das operações — não é uma página de produto WhatsApp BSP separada. O Starter inclui apenas calculadoras."
+        },
+        {
+          "title": "Porter e Shiprocket",
+          "body": "A entrega imediata usa Porter ou Shiprocket Quick quando configura as credenciais nas definições de entrega da loja."
+        },
+        {
+          "title": "e-fatura GST e e-way",
+          "body": "O Orbit Mart Pro inclui relatórios GST, e-fatura (IRN) e e-way bill como parte do produto de retalho — não como complemento pago de terceiros. O Starter inclui caixa, diário, pedidos online e devoluções."
+        }
+      ],
+      "footer": "A forma como estes processadores tratam os dados está descrita nas páginas de <privacy>Privacidade</privacy> e <cookies>Cookies</cookies>."
+    },
+    "faq": {
+      "eyebrow": "Perguntas frequentes",
+      "title": "Respostas antes de começar",
+      "lead": "Preços, teste, apps white-label e como Orbit Appoint e Orbit Mart encaixam.",
+      "searchPlaceholder": "Pesquisar perguntas",
+      "jumpTo": "Ir para",
+      "topicsAria": "Tópicos do FAQ",
+      "noMatches": "Nenhum resultado para “{{query}}”.",
+      "matchTotal": "Resultados para “{{query}}”: {{total}}.",
+      "emptyTitle": "Nenhum resultado",
+      "emptyBody": "Tente uma busca mais curta ou <contact>fale conosco</contact> e ajudaremos diretamente.",
+      "clearSearch": "Limpar busca",
+      "stillStuck": "Ainda com dúvidas?",
+      "askTeam": "Pergunte à equipe",
+      "askBody": "Se a resposta não estiver aqui, envie uma mensagem e responderemos em até dois dias úteis.",
+      "ctaTitle": "Pronto para configurar o seu negócio?",
+      "ctaBody": "Crie uma conta — sem cartão de crédito. Pague com UPI quando fizer o upgrade.",
+      "sections": {
+        "overview": {
+          "title": "Visão geral da plataforma",
+          "description": "O que é o IE Orbit e para quem ele serve.",
+          "items": [
+            {
+              "q": "O que é o IE Orbit?",
+              "a": {
+                "paragraphs": [
+                  "O IE Orbit é um espaço de trabalho para negócios da Indians Empire Technologies. Uma única conta opera o Orbit Appoint (agendamentos e operações de serviço) e o Orbit Mart (varejo, PDV, contabilidade GST e ferramentas Grow). Você pode assinar um produto ou os dois — eles compartilham o mesmo negócio, equipe, clientes e cobrança.",
+                  "O grande diferencial é o app de clientes white-label: os clientes agendam, compram e acompanham pedidos com o nome do seu negócio, não do IE Orbit. Proprietários e equipe usam o painel web e o app de operações."
+                ]
+              }
+            },
+            {
+              "q": "O que é o app de clientes white-label?",
+              "a": {
+                "paragraphs": [
+                  "É o principal motivo para escolher o IE Orbit em vez de um software que só emite cobranças. Todo plano Starter e Pro inclui um app móvel com a marca do seu negócio. Os clientes veem seu nome, suas cores e suas ofertas ao agendar ou comprar — não o IE Orbit, nem um marketplace público.",
+                  "Proprietários e equipe continuam usando o espaço de operações. O Starter pode exibir anúncios do Google no app de clientes; o Pro não tem anúncios. Os links de instalação vêm do seu negócio, não de uma página genérica de loja pública neste site."
+                ]
+              }
+            },
+            {
+              "q": "Para quem o IE Orbit foi feito?",
+              "a": {
+                "bullets": [
+                  "Salões, spas, clínicas, personal trainers e outras equipes que trabalham com agendamentos (Orbit Appoint)",
+                  "Lojas, balcões e equipes de varejo que precisam de PDV, catálogo e contabilidade GST (Orbit Mart)",
+                  "Negócios que operam serviço e varejo no mesmo local",
+                  "Negócios que querem um app de clientes com a própria marca, e não uma listagem em um marketplace genérico"
+                ]
+              }
+            },
+            {
+              "q": "Posso usar o Orbit Appoint e o Orbit Mart juntos?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Os dois produtos ficam no mesmo espaço de trabalho. Você escolhe um ou ambos no cadastro e pode adicionar o segundo depois. Equipe, clientes, escritórios, cobrança e o app de clientes white-label permanecem unificados — sem logins separados nem perfis de negócio duplicados."
+                ]
+              }
+            }
+          ]
+        },
+        "ai": {
+          "title": "IA no espaço de trabalho",
+          "description": "Assistente, automações, notas de fornecedores e uso de IA pré-pago.",
+          "items": [
+            {
+              "q": "O que é o assistente de IA?",
+              "a": {
+                "paragraphs": [
+                  "O Business Assistant permite que proprietários e equipe perguntem, em linguagem natural, sobre agendamentos, pedidos, estoque e clientes. Uma mensagem é uma pergunta que você envia. Uma confirmação é quando você aprova uma alteração proposta — nada é atualizado até você dizer sim.",
+                  "Primeiro vale uma cota diária gratuita de perguntas e aprovações. Mensagens e confirmações extras usam a carteira pré-paga do Assistant. O Business Assistant está no Pro do Orbit Appoint e do Orbit Mart, e no teste Pro completo de 45 dias. Os limites gratuitos e os valores excedentes estão na página de Preços."
+                ]
+              }
+            },
+            {
+              "q": "O que é o Automation Creator?",
+              "a": {
+                "paragraphs": [
+                  "Descreva com as suas palavras uma oferta de aniversário, uma ocasião ou uma regra VIP. O Orbit cria um rascunho da automação para você visualizar e ativar.",
+                  "O Orbit Mart pode aplicar descontos. O Orbit Appoint pode enviar lembretes e sugerir ofertas à equipe. O Automation Creator está no Pro e durante o teste Pro completo de 45 dias. Os rascunhos usam a carteira de IA pré-paga."
+                ]
+              }
+            },
+            {
+              "q": "O que é a extração de notas com IA?",
+              "a": {
+                "paragraphs": [
+                  "No Orbit Mart Pro — e durante o teste Pro completo de 45 dias — fotografe uma nota de fornecedor. Revise os itens, preços e GST extraídos e lance uma compra que adiciona estoque. Cada digitalização usa a carteira de IA pré-paga."
+                ]
+              }
+            },
+            {
+              "q": "Como funciona a cobrança do uso de IA?",
+              "a": {
+                "paragraphs": [
+                  "Duas carteiras pré-pagas cobrem a IA além da cota diária gratuita do Assistant. Ambas estão disponíveis no Pro e durante o teste Pro completo de 45 dias."
+                ],
+                "bullets": [
+                  "Carteira do Assistant — perguntas extras (mensagens) e aprovações (confirmações) após o limite diário gratuito",
+                  "Carteira de IA — preenchimento por foto da embalagem, digitalização de notas de fornecedores e rascunhos de automação (por uso, com um pequeno mínimo por chamada)",
+                  "Os limites diários gratuitos atuais, os valores excedentes e os mínimos das carteiras aparecem na página de Preços da sua região"
+                ]
+              }
+            }
+          ]
+        },
+        "appoint": {
+          "title": "Orbit Appoint",
+          "description": "Agendamentos, calendário, equipe e clientes.",
+          "items": [
+            {
+              "q": "O que o Orbit Appoint inclui?",
+              "a": {
+                "bullets": [
+                  "App de clientes white-label com a marca do seu negócio",
+                  "Agendamentos online de qualquer dispositivo",
+                  "Calendário da equipe, escalas e disponibilidade",
+                  "Cadastro de clientes, lembretes e avaliações",
+                  "Catálogo de serviços e gestão de agendamentos",
+                  "Lembretes para clientes por WhatsApp no Pro",
+                  "Segundo escritório, pagamentos e app de clientes sem anúncios no Pro",
+                  "Business intelligence no Starter (Overview) e BI completo no Pro",
+                  "Pontos de recompensa para clientes no Pro (acumular e resgatar)",
+                  "Assistente de IA para perguntas em linguagem natural sobre agendamentos e clientes",
+                  "Automation Creator no Pro para lembretes e sugestões de ofertas à equipe"
+                ]
+              }
+            },
+            {
+              "q": "Quais negócios costumam usar o Orbit Appoint?",
+              "a": {
+                "paragraphs": [
+                  "Salões e spas, clínicas e saúde, estúdios de fitness e bem-estar, serviços profissionais, educação e treinamento, serviços domésticos e qualquer equipe que agende pessoas e horários."
+                ]
+              }
+            }
+          ]
+        },
+        "mart": {
+          "title": "Orbit Mart",
+          "description": "Comércio, contabilidade GST, Grow e pacote Pets opcional.",
+          "items": [
+            {
+              "q": "O que o Orbit Mart inclui?",
+              "a": {
+                "paragraphs": [
+                  "O Orbit Mart é um único produto com três áreas operacionais — comércio, contabilidade e Grow — e não três assinaturas separadas. O Starter cobre o balcão, o livro-diário, os pedidos online e as devoluções; o Pro libera o Instant Delivery com Porter/Shiprocket, a nota fiscal eletrônica GST / e-way bill e o Grow."
+                ],
+                "bullets": [
+                  "App de clientes white-label para os compradores navegarem e pedirem com a sua marca",
+                  "Starter: PDV, catálogo, pedidos online, devoluções, notas de venda, parceiros, caixa, despesas e estoque — um local, duas pessoas (é possível adicionar 1 extra)",
+                  "Pro: Instant Delivery com Porter/Shiprocket, compras, relatórios GST, e-invoice, e-way bill, Grow WhatsApp / Google, fidelidade, gateways de pagamento e um segundo escritório",
+                  "Extração de notas com IA no Pro: fotografe uma nota de fornecedor, revise os itens e adicione o estoque",
+                  "Automation Creator no Pro para descontos de aniversário, ocasião e VIP",
+                  "O pacote Pets continua sendo um complemento mensal opcional no Orbit Mart"
+                ]
+              }
+            },
+            {
+              "q": "O que é o pacote Pets?",
+              "a": {
+                "paragraphs": [
+                  "O pacote Pets é um complemento mensal opcional para lojistas do Orbit Mart que precisam de registros de animais. Ele não está incluído no plano básico do Orbit Mart.",
+                  "Funciona junto com catálogo, PDV, pedidos e estoque quando você o ativa nas configurações de cobrança."
+                ]
+              }
+            },
+            {
+              "q": "O Orbit Mart substitui um software de contabilidade separado?",
+              "a": {
+                "paragraphs": [
+                  "Para muitos pequenos e médios lojistas, o Orbit Mart Books cobre o dia a dia: vendas, compras, caixa e banco, despesas, parceiros, estoque e conformidade GST (relatórios, e-invoice, e-way bill) no mesmo espaço do seu balcão e catálogo. Necessidades contábeis complexas ainda podem exigir orientação especializada."
+                ]
+              }
+            }
+          ]
+        },
+        "gettingStarted": {
+          "title": "Primeiros passos",
+          "description": "Criação de conta, cadastro e acesso.",
+          "items": [
+            {
+              "q": "Como crio uma conta?",
+              "a": {
+                "paragraphs": [
+                  "Clique em “Criar conta” no site ou acesse /auth/register/start. Conclua o assistente guiado: dados do negócio, conta do proprietário, preferências (moeda, fuso horário, produtos e pacotes), identidade visual opcional e, por fim, revise e envie.",
+                  "Você verifica o e-mail do proprietário com um código de uso único durante o cadastro ou continua com o Google na etapa do proprietário. Não é preciso cartão de crédito para começar."
+                ]
+              }
+            },
+            {
+              "q": "O que acontece depois que termino o cadastro?",
+              "a": {
+                "bullets": [
+                  "Seu espaço de trabalho é criado automaticamente (tenant, negócio, configurações padrão)",
+                  "Você verifica seu e-mail antes de ter acesso completo",
+                  "Uma lista de primeiros passos no painel ajuda a adicionar serviços, equipe ou itens de catálogo",
+                  "Seu teste Pro completo de 45 dias começa para o(s) produto(s) escolhido(s)"
+                ]
+              }
+            },
+            {
+              "q": "Minha equipe pode entrar separadamente?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Convide a equipe pelo espaço de trabalho após o cadastro. Cada pessoa recebe o próprio login, com funções e permissões. Os proprietários gerenciam cobrança, configurações e assinaturas de produtos."
+                ]
+              }
+            },
+            {
+              "q": "Existe um app móvel para clientes?",
+              "a": {
+                "paragraphs": [
+                  "Sim. O IE Orbit oferece um app de clientes white-label com a marca do seu negócio em todos os planos pagos e durante o teste. Dependendo dos produtos que você usa, os clientes podem agendar, navegar na loja, fazer pedidos e acompanhar o status. Os planos Starter podem exibir anúncios do Google no app de clientes; o Pro não tem anúncios."
+                ]
+              }
+            },
+            {
+              "q": "Quais moedas e regiões são aceitas?",
+              "a": {
+                "paragraphs": [
+                  "Você escolhe uma moeda de operação no cadastro (INR, USD, EUR, GBP e outras). A cobrança da assinatura SaaS do IE Orbit segue a região do seu negócio: espaços da Índia são cobrados em INR via UPI (mais Razorpay/Cashfree onde configurados); espaços internacionais, em USD via Stripe. Os preços públicos deste site costumam aparecer em INR para a Índia."
+                ]
+              }
+            }
+          ]
+        },
+        "plans": {
+          "title": "Planos, teste e limites",
+          "description": "Starter x Pro, regras do teste e complementos.",
+          "items": [
+            {
+              "q": "Como funciona o teste gratuito?",
+              "a": {
+                "paragraphs": [
+                  "Todo novo espaço de trabalho recebe um teste de 45 dias com acesso Pro completo aos produtos escolhidos. Não é preciso cartão de crédito para começar.",
+                  "Quando o teste termina sem upgrade, o espaço de trabalho é bloqueado parcialmente — você ainda pode entrar e ver os dados, mas a operação do dia a dia pausa até você assinar. Seus dados permanecem no lugar."
+                ]
+              }
+            },
+            {
+              "q": "Qual é a diferença entre Starter e Pro?",
+              "a": {
+                "bullets": [
+                  "Starter: operações essenciais para um local (2 pessoas, 1 extra possível); apenas BI Overview. O Orbit Mart Starter inclui balcão, livro-diário, pedidos online e devoluções (a e-invoice GST continua no Pro)",
+                  "Pro: 5 pessoas e 2 escritórios incluídos; BI completo; lembretes por WhatsApp, pagamentos e app sem anúncios. O Orbit Mart Pro acrescenta Instant Delivery com Porter/Shiprocket, contabilidade GST e Grow",
+                  "O Pro não tem anúncios; o Starter pode exibir anúncios do Google no app de clientes",
+                  "Um segundo escritório é do Pro. O Starter pode adicionar 1 pessoa extra; escritórios adicionais são um complemento do Pro"
+                ],
+                "paragraphs": [
+                  "Os limites exatos de equipe e escritórios dependem do plano exibido na página de Preços de cada produto."
+                ]
+              }
+            },
+            {
+              "q": "Posso adicionar equipe extra, escritórios ou o pacote Pets?",
+              "a": {
+                "paragraphs": [
+                  "O Starter pode adicionar 1 pessoa extra. Escritórios adicionais estão disponíveis no Pro. O pacote Pets é um complemento separado do Orbit Mart para registros de animais.",
+                  "Os preços mensais atuais dos complementos aparecem na página de Preços da sua região (Índia em INR ou internacional em USD)."
+                ]
+              }
+            },
+            {
+              "q": "Posso trocar de plano depois?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Faça upgrade ou altere pacotes nas configurações de cobrança do espaço de trabalho. Mudanças de plano pendentes podem ser agendadas; você pode cancelar uma antes que ela entre em vigor. A cobrança anual está disponível em um múltiplo com desconto do valor mensal (exibido em Products & Billing e em Preços)."
+                ]
+              }
+            }
+          ]
+        },
+        "billing": {
+          "title": "Cobrança e pagamentos",
+          "description": "UPI, comprovantes de pagamento e pelo que você paga.",
+          "items": [
+            {
+              "q": "Como funciona a cobrança da assinatura?",
+              "a": {
+                "paragraphs": [
+                  "Índia: as assinaturas são cobradas em INR. Pague mensal ou anualmente via UPI em Products & Billing (Razorpay/Cashfree também podem estar disponíveis). Após uma transferência UPI, envie um comprovante de pagamento com seu UTR ou uma captura de tela para que nossa equipe confirme a ativação.",
+                  "Internacional: as assinaturas são cobradas em USD via Stripe Checkout em Products & Billing. Os impostos podem ser calculados com o Stripe Tax, quando aplicável."
+                ]
+              }
+            },
+            {
+              "q": "Preciso de cartão de crédito?",
+              "a": {
+                "paragraphs": [
+                  "Não é preciso cartão de crédito para começar o teste. Na Índia, você pode fazer upgrade com UPI (e gateways opcionais). Fora da Índia, a assinatura paga usa o Stripe (cartão e outros métodos aceitos pelo Stripe)."
+                ]
+              }
+            },
+            {
+              "q": "Como funcionam os pagamentos dos clientes (Razorpay)?",
+              "a": {
+                "paragraphs": [
+                  "Em planos Orbit Mart Pro elegíveis na Índia, você pode conectar o Razorpay e/ou o Cashfree para que os clientes paguem a você pelos pedidos da loja. Internacionalmente, o Stripe Connect pode estar disponível quando oferecido. Sua fatura SaaS do IE Orbit (INR/UPI ou USD/Stripe) é sempre separada do pagamento dos seus clientes."
+                ]
+              }
+            },
+            {
+              "q": "E se meu teste terminar e eu não fizer upgrade?",
+              "a": {
+                "paragraphs": [
+                  "O espaço de trabalho é bloqueado parcialmente. Os dados são mantidos. Faça upgrade quando quiser para retomar a operação. Se precisar de ajuda para escolher um plano, fale conosco antes do fim do teste."
+                ]
+              }
+            }
+          ]
+        },
+        "bi": {
+          "title": "Business intelligence e plataforma",
+          "description": "Relatórios, escritórios e recursos compartilhados do espaço de trabalho.",
+          "items": [
+            {
+              "q": "Qual business intelligence está incluído?",
+              "a": {
+                "bullets": [
+                  "Starter: BI Overview — um panorama geral da sua operação",
+                  "Pro: suíte completa — Growth, Revenue, Forecast e Reports",
+                  "O BI se aplica a cada produto assinado onde houver análises disponíveis"
+                ]
+              }
+            },
+            {
+              "q": "Como funcionam os escritórios (filiais)?",
+              "a": {
+                "paragraphs": [
+                  "Cada plano inclui um ou mais escritórios com endereço e localização no mapa. Escritórios extras podem ser adicionados como complemento mensal. O Orbit Appoint usa os escritórios para agendamento e disponibilidade; o Orbit Mart, para o contexto de balcão, estoque e contabilidade."
+                ]
+              }
+            },
+            {
+              "q": "Meus dados estão seguros?",
+              "a": {
+                "paragraphs": [
+                  "Os espaços de trabalho são isolados por negócio. O acesso é controlado por autenticação, funções e permissões.",
+                  "Leia nossa Política de Privacidade para saber como tratamos os dados da conta e do negócio. O login usa códigos de uso único por e-mail (e desbloqueio biométrico opcional no celular após entrar). Verifique o e-mail do proprietário após o cadastro."
+                ]
+              }
+            }
+          ]
+        },
+        "support": {
+          "title": "Conta, suporte e jurídico",
+          "description": "Ajuda com login, contato e políticas.",
+          "items": [
+            {
+              "q": "Como entro se perdi o acesso ao meu e-mail?",
+              "a": {
+                "paragraphs": [
+                  "O login usa um código de uso único enviado ao e-mail da sua conta (login com OTP na web ou no celular). Se você não consegue receber e-mails, fale com o suporte informando o endereço da sua conta para ajudarmos a recuperar o acesso."
+                ]
+              }
+            },
+            {
+              "q": "Como verifico meu e-mail?",
+              "a": {
+                "paragraphs": [
+                  "Depois de criar a conta, conclua a verificação de e-mail pelo link na sua caixa de entrada ou pela tela de verificação de e-mail no app. Alguns recursos podem ficar limitados até a verificação ser concluída."
+                ]
+              }
+            },
+            {
+              "q": "Como falo com o suporte ou peço uma demonstração?",
+              "a": {
+                "paragraphs": [
+                  "E-mail: support@indiansempire.com",
+                  "Telefone: +91 9766855617",
+                  "Use a página de Contato para demonstrações, vendas e parcerias. Nosso objetivo é responder em até dois dias úteis."
+                ]
+              }
+            },
+            {
+              "q": "Onde ficam os Termos e a Privacidade?",
+              "a": {
+                "paragraphs": [
+                  "Os termos de serviço, a Política de Privacidade e a Política de Cookies estão linkados no rodapé do site e durante a criação da conta. Você precisa aceitar os Termos e a Privacidade para concluir o cadastro do proprietário."
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "notFound": {
+      "title": "Página não encontrada",
+      "metaTitle": "Página não encontrada — IE Orbit",
+      "metaDescription": "Esta página IE Orbit não foi encontrada.",
+      "body": "A página que procura não foi encontrada. Experimente uma destas secções."
+    },
+    "legal": {
+      "englishOnly": "Este documento legal está atualmente disponível em inglês."
+    },
+    "plans": {
+      "tryFirst": "Experimente primeiro",
+      "free": "Grátis",
+      "trialDays": "{{days}} dias",
+      "mostPopular": "Mais popular",
+      "kickerStarter": "Autônomos e microempresas",
+      "kickerPro": "Equipes em crescimento",
+      "perMonth": "/mês",
+      "appointName": "Orbit Appoint",
+      "martName": "Orbit Mart",
+      "bothName": "Orbit Appoint + Orbit Mart",
+      "trialBullets": {
+        "fullPro": "Todos os recursos Pro do {{product}} durante o teste",
+        "whiteLabel": "App de clientes white-label com a sua marca",
+        "noCard": "Não é preciso cartão de crédito para começar",
+        "upgrade": "Faça upgrade a qualquer momento para manter seus dados"
+      },
+      "combinedTrialBullets": {
+        "fullPro": "Orbit Appoint e Orbit Mart Pro completos durante o teste",
+        "oneApp": "Um único app white-label para agendar e comprar",
+        "sharedCustomers": "Clientes compartilhados em um só espaço de trabalho",
+        "noCard": "Não é preciso cartão de crédito para começar"
+      },
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (cobrados por produto)"
+    },
+    "features": {
+      "createAccount": "Criar conta",
+      "howKicker": "Como funciona",
+      "howAria": "Como funciona",
+      "benefitsKicker": "Benefícios",
+      "benefitsAria": "Benefícios",
+      "pricingKicker": "Preços",
+      "pricingAria": "Preços",
+      "seeFullPricing": "Ver todos os preços",
+      "ctaTitle": "Experimente o app white-label por {{days}} dias",
+      "appoint": {
+        "kicker": "Orbit Appoint",
+        "title": "Agendamentos sem idas e vindas.",
+        "body": "Ofereça aos clientes uma forma elegante de ver a disponibilidade, agendar na hora e voltar sempre. O Starter cobre um local. O Pro adiciona lembretes por WhatsApp, pagamentos, um segundo escritório e um app sem anúncios.",
+        "features": {
+          "f1": "App de clientes white-label para que eles agendem com a sua marca",
+          "f2": "Disponibilidade inteligente e agendas da equipe",
+          "f3": "Lembretes automáticos por e-mail; WhatsApp no Pro",
+          "f4": "O Pro adiciona segundo escritório, pagamentos, BI completo, pontos de recompensa e um app de clientes sem anúncios",
+          "f5": "Assistente de IA para perguntas sobre o dia em linguagem natural",
+          "f6": "Automation Creator no Pro para lembretes e sugestões de ofertas à equipe"
+        },
+        "howTitle": "Como o Orbit Appoint funciona",
+        "howLead": "Os clientes agendam no app com a sua marca. Sua equipe conduz o dia a partir de uma única agenda.",
+        "how": {
+          "s1": {
+            "title": "Publique serviços e equipe",
+            "body": "Defina a duração dos serviços, a equipe, as salas e os horários para que a disponibilidade seja sempre real."
+          },
+          "s2": {
+            "title": "Clientes agendam on-line",
+            "body": "Eles escolhem um horário no seu app white-label ou no agendamento pela web, em vez de ligar para a recepção."
+          },
+          "s3": {
+            "title": "Atenda e acompanhe",
+            "body": "A equipe vê a agenda ao vivo, envia lembretes e mantém o histórico do cliente em um só lugar."
+          }
+        },
+        "benefitsTitle": "Por que as empresas escolhem o Orbit Appoint",
+        "benefitsLead": "Menos horários perdidos, menos telefonemas e um app de clientes com a cara da sua marca.",
+        "benefits": {
+          "b1": {
+            "title": "App de agendamento white-label",
+            "body": "Os clientes instalam a sua marca — não uma listagem genérica do IE Orbit — no iOS e no Android."
+          },
+          "b2": {
+            "title": "Uma agenda compartilhada",
+            "body": "Chega de agendas de papel e conversas no WhatsApp. Todos veem quem está livre e o que está reservado."
+          },
+          "b3": {
+            "title": "Lembretes que funcionam",
+            "body": "Lembretes por e-mail em todos os planos; lembretes por WhatsApp no Pro para reduzir faltas."
+          },
+          "b4": {
+            "title": "Cresça sem caos",
+            "body": "Adicione um segundo escritório, pagamentos, BI completo e um app sem anúncios ao migrar para o Pro."
+          }
+        },
+        "pricingTitle": "Preços do Orbit Appoint",
+        "pricingLead": "Teste Pro completo de {{days}} dias e depois Starter {{starter}} ou Pro {{pro}} por mês. O app de clientes white-label está incluído em todos os planos.",
+        "starter": {
+          "f1": "App de agendamento white-label para clientes",
+          "f2": "Um local com agenda da equipe",
+          "f3": "Lembretes por e-mail",
+          "f4": "Visão geral de BI",
+          "f5": "Cadastro de clientes e avaliações"
+        },
+        "pro": {
+          "f1": "Tudo do Starter",
+          "f2": "Lembretes por WhatsApp",
+          "f3": "Pagamentos e pontos de recompensa",
+          "f4": "Segundo escritório",
+          "f5": "BI completo e app de clientes sem anúncios",
+          "f6": "Automation Creator"
+        }
+      },
+      "mart": {
+        "kicker": "Orbit Mart",
+        "title": "Seus produtos, no bolso deles.",
+        "body": "Crie uma loja em que seus produtos sejam fáceis de ver, comprar e lembrar — com PDV e contabilidade GST no mesmo espaço de trabalho. O Starter inclui o balcão, pedidos on-line e devoluções; o Pro libera a entrega instantânea com Porter/Shiprocket, a nota fiscal eletrônica GST e o Grow.",
+        "features": {
+          "f1": "App de clientes white-label para que os compradores comprem com a sua marca",
+          "f2": "PDV, catálogo, pedidos on-line e devoluções no Starter",
+          "f3": "Entrega instantânea com Porter/Shiprocket no Pro",
+          "f4": "Livro-diário no Starter; relatórios GST, nota eletrônica, Grow e e-way no Pro",
+          "f5": "Extração de notas com IA no Pro — fotografe a nota do fornecedor, revise as linhas e adicione o estoque",
+          "f6": "Automation Creator no Pro para regras de aniversário, datas especiais e VIP"
+        },
+        "howTitle": "Como o Orbit Mart funciona",
+        "howLead": "Venda no balcão e on-line com a sua marca, com a contabilidade no mesmo espaço de trabalho.",
+        "how": {
+          "s1": {
+            "title": "Monte o seu catálogo",
+            "body": "Adicione produtos, preços e estoque para que o balcão e o app de clientes fiquem sempre sincronizados."
+          },
+          "s2": {
+            "title": "Venda em qualquer lugar",
+            "body": "Registre as vendas de balcão no PDV e receba pedidos on-line no seu app de loja white-label."
+          },
+          "s3": {
+            "title": "Feche as contas",
+            "body": "Acompanhe as vendas no livro-diário do Starter; libere relatórios GST, nota eletrônica e ferramentas Grow no Pro."
+          }
+        },
+        "benefitsTitle": "Por que os lojistas escolhem o Orbit Mart",
+        "benefitsLead": "Um só espaço de trabalho para o balcão, a loja on-line e uma contabilidade pronta para GST.",
+        "benefits": {
+          "b1": {
+            "title": "App de loja white-label",
+            "body": "Os clientes navegam e pedem em um app com a cara da sua loja, não de um marketplace."
+          },
+          "b2": {
+            "title": "Balcão e catálogo juntos",
+            "body": "PDV, devoluções e pedidos on-line compartilham os mesmos produtos e a mesma lista de clientes."
+          },
+          "b3": {
+            "title": "GST quando você precisar",
+            "body": "Livro-diário no Starter. Relatórios GST, nota eletrônica e e-way bill no Pro."
+          },
+          "b4": {
+            "title": "Entrega e marketing no Pro",
+            "body": "Entrega instantânea com Porter/Shiprocket e assistentes Grow para promoções e anúncios."
+          }
+        },
+        "pricingTitle": "Preços do Orbit Mart",
+        "pricingLead": "Teste Pro completo de {{days}} dias e depois Starter {{starter}} ou Pro {{pro}} por mês. O app de clientes white-label está incluído em todos os planos.",
+        "starter": {
+          "f1": "App de loja white-label para clientes",
+          "f2": "PDV, catálogo, pedidos on-line e devoluções",
+          "f3": "Livro-diário",
+          "f4": "Visão geral de BI",
+          "f5": "Lista de clientes compartilhada"
+        },
+        "pro": {
+          "f1": "Tudo do Starter",
+          "f2": "Entrega instantânea com Porter/Shiprocket",
+          "f3": "Relatórios GST, nota eletrônica e e-way",
+          "f4": "Assistentes de marketing Grow",
+          "f5": "Extração de notas com IA",
+          "f6": "App de clientes sem anúncios"
+        }
+      },
+      "both": {
+        "kicker": "Orbit Appoint + Orbit Mart",
+        "title": "Uma marca. Todas as formas de comprar.",
+        "body": "A versão mais completa do IE Orbit — agendamentos e e-commerce com um único relacionamento com o cliente.",
+        "features": {
+          "f1": "Um único app white-label para agendar e comprar",
+          "f2": "Perfis de clientes unificados",
+          "f3": "Venda cruzada de agendamentos e produtos",
+          "f4": "Um teste de {{days}} dias, um espaço de trabalho, cobrança por UPI",
+          "f5": "Assistente de IA e Automation Creator em agendamentos e na loja"
+        },
+        "howTitle": "Como Appoint + Mart funcionam juntos",
+        "howLead": "Um espaço de trabalho, uma lista de clientes e um app com a sua marca para agendamentos e compras.",
+        "how": {
+          "s1": {
+            "title": "Ative os dois produtos",
+            "body": "Assine o Orbit Appoint e o Orbit Mart no mesmo negócio para manter equipe e clientes unificados."
+          },
+          "s2": {
+            "title": "Clientes agendam e compram",
+            "body": "Seu app white-label cuida de agendamentos e pedidos de produtos sob uma só marca."
+          },
+          "s3": {
+            "title": "Conduza serviços e varejo juntos",
+            "body": "A agenda do salão e o balcão compartilham clientes, histórico e cobrança em um único login."
+          }
+        },
+        "benefitsTitle": "Por que as equipes usam os dois",
+        "benefitsLead": "Pare de dividir agendamentos e varejo entre ferramentas que nunca conversam.",
+        "benefits": {
+          "b1": {
+            "title": "Um app de clientes com a sua marca",
+            "body": "Agende um serviço e compre um produto sem sair da experiência da sua marca."
+          },
+          "b2": {
+            "title": "Clientes compartilhados",
+            "body": "Histórico de visitas, pedidos da loja e acompanhamentos ficam no mesmo cadastro do cliente."
+          },
+          "b3": {
+            "title": "Venda cruzada natural",
+            "body": "Ofereça produtos para levar depois de um serviço ou agende a próxima visita pela loja."
+          },
+          "b4": {
+            "title": "Um teste, um caminho de cobrança",
+            "body": "Teste Pro completo de {{days}} dias no espaço de trabalho e depois cobrança por UPI conforme o plano de cada produto."
+          }
+        },
+        "pricingTitle": "Preços ao usar os dois",
+        "starter": {
+          "f1": "Orbit Appoint Starter {{price}}/mês + Orbit Mart Starter {{price}}/mês",
+          "f2": "Um único app white-label para agendar e comprar",
+          "f3": "Clientes compartilhados entre agendamentos e varejo",
+          "f4": "Agenda da equipe, PDV, catálogo e livro-diário",
+          "f5": "Lembretes por e-mail e visão geral de BI nos dois produtos"
+        },
+        "pro": {
+          "f1": "Orbit Appoint Pro {{price}}/mês + Orbit Mart Pro {{price}}/mês",
+          "f2": "Tudo do Starter",
+          "f3": "Lembretes por WhatsApp, pagamentos e segundo escritório no Appoint",
+          "f4": "Entrega instantânea, nota eletrônica GST/e-way e Grow no Mart",
+          "f5": "BI completo, Automation Creator e app de clientes sem anúncios"
+        }
+      }
+    },
+    "pricing": {
+      "products": {
+        "appointie": {
+          "kicker": "Orbit Appoint",
+          "title": "Agendamentos, agenda, equipe e clientes",
+          "lead": "Agenda individual no Starter. Lembretes por WhatsApp, pagamentos e segundo escritório no Pro."
+        },
+        "shopie": {
+          "kicker": "Orbit Mart",
+          "title": "Comércio, contabilidade e GST",
+          "lead": "Balcão, pedidos on-line e devoluções no Starter. Entrega instantânea, contabilidade GST e Grow no Pro."
+        },
+        "both": {
+          "kicker": "Orbit Appoint + Orbit Mart",
+          "title": "Um espaço de trabalho para agendar e comprar",
+          "lead": "Starter ou Pro nos dois produtos. Cada produto é cobrado separadamente; os totais abaixo mostram o custo mensal combinado."
+        }
+      },
+      "regionIn": "Índia (₹)",
+      "regionIntl": "Internacional ($)",
+      "billingUpi": "Cobrança por UPI",
+      "billingCard": "Cobrança no cartão (USD)",
+      "yearly": {
+        "chip": "Anual = {{months}}× mensal",
+        "noteFreeOne": "A cobrança anual equivale a {{months}}× a mensal ({{free}} mês grátis).",
+        "noteFreeMany": "A cobrança anual equivale a {{months}}× a mensal ({{free}} meses grátis).",
+        "noteNoFree": "A cobrança anual equivale a {{months}}× a mensal.",
+        "planLine": "ou {{price}}/ano ({{months}}× mensal)"
+      },
+      "fallback": {
+        "freeBlurb": "Acesso Pro completo durante o teste e, depois, bloqueio parcial até você fazer upgrade.",
+        "starterBlurb": "Operações essenciais, visão geral de BI, um local e um app de clientes white-label.",
+        "starterBlurbBoth": "Appoint Starter + Mart Starter em um espaço de trabalho, cobrados por produto.",
+        "proBlurb": "BI completo, segundo escritório, ferramentas de WhatsApp ou GST e um app white-label sem anúncios. {{note}}",
+        "proBlurbBoth": "Appoint Pro + Mart Pro com BI completo e app sem anúncios."
+      },
+      "extras": {
+        "kicker": "Complementos e IA",
+        "titleBefore": "Equipe, escritórios, pacote Pets e",
+        "titleEm": "uso de IA",
+        "seatKicker": "Complementos de usuários e pacotes",
+        "monthlyExtras": "Extras mensais",
+        "extraStaff": "Funcionário extra",
+        "extraStaffNote": "Starter (máx. 1) e Pro",
+        "extraOffice": "Escritório extra",
+        "extraOfficeNote": "Somente Pro",
+        "petsPack": "Pacote Pets",
+        "petsPackNote": "Complemento opcional do Orbit Mart",
+        "aiKicker": "Uso de IA",
+        "aiTitle": "Carteiras pré-pagas no Pro",
+        "freeEachDay": "Grátis por dia",
+        "freeEachDayNote": "Incluído antes das cobranças da carteira",
+        "questions": "perguntas",
+        "approvals": "aprovações",
+        "extraQuestion": "Pergunta extra",
+        "extraApproval": "Aprovação extra",
+        "afterFreeLimit": "Após o limite diário gratuito",
+        "walletCalls": "Chamadas da carteira de IA",
+        "walletCallsNote": "Leitura de notas, rascunhos de automação",
+        "minPerCall": "mín. / chamada"
+      },
+      "ctaTitle": "Comece com acesso Pro completo"
+    },
+    "industries": {
+      "detail": {
+        "faqTitle": "Perguntas frequentes",
+        "relatedTitle": "Setores relacionados",
+        "alsoSee": "Veja também <products>produtos</products>, <pricing>preços</pricing> e o <faq>FAQ</faq>.",
+        "ctaTitle": "Comece um teste Pro completo de 45 dias"
+      },
+      "items": {
+        "salon-spa": {
+          "name": "Salão e spa",
+          "h1": "Software de agendamento para salões e spas",
+          "lead": "Dê aos seus clientes um app com o nome do seu salão. O Orbit Appoint cuida de cadeiras, salas e agendas da equipe. O Orbit Mart cuida do balcão de vendas na recepção e das notas GST quando você também vende produtos.",
+          "problemTitle": "O problema no salão",
+          "problem": "Clientes sem hora marcada, agendamentos por telefone e uma agenda de papel disputam as mesmas cadeiras. Profissionais são agendados duas vezes, faltas deixam horários vazios e as vendas de produtos ficam em outro caixa. Os donos não conseguem ver quem está livre, o que foi cobrado ou quais serviços realmente dão lucro.",
+          "solutionTitle": "Como o IE Orbit ajuda salões e spas",
+          "solution": "Com o Orbit Appoint, os clientes agendam online, a equipe vê uma agenda em tempo real e os lembretes saem antes da visita. Se você vende shampoo, coloração ou kits de spa, adicione o Orbit Mart no mesmo espaço de trabalho para PDV, catálogo e contabilidade GST — um login, uma lista de clientes.",
+          "featuresTitle": "Recursos que combinam com o trabalho no salão",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Os clientes agendam e compram em um app com a marca do seu salão — não em uma listagem genérica do IE Orbit."
+            },
+            {
+              "title": "Agendamento online",
+              "body": "Os clientes escolhem serviço e horário de qualquer dispositivo, em vez de ligar para a recepção."
+            },
+            {
+              "title": "Agenda da equipe",
+              "body": "Veja quem está com um cliente, quem está livre e qual cadeira ou sala está ocupada."
+            },
+            {
+              "title": "Clientes e avaliações",
+              "body": "Guarde o histórico de visitas, envie lembretes e colete avaliações depois do atendimento."
+            },
+            {
+              "title": "PDV de varejo e GST",
+              "body": "Cobre produtos para levar no balcão com vendas prontas para GST quando o Orbit Mart está ativo."
+            }
+          ],
+          "workflowTitle": "Um dia típico no salão",
+          "workflow": [
+            {
+              "title": "Abrir a agenda",
+              "body": "A equipe vê os agendamentos de hoje e os intervalos para clientes sem hora marcada antes de o primeiro cliente chegar."
+            },
+            {
+              "title": "Realizar o atendimento",
+              "body": "Registre a chegada do cliente, execute o serviço e colete uma avaliação quando quiser."
+            },
+            {
+              "title": "Vender e fechar",
+              "body": "Se você tem produtos à venda, passe-os no PDV do Orbit Mart e mantenha a contabilidade GST no mesmo espaço de trabalho."
+            }
+          ],
+          "benefitsTitle": "O que muda para o negócio",
+          "benefits": [
+            "App de clientes white-label com a marca do seu salão",
+            "Menos horários perdidos com confirmações e uma agenda compartilhada",
+            "Um único cadastro de cliente para serviços e vendas de produtos",
+            "Cobrança por UPI da sua assinatura IE Orbit — sem cartão de crédito para começar o teste de 45 dias"
+          ],
+          "customerTitle": "O que os clientes vivenciam",
+          "customer": "Os clientes agendam corte, coloração ou horário de spa no seu app de marca ou no fluxo de agendamento web, recebem lembretes e podem comprar produtos para levar se você ativar o Orbit Mart.",
+          "businessTitle": "O que donos e equipe vivenciam",
+          "business": "Os donos têm o BI Overview no Starter e Growth, Revenue, Forecast e Reports completos no Pro. A equipe trabalha com uma única agenda em vez de um caderno mais um caixa de loja separado.",
+          "faqs": [
+            {
+              "q": "O IE Orbit é só para grandes redes de salões?",
+              "a": "Não. Starter e Pro foram feitos para unidades únicas e equipes pequenas. Adicione equipe extra ou escritórios depois como complementos mensais."
+            },
+            {
+              "q": "Podemos vender produtos além de serviços?",
+              "a": "Sim. Assine o Orbit Mart no mesmo espaço de trabalho para PDV, catálogo e contabilidade GST. Você não precisa de um segundo login."
+            },
+            {
+              "q": "Os clientes precisam de uma conta própria do IE Orbit com vocês?",
+              "a": "Os clientes usam o seu app white-label para agendar e fazer pedidos da loja. Sua equipe usa o espaço de operações para tocar o salão."
+            }
+          ]
+        },
+        "clinic-healthcare": {
+          "name": "Clínica e saúde",
+          "h1": "Software de agendamento para clínicas",
+          "lead": "Os pacientes agendam no seu app de marca. O Orbit Appoint organiza profissionais e salas. O Orbit Mart pode funcionar ao lado se você também tem um balcão de itens cobrados com contabilidade GST.",
+          "problemTitle": "O problema da recepção da clínica",
+          "problem": "Pacientes ligam, mandam WhatsApp e aparecem para os mesmos horários. A recepção faz malabarismo com a disponibilidade dos profissionais, retornos e uma fila invisível até alguém estar no balcão. Se você também vende itens, essa cobrança costuma ficar em outro sistema.",
+          "solutionTitle": "Como o IE Orbit ajuda clínicas",
+          "solution": "O Orbit Appoint reúne agendamentos, agendas da equipe e cadastro de clientes em um só lugar, para que a recepção não seja a única fonte de verdade. Combine com o Orbit Mart para vendas de balcão com GST e contabilidade dos itens que você vende — o mesmo negócio, equipe e cobrança.",
+          "featuresTitle": "Recursos para a operação da clínica",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Os pacientes agendam ou gerenciam consultas com o nome da sua clínica, em vez de um marketplace genérico."
+            },
+            {
+              "title": "Agenda de consultas",
+              "body": "Associe as consultas a profissionais e salas em vez de uma planilha compartilhada."
+            },
+            {
+              "title": "Agendamento online",
+              "body": "Deixe os pacientes pedirem um horário sem ocupar a linha telefônica."
+            },
+            {
+              "title": "Lembretes e cadastros",
+              "body": "Guarde o histórico do cliente e envie lembretes antes da consulta."
+            },
+            {
+              "title": "Balcão e contabilidade GST",
+              "body": "Use o Orbit Mart quando cobrar itens na recepção, com relatórios GST e e-invoice onde você os utiliza."
+            }
+          ],
+          "workflowTitle": "Como funciona um dia na clínica",
+          "workflow": [
+            {
+              "title": "Publicar a disponibilidade",
+              "body": "Defina as escalas da equipe para que o agendamento online e os pacientes sem hora marcada compartilhem a mesma agenda."
+            },
+            {
+              "title": "Realizar a consulta",
+              "body": "Chame o próximo paciente, conclua a consulta e mantenha o registro no perfil do cliente."
+            },
+            {
+              "title": "Cobrar o que você vende",
+              "body": "Se você vende insumos ou itens cobrados, feche-os no PDV do Orbit Mart no mesmo espaço de trabalho."
+            }
+          ],
+          "benefitsTitle": "Benefícios para a clínica",
+          "benefits": [
+            "App de clientes white-label para agendamentos de pacientes",
+            "Menos profissionais com agendamento duplicado",
+            "Uma única lista de clientes para consultas e vendas de balcão",
+            "Teste Pro completo de 45 dias sem cartão de crédito"
+          ],
+          "customerTitle": "O que os pacientes vivenciam",
+          "customer": "Os pacientes agendam ou gerenciam consultas pelo seu app de clientes white-label, onde você o ativar, em vez de apenas ligar para a recepção.",
+          "businessTitle": "O que o consultório vivencia",
+          "business": "A recepção vê uma única agenda. Os donos podem começar com o BI Overview no Starter e liberar o conjunto completo de BI no Pro. O IE Orbit é um software de operações — não é um prontuário eletrônico clínico nem substitui sistemas de registros médicos.",
+          "faqs": [
+            {
+              "q": "Isso substitui um software de prontuário hospitalar?",
+              "a": "Não. O Orbit Appoint é um software de agendamento e de operações com clientes. Ele não se apresenta como um prontuário eletrônico clínico."
+            },
+            {
+              "q": "Vários profissionais podem compartilhar um espaço de trabalho?",
+              "a": "Sim. Convide a equipe com funções e permissões. Profissionais agendáveis extras podem ser adicionados como complemento mensal quando você ultrapassar o limite do plano."
+            },
+            {
+              "q": "Podemos pagar nossa fatura do IE Orbit por UPI?",
+              "a": "Sim. A assinatura da plataforma é em INR e UPI, com um comprovante de pagamento pelo espaço de trabalho. Os pagamentos dos pacientes na clínica são separados."
+            }
+          ]
+        },
+        "fitness-wellness": {
+          "name": "Fitness e bem-estar",
+          "h1": "Software de agendamento para fitness e bem-estar",
+          "lead": "Os alunos agendam no seu app de marca. O Orbit Appoint cuida da agenda. O Orbit Mart cobre merchandising ou suplementos se você vende na recepção.",
+          "problemTitle": "O problema da programação no estúdio",
+          "problem": "As listas de aulas ficam em grupos de chat. Os horários de treino personalizado ficam no celular do treinador. A recepção não sabe quem vem até as pessoas chegarem, e a venda (garrafas, faixas, kits) é uma gaveta de dinheiro à parte.",
+          "solutionTitle": "Como o IE Orbit ajuda equipes de fitness e bem-estar",
+          "solution": "Coloque as sessões no Orbit Appoint para que os clientes agendem de acordo com a disponibilidade real. Mantenha clientes, lembretes e avaliações junto com o atendimento. Ative o Orbit Mart quando quiser PDV, catálogo e contabilidade GST para o que você vende no estúdio.",
+          "featuresTitle": "Recursos para estúdios e treinadores",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Os alunos instalam a marca do seu estúdio para agendar sessões e comprar produtos."
+            },
+            {
+              "title": "Agendamento de sessões",
+              "body": "Agendamentos online para horários de treino e atendimentos de bem-estar de qualquer dispositivo."
+            },
+            {
+              "title": "Disponibilidade da equipe",
+              "body": "Treinadores e terapeutas veem a própria agenda em vez de um grupo de chat."
+            },
+            {
+              "title": "Histórico do cliente",
+              "body": "Saiba quem está voltando, quem faltou e o que agendou da última vez."
+            },
+            {
+              "title": "Venda no estúdio",
+              "body": "PDV e contabilidade GST do Orbit Mart se você vende merchandising ou produtos embalados."
+            }
+          ],
+          "workflowTitle": "Como funciona uma semana no estúdio",
+          "workflow": [
+            {
+              "title": "Definir a grade",
+              "body": "Publique os horários da equipe e os serviços para que os clientes agendem sem ligar."
+            },
+            {
+              "title": "Realizar a sessão",
+              "body": "Registre a chegada, conclua o atendimento e faça o acompanhamento com lembretes ou avaliações."
+            },
+            {
+              "title": "Vender na recepção",
+              "body": "Se você tem produtos à venda, cobre-os no Orbit Mart no mesmo espaço de trabalho."
+            }
+          ],
+          "benefitsTitle": "Benefícios para o estúdio",
+          "benefits": [
+            "App de clientes white-label para agendamento e loja",
+            "Uma agenda compartilhada em vez de agendamentos espalhados em chats",
+            "Venda opcional sem um segundo login de outro software",
+            "Cobrança anual do IE Orbit por um múltiplo com desconto do valor mensal (meses grátis exibidos no checkout)"
+          ],
+          "customerTitle": "O que os alunos vivenciam",
+          "customer": "Os alunos agendam um treinador ou horário de bem-estar no seu app de marca e podem comprar produtos do estúdio se você ativar o Orbit Mart.",
+          "businessTitle": "O que os operadores vivenciam",
+          "business": "Os operadores veem as sessões de hoje em um só lugar. O Pro libera BI completo e pontos de recompensa no Orbit Appoint onde o plano os inclui.",
+          "faqs": [
+            {
+              "q": "Podemos oferecer aulas e uma pequena loja?",
+              "a": "Sim. Orbit Appoint para agendamentos e Orbit Mart para PDV e contabilidade GST, no mesmo espaço de trabalho."
+            },
+            {
+              "q": "Existe teste gratuito?",
+              "a": "Novos espaços de trabalho recebem um teste Pro completo de 45 dias sem cartão de crédito. Depois disso, o espaço é bloqueado parcialmente até você assinar."
+            },
+            {
+              "q": "Precisamos de escritórios extras para vários estúdios?",
+              "a": "Os planos incluem um número definido de escritórios. Escritórios extras são um complemento mensal com endereço e localização no mapa."
+            }
+          ]
+        },
+        "professional-services": {
+          "name": "Serviços profissionais",
+          "h1": "Software de agendamento para consultores e profissionais",
+          "lead": "Os clientes agendam em um app com o nome da sua empresa. O Orbit Appoint foi feito para consultas, não para uma cadeira de salão. Adicione o Orbit Mart apenas se você também vende produtos embalados.",
+          "problemTitle": "O problema da agenda na consultoria",
+          "problem": "Chamadas de descoberta, sessões pagas e retornos ficam em threads de e-mail. Assistentes redigitam o mesmo horário três vezes. Não há uma visão compartilhada de quem está agendado, e as notas de produtos físicos ficam em outro lugar.",
+          "solutionTitle": "Como o IE Orbit ajuda serviços profissionais",
+          "solution": "Os clientes agendam de acordo com a sua disponibilidade real no Orbit Appoint. Agendas da equipe, lembretes e avaliações ficam com o cadastro do cliente. Se você vende kits, livros ou ofertas embaladas no balcão, o Orbit Mart adiciona PDV e contabilidade GST sem um segundo espaço de trabalho.",
+          "featuresTitle": "Recursos para consultores e empresas",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Um fluxo de agendamento profissional com a marca da sua empresa, não do IE Orbit."
+            },
+            {
+              "title": "Consultas agendáveis",
+              "body": "Publique serviços e deixe os clientes escolherem um horário em vez de trocar e-mails."
+            },
+            {
+              "title": "Equipe e salas",
+              "body": "Associe pessoas e escritórios para que equipes com vários consultores não entrem em conflito."
+            },
+            {
+              "title": "Cadastro de clientes",
+              "body": "Guarde quem você atendeu, quando e o que foi agendado em seguida."
+            },
+            {
+              "title": "Venda opcional de produtos",
+              "body": "Orbit Mart para catálogo e GST se você vende algo no balcão."
+            }
+          ],
+          "workflowTitle": "Como o trabalho com clientes é agendado",
+          "workflow": [
+            {
+              "title": "Definir serviços",
+              "body": "Crie os tipos de consulta e as durações que seus clientes podem agendar."
+            },
+            {
+              "title": "Proteger a agenda",
+              "body": "A disponibilidade da equipe determina o que é oferecido online."
+            },
+            {
+              "title": "Dar seguimento",
+              "body": "Os lembretes saem; avaliações e histórico ficam com o cliente."
+            }
+          ],
+          "benefitsTitle": "Benefícios para a empresa",
+          "benefits": [
+            "Um fluxo de agendamento profissional em um app de clientes white-label",
+            "Menos tempo coordenando horários por e-mail",
+            "A mesma cobrança de assinatura por UPI dos outros produtos IE Orbit",
+            "BI Overview no Starter; BI completo no Pro"
+          ],
+          "customerTitle": "O que os clientes vivenciam",
+          "customer": "Os clientes agendam uma consulta no seu app de marca, recebem lembretes e comparecem em um horário confirmado.",
+          "businessTitle": "O que a empresa vivencia",
+          "business": "Os consultores veem a própria agenda. Os donos convidam a equipe com permissões em vez de compartilhar um único login. O IE Orbit não substitui seu contrato, seu CRM nem seu escritório de contabilidade — ele cuida de agendamentos e de vendas opcionais.",
+          "faqs": [
+            {
+              "q": "Isso é só para negócios de beleza?",
+              "a": "Não. O cadastro inclui Serviços profissionais como categoria própria. O Orbit Appoint é um agendamento independente de setor."
+            },
+            {
+              "q": "Podemos usar o login com Google?",
+              "a": "Sim. Os donos podem continuar com o Google durante o cadastro, e existem conexões com o Google Agenda no produto para fluxos elegíveis."
+            },
+            {
+              "q": "Como pedimos uma demonstração?",
+              "a": "Use a página de Contato (adicione intent=demo) ou escreva para support@indiansempire.com. Telefone: +91 9766855617."
+            }
+          ]
+        },
+        "retail": {
+          "name": "Varejo",
+          "h1": "Software de PDV e GST para varejo",
+          "lead": "Os compradores navegam em um app com o nome da sua loja. O Orbit Mart é o produto do chão de loja. O Starter cuida do balcão, dos pedidos online e das devoluções. O Pro adiciona Instant Delivery com Porter/Shiprocket, e-invoice GST, e-way e Grow. Adicione o Orbit Appoint apenas se você também vende serviços com hora marcada.",
+          "problemTitle": "O problema do balcão e da contabilidade",
+          "problem": "O caixa, a lista de estoque e a papelada GST são três hábitos diferentes. Pedidos online chegam por chat. As devoluções ficam em um caderno. Pet shops ainda mantêm registros de animais que não cabem em uma lista genérica de SKUs.",
+          "solutionTitle": "Como o Orbit Mart ajuda lojistas",
+          "solution": "Gerencie no Orbit Mart vendas de balcão PDV / GST, catálogo, estoque, pedidos de retirada e entrega e devoluções. A contabilidade cobre vendas, compras, caixa, despesas, parceiros, estoque, relatórios GST, e-invoice (IRN) e e-way bill. O Grow adiciona compartilhamento por WhatsApp, apoio à criação de anúncios e calculadoras. O pacote Pets é um complemento opcional para registros de animais.",
+          "featuresTitle": "Recursos de varejo disponíveis hoje no produto",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Os compradores navegam, pedem e acompanham com a marca da sua loja — não em uma listagem de marketplace."
+            },
+            {
+              "title": "PDV e catálogo",
+              "body": "Vendas de balcão com GST, produtos, estoque, pedidos online e devoluções no Starter. Fidelidade da loja no Pro."
+            },
+            {
+              "title": "Pedidos e entrega",
+              "body": "Pedidos online e devoluções no Starter. Instant Delivery com Porter/Shiprocket no Orbit Mart Pro."
+            },
+            {
+              "title": "Contabilidade GST",
+              "body": "Livro-diário no Starter. Compras, relatórios GST, e-invoice e e-way bill no Pro."
+            },
+            {
+              "title": "Grow e pacote Pets",
+              "body": "Calculadoras no Starter. WhatsApp e apoio à criação de anúncios no Pro. O pacote Pets é um complemento mensal opcional."
+            }
+          ],
+          "workflowTitle": "Como se fecha o dia na loja",
+          "workflow": [
+            {
+              "title": "Vender no balcão",
+              "body": "Registre vendas com GST incluso ou não no PDV a partir do catálogo."
+            },
+            {
+              "title": "Atender os pedidos",
+              "body": "Retirada, entrega ou devolução com as ferramentas de pedidos e zonas que você ativou."
+            },
+            {
+              "title": "Manter a contabilidade",
+              "body": "Vendas, compras, caixa e conformidade GST ficam no mesmo produto Orbit Mart."
+            }
+          ],
+          "benefitsTitle": "Benefícios para lojistas",
+          "benefits": [
+            "App de clientes white-label para os compradores comprarem com a sua marca",
+            "Um produto para comércio, contabilidade e Grow — não três assinaturas",
+            "Pacote Pets opcional em vez de um sistema separado para pet shop",
+            "Conecte o Razorpay em planos Pro elegíveis para os clientes pagarem a você pelos pedidos da loja"
+          ],
+          "customerTitle": "O que os compradores vivenciam",
+          "customer": "Os compradores usam o seu app de clientes white-label para navegar, pedir e acompanhar — conforme o que você ativar — enquanto você opera o balcão no espaço de operações.",
+          "businessTitle": "O que a loja vivencia",
+          "business": "Caixas e gerentes trabalham no Orbit Mart. Se você também corta cabelo ou oferece agendamentos, adicione o Orbit Appoint ao mesmo espaço de trabalho em vez de um segundo fornecedor.",
+          "faqs": [
+            {
+              "q": "Precisamos do Orbit Appoint para usar o Orbit Mart?",
+              "a": "Não. Você pode assinar só o Orbit Mart. Adicione o Orbit Appoint depois, se começar a agendar serviços."
+            },
+            {
+              "q": "O que é o pacote Pets?",
+              "a": "Um complemento opcional do Orbit Mart (₹500/mês ao preço padrão do catálogo) para registros de animais. Não está no plano básico."
+            },
+            {
+              "q": "O Orbit Mart inclui e-invoice?",
+              "a": "No Orbit Mart Pro. Relatórios GST, e-invoice (IRN) e e-way bill fazem parte do Mart Books no Pro. O Starter cobre balcão, pedidos online, devoluções e livro-diário."
+            }
+          ]
+        },
+        "education-training": {
+          "name": "Educação e treinamento",
+          "h1": "Software de agendamento para aulas e reforço escolar",
+          "lead": "Os alunos agendam no seu app de marca. O Orbit Appoint mantém a agenda de aulas. O Orbit Mart é opcional se você vende apostilas, kits ou merchandising.",
+          "problemTitle": "O problema das turmas e dos horários",
+          "problem": "As turmas são anunciadas no WhatsApp. Os pais mandam mensagem para uma aula de reposição. Os instrutores mantêm a própria planilha de Excel. Não há uma visão única de quem está em cada horário, e vender material impresso é uma venda em dinheiro à parte.",
+          "solutionTitle": "Como o IE Orbit ajuda educação e treinamento",
+          "solution": "Trate aulas e horários de reforço como serviços agendáveis no Orbit Appoint. As agendas da equipe mostram quem ensina quando. Os clientes (alunos ou pais) recebem lembretes. Use o Orbit Mart se você também precisa de balcão, catálogo e contabilidade GST para os materiais que vende.",
+          "featuresTitle": "Recursos para equipes de treinamento",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "Alunos ou pais agendam um horário com o nome do seu centro."
+            },
+            {
+              "title": "Aulas agendáveis",
+              "body": "Publique os tipos de sessão para que os alunos agendem em vez de correr atrás de um coordenador."
+            },
+            {
+              "title": "Agendas dos instrutores",
+              "body": "A disponibilidade da equipe determina o que pode ser agendado."
+            },
+            {
+              "title": "Cadastro de clientes",
+              "body": "Guarde quem compareceu, quem precisa voltar e as avaliações onde você as coleta."
+            },
+            {
+              "title": "Venda de materiais",
+              "body": "PDV e GST do Orbit Mart se você vende apostilas, kits ou merchandising."
+            }
+          ],
+          "workflowTitle": "Como funciona uma semana de treinamento",
+          "workflow": [
+            {
+              "title": "Publicar a grade",
+              "body": "Serviços e horários da equipe se tornam a fonte de verdade."
+            },
+            {
+              "title": "Dar a sessão",
+              "body": "Registre a chegada dos alunos e mantenha o registro no perfil do cliente."
+            },
+            {
+              "title": "Vender materiais se preciso",
+              "body": "Cobre kits ou apostilas no Orbit Mart sem sair do espaço de trabalho."
+            }
+          ],
+          "benefitsTitle": "Benefícios para o centro",
+          "benefits": [
+            "App de clientes white-label para agendamentos",
+            "Uma agenda para coordenadores e instrutores",
+            "O mesmo modelo de teste e assinatura por UPI dos outros setores do IE Orbit",
+            "Adicione equipe ou escritórios quando o centro crescer"
+          ],
+          "customerTitle": "O que os alunos vivenciam",
+          "customer": "Alunos ou pais agendam um horário no seu app de marca e recebem lembretes antes da aula.",
+          "businessTitle": "O que o centro vivencia",
+          "business": "Os coordenadores deixam de ser a grade de horários humana. O IE Orbit não é um LMS completo (sem promessas inventadas sobre conteúdo) — é agendamento mais venda opcional.",
+          "faqs": [
+            {
+              "q": "Podemos agendar aulas particulares e turmas em grupo?",
+              "a": "Sim, desde que você os modele como serviços com disponibilidade da equipe no Orbit Appoint. Você define os serviços; o produto não inventa um “LMS” à parte."
+            },
+            {
+              "q": "Podemos vender livros ou kits?",
+              "a": "Adicione o Orbit Mart para catálogo, PDV e contabilidade GST no mesmo espaço de trabalho."
+            },
+            {
+              "q": "Os preços são em INR?",
+              "a": "Os preços do catálogo do site são em INR. Você pode registrar outra moeda do negócio no cadastro; a cobrança de assinatura por UPI foi pensada para negócios indianos."
+            }
+          ]
+        },
+        "home-services": {
+          "name": "Serviços domésticos",
+          "h1": "Software de agendamento para serviços domésticos",
+          "lead": "As famílias agendam visitas em um app com a marca do seu ofício. O Orbit Appoint agenda o serviço. O Orbit Mart ajuda se você também vende peças ou produtos com nota GST.",
+          "problemTitle": "O problema das visitas em campo",
+          "problem": "Os serviços são prometidos por telefone. Os técnicos não compartilham uma agenda. Os clientes não recebem uma confirmação confiável. As peças de reposição, se vendidas, são cobradas em um recibo manuscrito.",
+          "solutionTitle": "Como o IE Orbit ajuda equipes de serviços domésticos",
+          "solution": "Agende visitas de acordo com a disponibilidade da equipe no Orbit Appoint. Mantenha o cliente, o lembrete e a avaliação junto com o serviço. Se você vende peças ou produtos embalados, o Orbit Mart adiciona PDV, catálogo e contabilidade GST — incluindo e-invoice e e-way onde você os utiliza.",
+          "featuresTitle": "Recursos para visitas em campo e domiciliares",
+          "features": [
+            {
+              "title": "App de clientes white-label",
+              "body": "As famílias agendam uma visita com o nome do seu ofício em vez de apenas uma promessa por telefone."
+            },
+            {
+              "title": "Agendamento de visitas",
+              "body": "Os clientes pedem um horário online de acordo com as agendas reais da equipe."
+            },
+            {
+              "title": "Visão de despacho",
+              "body": "Veja quem está agendado para não enviar dois técnicos na mesma janela."
+            },
+            {
+              "title": "Histórico do cliente",
+              "body": "Saiba o que foi feito na última visita antes de sair."
+            },
+            {
+              "title": "Peças e GST",
+              "body": "Orbit Mart para peças vendidas no balcão ou cobradas, com relatórios GST e ferramentas de e-invoice."
+            }
+          ],
+          "workflowTitle": "Como um serviço é concluído",
+          "workflow": [
+            {
+              "title": "Receber o agendamento",
+              "body": "Agendamentos online ou feitos pela equipe compartilham a mesma agenda."
+            },
+            {
+              "title": "Realizar a visita",
+              "body": "O profissional designado vê o horário; o cliente recebe lembretes."
+            },
+            {
+              "title": "Cobrar peças se preciso",
+              "body": "Venda peças no Orbit Mart no mesmo espaço de trabalho do negócio."
+            }
+          ],
+          "benefitsTitle": "Benefícios para o operador",
+          "benefits": [
+            "Um app de clientes com a marca do seu ofício",
+            "Menos visitas sobrepostas",
+            "Venda opcional de produtos pronta para GST",
+            "Teste Pro completo de 45 dias sem cartão de crédito"
+          ],
+          "customerTitle": "O que as famílias vivenciam",
+          "customer": "As famílias agendam uma visita no seu app white-label e recebem lembretes em vez de apenas uma promessa verbal.",
+          "businessTitle": "O que o operador vivencia",
+          "business": "Os despachantes olham uma única agenda. O Starter é um local (é possível adicionar 1 pessoa extra). Escritórios extras e 4 ou mais pessoas são do Pro.",
+          "faqs": [
+            {
+              "q": "O IE Orbit inclui rastreamento GPS ao vivo dos técnicos?",
+              "a": "O produto documentado é operação de agendamentos, vendas opcionais e ferramentas de entrega relacionadas no Orbit Mart — não um produto de GPS ao vivo de técnicos. Não espere recursos que não estão no espaço de trabalho."
+            },
+            {
+              "q": "Podemos usar isso com várias áreas de atendimento?",
+              "a": "Escritórios/filiais têm endereço e localização no Google Maps. Escritórios extras são um complemento mensal. O Orbit Mart também tem zonas de entrega para os pedidos da loja."
+            },
+            {
+              "q": "Como começamos?",
+              "a": "Crie uma conta, escolha o Orbit Appoint (e o Orbit Mart se vender peças) e use o teste Pro completo de 45 dias."
+            }
+          ]
+        }
+      },
+      "shots": {
+        "altHome": "{{name}} início da app de clientes",
+        "altShop": "{{name}} loja para clientes",
+        "altWorkspace": "{{name}} espaço de trabalho de operações",
+        "altCalendar": "{{name}} agenda de marcações",
+        "titleHome": "{{name}} · Início",
+        "titleCalendar": "{{name}} · Agenda",
+        "dotsLabel": "Capturas de ecrã por setor"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "Painel",
+    "welcome": "Bem-vindo",
+    "welcomeDismiss": "Fechar",
+    "searchPlaceholder": "Pesquisar clientes, reservas, encomendas…",
+    "quickActions": "Ações rápidas",
+    "todayBookings": "Reservas de hoje",
+    "upcomingBookings": "Próximas",
+    "openOrders": "Encomendas abertas",
+    "lowStock": "Stock baixo",
+    "revenueToday": "Receita de hoje",
+    "noResults": "Sem resultados",
+    "viewAll": "Ver tudo",
+    "insights": "Insights",
+    "gettingStarted": "Primeiros passos",
+    "yourBusiness": "Seu negócio",
+    "bookingFallback": "Agendamento",
+    "orderFallback": "Pedido",
+    "customerFallback": "Cliente",
+    "welcomeBoth": "Seu espaço central para agendamentos, operações da loja e o trabalho do dia a dia.",
+    "welcomeShop": "Seu espaço central para pedidos, estoque e as operações diárias da loja.",
+    "welcomeBookings": "Seu espaço central para agendamentos, clientes e as operações do dia a dia.",
+    "planTrial": "Teste",
+    "planLabel": "Plano",
+    "completedToday": "Concluídos hoje",
+    "cancelledToday": "Cancelados hoje",
+    "revenueMonth": "Receita deste mês",
+    "activeCustomers": "Clientes ativos",
+    "newCustomers": "Novos clientes",
+    "staffOnDuty": "Equipe em serviço",
+    "ordersToday": "Pedidos hoje",
+    "ordersMonth": "Pedidos deste mês",
+    "gmvToday": "GMV hoje",
+    "gmvMonth": "GMV deste mês",
+    "deliveryFeesMonth": "Taxas de entrega (mês)",
+    "pendingReturns": "Devoluções pendentes",
+    "petsEnrolled": "Pets cadastrados",
+    "birthdays7d": "Aniversários (7 dias)",
+    "birthdays30d": "Aniversários (30 dias)",
+    "withPhoto": "Com foto",
+    "refreshIntervalAria": "Intervalo de atualização do painel",
+    "manualRefresh": "Atualização manual",
+    "refreshEvery": "Atualizar a cada {{seconds}} s",
+    "insightsSubtitle": "Os sinais mais fortes dos últimos 30 dias.",
+    "openBi": "Abrir Business Intelligence",
+    "appointSubtitle": "Agendamentos e operações de serviço",
+    "martSubtitle": "Pedidos, devoluções e entrega",
+    "petsPack": "Pacote de pets",
+    "petsPackSubtitle": "Cadastro e próximos aniversários",
+    "todaysSchedule": "Agenda de hoje",
+    "todaysScheduleSubtitle": "Compromissos do dia",
+    "bookingNumberFallback": "Agendamento nº",
+    "statusUnknown": "Status desconhecido",
+    "recentOrders": "Pedidos recentes",
+    "recentOrdersSubtitle": "Atividade mais recente da loja",
+    "notificationCenter": "Central de notificações",
+    "unreadCount": "{{count}} não lidas",
+    "notificationFallback": "Notificação",
+    "recentActivity": "Atividade recente",
+    "calendarPreview": "Prévia do calendário",
+    "calendarPreviewSubtitle": "Hoje e semana",
+    "availableCapacity": "Capacidade disponível hoje",
+    "slotsCount": "{{count}} horários",
+    "capacityCount": "{{count}} de capacidade",
+    "businessSummary": "Resumo do negócio",
+    "statusUnavailable": "Status indisponível",
+    "staffActiveCount": "{{count}} membros da equipe ativos",
+    "enabled": "Ativado",
+    "searchResults": "Resultados da pesquisa",
+    "typeToSearch": "Digite para pesquisar",
+    "previewByTerm": "Prévia dos resultados por termo",
+    "bookingsHeading": "Agendamentos",
+    "customersHeading": "Clientes",
+    "settingsTitle": "Configurações do painel",
+    "layout": "Layout",
+    "layoutGrid": "Grade",
+    "layoutCompact": "Compacto",
+    "refreshInterval": "Intervalo de atualização",
+    "refreshIntervalManual": "Manual",
+    "intervalSeconds": "{{seconds}} s"
+  },
+  "errors": {
+    "notFoundTitle": "Página não encontrada",
+    "notFoundBody": "A página não foi encontrada.",
+    "goHome": "Início",
+    "tryAgain": "Tentar novamente"
   }
 }

@@ -1,0 +1,298 @@
+{
+  "public": {
+    "plans": {
+      "tryFirst": "Try first",
+      "free": "Free",
+      "trialDays": "{{days}} days",
+      "mostPopular": "Most popular",
+      "kickerStarter": "Solo & micro",
+      "kickerPro": "Growing teams",
+      "perMonth": "/month",
+      "appointName": "Orbit Appoint",
+      "martName": "Orbit Mart",
+      "bothName": "Orbit Appoint + Orbit Mart",
+      "trialBullets": {
+        "fullPro": "Full {{product}} Pro features during trial",
+        "whiteLabel": "White-label customer app under your brand",
+        "noCard": "No credit card required to start",
+        "upgrade": "Upgrade any time to keep your data"
+      },
+      "combinedTrialBullets": {
+        "fullPro": "Full Orbit Appoint and Orbit Mart Pro during trial",
+        "oneApp": "One white-label app for book and shop",
+        "sharedCustomers": "Shared customers in one workspace",
+        "noCard": "No credit card required to start"
+      },
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (billed per product)"
+    },
+    "features": {
+      "createAccount": "Create account",
+      "howKicker": "How it works",
+      "howAria": "How it works",
+      "benefitsKicker": "Benefits",
+      "benefitsAria": "Benefits",
+      "pricingKicker": "Pricing",
+      "pricingAria": "Pricing",
+      "seeFullPricing": "See full pricing",
+      "ctaTitle": "Try the white-label app for {{days}} days",
+      "appoint": {
+        "kicker": "Orbit Appoint",
+        "title": "Bookings without the back-and-forth.",
+        "body": "Give customers a beautiful way to discover availability, book instantly, and keep coming back. Starter is one location. Pro adds WhatsApp reminders, payments, a second office, and an ad-free app.",
+        "features": {
+          "f1": "White-label customer app so clients book under your brand",
+          "f2": "Smart availability and staff calendars",
+          "f3": "Automated email reminders; WhatsApp on Pro",
+          "f4": "Pro adds a second office, payments, full BI, reward points, and an ad-free customer app",
+          "f5": "AI Assistant for plain-language questions about the day",
+          "f6": "Automation Creator on Pro for reminders and staff offer hints"
+        },
+        "howTitle": "How Orbit Appoint works",
+        "howLead": "Customers book in your branded app. Your team runs the day from one calendar.",
+        "how": {
+          "s1": {
+            "title": "Publish services and staff",
+            "body": "Set service durations, staff, rooms, and working hours so availability is always real."
+          },
+          "s2": {
+            "title": "Customers book online",
+            "body": "They pick a time in your white-label app or web booking flow instead of calling the desk."
+          },
+          "s3": {
+            "title": "Run and follow up",
+            "body": "Staff see the live calendar, send reminders, and keep customer history in one place."
+          }
+        },
+        "benefitsTitle": "Why businesses choose Orbit Appoint",
+        "benefitsLead": "Fewer missed slots, less phone tag, and a customer app that looks like your brand.",
+        "benefits": {
+          "b1": {
+            "title": "White-label booking app",
+            "body": "Clients install your brand — not a generic IE Orbit listing — on iOS and Android."
+          },
+          "b2": {
+            "title": "One shared calendar",
+            "body": "Stop juggling diaries and WhatsApp chats. Everyone sees who is free and what is booked."
+          },
+          "b3": {
+            "title": "Reminders that stick",
+            "body": "Email reminders on every plan; WhatsApp reminders on Pro to cut no-shows."
+          },
+          "b4": {
+            "title": "Grow without chaos",
+            "body": "Add a second office, payments, full BI, and an ad-free app when you move to Pro."
+          }
+        },
+        "pricingTitle": "Orbit Appoint pricing",
+        "pricingLead": "{{days}}-day full-Pro trial, then Starter {{starter}} or Pro {{pro}} per month. White-label customer app included on every plan.",
+        "starter": {
+          "f1": "White-label customer booking app",
+          "f2": "One location with staff calendar",
+          "f3": "Email reminders",
+          "f4": "BI Overview",
+          "f5": "Customer records and reviews"
+        },
+        "pro": {
+          "f1": "Everything in Starter",
+          "f2": "WhatsApp reminders",
+          "f3": "Payments and reward points",
+          "f4": "Second office",
+          "f5": "Full BI and ad-free customer app",
+          "f6": "Automation Creator"
+        }
+      },
+      "mart": {
+        "kicker": "Orbit Mart",
+        "title": "Your products, in their pocket.",
+        "body": "Create a storefront that makes your products easy to browse, buy, and remember — with POS and GST books in the same workspace. Starter is the counter plus online orders and returns; Pro unlocks Instant Delivery with Porter/Shiprocket, GST e-invoice, and Grow.",
+        "features": {
+          "f1": "White-label customer app so shoppers buy under your brand",
+          "f2": "POS, catalog, online orders, and returns on Starter",
+          "f3": "Instant Delivery with Porter/Shiprocket on Pro",
+          "f4": "Day-book on Starter; GST reports, e-invoice, Grow, and e-way on Pro",
+          "f5": "AI invoice extraction on Pro — photograph a supplier bill, review the lines, then add stock",
+          "f6": "Automation Creator on Pro for birthday, occasion, and VIP rules"
+        },
+        "howTitle": "How Orbit Mart works",
+        "howLead": "Sell at the counter and online under your brand, with books that stay in the same workspace.",
+        "how": {
+          "s1": {
+            "title": "Build your catalog",
+            "body": "Add products, prices, and stock so the counter and the customer app stay in sync."
+          },
+          "s2": {
+            "title": "Sell anywhere",
+            "body": "Ring up walk-ins on POS and take online orders from your white-label shop app."
+          },
+          "s3": {
+            "title": "Close the books",
+            "body": "Track sales day-book on Starter; unlock GST reports, e-invoice, and Grow tools on Pro."
+          }
+        },
+        "benefitsTitle": "Why retailers choose Orbit Mart",
+        "benefitsLead": "One workspace for the counter, the online shop, and GST-ready books.",
+        "benefits": {
+          "b1": {
+            "title": "White-label shop app",
+            "body": "Customers browse and order in an app that looks like your store, not a marketplace."
+          },
+          "b2": {
+            "title": "Counter and catalog together",
+            "body": "POS, returns, and online orders share the same products and customer list."
+          },
+          "b3": {
+            "title": "GST when you need it",
+            "body": "Day-book on Starter. GST reports, e-invoice, and e-way bill on Pro."
+          },
+          "b4": {
+            "title": "Delivery and marketing on Pro",
+            "body": "Instant Delivery with Porter/Shiprocket plus Grow helpers for promos and listings."
+          }
+        },
+        "pricingTitle": "Orbit Mart pricing",
+        "pricingLead": "{{days}}-day full-Pro trial, then Starter {{starter}} or Pro {{pro}} per month. White-label customer app included on every plan.",
+        "starter": {
+          "f1": "White-label customer shop app",
+          "f2": "POS, catalog, online orders, and returns",
+          "f3": "Day-book",
+          "f4": "BI Overview",
+          "f5": "Shared customer list"
+        },
+        "pro": {
+          "f1": "Everything in Starter",
+          "f2": "Instant Delivery with Porter/Shiprocket",
+          "f3": "GST reports, e-invoice, and e-way",
+          "f4": "Grow marketing helpers",
+          "f5": "AI invoice extraction",
+          "f6": "Ad-free customer app"
+        }
+      },
+      "both": {
+        "kicker": "Orbit Appoint + Orbit Mart",
+        "title": "One brand. Every way to buy.",
+        "body": "The most complete version of IE Orbit — appointments and ecommerce sharing one customer relationship.",
+        "features": {
+          "f1": "One white-label app for book and shop",
+          "f2": "Unified customer profiles",
+          "f3": "Cross-sell bookings and products",
+          "f4": "One {{days}}-day trial, one workspace, UPI billing",
+          "f5": "AI Assistant and Automation Creator across bookings and the shop"
+        },
+        "howTitle": "How Appoint + Mart works together",
+        "howLead": "One workspace, one customer list, and one branded app for bookings and shopping.",
+        "how": {
+          "s1": {
+            "title": "Turn on both products",
+            "body": "Subscribe to Orbit Appoint and Orbit Mart in the same business so staff and customers stay unified."
+          },
+          "s2": {
+            "title": "Customers book and shop",
+            "body": "Your white-label app handles appointments and product orders under one brand."
+          },
+          "s3": {
+            "title": "Run services and retail together",
+            "body": "The floor calendar and the counter share customers, history, and billing in one login."
+          }
+        },
+        "benefitsTitle": "Why teams run both",
+        "benefitsLead": "Stop splitting bookings and retail across tools that never talk to each other.",
+        "benefits": {
+          "b1": {
+            "title": "One branded customer app",
+            "body": "Book a service and buy a product without leaving your brand experience."
+          },
+          "b2": {
+            "title": "Shared customers",
+            "body": "Visit history, shop orders, and follow-ups live on the same customer record."
+          },
+          "b3": {
+            "title": "Cross-sell naturally",
+            "body": "Offer take-home products after a service, or book the next visit from the shop flow."
+          },
+          "b4": {
+            "title": "One trial, one bill path",
+            "body": "{{days}}-day full-Pro trial on the workspace, then UPI billing per product plan."
+          }
+        },
+        "pricingTitle": "Pricing when you run both",
+        "starter": {
+          "f1": "Orbit Appoint Starter {{price}}/mo + Orbit Mart Starter {{price}}/mo",
+          "f2": "One white-label app for book and shop",
+          "f3": "Shared customers across bookings and retail",
+          "f4": "Staff calendar, POS, catalog, and day-book",
+          "f5": "Email reminders and BI Overview on both products"
+        },
+        "pro": {
+          "f1": "Orbit Appoint Pro {{price}}/mo + Orbit Mart Pro {{price}}/mo",
+          "f2": "Everything in Starter",
+          "f3": "WhatsApp reminders, payments, and second office on Appoint",
+          "f4": "Instant Delivery, GST e-invoice/e-way, and Grow on Mart",
+          "f5": "Full BI, Automation Creator, and ad-free customer app"
+        }
+      }
+    },
+    "pricing": {
+      "products": {
+        "appointie": {
+          "kicker": "Orbit Appoint",
+          "title": "Bookings, calendar, staff, and customers",
+          "lead": "Solo scheduling on Starter. WhatsApp reminders, payments, and a second office on Pro."
+        },
+        "shopie": {
+          "kicker": "Orbit Mart",
+          "title": "Commerce, books, and GST",
+          "lead": "Counter, online orders, and returns on Starter. Instant Delivery, GST books, and Grow on Pro."
+        },
+        "both": {
+          "kicker": "Orbit Appoint + Orbit Mart",
+          "title": "One workspace for book and shop",
+          "lead": "Starter or Pro across both products. Each product is billed separately; totals below show the combined monthly cost."
+        }
+      },
+      "regionIn": "India (₹)",
+      "regionIntl": "International ($)",
+      "billingUpi": "UPI billing",
+      "billingCard": "Card billing (USD)",
+      "yearly": {
+        "chip": "Yearly is {{months}}× monthly",
+        "noteFreeOne": "Yearly billing is {{months}}× monthly ({{free}} month free).",
+        "noteFreeMany": "Yearly billing is {{months}}× monthly ({{free}} months free).",
+        "noteNoFree": "Yearly billing is {{months}}× monthly.",
+        "planLine": "or {{price}}/year ({{months}}× monthly)"
+      },
+      "fallback": {
+        "freeBlurb": "Full Pro access during trial, then soft lock until you upgrade.",
+        "starterBlurb": "Core operations, BI Overview, one location, and a white-label customer app.",
+        "starterBlurbBoth": "Appoint Starter + Mart Starter in one workspace, billed per product.",
+        "proBlurb": "Full BI, a second office, WhatsApp or GST tools, and an ad-free white-label app. {{note}}",
+        "proBlurbBoth": "Appoint Pro + Mart Pro with full BI and an ad-free app."
+      },
+      "extras": {
+        "kicker": "Add-ons & AI",
+        "titleBefore": "Staff, offices, Pets pack, and",
+        "titleEm": "AI usage",
+        "seatKicker": "Seat & pack add-ons",
+        "monthlyExtras": "Monthly extras",
+        "extraStaff": "Extra staff",
+        "extraStaffNote": "Starter (max 1) and Pro",
+        "extraOffice": "Extra office",
+        "extraOfficeNote": "Pro only",
+        "petsPack": "Pets pack",
+        "petsPackNote": "Optional Orbit Mart add-on",
+        "aiKicker": "AI usage",
+        "aiTitle": "Prepaid wallets on Pro",
+        "freeEachDay": "Free each day",
+        "freeEachDayNote": "Included before wallet charges",
+        "questions": "questions",
+        "approvals": "approvals",
+        "extraQuestion": "Extra question",
+        "extraApproval": "Extra approval",
+        "afterFreeLimit": "After free daily limit",
+        "walletCalls": "AI wallet calls",
+        "walletCallsNote": "Invoice scans, automation drafts",
+        "minPerCall": "min / call"
+      },
+      "ctaTitle": "Start with full Pro access"
+    }
+  }
+}

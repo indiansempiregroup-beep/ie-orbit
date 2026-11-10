@@ -1,0 +1,287 @@
+{
+  "public": {
+    "industries": {
+      "detail": {
+        "faqTitle": "Questions fréquentes",
+        "relatedTitle": "Secteurs similaires",
+        "alsoSee": "Voir aussi les <products>produits</products>, les <pricing>tarifs</pricing> et la <faq>FAQ</faq>.",
+        "ctaTitle": "Démarrez un essai Pro complet de 45 jours"
+      },
+      "items": {
+        "salon-spa": {
+          "name": "Salon & spa",
+          "h1": "Logiciel de réservation pour salons et spas",
+          "lead": "Offrez à vos clients une appli au nom de votre salon. Orbit Appoint gère fauteuils, cabines et agendas de l’équipe. Orbit Mart gère le comptoir de vente à l’accueil et les factures GST quand vous vendez aussi des produits.",
+          "problemTitle": "Le problème en salon",
+          "problem": "Clients sans rendez-vous, réservations par téléphone et agenda papier se disputent les mêmes fauteuils. Les coiffeurs sont réservés deux fois, les absences vident des créneaux et les ventes de produits passent par une autre caisse. Le propriétaire ne voit ni qui est libre, ni ce qui est facturé, ni quelles prestations rapportent vraiment.",
+          "solutionTitle": "Comment IE Orbit aide les salons et les spas",
+          "solution": "Avec Orbit Appoint, les clients réservent en ligne, l’équipe voit un agenda en direct et les rappels partent avant la visite. Si vous vendez shampooings, colorations ou coffrets spa, ajoutez Orbit Mart dans le même espace de travail pour la caisse, le catalogue et la comptabilité GST — une connexion, un fichier clients.",
+          "featuresTitle": "Des fonctions adaptées au travail en salon",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les clients réservent et achètent dans une appli à l’image de votre salon — pas dans une fiche générique IE Orbit." },
+            { "title": "Réservation en ligne", "body": "Les clients choisissent une prestation et un horaire depuis n’importe quel appareil au lieu d’appeler l’accueil." },
+            { "title": "Agenda de l’équipe", "body": "Voyez qui est avec un client, qui est libre et quel fauteuil ou quelle cabine est occupé." },
+            { "title": "Clients et avis", "body": "Gardez l’historique des visites, envoyez des rappels et recueillez des avis après le rendez-vous." },
+            { "title": "Caisse et GST", "body": "Facturez les produits à emporter au comptoir avec des ventes conformes GST quand Orbit Mart est activé." }
+          ],
+          "workflowTitle": "Une journée type en salon",
+          "workflow": [
+            { "title": "Ouvrir l’agenda", "body": "L’équipe voit les réservations du jour et les créneaux libres pour les clients sans rendez-vous avant l’arrivée du premier client." },
+            { "title": "Réaliser la visite", "body": "Enregistrez l’arrivée du client, réalisez la prestation et recueillez un avis quand vous le souhaitez." },
+            { "title": "Vendre et clôturer", "body": "Si vous tenez un rayon de vente, encaissez-le sur la caisse Orbit Mart et gardez la comptabilité GST dans le même espace de travail." }
+          ],
+          "benefitsTitle": "Ce qui change pour l’entreprise",
+          "benefits": [
+            "Appli client en marque blanche aux couleurs de votre salon",
+            "Moins de créneaux manqués grâce aux confirmations et à un agenda partagé",
+            "Une seule fiche client pour les prestations et les ventes de produits",
+            "Facturation UPI pour votre abonnement IE Orbit — pas de carte bancaire pour démarrer l’essai de 45 jours"
+          ],
+          "customerTitle": "Ce que vivent les clients",
+          "customer": "Les clients réservent une coupe, une couleur ou un soin spa dans votre appli de marque ou le parcours de réservation web, reçoivent des rappels et peuvent acheter des produits à emporter si vous activez Orbit Mart.",
+          "businessTitle": "Ce que vivent propriétaires et équipe",
+          "business": "Les propriétaires disposent de la BI Overview avec Starter et de la suite complète Growth, Revenue, Forecast et Reports avec Pro. L’équipe travaille depuis un seul agenda au lieu d’un cahier plus une caisse de boutique séparée.",
+          "faqs": [
+            { "q": "IE Orbit est-il réservé aux grandes chaînes de salons ?", "a": "Non. Starter et Pro sont conçus pour les établissements uniques et les petites équipes. Ajoutez du personnel ou des sites supplémentaires plus tard en modules mensuels." },
+            { "q": "Pouvons-nous vendre des produits en plus des prestations ?", "a": "Oui. Souscrivez à Orbit Mart dans le même espace de travail pour la caisse, le catalogue et la comptabilité GST. Pas besoin d’une seconde connexion." },
+            { "q": "Les clients ont-ils besoin de leur propre compte IE Orbit chez vous ?", "a": "Les clients utilisent votre appli en marque blanche pour réserver et commander. Votre équipe utilise l’espace ops pour gérer le salon." }
+          ]
+        },
+        "clinic-healthcare": {
+          "name": "Cabinet & santé",
+          "h1": "Logiciel de rendez-vous pour cabinets",
+          "lead": "Les patients réservent dans votre appli de marque. Orbit Appoint planifie praticiens et salles. Orbit Mart peut s’y ajouter si vous tenez aussi un comptoir d’articles facturés avec comptabilité GST.",
+          "problemTitle": "Le problème de l’accueil du cabinet",
+          "problem": "Les patients appellent, écrivent sur WhatsApp et se présentent pour les mêmes créneaux. L’accueil jongle entre disponibilités des praticiens, consultations de suivi et une file d’attente invisible tant que quelqu’un n’est pas au bureau. Si vous remettez aussi des articles, leur facturation se fait souvent dans un autre système.",
+          "solutionTitle": "Comment IE Orbit aide les cabinets",
+          "solution": "Orbit Appoint réunit réservations, agendas de l’équipe et fiches clients au même endroit pour que l’accueil ne soit pas la seule source de vérité. Associez Orbit Mart pour les ventes au comptoir avec GST et la comptabilité des articles que vous vendez — toujours la même entreprise, la même équipe et la même facturation.",
+          "featuresTitle": "Des fonctions pour l’activité du cabinet",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les patients réservent ou gèrent leurs visites au nom de votre cabinet plutôt que sur une place de marché générique." },
+            { "title": "Agenda de rendez-vous", "body": "Associez les visites aux praticiens et aux salles au lieu d’un tableur partagé." },
+            { "title": "Réservation en ligne", "body": "Laissez les patients demander un créneau sans saturer la ligne téléphonique." },
+            { "title": "Rappels et dossiers", "body": "Conservez l’historique client et envoyez des rappels avant la visite." },
+            { "title": "Comptoir et comptabilité GST", "body": "Utilisez Orbit Mart quand vous facturez des articles à l’accueil, avec rapports GST et e-invoice là où vous les utilisez." }
+          ],
+          "workflowTitle": "Le déroulement d’une journée au cabinet",
+          "workflow": [
+            { "title": "Publier les disponibilités", "body": "Définissez les plannings pour que la réservation en ligne et les patients sans rendez-vous partagent le même agenda." },
+            { "title": "Mener la consultation", "body": "Appelez le patient suivant, terminez la visite et conservez le dossier dans la fiche client." },
+            { "title": "Facturer ce que vous vendez", "body": "Si vous vendez des fournitures ou des articles facturés, clôturez-les sur la caisse Orbit Mart dans le même espace de travail." }
+          ],
+          "benefitsTitle": "Avantages côté cabinet",
+          "benefits": [
+            "Appli client en marque blanche pour les réservations des patients",
+            "Moins de praticiens réservés en double",
+            "Une seule liste de clients pour les visites et les ventes au comptoir",
+            "Essai Pro complet de 45 jours sans carte bancaire"
+          ],
+          "customerTitle": "Ce que vivent les patients",
+          "customer": "Les patients réservent ou gèrent leurs visites via votre appli client en marque blanche, là où vous l’activez, au lieu de seulement appeler l’accueil.",
+          "businessTitle": "Ce que vit le cabinet",
+          "business": "L’accueil voit un seul agenda. Les propriétaires peuvent commencer par la BI Overview avec Starter et débloquer la suite BI complète avec Pro. IE Orbit est un logiciel d’exploitation — ce n’est pas un dossier médical informatisé clinique ni un substitut aux systèmes de dossiers médicaux.",
+          "faqs": [
+            { "q": "Cela remplace-t-il un logiciel de dossier médical hospitalier ?", "a": "Non. Orbit Appoint est un logiciel de rendez-vous et de gestion client. Il ne prétend pas être un dossier médical électronique clinique." },
+            { "q": "Plusieurs praticiens peuvent-ils partager un espace de travail ?", "a": "Oui. Invitez votre équipe avec rôles et autorisations. Des personnes réservables en plus peuvent être ajoutées en module mensuel quand vous dépassez la limite du forfait." },
+            { "q": "Pouvons-nous régler notre facture IE Orbit par UPI ?", "a": "Oui. L’abonnement à la plateforme est en INR et UPI, avec une déclaration de paiement depuis l’espace de travail. Les paiements des patients au cabinet sont séparés." }
+          ]
+        },
+        "fitness-wellness": {
+          "name": "Fitness & bien-être",
+          "h1": "Logiciel de réservation pour le fitness et le bien-être",
+          "lead": "Les adhérents réservent dans votre appli de marque. Orbit Appoint gère l’agenda. Orbit Mart couvre le merchandising ou les compléments si vous vendez à l’accueil.",
+          "problemTitle": "Le problème de planning en studio",
+          "problem": "Les listes de cours vivent dans des groupes de discussion. Les créneaux de coaching personnel sont dans le téléphone du coach. L’accueil ne sait pas qui vient avant leur arrivée, et la vente (gourdes, bandes, kits) est un tiroir-caisse à part.",
+          "solutionTitle": "Comment IE Orbit aide les équipes de fitness et de bien-être",
+          "solution": "Placez les séances dans Orbit Appoint pour que les clients réservent selon les vraies disponibilités. Gardez clients, rappels et avis avec la visite. Activez Orbit Mart quand vous voulez caisse, catalogue et comptabilité GST pour ce que vous vendez au studio.",
+          "featuresTitle": "Des fonctions pour studios et coachs",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les adhérents installent la marque de votre studio pour réserver des séances et acheter des produits." },
+            { "title": "Réservation de séances", "body": "Réservations en ligne pour les créneaux d’entraînement et les rendez-vous bien-être depuis n’importe quel appareil." },
+            { "title": "Disponibilités de l’équipe", "body": "Coachs et thérapeutes voient leur propre agenda au lieu d’un groupe de discussion." },
+            { "title": "Historique client", "body": "Sachez qui revient, qui ne s’est pas présenté et ce qu’il a réservé la dernière fois." },
+            { "title": "Vente au studio", "body": "Caisse et comptabilité GST Orbit Mart si vous vendez du merchandising ou des produits conditionnés." }
+          ],
+          "workflowTitle": "Le déroulement d’une semaine au studio",
+          "workflow": [
+            { "title": "Fixer le planning", "body": "Publiez les horaires de l’équipe et les prestations pour que les clients réservent sans appeler." },
+            { "title": "Mener la séance", "body": "Enregistrez l’arrivée, terminez la visite et relancez avec des rappels ou des avis." },
+            { "title": "Vendre à l’accueil", "body": "Si vous tenez un rayon de vente, facturez-le dans Orbit Mart au sein du même espace de travail." }
+          ],
+          "benefitsTitle": "Avantages pour le studio",
+          "benefits": [
+            "Appli client en marque blanche pour la réservation et la boutique",
+            "Un agenda partagé au lieu de réservations éparpillées dans les discussions",
+            "Vente optionnelle sans seconde connexion à un autre logiciel",
+            "Facturation annuelle IE Orbit à un multiple réduit du tarif mensuel (mois offerts affichés au paiement)"
+          ],
+          "customerTitle": "Ce que vivent les adhérents",
+          "customer": "Les adhérents réservent un coach ou un créneau bien-être dans votre appli de marque et peuvent acheter les produits du studio si vous activez Orbit Mart.",
+          "businessTitle": "Ce que vivent les exploitants",
+          "business": "Les exploitants voient les séances du jour au même endroit. Pro débloque la BI complète et les points de fidélité dans Orbit Appoint lorsque le forfait les inclut.",
+          "faqs": [
+            { "q": "Pouvons-nous proposer des cours et une petite boutique ?", "a": "Oui. Orbit Appoint pour les réservations, Orbit Mart pour la caisse et la comptabilité GST, dans le même espace de travail." },
+            { "q": "Y a-t-il un essai gratuit ?", "a": "Les nouveaux espaces de travail bénéficient d’un essai Pro complet de 45 jours sans carte bancaire. Ensuite, l’espace est verrouillé partiellement jusqu’à votre abonnement." },
+            { "q": "Nous faut-il des sites supplémentaires pour plusieurs studios ?", "a": "Les forfaits incluent un certain nombre de sites. Les sites supplémentaires sont un module mensuel avec adresse et localisation sur la carte." }
+          ]
+        },
+        "professional-services": {
+          "name": "Services professionnels",
+          "h1": "Logiciel de réservation pour consultants et professionnels",
+          "lead": "Les clients réservent dans une appli au nom de votre cabinet. Orbit Appoint est conçu pour les consultations, pas pour un fauteuil de salon. N’ajoutez Orbit Mart que si vous vendez aussi des produits conditionnés.",
+          "problemTitle": "Le problème de l’agenda en conseil",
+          "problem": "Les appels de découverte, les séances payantes et les suivis vivent dans des fils d’e-mails. Les assistants ressaisissent trois fois le même créneau. Il n’existe pas de vue partagée de qui est réservé, et les factures des produits physiques sont ailleurs.",
+          "solutionTitle": "Comment IE Orbit aide les services professionnels",
+          "solution": "Les clients réservent selon vos vraies disponibilités dans Orbit Appoint. Agendas de l’équipe, rappels et avis restent liés à la fiche client. Si vous vendez des kits, des livres ou des offres conditionnées au comptoir, Orbit Mart ajoute caisse et comptabilité GST sans second espace de travail.",
+          "featuresTitle": "Des fonctions pour consultants et cabinets",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Un parcours de réservation professionnel aux couleurs de votre cabinet, pas d’IE Orbit." },
+            { "title": "Consultations réservables", "body": "Publiez vos prestations et laissez les clients choisir un horaire au lieu d’échanger des e-mails." },
+            { "title": "Équipe et salles", "body": "Associez personnes et sites pour que les équipes à plusieurs conseillers ne se chevauchent pas." },
+            { "title": "Fiches clients", "body": "Gardez trace de qui vous avez rencontré, quand, et de ce qui a été réservé ensuite." },
+            { "title": "Vente de produits optionnelle", "body": "Orbit Mart pour le catalogue et la GST si vous vendez quelque chose au comptoir." }
+          ],
+          "workflowTitle": "Comment le travail client est planifié",
+          "workflow": [
+            { "title": "Définir les prestations", "body": "Créez les types de consultation et les durées que vos clients peuvent réserver." },
+            { "title": "Protéger l’agenda", "body": "Les disponibilités de l’équipe déterminent ce qui est proposé en ligne." },
+            { "title": "Assurer le suivi", "body": "Les rappels partent ; avis et historique restent liés au client." }
+          ],
+          "benefitsTitle": "Avantages pour le cabinet",
+          "benefits": [
+            "Un parcours de réservation professionnel sur une appli client en marque blanche",
+            "Moins de temps passé à coordonner les créneaux par e-mail",
+            "La même facturation d’abonnement par UPI que les autres produits IE Orbit",
+            "BI Overview avec Starter ; BI complète avec Pro"
+          ],
+          "customerTitle": "Ce que vivent les clients",
+          "customer": "Les clients réservent une consultation dans votre appli de marque, reçoivent des rappels et se présentent sur un créneau confirmé.",
+          "businessTitle": "Ce que vit le cabinet",
+          "business": "Chaque conseiller voit son propre agenda. Les propriétaires invitent l’équipe avec des autorisations au lieu de partager une seule connexion. IE Orbit ne remplace ni vos contrats, ni votre CRM, ni votre cabinet comptable — il gère les rendez-vous et la vente optionnelle.",
+          "faqs": [
+            { "q": "Est-ce réservé aux entreprises de beauté ?", "a": "Non. L’inscription propose Services professionnels comme catégorie à part entière. Orbit Appoint est une planification indépendante du secteur." },
+            { "q": "Pouvons-nous utiliser la connexion Google ?", "a": "Oui. Les propriétaires peuvent continuer avec Google à l’inscription, et des connexions Google Agenda existent dans le produit pour les usages éligibles." },
+            { "q": "Comment demander une démo ?", "a": "Utilisez la page Contact (ajoutez intent=demo) ou écrivez à support@indiansempire.com. Téléphone : +91 9766855617." }
+          ]
+        },
+        "retail": {
+          "name": "Commerce de détail",
+          "h1": "Logiciel de caisse et de GST pour le commerce",
+          "lead": "Les clients parcourent une appli au nom de votre boutique. Orbit Mart est le produit pour la surface de vente. Starter gère le comptoir, les commandes en ligne et les retours. Pro ajoute la livraison instantanée avec Porter/Shiprocket, la facture électronique GST, l’e-way et Grow. N’ajoutez Orbit Appoint que si vous vendez aussi des prestations sur rendez-vous.",
+          "problemTitle": "Le problème du comptoir et de la comptabilité",
+          "problem": "La caisse, la liste de stock et la paperasse GST sont trois habitudes distinctes. Les commandes en ligne arrivent par message. Les retours sont dans un cahier. Les animaleries tiennent en plus des fiches d’animaux qui n’entrent pas dans une liste de références classique.",
+          "solutionTitle": "Comment Orbit Mart aide les commerçants",
+          "solution": "Gérez dans Orbit Mart les ventes comptoir POS / GST, le catalogue, l’inventaire, les commandes en retrait ou livrées et les retours. La comptabilité couvre ventes, achats, caisse, dépenses, tiers, stock, rapports GST, e-invoice (IRN) et e-way bill. Grow ajoute le partage WhatsApp, des aides à la mise en ligne et des calculateurs. Le pack Pets est un module optionnel pour les fiches animaux.",
+          "featuresTitle": "Les fonctions commerce disponibles aujourd’hui dans le produit",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les clients parcourent, commandent et suivent sous la marque de votre boutique — pas sur une place de marché." },
+            { "title": "Caisse et catalogue", "body": "Ventes comptoir GST, produits, stock, commandes en ligne et retours avec Starter. Fidélité boutique avec Pro." },
+            { "title": "Commandes et livraison", "body": "Commandes en ligne et retours avec Starter. Livraison instantanée avec Porter/Shiprocket sur Orbit Mart Pro." },
+            { "title": "Comptabilité GST", "body": "Journal avec Starter. Achats, rapports GST, e-invoice et e-way bill avec Pro." },
+            { "title": "Grow et pack Pets", "body": "Calculateurs avec Starter. WhatsApp et aides à la mise en ligne avec Pro. Le pack Pets est un module mensuel optionnel." }
+          ],
+          "workflowTitle": "Comment se clôt une journée en boutique",
+          "workflow": [
+            { "title": "Vendre au comptoir", "body": "Saisissez des ventes TTC ou HT sur la caisse à partir du catalogue." },
+            { "title": "Traiter les commandes", "body": "Retrait, livraison ou retour grâce aux outils de commandes et de zones que vous avez activés." },
+            { "title": "Tenir la comptabilité", "body": "Ventes, achats, caisse et conformité GST restent dans le même produit Orbit Mart." }
+          ],
+          "benefitsTitle": "Avantages pour les commerçants",
+          "benefits": [
+            "Appli client en marque blanche pour que les clients achètent sous votre marque",
+            "Un seul produit pour le commerce, la comptabilité et Grow — pas trois abonnements",
+            "Pack Pets optionnel plutôt qu’un système d’animalerie séparé",
+            "Connectez Razorpay sur les forfaits Pro éligibles pour que les clients vous paient leurs commandes"
+          ],
+          "customerTitle": "Ce que vivent les acheteurs",
+          "customer": "Les acheteurs utilisent votre appli client en marque blanche pour parcourir, commander et suivre — selon ce que vous activez — pendant que vous gérez le comptoir dans l’espace ops.",
+          "businessTitle": "Ce que vit la boutique",
+          "business": "Caissiers et responsables de magasin travaillent dans Orbit Mart. Si vous coiffez aussi ou proposez des rendez-vous, ajoutez Orbit Appoint au même espace de travail plutôt qu’un second fournisseur.",
+          "faqs": [
+            { "q": "Faut-il Orbit Appoint pour utiliser Orbit Mart ?", "a": "Non. Vous pouvez souscrire à Orbit Mart seul. Ajoutez Orbit Appoint plus tard si vous commencez à prendre des rendez-vous." },
+            { "q": "Qu’est-ce que le pack Pets ?", "a": "Un module Orbit Mart optionnel (500 ₹/mois au prix catalogue par défaut) pour les fiches animaux. Il n’est pas inclus dans le forfait de base." },
+            { "q": "Orbit Mart inclut-il la facture électronique ?", "a": "Avec Orbit Mart Pro. Les rapports GST, l’e-invoice (IRN) et l’e-way bill font partie de Mart Books avec Pro. Starter couvre le comptoir, les commandes en ligne, les retours et le journal." }
+          ]
+        },
+        "education-training": {
+          "name": "Éducation & formation",
+          "h1": "Logiciel de réservation pour cours et soutien scolaire",
+          "lead": "Les apprenants réservent dans votre appli de marque. Orbit Appoint tient l’agenda des cours. Orbit Mart est optionnel si vous vendez des supports, des kits ou du merchandising.",
+          "problemTitle": "Le problème des groupes et des créneaux",
+          "problem": "Les groupes sont annoncés sur WhatsApp. Les parents écrivent pour un cours de rattrapage. Les formateurs gardent leur propre feuille Excel. Il n’existe pas de vue unique de qui est dans quel créneau, et la vente de documents imprimés est une vente en espèces à part.",
+          "solutionTitle": "Comment IE Orbit aide l’éducation et la formation",
+          "solution": "Traitez cours et créneaux de soutien comme des prestations réservables dans Orbit Appoint. Les agendas de l’équipe montrent qui enseigne quand. Les clients (élèves ou parents) reçoivent des rappels. Utilisez Orbit Mart si vous avez aussi besoin d’un comptoir, d’un catalogue et d’une comptabilité GST pour les supports que vous vendez.",
+          "featuresTitle": "Des fonctions pour les équipes de formation",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les apprenants ou les parents réservent un créneau au nom de votre centre." },
+            { "title": "Cours réservables", "body": "Publiez les types de séances pour que les apprenants réservent au lieu de courir après un coordinateur." },
+            { "title": "Agendas des formateurs", "body": "Les disponibilités de l’équipe déterminent ce qui peut être réservé." },
+            { "title": "Fiches clients", "body": "Gardez trace de qui a assisté, qui doit revenir, et des avis là où vous les recueillez." },
+            { "title": "Vente de supports", "body": "Caisse et GST Orbit Mart si vous vendez des polycopiés, des kits ou du merchandising." }
+          ],
+          "workflowTitle": "Comment se déroule une semaine de formation",
+          "workflow": [
+            { "title": "Publier l’emploi du temps", "body": "Prestations et horaires de l’équipe deviennent la source de vérité." },
+            { "title": "Donner la séance", "body": "Enregistrez l’arrivée des apprenants et conservez le dossier dans la fiche client." },
+            { "title": "Vendre des supports si besoin", "body": "Facturez kits ou polycopiés dans Orbit Mart sans quitter l’espace de travail." }
+          ],
+          "benefitsTitle": "Avantages pour le centre",
+          "benefits": [
+            "Appli client en marque blanche pour les réservations",
+            "Un agenda pour les coordinateurs et les formateurs",
+            "Le même modèle d’essai et d’abonnement UPI que les autres secteurs IE Orbit",
+            "Ajoutez du personnel ou des sites quand le centre grandit"
+          ],
+          "customerTitle": "Ce que vivent les apprenants",
+          "customer": "Les apprenants ou les parents réservent un créneau dans votre appli de marque et reçoivent des rappels avant le cours.",
+          "businessTitle": "Ce que vit le centre",
+          "business": "Les coordinateurs ne sont plus l’emploi du temps humain. IE Orbit n’est pas un LMS complet (aucune promesse pédagogique inventée) — c’est de la planification plus une vente optionnelle.",
+          "faqs": [
+            { "q": "Pouvons-nous planifier des cours particuliers et des groupes ?", "a": "Oui, à condition de les modéliser comme des prestations avec disponibilités de l’équipe dans Orbit Appoint. Vous définissez les prestations ; le produit n’invente pas de « LMS » à part." },
+            { "q": "Pouvons-nous vendre des livres ou des kits ?", "a": "Ajoutez Orbit Mart pour le catalogue, la caisse et la comptabilité GST dans le même espace de travail." },
+            { "q": "Les prix sont-ils en INR ?", "a": "Les prix du catalogue du site sont en INR. Vous pouvez enregistrer une autre devise d’entreprise à l’inscription ; la facturation d’abonnement par UPI est conçue pour les entreprises indiennes." }
+          ]
+        },
+        "home-services": {
+          "name": "Services à domicile",
+          "h1": "Logiciel de réservation pour services à domicile",
+          "lead": "Les foyers réservent des visites dans une appli aux couleurs de votre métier. Orbit Appoint réserve l’intervention. Orbit Mart aide si vous vendez aussi des pièces ou des produits avec facturation GST.",
+          "problemTitle": "Le problème des interventions sur le terrain",
+          "problem": "Les interventions sont promises par téléphone. Les techniciens ne partagent pas un agenda. Les clients ne reçoivent pas de confirmation fiable. Les pièces détachées, si elles sont vendues, sont facturées sur une note manuscrite.",
+          "solutionTitle": "Comment IE Orbit aide les équipes de services à domicile",
+          "solution": "Réservez les visites selon les disponibilités de l’équipe dans Orbit Appoint. Gardez le client, le rappel et l’avis avec l’intervention. Si vous vendez des pièces ou des produits conditionnés, Orbit Mart ajoute caisse, catalogue et comptabilité GST — y compris e-invoice et e-way là où vous les utilisez.",
+          "featuresTitle": "Des fonctions pour les interventions à domicile",
+          "features": [
+            { "title": "Appli client en marque blanche", "body": "Les foyers réservent une visite au nom de votre métier plutôt que par simple promesse téléphonique." },
+            { "title": "Réservation de visites", "body": "Les clients demandent un créneau en ligne selon les vrais agendas de l’équipe." },
+            { "title": "Vue de répartition", "body": "Voyez qui est réservé pour ne pas envoyer deux techniciens sur la même plage horaire." },
+            { "title": "Historique client", "body": "Sachez ce qui a été fait lors de la dernière visite avant de partir." },
+            { "title": "Pièces et GST", "body": "Orbit Mart pour les pièces vendues au comptoir ou facturées, avec rapports GST et outils d’e-invoice." }
+          ],
+          "workflowTitle": "Comment une intervention se déroule",
+          "workflow": [
+            { "title": "Prendre la réservation", "body": "Les réservations en ligne ou saisies par l’équipe partagent le même agenda." },
+            { "title": "Réaliser la visite", "body": "La personne assignée voit le créneau ; le client reçoit des rappels." },
+            { "title": "Facturer les pièces si besoin", "body": "Vendez les pièces dans Orbit Mart au sein du même espace de travail." }
+          ],
+          "benefitsTitle": "Avantages pour l’exploitant",
+          "benefits": [
+            "Une appli client aux couleurs de votre métier",
+            "Moins d’interventions qui se chevauchent",
+            "Vente de produits conforme GST en option",
+            "Essai Pro complet de 45 jours sans carte bancaire"
+          ],
+          "customerTitle": "Ce que vivent les foyers",
+          "customer": "Les foyers réservent une visite dans votre appli en marque blanche et reçoivent des rappels au lieu d’une simple promesse verbale.",
+          "businessTitle": "Ce que vit l’exploitant",
+          "business": "Les répartiteurs consultent un seul agenda. Starter couvre un site (1 personne supplémentaire possible). Les sites supplémentaires et 4 personnes et plus sont dans Pro.",
+          "faqs": [
+            { "q": "IE Orbit inclut-il le suivi GPS en direct des techniciens ?", "a": "Le produit documenté couvre les opérations de rendez-vous, la vente optionnelle et les outils de livraison associés dans Orbit Mart — pas un produit de GPS de techniciens en direct. N’attendez pas de fonctions qui ne sont pas dans l’espace de travail." },
+            { "q": "Pouvons-nous l’utiliser avec plusieurs zones de service ?", "a": "Les sites/agences ont une adresse et une localisation Google Maps. Les sites supplémentaires sont un module mensuel. Orbit Mart propose aussi des zones de livraison pour les commandes de la boutique." },
+            { "q": "Comment démarrer ?", "a": "Créez un compte, choisissez Orbit Appoint (et Orbit Mart si vous vendez des pièces) et profitez de l’essai Pro complet de 45 jours." }
+          ]
+        }
+      }
+    }
+  }
+}

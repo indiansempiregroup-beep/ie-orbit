@@ -1,0 +1,287 @@
+{
+  "public": {
+    "industries": {
+      "detail": {
+        "faqTitle": "Preguntas frecuentes",
+        "relatedTitle": "Sectores relacionados",
+        "alsoSee": "Consulta también <products>productos</products>, <pricing>precios</pricing> y las <faq>preguntas frecuentes</faq>.",
+        "ctaTitle": "Empieza una prueba Pro completa de 45 días"
+      },
+      "items": {
+        "salon-spa": {
+          "name": "Salón y spa",
+          "h1": "Software de reservas para salones y spas",
+          "lead": "Dale a tus clientes una app con el nombre de tu salón. Orbit Appoint gestiona sillones, salas y calendarios del equipo. Orbit Mart gestiona el mostrador de venta en recepción y las facturas GST cuando también vendes productos.",
+          "problemTitle": "El problema en el salón",
+          "problem": "Clientes sin cita, reservas por teléfono y una agenda de papel compiten por los mismos sillones. Los estilistas se reservan dos veces, las ausencias dejan huecos vacíos y las ventas de productos pasan por otra caja. Los dueños no ven quién está libre, qué se ha facturado ni qué servicios dan realmente dinero.",
+          "solutionTitle": "Cómo ayuda IE Orbit a salones y spas",
+          "solution": "Con Orbit Appoint, los clientes reservan online, el equipo ve un calendario en vivo y los recordatorios salen antes de la visita. Si vendes champú, tintes o kits de spa, añade Orbit Mart en el mismo espacio de trabajo para TPV, catálogo y contabilidad GST: un acceso, una lista de clientes.",
+          "featuresTitle": "Funciones pensadas para el trabajo en salón",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Los clientes reservan y compran en una app con la marca de tu salón, no en una ficha genérica de IE Orbit." },
+            { "title": "Reserva online", "body": "Los clientes eligen servicio y hora desde cualquier dispositivo en lugar de llamar a recepción." },
+            { "title": "Calendario del equipo", "body": "Mira quién está con un cliente, quién está libre y qué sillón o sala está ocupado." },
+            { "title": "Clientes y reseñas", "body": "Guarda el historial de visitas, envía recordatorios y recoge reseñas después de la cita." },
+            { "title": "TPV minorista y GST", "body": "Cobra los productos para llevar en el mostrador con ventas listas para GST cuando Orbit Mart está activo." }
+          ],
+          "workflowTitle": "Un día típico en el salón",
+          "workflow": [
+            { "title": "Abrir el calendario", "body": "El equipo ve las reservas de hoy y los huecos para clientes sin cita antes de que llegue el primero." },
+            { "title": "Atender la visita", "body": "Registra la llegada del cliente, realiza el servicio y recoge una reseña cuando quieras." },
+            { "title": "Vender y cerrar", "body": "Si tienes productos a la venta, cóbralos en el TPV de Orbit Mart y mantén la contabilidad GST en el mismo espacio de trabajo." }
+          ],
+          "benefitsTitle": "Qué cambia para el negocio",
+          "benefits": [
+            "App de cliente white-label con la marca de tu salón",
+            "Menos huecos perdidos gracias a las confirmaciones y a un calendario compartido",
+            "Una sola ficha de cliente para servicios y venta de productos",
+            "Facturación UPI de tu suscripción a IE Orbit: sin tarjeta de crédito para empezar la prueba de 45 días"
+          ],
+          "customerTitle": "Qué viven los clientes",
+          "customer": "Los clientes reservan un corte, un color o un servicio de spa en tu app de marca o en el flujo de reserva web, reciben recordatorios y pueden comprar productos para llevar si activas Orbit Mart.",
+          "businessTitle": "Qué viven propietarios y equipo",
+          "business": "Los propietarios tienen BI Overview en Starter y Growth, Revenue, Forecast y Reports completos en Pro. El equipo trabaja con un solo calendario en lugar de una agenda más una caja de tienda aparte.",
+          "faqs": [
+            { "q": "¿IE Orbit es solo para grandes cadenas de salones?", "a": "No. Starter y Pro están pensados para locales únicos y equipos pequeños. Añade más personal u oficinas después como complementos mensuales." },
+            { "q": "¿Podemos vender productos además de servicios?", "a": "Sí. Suscríbete a Orbit Mart en el mismo espacio de trabajo para TPV, catálogo y contabilidad GST. No necesitas un segundo acceso." },
+            { "q": "¿Los clientes necesitan su propia cuenta de IE Orbit con vosotros?", "a": "Los clientes usan tu app white-label para reservar y hacer pedidos de la tienda. Tu equipo usa el espacio de operaciones para llevar el salón." }
+          ]
+        },
+        "clinic-healthcare": {
+          "name": "Clínica y salud",
+          "h1": "Software de citas para clínicas",
+          "lead": "Los pacientes reservan en tu app de marca. Orbit Appoint programa profesionales y salas. Orbit Mart puede acompañarlo si también tienes un mostrador de artículos facturados con contabilidad GST.",
+          "problemTitle": "El problema de la recepción de la clínica",
+          "problem": "Los pacientes llaman, escriben por WhatsApp y se presentan por los mismos huecos. Recepción hace malabares con la disponibilidad de los profesionales, las visitas de seguimiento y una cola invisible hasta que alguien está en el mostrador. Si además dispensas artículos, esa facturación suele estar en otro sistema.",
+          "solutionTitle": "Cómo ayuda IE Orbit a las clínicas",
+          "solution": "Orbit Appoint reúne reservas, calendarios del equipo y fichas de clientes en un solo lugar para que recepción no sea la única fuente de verdad. Combínalo con Orbit Mart para ventas de mostrador con GST y contabilidad de los artículos que vendes: el mismo negocio, equipo y facturación.",
+          "featuresTitle": "Funciones para la operativa de la clínica",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Los pacientes reservan o gestionan sus visitas con el nombre de tu clínica en lugar de un marketplace genérico." },
+            { "title": "Calendario de citas", "body": "Asigna las visitas a profesionales y salas en lugar de una hoja de cálculo compartida." },
+            { "title": "Reserva online", "body": "Permite que los pacientes pidan un hueco sin saturar la línea telefónica." },
+            { "title": "Recordatorios y fichas", "body": "Guarda el historial del cliente y envía recordatorios antes de la visita." },
+            { "title": "Mostrador y contabilidad GST", "body": "Usa Orbit Mart cuando factures artículos en recepción, con informes GST y e-invoice donde los uses." }
+          ],
+          "workflowTitle": "Cómo transcurre un día en la clínica",
+          "workflow": [
+            { "title": "Publicar la disponibilidad", "body": "Define los horarios del equipo para que la reserva online y los pacientes sin cita compartan el mismo calendario." },
+            { "title": "Realizar la sesión", "body": "Llama al siguiente paciente, completa la visita y guarda el registro en la ficha del cliente." },
+            { "title": "Facturar lo que vendes", "body": "Si vendes suministros o artículos facturados, ciérralos en el TPV de Orbit Mart dentro del mismo espacio de trabajo." }
+          ],
+          "benefitsTitle": "Ventajas para la clínica",
+          "benefits": [
+            "App de cliente white-label para las reservas de pacientes",
+            "Menos profesionales con reservas duplicadas",
+            "Una única lista de clientes para visitas y ventas de mostrador",
+            "Prueba Pro completa de 45 días sin tarjeta de crédito"
+          ],
+          "customerTitle": "Qué viven los pacientes",
+          "customer": "Los pacientes reservan o gestionan sus visitas a través de tu app de cliente white-label, donde la actives, en lugar de solo llamar a recepción.",
+          "businessTitle": "Qué vive la consulta",
+          "business": "Recepción ve un solo calendario. Los propietarios pueden empezar con BI Overview en Starter y desbloquear la suite completa de BI en Pro. IE Orbit es software de operaciones: no es una historia clínica electrónica ni sustituye a los sistemas de historiales médicos.",
+          "faqs": [
+            { "q": "¿Esto sustituye al software de historia clínica de un hospital?", "a": "No. Orbit Appoint es software de citas y de operaciones con clientes. No pretende ser una historia clínica electrónica." },
+            { "q": "¿Pueden varios profesionales compartir un espacio de trabajo?", "a": "Sí. Invita al equipo con roles y permisos. Puedes añadir personal reservable extra como complemento mensual cuando superes el límite del plan." },
+            { "q": "¿Podemos pagar con UPI nuestra factura de IE Orbit?", "a": "Sí. La suscripción a la plataforma se factura en INR y UPI, con una notificación de pago desde el espacio de trabajo. Los pagos de los pacientes en la clínica son independientes." }
+          ]
+        },
+        "fitness-wellness": {
+          "name": "Fitness y bienestar",
+          "h1": "Software de reservas para fitness y bienestar",
+          "lead": "Los socios reservan en tu app de marca. Orbit Appoint gestiona el calendario. Orbit Mart cubre merchandising o suplementos si vendes desde recepción.",
+          "problemTitle": "El problema de la programación en el estudio",
+          "problem": "Las listas de clases viven en grupos de chat. Los huecos de entrenamiento personal están en el móvil del entrenador. Recepción no sabe quién viene hasta que llegan, y la venta (botellas, bandas, kits) es un cajón de efectivo aparte.",
+          "solutionTitle": "Cómo ayuda IE Orbit a los equipos de fitness y bienestar",
+          "solution": "Pon las sesiones en Orbit Appoint para que los clientes reserven según la disponibilidad real. Mantén clientes, recordatorios y reseñas junto a la visita. Activa Orbit Mart cuando quieras TPV, catálogo y contabilidad GST para lo que vendes en el estudio.",
+          "featuresTitle": "Funciones para estudios y entrenadores",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Los socios instalan la marca de tu estudio para reservar sesiones y comprar productos." },
+            { "title": "Reserva de sesiones", "body": "Reservas online para sesiones de entrenamiento y citas de bienestar desde cualquier dispositivo." },
+            { "title": "Disponibilidad del equipo", "body": "Entrenadores y terapeutas ven su propio calendario en lugar de un grupo de chat." },
+            { "title": "Historial del cliente", "body": "Sabe quién vuelve, quién no se presentó y qué reservó la última vez." },
+            { "title": "Venta en el estudio", "body": "TPV y contabilidad GST de Orbit Mart si vendes merchandising o productos envasados." }
+          ],
+          "workflowTitle": "Cómo funciona una semana en el estudio",
+          "workflow": [
+            { "title": "Fijar el horario", "body": "Publica los horarios del equipo y los servicios para que los clientes reserven sin llamar." },
+            { "title": "Realizar la sesión", "body": "Registra la llegada, completa la visita y haz seguimiento con recordatorios o reseñas." },
+            { "title": "Vender desde recepción", "body": "Si tienes productos a la venta, factúralos en Orbit Mart en el mismo espacio de trabajo." }
+          ],
+          "benefitsTitle": "Ventajas para el estudio",
+          "benefits": [
+            "App de cliente white-label para reservas y tienda",
+            "Un calendario compartido en lugar de reservas dispersas en chats",
+            "Venta opcional sin un segundo acceso a otro software",
+            "Facturación anual de IE Orbit a un múltiplo con descuento de la mensual (los meses gratis se muestran al pagar)"
+          ],
+          "customerTitle": "Qué viven los socios",
+          "customer": "Los socios reservan un entrenador o una sesión de bienestar en tu app de marca y pueden comprar los productos del estudio si activas Orbit Mart.",
+          "businessTitle": "Qué viven los operadores",
+          "business": "Los operadores ven las sesiones de hoy en un solo lugar. Pro desbloquea BI completa y puntos de recompensa en Orbit Appoint donde el plan los incluye.",
+          "faqs": [
+            { "q": "¿Podemos ofrecer clases y una pequeña tienda?", "a": "Sí. Orbit Appoint para las reservas y Orbit Mart para TPV y contabilidad GST, en el mismo espacio de trabajo." },
+            { "q": "¿Hay prueba gratuita?", "a": "Los nuevos espacios de trabajo reciben una prueba Pro completa de 45 días sin tarjeta de crédito. Después, el espacio se bloquea parcialmente hasta que te suscribas." },
+            { "q": "¿Necesitamos oficinas adicionales para varios estudios?", "a": "Los planes incluyen un número determinado de oficinas. Las oficinas adicionales son un complemento mensual con dirección y ubicación en el mapa." }
+          ]
+        },
+        "professional-services": {
+          "name": "Servicios profesionales",
+          "h1": "Software de reservas para consultores y profesionales",
+          "lead": "Los clientes reservan en una app con el nombre de tu firma. Orbit Appoint está pensado para consultas, no para un sillón de salón. Añade Orbit Mart solo si también vendes productos envasados.",
+          "problemTitle": "El problema del calendario en consultoría",
+          "problem": "Las llamadas de descubrimiento, las sesiones de pago y los seguimientos viven en hilos de correo. Los asistentes reescriben el mismo hueco tres veces. No hay una vista compartida de quién está reservado, y las facturas de productos físicos están en otro sitio.",
+          "solutionTitle": "Cómo ayuda IE Orbit a los servicios profesionales",
+          "solution": "Los clientes reservan según tu disponibilidad real en Orbit Appoint. Los calendarios del equipo, los recordatorios y las reseñas se quedan con la ficha del cliente. Si vendes kits, libros o ofertas envasadas en mostrador, Orbit Mart añade TPV y contabilidad GST sin un segundo espacio de trabajo.",
+          "featuresTitle": "Funciones para consultores y firmas",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Un flujo de reserva profesional con la marca de tu despacho, no de IE Orbit." },
+            { "title": "Consultas reservables", "body": "Publica servicios y deja que los clientes elijan hora en lugar de cruzar correos." },
+            { "title": "Equipo y salas", "body": "Asigna personas y oficinas para que los equipos con varios asesores no se solapen." },
+            { "title": "Fichas de clientes", "body": "Guarda a quién viste, cuándo y qué reservó después." },
+            { "title": "Venta opcional de productos", "body": "Orbit Mart para catálogo y GST si vendes algo en el mostrador." }
+          ],
+          "workflowTitle": "Cómo se programa el trabajo con clientes",
+          "workflow": [
+            { "title": "Definir servicios", "body": "Crea los tipos de consulta y las duraciones que tus clientes pueden reservar." },
+            { "title": "Proteger el calendario", "body": "La disponibilidad del equipo determina lo que se ofrece online." },
+            { "title": "Hacer seguimiento", "body": "Los recordatorios salen; las reseñas y el historial se quedan con el cliente." }
+          ],
+          "benefitsTitle": "Ventajas para el despacho",
+          "benefits": [
+            "Un flujo de reserva profesional en una app de cliente white-label",
+            "Menos tiempo coordinando horarios por correo",
+            "La misma facturación de suscripción por UPI que otros productos de IE Orbit",
+            "BI Overview en Starter; BI completa en Pro"
+          ],
+          "customerTitle": "Qué viven los clientes",
+          "customer": "Los clientes reservan una consulta en tu app de marca, reciben recordatorios y se presentan en un hueco confirmado.",
+          "businessTitle": "Qué vive la firma",
+          "business": "Los asesores ven su propia agenda. Los propietarios invitan al equipo con permisos en lugar de compartir un solo acceso. IE Orbit no sustituye tu contrato, tu CRM ni a tu asesoría contable: gestiona citas y venta opcional.",
+          "faqs": [
+            { "q": "¿Es solo para negocios de belleza?", "a": "No. El alta incluye Servicios profesionales como categoría propia. Orbit Appoint es programación independiente del sector." },
+            { "q": "¿Podemos usar el inicio de sesión con Google?", "a": "Sí. Los propietarios pueden continuar con Google durante el registro, y existen conexiones con Google Calendar en el producto para flujos aptos." },
+            { "q": "¿Cómo pedimos una demo?", "a": "Usa la página de Contacto (añade intent=demo) o escribe a support@indiansempire.com. Teléfono: +91 9766855617." }
+          ]
+        },
+        "retail": {
+          "name": "Comercio minorista",
+          "h1": "Software de TPV y GST para comercios",
+          "lead": "Los compradores navegan en una app con el nombre de tu tienda. Orbit Mart es el producto para la tienda física. Starter gestiona el mostrador, los pedidos online y las devoluciones. Pro añade Instant Delivery con Porter/Shiprocket, factura electrónica GST, e-way y Grow. Añade Orbit Appoint solo si también vendes servicios con cita.",
+          "problemTitle": "El problema del mostrador y la contabilidad",
+          "problem": "La caja, la lista de stock y el papeleo GST son tres hábitos distintos. Los pedidos online llegan por chat. Las devoluciones están en un cuaderno. Las tiendas de mascotas además llevan fichas de animales que no caben en una lista genérica de referencias.",
+          "solutionTitle": "Cómo ayuda Orbit Mart a los comercios",
+          "solution": "Gestiona en Orbit Mart las ventas de mostrador TPV / GST, el catálogo, el inventario, los pedidos de recogida y entrega y las devoluciones. La contabilidad cubre ventas, compras, caja, gastos, terceros, stock, informes GST, e-invoice (IRN) y e-way bill. Grow añade compartir por WhatsApp, ayudas de publicación y calculadoras. El paquete Pets es un complemento opcional para fichas de mascotas.",
+          "featuresTitle": "Funciones de comercio disponibles hoy en el producto",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Los compradores navegan, piden y siguen sus pedidos con la marca de tu tienda, no en un marketplace." },
+            { "title": "TPV y catálogo", "body": "Ventas de mostrador con GST, productos, stock, pedidos online y devoluciones en Starter. Fidelización de tienda en Pro." },
+            { "title": "Pedidos y entrega", "body": "Pedidos online y devoluciones en Starter. Instant Delivery con Porter/Shiprocket en Orbit Mart Pro." },
+            { "title": "Contabilidad GST", "body": "Libro diario en Starter. Compras, informes GST, e-invoice y e-way bill en Pro." },
+            { "title": "Grow y paquete Pets", "body": "Calculadoras en Starter. WhatsApp y ayudas de publicación en Pro. El paquete Pets es un complemento mensual opcional." }
+          ],
+          "workflowTitle": "Cómo se cierra un día en la tienda",
+          "workflow": [
+            { "title": "Vender en el mostrador", "body": "Registra ventas con GST incluido o excluido en el TPV a partir del catálogo." },
+            { "title": "Cumplir los pedidos", "body": "Recogida, entrega o devolución con las herramientas de pedidos y zonas que hayas activado." },
+            { "title": "Llevar la contabilidad", "body": "Ventas, compras, caja y cumplimiento GST se quedan en el mismo producto Orbit Mart." }
+          ],
+          "benefitsTitle": "Ventajas para el comercio",
+          "benefits": [
+            "App de cliente white-label para que los compradores compren con tu marca",
+            "Un solo producto para comercio, contabilidad y Grow, no tres suscripciones",
+            "Paquete Pets opcional en lugar de un sistema aparte para tiendas de mascotas",
+            "Conecta Razorpay en los planes Pro aptos para que los clientes te paguen los pedidos de la tienda"
+          ],
+          "customerTitle": "Qué viven los compradores",
+          "customer": "Los compradores usan tu app de cliente white-label para navegar, pedir y seguir sus pedidos, según lo que actives, mientras tú llevas el mostrador en el espacio de operaciones.",
+          "businessTitle": "Qué vive la tienda",
+          "business": "Cajeros y encargados trabajan en Orbit Mart. Si además cortas el pelo u ofreces citas, añade Orbit Appoint al mismo espacio de trabajo en lugar de un segundo proveedor.",
+          "faqs": [
+            { "q": "¿Necesitamos Orbit Appoint para usar Orbit Mart?", "a": "No. Puedes suscribirte solo a Orbit Mart. Añade Orbit Appoint más adelante si empiezas a reservar servicios." },
+            { "q": "¿Qué es el paquete Pets?", "a": "Un complemento opcional de Orbit Mart (₹500/mes al precio de catálogo por defecto) para fichas de mascotas. No está en el plan base." },
+            { "q": "¿Orbit Mart incluye factura electrónica?", "a": "En Orbit Mart Pro. Los informes GST, la e-invoice (IRN) y el e-way bill forman parte de Mart Books en Pro. Starter cubre el mostrador, los pedidos online, las devoluciones y el libro diario." }
+          ]
+        },
+        "education-training": {
+          "name": "Educación y formación",
+          "h1": "Software de reservas para clases y tutorías",
+          "lead": "Los alumnos reservan en tu app de marca. Orbit Appoint lleva el calendario de clases. Orbit Mart es opcional si vendes apuntes, kits o merchandising.",
+          "problemTitle": "El problema de los grupos y los huecos",
+          "problem": "Los grupos se anuncian por WhatsApp. Los padres escriben para una clase de recuperación. Los formadores llevan su propia hoja de Excel. No hay una vista única de quién está en cada hueco, y vender material impreso es una venta en efectivo aparte.",
+          "solutionTitle": "Cómo ayuda IE Orbit a la educación y la formación",
+          "solution": "Trata las clases y las tutorías como servicios reservables en Orbit Appoint. Los calendarios del equipo muestran quién enseña y cuándo. Los clientes (alumnos o padres) reciben recordatorios. Usa Orbit Mart si además necesitas mostrador, catálogo y contabilidad GST para el material que vendes.",
+          "featuresTitle": "Funciones para equipos de formación",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Alumnos o padres reservan un hueco con el nombre de tu centro." },
+            { "title": "Clases reservables", "body": "Publica los tipos de sesión para que los alumnos reserven en lugar de perseguir a un coordinador." },
+            { "title": "Calendarios de formadores", "body": "La disponibilidad del equipo determina lo que se puede reservar." },
+            { "title": "Fichas de clientes", "body": "Guarda quién asistió, quién debe volver y las reseñas donde las recojas." },
+            { "title": "Venta de material", "body": "TPV y GST de Orbit Mart si vendes apuntes, kits o merchandising." }
+          ],
+          "workflowTitle": "Cómo se organiza una semana de formación",
+          "workflow": [
+            { "title": "Publicar el horario", "body": "Los servicios y los horarios del equipo se convierten en la fuente de verdad." },
+            { "title": "Impartir la sesión", "body": "Registra la llegada de los alumnos y guarda el registro en la ficha del cliente." },
+            { "title": "Vender material si hace falta", "body": "Factura kits o apuntes en Orbit Mart sin salir del espacio de trabajo." }
+          ],
+          "benefitsTitle": "Ventajas para el centro",
+          "benefits": [
+            "App de cliente white-label para las reservas",
+            "Un calendario para coordinadores y formadores",
+            "El mismo modelo de prueba y suscripción por UPI que otros sectores de IE Orbit",
+            "Añade personal u oficinas cuando el centro crezca"
+          ],
+          "customerTitle": "Qué viven los alumnos",
+          "customer": "Alumnos o padres reservan un hueco en tu app de marca y reciben recordatorios antes de la clase.",
+          "businessTitle": "Qué vive el centro",
+          "business": "Los coordinadores dejan de ser el horario humano. IE Orbit no es un LMS completo (sin promesas inventadas sobre contenidos): es programación más venta opcional.",
+          "faqs": [
+            { "q": "¿Podemos programar tutorías individuales y grupos?", "a": "Sí, siempre que los modeles como servicios con disponibilidad del equipo en Orbit Appoint. Tú defines los servicios; el producto no inventa un «LMS» aparte." },
+            { "q": "¿Podemos vender libros o kits?", "a": "Añade Orbit Mart para catálogo, TPV y contabilidad GST en el mismo espacio de trabajo." },
+            { "q": "¿Los precios son en INR?", "a": "Los precios del catálogo del sitio web son en INR. Puedes guardar otra moneda de negocio en el alta; la facturación de suscripción por UPI está pensada para negocios indios." }
+          ]
+        },
+        "home-services": {
+          "name": "Servicios a domicilio",
+          "h1": "Software de reservas para servicios a domicilio",
+          "lead": "Los hogares reservan visitas en una app con la marca de tu oficio. Orbit Appoint reserva el trabajo. Orbit Mart ayuda si también vendes piezas o productos con facturación GST.",
+          "problemTitle": "El problema de las visitas a domicilio",
+          "problem": "Los trabajos se prometen por teléfono. Los técnicos no comparten un calendario. Los clientes no reciben una confirmación fiable. Los repuestos, si se venden, se facturan en un albarán escrito a mano.",
+          "solutionTitle": "Cómo ayuda IE Orbit a los equipos de servicios a domicilio",
+          "solution": "Reserva visitas según la disponibilidad del equipo en Orbit Appoint. Mantén el cliente, el recordatorio y la reseña junto al trabajo. Si vendes piezas o productos envasados, Orbit Mart añade TPV, catálogo y contabilidad GST, incluidas e-invoice y e-way donde las uses.",
+          "featuresTitle": "Funciones para visitas a domicilio y en campo",
+          "features": [
+            { "title": "App de cliente white-label", "body": "Los hogares reservan una visita con el nombre de tu oficio en lugar de solo una promesa por teléfono." },
+            { "title": "Reserva de visitas", "body": "Los clientes piden un hueco online según los calendarios reales del equipo." },
+            { "title": "Vista de asignación", "body": "Mira quién está reservado para no enviar a dos técnicos en la misma franja." },
+            { "title": "Historial del cliente", "body": "Sabe qué se hizo en la última visita antes de salir." },
+            { "title": "Piezas y GST", "body": "Orbit Mart para piezas vendidas en mostrador o facturadas, con informes GST y herramientas de e-invoice." }
+          ],
+          "workflowTitle": "Cómo se hace un trabajo",
+          "workflow": [
+            { "title": "Tomar la reserva", "body": "Las reservas online o introducidas por el equipo comparten el mismo calendario." },
+            { "title": "Realizar la visita", "body": "La persona asignada ve el hueco; el cliente recibe recordatorios." },
+            { "title": "Facturar piezas si hace falta", "body": "Vende piezas en Orbit Mart dentro del mismo espacio de trabajo del negocio." }
+          ],
+          "benefitsTitle": "Ventajas para el operador",
+          "benefits": [
+            "Una app de cliente con la marca de tu oficio",
+            "Menos visitas solapadas",
+            "Venta opcional de productos lista para GST",
+            "Prueba Pro completa de 45 días sin tarjeta de crédito"
+          ],
+          "customerTitle": "Qué viven los hogares",
+          "customer": "Los hogares reservan una visita en tu app white-label y reciben recordatorios en lugar de solo una promesa verbal.",
+          "businessTitle": "Qué vive el operador",
+          "business": "Los despachadores miran un solo calendario. Starter es una ubicación (se puede añadir 1 persona extra). Las oficinas adicionales y 4 o más personas son de Pro.",
+          "faqs": [
+            { "q": "¿IE Orbit incluye seguimiento GPS en vivo de los técnicos?", "a": "El producto documentado es operativa de citas, venta opcional y herramientas de entrega relacionadas en Orbit Mart, no un producto de GPS en vivo de técnicos. No esperes funciones que no estén en el espacio de trabajo." },
+            { "q": "¿Podemos usarlo con varias zonas de servicio?", "a": "Las oficinas/sucursales tienen dirección y ubicación en Google Maps. Las oficinas adicionales son un complemento mensual. Orbit Mart también tiene zonas de entrega para los pedidos de la tienda." },
+            { "q": "¿Cómo empezamos?", "a": "Crea una cuenta, elige Orbit Appoint (y Orbit Mart si vendes piezas) y usa la prueba Pro completa de 45 días." }
+          ]
+        }
+      }
+    }
+  }
+}

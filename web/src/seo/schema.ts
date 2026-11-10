@@ -5,6 +5,7 @@ import {
   ORGANIZATION_NAME,
   PRO_MONTHLY_INR,
   SITE_NAME,
+  SOCIAL_LINKS,
   STARTER_MONTHLY_INR,
   absoluteUrl,
 } from './config';
@@ -21,7 +22,7 @@ export function organizationSchema(siteUrl: string) {
     email: CONTACT_EMAIL,
     telephone: CONTACT_PHONE_DISPLAY,
     brand: { '@type': 'Brand', name: SITE_NAME },
-    sameAs: [siteUrl],
+    sameAs: [siteUrl, ...SOCIAL_LINKS.filter((link) => link.id !== 'whatsapp').map((link) => link.href)],
   };
 }
 

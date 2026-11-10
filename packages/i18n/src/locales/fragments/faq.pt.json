@@ -1,0 +1,387 @@
+{
+  "public": {
+    "faq": {
+      "jumpTo": "Ir para",
+      "topicsAria": "Tópicos do FAQ",
+      "noMatches": "Nenhum resultado para “{{query}}”.",
+      "matchTotal": "Resultados para “{{query}}”: {{total}}.",
+      "emptyTitle": "Nenhum resultado",
+      "emptyBody": "Tente uma busca mais curta ou <contact>fale conosco</contact> e ajudaremos diretamente.",
+      "clearSearch": "Limpar busca",
+      "stillStuck": "Ainda com dúvidas?",
+      "askTeam": "Pergunte à equipe",
+      "askBody": "Se a resposta não estiver aqui, envie uma mensagem e responderemos em até dois dias úteis.",
+      "ctaTitle": "Pronto para configurar o seu negócio?",
+      "ctaBody": "Crie uma conta — sem cartão de crédito. Pague com UPI quando fizer o upgrade.",
+      "sections": {
+        "overview": {
+          "title": "Visão geral da plataforma",
+          "description": "O que é o IE Orbit e para quem ele serve.",
+          "items": [
+            {
+              "q": "O que é o IE Orbit?",
+              "a": {
+                "paragraphs": [
+                  "O IE Orbit é um espaço de trabalho para negócios da Indians Empire Technologies. Uma única conta opera o Orbit Appoint (agendamentos e operações de serviço) e o Orbit Mart (varejo, PDV, contabilidade GST e ferramentas Grow). Você pode assinar um produto ou os dois — eles compartilham o mesmo negócio, equipe, clientes e cobrança.",
+                  "O grande diferencial é o app de clientes white-label: os clientes agendam, compram e acompanham pedidos com o nome do seu negócio, não do IE Orbit. Proprietários e equipe usam o painel web e o app de operações."
+                ]
+              }
+            },
+            {
+              "q": "O que é o app de clientes white-label?",
+              "a": {
+                "paragraphs": [
+                  "É o principal motivo para escolher o IE Orbit em vez de um software que só emite cobranças. Todo plano Starter e Pro inclui um app móvel com a marca do seu negócio. Os clientes veem seu nome, suas cores e suas ofertas ao agendar ou comprar — não o IE Orbit, nem um marketplace público.",
+                  "Proprietários e equipe continuam usando o espaço de operações. O Starter pode exibir anúncios do Google no app de clientes; o Pro não tem anúncios. Os links de instalação vêm do seu negócio, não de uma página genérica de loja pública neste site."
+                ]
+              }
+            },
+            {
+              "q": "Para quem o IE Orbit foi feito?",
+              "a": {
+                "bullets": [
+                  "Salões, spas, clínicas, personal trainers e outras equipes que trabalham com agendamentos (Orbit Appoint)",
+                  "Lojas, balcões e equipes de varejo que precisam de PDV, catálogo e contabilidade GST (Orbit Mart)",
+                  "Negócios que operam serviço e varejo no mesmo local",
+                  "Negócios que querem um app de clientes com a própria marca, e não uma listagem em um marketplace genérico"
+                ]
+              }
+            },
+            {
+              "q": "Posso usar o Orbit Appoint e o Orbit Mart juntos?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Os dois produtos ficam no mesmo espaço de trabalho. Você escolhe um ou ambos no cadastro e pode adicionar o segundo depois. Equipe, clientes, escritórios, cobrança e o app de clientes white-label permanecem unificados — sem logins separados nem perfis de negócio duplicados."
+                ]
+              }
+            }
+          ]
+        },
+        "ai": {
+          "title": "IA no espaço de trabalho",
+          "description": "Assistente, automações, notas de fornecedores e uso de IA pré-pago.",
+          "items": [
+            {
+              "q": "O que é o assistente de IA?",
+              "a": {
+                "paragraphs": [
+                  "O Business Assistant permite que proprietários e equipe perguntem, em linguagem natural, sobre agendamentos, pedidos, estoque e clientes. Uma mensagem é uma pergunta que você envia. Uma confirmação é quando você aprova uma alteração proposta — nada é atualizado até você dizer sim.",
+                  "Primeiro vale uma cota diária gratuita de perguntas e aprovações. Mensagens e confirmações extras usam a carteira pré-paga do Assistant. O Business Assistant está no Pro do Orbit Appoint e do Orbit Mart, e no teste Pro completo de 45 dias. Os limites gratuitos e os valores excedentes estão na página de Preços."
+                ]
+              }
+            },
+            {
+              "q": "O que é o Automation Creator?",
+              "a": {
+                "paragraphs": [
+                  "Descreva com as suas palavras uma oferta de aniversário, uma ocasião ou uma regra VIP. O Orbit cria um rascunho da automação para você visualizar e ativar.",
+                  "O Orbit Mart pode aplicar descontos. O Orbit Appoint pode enviar lembretes e sugerir ofertas à equipe. O Automation Creator está no Pro e durante o teste Pro completo de 45 dias. Os rascunhos usam a carteira de IA pré-paga."
+                ]
+              }
+            },
+            {
+              "q": "O que é a extração de notas com IA?",
+              "a": {
+                "paragraphs": [
+                  "No Orbit Mart Pro — e durante o teste Pro completo de 45 dias — fotografe uma nota de fornecedor. Revise os itens, preços e GST extraídos e lance uma compra que adiciona estoque. Cada digitalização usa a carteira de IA pré-paga."
+                ]
+              }
+            },
+            {
+              "q": "Como funciona a cobrança do uso de IA?",
+              "a": {
+                "paragraphs": [
+                  "Duas carteiras pré-pagas cobrem a IA além da cota diária gratuita do Assistant. Ambas estão disponíveis no Pro e durante o teste Pro completo de 45 dias."
+                ],
+                "bullets": [
+                  "Carteira do Assistant — perguntas extras (mensagens) e aprovações (confirmações) após o limite diário gratuito",
+                  "Carteira de IA — preenchimento por foto da embalagem, digitalização de notas de fornecedores e rascunhos de automação (por uso, com um pequeno mínimo por chamada)",
+                  "Os limites diários gratuitos atuais, os valores excedentes e os mínimos das carteiras aparecem na página de Preços da sua região"
+                ]
+              }
+            }
+          ]
+        },
+        "appoint": {
+          "title": "Orbit Appoint",
+          "description": "Agendamentos, calendário, equipe e clientes.",
+          "items": [
+            {
+              "q": "O que o Orbit Appoint inclui?",
+              "a": {
+                "bullets": [
+                  "App de clientes white-label com a marca do seu negócio",
+                  "Agendamentos online de qualquer dispositivo",
+                  "Calendário da equipe, escalas e disponibilidade",
+                  "Cadastro de clientes, lembretes e avaliações",
+                  "Catálogo de serviços e gestão de agendamentos",
+                  "Lembretes para clientes por WhatsApp no Pro",
+                  "Segundo escritório, pagamentos e app de clientes sem anúncios no Pro",
+                  "Business intelligence no Starter (Overview) e BI completo no Pro",
+                  "Pontos de recompensa para clientes no Pro (acumular e resgatar)",
+                  "Assistente de IA para perguntas em linguagem natural sobre agendamentos e clientes",
+                  "Automation Creator no Pro para lembretes e sugestões de ofertas à equipe"
+                ]
+              }
+            },
+            {
+              "q": "Quais negócios costumam usar o Orbit Appoint?",
+              "a": {
+                "paragraphs": [
+                  "Salões e spas, clínicas e saúde, estúdios de fitness e bem-estar, serviços profissionais, educação e treinamento, serviços domésticos e qualquer equipe que agende pessoas e horários."
+                ]
+              }
+            }
+          ]
+        },
+        "mart": {
+          "title": "Orbit Mart",
+          "description": "Comércio, contabilidade GST, Grow e pacote Pets opcional.",
+          "items": [
+            {
+              "q": "O que o Orbit Mart inclui?",
+              "a": {
+                "paragraphs": [
+                  "O Orbit Mart é um único produto com três áreas operacionais — comércio, contabilidade e Grow — e não três assinaturas separadas. O Starter cobre o balcão, o livro-diário, os pedidos online e as devoluções; o Pro libera o Instant Delivery com Porter/Shiprocket, a nota fiscal eletrônica GST / e-way bill e o Grow."
+                ],
+                "bullets": [
+                  "App de clientes white-label para os compradores navegarem e pedirem com a sua marca",
+                  "Starter: PDV, catálogo, pedidos online, devoluções, notas de venda, parceiros, caixa, despesas e estoque — um local, duas pessoas (é possível adicionar 1 extra)",
+                  "Pro: Instant Delivery com Porter/Shiprocket, compras, relatórios GST, e-invoice, e-way bill, Grow WhatsApp / Google, fidelidade, gateways de pagamento e um segundo escritório",
+                  "Extração de notas com IA no Pro: fotografe uma nota de fornecedor, revise os itens e adicione o estoque",
+                  "Automation Creator no Pro para descontos de aniversário, ocasião e VIP",
+                  "O pacote Pets continua sendo um complemento mensal opcional no Orbit Mart"
+                ]
+              }
+            },
+            {
+              "q": "O que é o pacote Pets?",
+              "a": {
+                "paragraphs": [
+                  "O pacote Pets é um complemento mensal opcional para lojistas do Orbit Mart que precisam de registros de animais. Ele não está incluído no plano básico do Orbit Mart.",
+                  "Funciona junto com catálogo, PDV, pedidos e estoque quando você o ativa nas configurações de cobrança."
+                ]
+              }
+            },
+            {
+              "q": "O Orbit Mart substitui um software de contabilidade separado?",
+              "a": {
+                "paragraphs": [
+                  "Para muitos pequenos e médios lojistas, o Orbit Mart Books cobre o dia a dia: vendas, compras, caixa e banco, despesas, parceiros, estoque e conformidade GST (relatórios, e-invoice, e-way bill) no mesmo espaço do seu balcão e catálogo. Necessidades contábeis complexas ainda podem exigir orientação especializada."
+                ]
+              }
+            }
+          ]
+        },
+        "gettingStarted": {
+          "title": "Primeiros passos",
+          "description": "Criação de conta, cadastro e acesso.",
+          "items": [
+            {
+              "q": "Como crio uma conta?",
+              "a": {
+                "paragraphs": [
+                  "Clique em “Criar conta” no site ou acesse /auth/register/start. Conclua o assistente guiado: dados do negócio, conta do proprietário, preferências (moeda, fuso horário, produtos e pacotes), identidade visual opcional e, por fim, revise e envie.",
+                  "Você verifica o e-mail do proprietário com um código de uso único durante o cadastro ou continua com o Google na etapa do proprietário. Não é preciso cartão de crédito para começar."
+                ]
+              }
+            },
+            {
+              "q": "O que acontece depois que termino o cadastro?",
+              "a": {
+                "bullets": [
+                  "Seu espaço de trabalho é criado automaticamente (tenant, negócio, configurações padrão)",
+                  "Você verifica seu e-mail antes de ter acesso completo",
+                  "Uma lista de primeiros passos no painel ajuda a adicionar serviços, equipe ou itens de catálogo",
+                  "Seu teste Pro completo de 45 dias começa para o(s) produto(s) escolhido(s)"
+                ]
+              }
+            },
+            {
+              "q": "Minha equipe pode entrar separadamente?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Convide a equipe pelo espaço de trabalho após o cadastro. Cada pessoa recebe o próprio login, com funções e permissões. Os proprietários gerenciam cobrança, configurações e assinaturas de produtos."
+                ]
+              }
+            },
+            {
+              "q": "Existe um app móvel para clientes?",
+              "a": {
+                "paragraphs": [
+                  "Sim. O IE Orbit oferece um app de clientes white-label com a marca do seu negócio em todos os planos pagos e durante o teste. Dependendo dos produtos que você usa, os clientes podem agendar, navegar na loja, fazer pedidos e acompanhar o status. Os planos Starter podem exibir anúncios do Google no app de clientes; o Pro não tem anúncios."
+                ]
+              }
+            },
+            {
+              "q": "Quais moedas e regiões são aceitas?",
+              "a": {
+                "paragraphs": [
+                  "Você escolhe uma moeda de operação no cadastro (INR, USD, EUR, GBP e outras). A cobrança da assinatura SaaS do IE Orbit segue a região do seu negócio: espaços da Índia são cobrados em INR via UPI (mais Razorpay/Cashfree onde configurados); espaços internacionais, em USD via Stripe. Os preços públicos deste site costumam aparecer em INR para a Índia."
+                ]
+              }
+            }
+          ]
+        },
+        "plans": {
+          "title": "Planos, teste e limites",
+          "description": "Starter x Pro, regras do teste e complementos.",
+          "items": [
+            {
+              "q": "Como funciona o teste gratuito?",
+              "a": {
+                "paragraphs": [
+                  "Todo novo espaço de trabalho recebe um teste de 45 dias com acesso Pro completo aos produtos escolhidos. Não é preciso cartão de crédito para começar.",
+                  "Quando o teste termina sem upgrade, o espaço de trabalho é bloqueado parcialmente — você ainda pode entrar e ver os dados, mas a operação do dia a dia pausa até você assinar. Seus dados permanecem no lugar."
+                ]
+              }
+            },
+            {
+              "q": "Qual é a diferença entre Starter e Pro?",
+              "a": {
+                "bullets": [
+                  "Starter: operações essenciais para um local (2 pessoas, 1 extra possível); apenas BI Overview. O Orbit Mart Starter inclui balcão, livro-diário, pedidos online e devoluções (a e-invoice GST continua no Pro)",
+                  "Pro: 5 pessoas e 2 escritórios incluídos; BI completo; lembretes por WhatsApp, pagamentos e app sem anúncios. O Orbit Mart Pro acrescenta Instant Delivery com Porter/Shiprocket, contabilidade GST e Grow",
+                  "O Pro não tem anúncios; o Starter pode exibir anúncios do Google no app de clientes",
+                  "Um segundo escritório é do Pro. O Starter pode adicionar 1 pessoa extra; escritórios adicionais são um complemento do Pro"
+                ],
+                "paragraphs": [
+                  "Os limites exatos de equipe e escritórios dependem do plano exibido na página de Preços de cada produto."
+                ]
+              }
+            },
+            {
+              "q": "Posso adicionar equipe extra, escritórios ou o pacote Pets?",
+              "a": {
+                "paragraphs": [
+                  "O Starter pode adicionar 1 pessoa extra. Escritórios adicionais estão disponíveis no Pro. O pacote Pets é um complemento separado do Orbit Mart para registros de animais.",
+                  "Os preços mensais atuais dos complementos aparecem na página de Preços da sua região (Índia em INR ou internacional em USD)."
+                ]
+              }
+            },
+            {
+              "q": "Posso trocar de plano depois?",
+              "a": {
+                "paragraphs": [
+                  "Sim. Faça upgrade ou altere pacotes nas configurações de cobrança do espaço de trabalho. Mudanças de plano pendentes podem ser agendadas; você pode cancelar uma antes que ela entre em vigor. A cobrança anual está disponível em um múltiplo com desconto do valor mensal (exibido em Products & Billing e em Preços)."
+                ]
+              }
+            }
+          ]
+        },
+        "billing": {
+          "title": "Cobrança e pagamentos",
+          "description": "UPI, comprovantes de pagamento e pelo que você paga.",
+          "items": [
+            {
+              "q": "Como funciona a cobrança da assinatura?",
+              "a": {
+                "paragraphs": [
+                  "Índia: as assinaturas são cobradas em INR. Pague mensal ou anualmente via UPI em Products & Billing (Razorpay/Cashfree também podem estar disponíveis). Após uma transferência UPI, envie um comprovante de pagamento com seu UTR ou uma captura de tela para que nossa equipe confirme a ativação.",
+                  "Internacional: as assinaturas são cobradas em USD via Stripe Checkout em Products & Billing. Os impostos podem ser calculados com o Stripe Tax, quando aplicável."
+                ]
+              }
+            },
+            {
+              "q": "Preciso de cartão de crédito?",
+              "a": {
+                "paragraphs": [
+                  "Não é preciso cartão de crédito para começar o teste. Na Índia, você pode fazer upgrade com UPI (e gateways opcionais). Fora da Índia, a assinatura paga usa o Stripe (cartão e outros métodos aceitos pelo Stripe)."
+                ]
+              }
+            },
+            {
+              "q": "Como funcionam os pagamentos dos clientes (Razorpay)?",
+              "a": {
+                "paragraphs": [
+                  "Em planos Orbit Mart Pro elegíveis na Índia, você pode conectar o Razorpay e/ou o Cashfree para que os clientes paguem a você pelos pedidos da loja. Internacionalmente, o Stripe Connect pode estar disponível quando oferecido. Sua fatura SaaS do IE Orbit (INR/UPI ou USD/Stripe) é sempre separada do pagamento dos seus clientes."
+                ]
+              }
+            },
+            {
+              "q": "E se meu teste terminar e eu não fizer upgrade?",
+              "a": {
+                "paragraphs": [
+                  "O espaço de trabalho é bloqueado parcialmente. Os dados são mantidos. Faça upgrade quando quiser para retomar a operação. Se precisar de ajuda para escolher um plano, fale conosco antes do fim do teste."
+                ]
+              }
+            }
+          ]
+        },
+        "bi": {
+          "title": "Business intelligence e plataforma",
+          "description": "Relatórios, escritórios e recursos compartilhados do espaço de trabalho.",
+          "items": [
+            {
+              "q": "Qual business intelligence está incluído?",
+              "a": {
+                "bullets": [
+                  "Starter: BI Overview — um panorama geral da sua operação",
+                  "Pro: suíte completa — Growth, Revenue, Forecast e Reports",
+                  "O BI se aplica a cada produto assinado onde houver análises disponíveis"
+                ]
+              }
+            },
+            {
+              "q": "Como funcionam os escritórios (filiais)?",
+              "a": {
+                "paragraphs": [
+                  "Cada plano inclui um ou mais escritórios com endereço e localização no mapa. Escritórios extras podem ser adicionados como complemento mensal. O Orbit Appoint usa os escritórios para agendamento e disponibilidade; o Orbit Mart, para o contexto de balcão, estoque e contabilidade."
+                ]
+              }
+            },
+            {
+              "q": "Meus dados estão seguros?",
+              "a": {
+                "paragraphs": [
+                  "Os espaços de trabalho são isolados por negócio. O acesso é controlado por autenticação, funções e permissões.",
+                  "Leia nossa Política de Privacidade para saber como tratamos os dados da conta e do negócio. O login usa códigos de uso único por e-mail (e desbloqueio biométrico opcional no celular após entrar). Verifique o e-mail do proprietário após o cadastro."
+                ]
+              }
+            }
+          ]
+        },
+        "support": {
+          "title": "Conta, suporte e jurídico",
+          "description": "Ajuda com login, contato e políticas.",
+          "items": [
+            {
+              "q": "Como entro se perdi o acesso ao meu e-mail?",
+              "a": {
+                "paragraphs": [
+                  "O login usa um código de uso único enviado ao e-mail da sua conta (login com OTP na web ou no celular). Se você não consegue receber e-mails, fale com o suporte informando o endereço da sua conta para ajudarmos a recuperar o acesso."
+                ]
+              }
+            },
+            {
+              "q": "Como verifico meu e-mail?",
+              "a": {
+                "paragraphs": [
+                  "Depois de criar a conta, conclua a verificação de e-mail pelo link na sua caixa de entrada ou pela tela de verificação de e-mail no app. Alguns recursos podem ficar limitados até a verificação ser concluída."
+                ]
+              }
+            },
+            {
+              "q": "Como falo com o suporte ou peço uma demonstração?",
+              "a": {
+                "paragraphs": [
+                  "E-mail: support@indiansempire.com",
+                  "Telefone: +91 9766855617",
+                  "Use a página de Contato para demonstrações, vendas e parcerias. Nosso objetivo é responder em até dois dias úteis."
+                ]
+              }
+            },
+            {
+              "q": "Onde ficam os Termos e a Privacidade?",
+              "a": {
+                "paragraphs": [
+                  "Os termos de serviço, a Política de Privacidade e a Política de Cookies estão linkados no rodapé do site e durante a criação da conta. Você precisa aceitar os Termos e a Privacidade para concluir o cadastro do proprietário."
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

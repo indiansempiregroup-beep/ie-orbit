@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from './Button';
 import { useEmailVerification } from '../hooks/useEmailVerification';
 
@@ -7,6 +8,7 @@ type EmailVerificationBannerProps = {
 };
 
 export function EmailVerificationBanner({ compact = false }: EmailVerificationBannerProps) {
+  const { t } = useTranslation();
   const { isPending, resendState, message, resendVerification } = useEmailVerification();
 
   if (!isPending) return null;
@@ -27,9 +29,9 @@ export function EmailVerificationBanner({ compact = false }: EmailVerificationBa
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ display: 'grid', gap: 4, maxWidth: 720 }}>
-          <strong style={{ color: '#78350f' }}>Verify your email address</strong>
+          <strong style={{ color: '#78350f' }}>{t('auth.verifyBanner.title')}</strong>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: '#92400e' }}>
-            We sent a verification link when your workspace was created. Confirm your email to secure your account.
+            {t('auth.verifyBanner.body')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -39,11 +41,15 @@ export function EmailVerificationBanner({ compact = false }: EmailVerificationBa
             onClick={() => void resendVerification()}
             disabled={resendState === 'loading' || resendState === 'sent'}
           >
-            {resendState === 'loading' ? 'Sending…' : resendState === 'sent' ? 'Email sent' : 'Resend email'}
+            {resendState === 'loading'
+              ? t('auth.verifyBanner.sending')
+              : resendState === 'sent'
+                ? t('auth.verifyBanner.sent')
+                : t('auth.verifyBanner.resend')}
           </Button>
           <Link to="/auth/verify-email">
             <Button variant="ghost" type="button">
-              Verification help
+              {t('auth.verifyBanner.help')}
             </Button>
           </Link>
         </div>

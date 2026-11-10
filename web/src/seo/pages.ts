@@ -22,14 +22,14 @@ export const MARKETING_PAGES: SeoPage[] = [
   },
   {
     path: '/features',
-    title: 'Features — White-label app, Orbit Appoint, and Orbit Mart',
+    title: 'Products — Orbit Appoint, Orbit Mart, and both together',
     description:
       'Every plan includes a white-label customer app branded to your business. Orbit Appoint covers bookings and staff. Orbit Mart covers POS, catalog, online orders, GST books on Pro, and Grow. Includes an AI assistant, automation creator, and invoice extraction.',
     index: true,
     schemas: ['organization', 'breadcrumb'],
     breadcrumb: [
       { name: 'Home', path: '/' },
-      { name: 'Features', path: '/features' },
+      { name: 'Products', path: '/features' },
     ],
   },
   {

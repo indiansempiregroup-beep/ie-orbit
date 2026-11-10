@@ -1,242 +1,1968 @@
 {
   "common": {
-    "save": "Save",
-    "saveChanges": "Save changes",
-    "cancel": "Cancel",
-    "loading": "Loading…",
-    "error": "Something went wrong",
-    "retry": "Retry",
-    "back": "Back",
-    "search": "Search",
-    "done": "Done",
-    "yes": "Yes",
-    "no": "No",
-    "language": "Language",
-    "timezone": "Timezone",
-    "phone": "Phone",
-    "email": "Email",
-    "firstName": "First name",
-    "lastName": "Last name",
-    "profilePhoto": "Profile photo",
-    "saving": "Saving…",
-    "account": "Account",
-    "today": "Today",
-    "all": "All",
-    "new": "New",
-    "workspace": "Workspace",
-    "overview": "Overview",
-    "user": "User"
+    "save": "حفظ",
+    "saveChanges": "حفظ التغييرات",
+    "cancel": "إلغاء",
+    "loading": "جارٍ التحميل…",
+    "error": "حدث خطأ ما",
+    "retry": "إعادة المحاولة",
+    "back": "رجوع",
+    "search": "بحث",
+    "done": "تم",
+    "yes": "نعم",
+    "no": "لا",
+    "language": "اللغة",
+    "timezone": "المنطقة الزمنية",
+    "phone": "الهاتف",
+    "email": "البريد الإلكتروني",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "profilePhoto": "صورة الملف الشخصي",
+    "saving": "جارٍ الحفظ…",
+    "account": "الحساب",
+    "today": "اليوم",
+    "all": "الكل",
+    "new": "جديد",
+    "workspace": "مساحة العمل",
+    "overview": "نظرة عامة",
+    "user": "المستخدم",
+    "refresh": "تحديث",
+    "refreshAria": "تحديث {{title}}",
+    "unableToLoad": "تعذّر التحميل",
+    "noDataYet": "لا توجد بيانات متاحة بعد.",
+    "errorTitle": "خطأ",
+    "clear": "مسح",
+    "from": "من",
+    "to": "إلى",
+    "searchEllipsis": "بحث…",
+    "and": "و",
+    "status": "الحالة",
+    "currency": "العملة",
+    "business": "النشاط التجاري",
+    "products": "المنتجات",
+    "active": "نشط",
+    "softLock": {
+      "reviewTitle": "الدفع قيد المراجعة",
+      "reviewBody": "تم إرسال {{names}}. تُستعاد إمكانية الوصول بعد تأكيد IE (عادةً في اليوم نفسه).",
+      "yourPayment": "دفعتك",
+      "renewTitle": "تجديد {{names}}",
+      "renewBody": "لا يزال بإمكانك عرض البيانات. تبقى الحجوزات والموظفون والمكاتب الجديدة مقفلة حتى تسدد هذه الفترة.",
+      "renewNow": "جدّد الآن",
+      "thisProduct": "هذا المنتج"
+    }
   },
   "auth": {
-    "signIn": "Sign in",
-    "signOut": "Sign out",
-    "password": "Password",
-    "forgotPassword": "Forgot password?",
-    "createAccount": "Create account",
-    "welcomeBack": "Welcome back",
-    "emailPlaceholder": "Email address",
-    "passwordPlaceholder": "Password",
-    "signingIn": "Signing in…",
-    "rememberMe": "Remember me on this device",
-    "signOutConfirm": "Are you sure you want to sign out?",
-    "emailNotVerified": "Email not verified"
+    "signIn": "تسجيل الدخول",
+    "signOut": "تسجيل الخروج",
+    "password": "كلمة المرور",
+    "forgotPassword": "هل نسيت كلمة المرور؟",
+    "createAccount": "إنشاء حساب",
+    "welcomeBack": "مرحبًا بعودتك",
+    "emailPlaceholder": "عنوان البريد الإلكتروني",
+    "passwordPlaceholder": "كلمة المرور",
+    "signingIn": "جارٍ تسجيل الدخول…",
+    "rememberMe": "تذكرني على هذا الجهاز",
+    "signOutConfirm": "هل أنت متأكد أنك تريد تسجيل الخروج؟",
+    "emailNotVerified": "البريد الإلكتروني غير مؤكد",
+    "verifyBanner": {
+      "title": "أكّد عنوان بريدك الإلكتروني",
+      "body": "أرسلنا رابط التحقق عند إنشاء مساحة العمل الخاصة بك. أكّد بريدك الإلكتروني لحماية حسابك.",
+      "sending": "جارٍ الإرسال…",
+      "sent": "تم إرسال البريد",
+      "resend": "إعادة إرسال البريد",
+      "help": "مساعدة التحقق",
+      "needEmail": "أدخل بريدك الإلكتروني أو سجّل الدخول لإعادة إرسال بريد التحقق.",
+      "sentDebug": "تم إرسال بريد التحقق. الرمز المحلي: {{code}}",
+      "sentMessage": "تم إرسال بريد التحقق. تحقق من بريدك الوارد للحصول على الرمز المكوّن من 6 أرقام.",
+      "resendFailed": "تعذّر إعادة إرسال بريد التحقق."
+    }
   },
   "profile": {
-    "title": "Profile",
-    "editTitle": "Edit profile",
-    "editSubtitle": "Your name, photo, and regional defaults.",
-    "personalInfo": "Personal Information",
-    "contactRegion": "Contact & region",
-    "identity": "Identity",
-    "languageHint": "App language for menus and labels.",
-    "updated": "Profile saved.",
-    "updateFailed": "Couldn't save your profile. Try again.",
-    "photoHelper": "Tap to take a photo or choose from your gallery.",
-    "sharedAccountNote": "Name, photo, and phone here are only for this shop. Your email is shared for OTP sign-in across shop apps that use the same account.",
-    "saveProfile": "Save profile",
-    "eyebrow": "Personal profile",
-    "editLead": "Update your photo, personal details, and notification preferences.",
-    "editProfile": "Edit profile",
-    "changePassword": "Account security",
-    "sessions": "Sessions",
-    "verifyEmail": "Verify email",
-    "security": "Security",
-    "session": "Session",
-    "notificationPreferences": "Notification Preferences",
-    "paymentMethods": "Payment Methods",
-    "privacySecurity": "Privacy & Security",
-    "myReviews": "My Reviews",
-    "completed": "Completed",
-    "loyaltyPts": "Reward points",
-    "rewardPoints": "Reward points",
-    "rewardPointsHint": "Use them when you book a service or check out in the shop."
+    "title": "الملف الشخصي",
+    "editTitle": "تعديل الملف الشخصي",
+    "editSubtitle": "اسمك وصورتك وإعداداتك الإقليمية الافتراضية.",
+    "personalInfo": "المعلومات الشخصية",
+    "contactRegion": "جهة الاتصال والمنطقة",
+    "identity": "الهوية",
+    "languageHint": "لغة التطبيق للقوائم والتسميات.",
+    "updated": "تم حفظ الملف الشخصي.",
+    "updateFailed": "تعذّر حفظ ملفك الشخصي. حاول مرة أخرى.",
+    "photoHelper": "اضغط لالتقاط صورة أو اختيارها من المعرض.",
+    "sharedAccountNote": "الاسم والصورة والهاتف هنا خاصة بهذا المتجر فقط. تتم مشاركة بريدك الإلكتروني لتسجيل الدخول برمز OTP عبر تطبيقات المتاجر التي تستخدم الحساب نفسه.",
+    "saveProfile": "حفظ الملف الشخصي",
+    "eyebrow": "الملف الشخصي",
+    "editLead": "حدّث صورتك وبياناتك الشخصية وتفضيلات الإشعارات.",
+    "editProfile": "تعديل الملف الشخصي",
+    "changePassword": "أمان الحساب",
+    "sessions": "الجلسات",
+    "verifyEmail": "تأكيد البريد الإلكتروني",
+    "security": "الأمان",
+    "session": "الجلسة",
+    "notificationPreferences": "تفضيلات الإشعارات",
+    "paymentMethods": "طرق الدفع",
+    "privacySecurity": "الخصوصية والأمان",
+    "myReviews": "تقييماتي",
+    "completed": "مكتمل",
+    "loyaltyPts": "نقاط المكافآت",
+    "rewardPoints": "نقاط المكافآت",
+    "rewardPointsHint": "استخدمها عند حجز خدمة أو عند الدفع في المتجر."
   },
   "referral": {
-    "menu": "Invite friends",
-    "title": "Invite & earn",
-    "heroTitle": "Earn {{points}} points per friend",
-    "earnOnSignup": "You get points when your friend creates an account with your code.",
-    "earnOnBooking": "You get points when your friend completes their first booking.",
-    "earnOnOrder": "You get points when your friend completes their first paid order.",
-    "invited": "Invited",
-    "pending": "Pending",
-    "earned": "Points earned",
-    "yourCode": "Your invite code",
-    "codeHint": "Share this code. Friends enter it when they join.",
-    "copy": "Copy code",
-    "copied": "Copied!",
-    "share": "Share invite",
-    "downloadApp": "Download the app",
-    "shareMessage": "Join me on {{appName}} and use my invite code {{code}}. I earn {{points}} reward points when you get started.",
-    "haveCode": "Have an invite code?",
-    "friendCode": "Friend's code",
-    "friendCodeRequired": "Friend's code is required",
-    "friendCodeHint": "Optional. You can also add this later from Profile.",
-    "apply": "Apply code",
-    "appliedTitle": "Code applied",
-    "appliedBody": "You're linked to your friend's invite. Points are awarded when the business's success step is complete.",
-    "youJoinedWith": "You joined with",
-    "history": "Your invites",
-    "emptyHistory": "No friends have used your code yet. Share it to start earning.",
-    "aFriend": "A friend",
-    "unavailable": "Invites are not available for this business right now.",
-    "loadError": "Couldn't load your invite details. Pull to retry.",
-    "applyError": "That invite code couldn't be applied.",
-    "homeTitle": "Invite a friend",
-    "homeSubtitle": "Share your code and earn reward points.",
+    "menu": "دعوة الأصدقاء",
+    "title": "ادعُ واكسب",
+    "heroTitle": "اكسب {{points}} نقطة عن كل صديق",
+    "earnOnSignup": "تحصل على نقاط عندما ينشئ صديقك حسابًا باستخدام رمزك.",
+    "earnOnBooking": "تحصل على نقاط عندما يُكمل صديقك أول حجز له.",
+    "earnOnOrder": "تحصل على نقاط عندما يُكمل صديقك أول طلب مدفوع.",
+    "invited": "تمت دعوتهم",
+    "pending": "قيد الانتظار",
+    "earned": "النقاط المكتسبة",
+    "yourCode": "رمز الدعوة الخاص بك",
+    "codeHint": "شارك هذا الرمز. يُدخله الأصدقاء عند الانضمام.",
+    "copy": "نسخ الرمز",
+    "copied": "تم النسخ!",
+    "share": "مشاركة الدعوة",
+    "downloadApp": "تنزيل التطبيق",
+    "shareMessage": "انضم إليّ في {{appName}} واستخدم رمز الدعوة الخاص بي {{code}}. أحصل على {{points}} نقطة مكافآت عندما تبدأ.",
+    "haveCode": "هل لديك رمز دعوة؟",
+    "friendCode": "رمز الصديق",
+    "friendCodeRequired": "رمز الصديق مطلوب",
+    "friendCodeHint": "اختياري. يمكنك أيضًا إضافته لاحقًا من الملف الشخصي.",
+    "apply": "تطبيق الرمز",
+    "appliedTitle": "تم تطبيق الرمز",
+    "appliedBody": "أنت مرتبط بدعوة صديقك. تُمنح النقاط عند اكتمال خطوة النجاح لدى النشاط التجاري.",
+    "youJoinedWith": "انضممت باستخدام",
+    "history": "دعواتك",
+    "emptyHistory": "لم يستخدم أي صديق رمزك بعد. شاركه لتبدأ الكسب.",
+    "aFriend": "صديق",
+    "unavailable": "الدعوات غير متاحة لهذا النشاط التجاري حاليًا.",
+    "loadError": "تعذّر تحميل تفاصيل دعوتك. اسحب لإعادة المحاولة.",
+    "applyError": "تعذّر تطبيق رمز الدعوة هذا.",
+    "homeTitle": "ادعُ صديقًا",
+    "homeSubtitle": "شارك رمزك واكسب نقاط مكافآت.",
     "status": {
-      "pending": "Waiting",
-      "qualified": "Qualified",
-      "rewarded": "Points awarded",
-      "void": "Void"
+      "pending": "بالانتظار",
+      "qualified": "مؤهَّل",
+      "rewarded": "تم منح النقاط",
+      "void": "ملغى"
     }
   },
   "shop": {
-    "myOrders": "My Orders",
-    "returns": "Returns",
-    "myPets": "My Pets",
-    "addresses": "Addresses"
+    "myOrders": "طلباتي",
+    "returns": "المرتجعات",
+    "myPets": "حيواناتي الأليفة",
+    "addresses": "العناوين",
+    "orders": {
+      "searchPlaceholder": "ابحث برقم الطلب أو المنتج أو الحالة…",
+      "fulfillment": "التنفيذ",
+      "allStatuses": "كل الحالات",
+      "allModes": "كل الأنماط",
+      "statuses": {
+        "pending": "قيد الانتظار",
+        "confirmed": "مؤكد",
+        "ready": "جاهز",
+        "out_for_delivery": "في الطريق للتوصيل",
+        "delivery_failed": "فشل التوصيل",
+        "completed": "مكتمل",
+        "returned": "مرتجع",
+        "cancelled": "ملغى"
+      },
+      "modes": {
+        "pos": "POS",
+        "pickup": "استلام",
+        "delivery": "توصيل"
+      },
+      "openPos": "فتح POS",
+      "deliverNow": "توصيل الآن",
+      "standardDelivery": "توصيل عادي",
+      "counterSale": "بيع من المنضدة",
+      "recordPayment": "تسجيل الدفعة على العميل",
+      "confirm": "تأكيد",
+      "markReady": "جاهز",
+      "complete": "إكمال",
+      "markOutForDelivery": "وضع علامة في الطريق للتوصيل",
+      "markDelivered": "وضع علامة تم التسليم",
+      "open": "فتح",
+      "empty": "لا توجد طلبات متجر تطابق هذه المرشحات.",
+      "etaMinutes": "الوصول خلال {{minutes}} دقيقة",
+      "partnerStatuses": {
+        "packing": "جارٍ تجهيز التوصيل",
+        "finding_rider": "جارٍ البحث عن سائق",
+        "rider_assigned": "تم تعيين السائق",
+        "at_pickup": "السائق في المتجر",
+        "picked_up": "في الطريق",
+        "out_for_delivery": "في الطريق للتوصيل",
+        "nearby": "قريب",
+        "delivered": "تم التسليم",
+        "failed": "فشل التوصيل",
+        "cancelled": "تم إلغاء التوصيل"
+      }
+    },
+    "pos": {
+      "addToBill": "إضافة إلى الفاتورة",
+      "addToChallan": "إضافة إلى إشعار التسليم",
+      "addToSaleOrder": "إضافة إلى أمر البيع",
+      "addToPurchaseOrder": "إضافة إلى أمر الشراء",
+      "scanPlaceholder": "امسح الباركود / RFID (قارئ HID أو الكاميرا أو اكتبه)",
+      "add": "إضافة",
+      "camera": "الكاميرا",
+      "hideCamera": "إخفاء الكاميرا",
+      "bulkPlaceholder": "باركودات / EPC بالجملة (واحد في كل سطر)",
+      "resolveBulk": "تحليل الدفعة",
+      "catalog": "الكتالوج",
+      "searchProducts": "ابحث عن المنتجات…",
+      "noMatching": "لا توجد منتجات مطابقة.",
+      "productMeta": "{{price}} · المخزون {{stock}}",
+      "titleBill": "الفاتورة",
+      "titleChallan": "إشعار التسليم",
+      "titleSaleOrder": "أمر البيع",
+      "titlePurchaseOrder": "أمر الشراء",
+      "editTitle": "تعديل: {{title}}",
+      "supplier": "المورّد",
+      "selectSupplier": "اختر المورّد",
+      "customer": "العميل",
+      "walkIn": "عميل زائر",
+      "customerGstin": "رقم GSTIN للعميل",
+      "gstinPlaceholder": "29AABCU9603R1ZJ (اختياري لـ B2C)",
+      "gstinBlank": "اتركه فارغًا لـ B2C. أدخل رقم GSTIN صالحًا لفواتير GST بين الشركات (B2B).",
+      "gstinValid": "رقم GSTIN صالح — ستُسجَّل الفاتورة كفاتورة B2B لأغراض GSTR-1 / الفاتورة الإلكترونية.",
+      "notes": "ملاحظات",
+      "notesPlaceholder": "ملاحظة اختيارية على هذا السجل",
+      "remove": "إزالة",
+      "noDiscount": "بدون خصم",
+      "percentOff": "خصم %",
+      "amountOff": "خصم بمبلغ",
+      "none": "لا شيء",
+      "lineDiscount": "خصم -{{amount}}",
+      "emptyBill": "امسح المنتجات أو اخترها لبدء الفاتورة.",
+      "emptyChallan": "امسح المنتجات أو اخترها لبدء إشعار التسليم.",
+      "customerRewards": "مكافآت العميل",
+      "rewardPoints": "نقاط المكافآت",
+      "pts": "نقطة",
+      "redeemInfo": "{{rate}} نقطة = {{value}} · يمكن استبدال حتى {{max}} نقطة",
+      "max": "الحد الأقصى",
+      "saves": "توفير {{amount}} على هذه الفاتورة",
+      "tapToRedeem": "اضغط + لاستبدال النقاط على هذه الفاتورة",
+      "specialForCustomer": "عروض خاصة لهذا العميل",
+      "automationOffers": "عروض تلقائية",
+      "badgeAmountOff": "خصم {{value}}",
+      "badgePercentOff": "خصم {{value}}%",
+      "applied": "تم تطبيقه على الفاتورة",
+      "tapToApply": "اضغط للتطبيق",
+      "billDiscount": "خصم الفاتورة",
+      "payment": "الدفع",
+      "challan": "إشعار التسليم",
+      "methodCash": "نقدًا",
+      "methodUpi": "UPI",
+      "methodCard": "بطاقة",
+      "methodBorrow": "آجل",
+      "methodRazorpay": "الدفع عبر Razorpay",
+      "methodCashfree": "الدفع عبر Cashfree",
+      "amountPaidNow": "المبلغ المدفوع الآن (اختياري)",
+      "amountReceived": "المبلغ المستلم",
+      "balanceDueCredit": "سيُضاف الرصيد المستحق {{amount}} إلى رصيد العميل الآجل.",
+      "fullyPaid": "ستُوسَم الفاتورة كمدفوعة بالكامل.",
+      "borrowNote": "آجل / ائتمان: يبقى الرصيد غير المدفوع في حساب العميل. يلزم تحديد عميل (وليس عميلًا زائرًا) عند وجود مبلغ مستحق.",
+      "razorpayNote": "يُفتح الدفع الآمن عبر Razorpay بعد إنشاء الفاتورة. تبقى الفاتورة غير مدفوعة حتى يؤكدها Razorpay.",
+      "cashfreeNote": "يُفتح الدفع عبر Cashfree بعد إنشاء الفاتورة. تبقى الفاتورة غير مدفوعة حتى يؤكدها Cashfree.",
+      "noPaymentPurchaseOrder": "لا دفع الآن. حوّل هذا الأمر إلى فاتورة شراء عند وصول البضاعة.",
+      "noPaymentSaleOrder": "لا دفع الآن. حوّل هذا الأمر إلى فاتورة بيع عند محاسبة العميل.",
+      "noPaymentChallan": "لا دفع الآن. أرسل إشعار التسليم عند خروج البضاعة — يُخصم المخزون حينها. أنشئ الفاتورة بعد ذلك حتى لا يُخصم المخزون مرتين.",
+      "challanSummary": "ملخص إشعار التسليم",
+      "billSummary": "ملخص الفاتورة",
+      "items": "الأصناف",
+      "productDiscounts": "خصومات المنتجات",
+      "subtotal": "المجموع الفرعي",
+      "taxable": "الخاضع للضريبة",
+      "cgst": "CGST",
+      "sgst": "SGST",
+      "tax": "الضريبة",
+      "total": "الإجمالي",
+      "received": "المستلم",
+      "balanceDue": "الرصيد المستحق",
+      "saving": "جارٍ الحفظ…",
+      "creatingBill": "جارٍ إنشاء الفاتورة…",
+      "saveChallan": "حفظ إشعار التسليم · {{amount}}",
+      "updateChallan": "تحديث إشعار التسليم · {{amount}}",
+      "saveSaleOrder": "حفظ أمر البيع · {{amount}}",
+      "updateSaleOrder": "تحديث أمر البيع · {{amount}}",
+      "savePurchaseOrder": "حفظ أمر الشراء · {{amount}}",
+      "updatePurchaseOrder": "تحديث أمر الشراء · {{amount}}",
+      "payRazorpay": "الدفع عبر Razorpay · {{amount}}",
+      "payCashfree": "الدفع عبر Cashfree · {{amount}}",
+      "createBillPartial": "إنشاء فاتورة · المدفوع {{paid}} · المستحق {{due}}",
+      "createBill": "إنشاء فاتورة · {{amount}}",
+      "barcodeNotFound": "لم يتم العثور على الباركود.",
+      "bulkLookupFailed": "فشل البحث بالجملة.",
+      "bulkResolved": "تم تحليل {{found}}/{{total}} من الرموز · أُضيف {{added}}.",
+      "selectCustomerPartial": "اختر عميلًا عندما لا تكون الفاتورة مدفوعة بالكامل (دفع جزئي أو آجل).",
+      "selectSupplierPo": "اختر موردًا لأمر الشراء هذا.",
+      "labelChallan": "إشعار التسليم",
+      "labelSaleOrder": "أمر البيع",
+      "labelPurchaseOrder": "أمر الشراء",
+      "docCreated": "تم إنشاء {{label}} {{number}}.",
+      "docUpdated": "تم تحديث {{label}} {{number}}.",
+      "docCreatedTotal": "تم إنشاء {{label}} {{number}} · {{total}}",
+      "docUpdatedTotal": "تم تحديث {{label}} {{number}} · {{total}}",
+      "billCreated": "تم إنشاء الفاتورة {{number}}.",
+      "billCreatedTotal": "تم إنشاء الفاتورة {{number}} · {{total}}",
+      "billCreatedOnline": "تم إنشاء الفاتورة {{number}} · مدفوعة عبر الإنترنت · {{total}}",
+      "billCreatedDue": "تم إنشاء الفاتورة {{number}} · المدفوع {{paid}} · المستحق {{due}} · {{total}}",
+      "challanReady": "إشعار التسليم جاهز",
+      "billCreatedTitle": "تم إنشاء الفاتورة",
+      "couldntOpenRecord": "تعذّر فتح هذا السجل في نقطة البيع.",
+      "couldntCreateBill": "تعذّر إنشاء هذه الفاتورة. حاول مرة أخرى.",
+      "razorpayLoadFailed": "تعذّر تحميل الدفع الآمن عبر Razorpay.",
+      "cashfreeLoadFailed": "تعذّر تحميل الدفع عبر Cashfree.",
+      "paymentWindowClosed": "أُغلقت نافذة الدفع. الفاتورة غير المدفوعة محفوظة.",
+      "onlinePaymentStatus": "حالة الدفع عبر الإنترنت",
+      "paymentReceived": "تم استلام الدفعة",
+      "paymentFailed": "فشلت عملية الدفع",
+      "waitingForPayment": "في انتظار الدفع",
+      "billNumber": "الفاتورة {{number}}",
+      "completeRazorpay": "أكمل نافذة Razorpay الآمنة. يتحدّث هذا الوضع تلقائيًا أيضًا عبر الـ webhook.",
+      "done": "تم",
+      "closeKeepUnpaid": "إغلاق — إبقاء الفاتورة غير مدفوعة"
+    }
   },
   "nav": {
-    "home": "Home",
-    "dashboard": "Dashboard",
-    "bookings": "Bookings",
-    "calendar": "Calendar",
-    "alerts": "Alerts",
-    "more": "More",
-    "profile": "Profile",
-    "discover": "Discover",
-    "book": "Book",
-    "settings": "Settings",
-    "admin": "Platform admin",
-    "customers": "Customers",
-    "services": "Services",
-    "staff": "Staff",
-    "reports": "Reports",
+    "home": "الرئيسية",
+    "dashboard": "لوحة التحكم",
+    "bookings": "الحجوزات",
+    "calendar": "التقويم",
+    "alerts": "التنبيهات",
+    "more": "المزيد",
+    "profile": "الملف الشخصي",
+    "discover": "اكتشف",
+    "book": "احجز",
+    "settings": "الإعدادات",
+    "admin": "إدارة المنصة",
+    "customers": "العملاء",
+    "services": "الخدمات",
+    "staff": "الموظفون",
+    "reports": "التقارير",
     "bi": "BI",
-    "notifications": "Notifications",
-    "pos": "Sale",
-    "shopProducts": "Products",
-    "shopProductProfit": "Product profit",
-    "shopLoyalty": "Reward points",
-    "shopMasterFiles": "Master Files",
-    "shopOrders": "Online orders",
-    "shopBilling": "Billing",
-    "shopReturns": "Returns",
-    "shopDeliveryZones": "Delivery zones",
-    "shopInstantDelivery": "Instant delivery",
-    "shopCoupons": "Coupons",
-    "automations": "Automations",
-    "shopPets": "Pets",
-    "shopBooks": "Books",
-    "shopSale": "Sale invoice",
-    "shopPurchase": "Purchase",
-    "shopExpense": "Expense",
-    "shopCashBank": "Cash & bank",
-    "shopParties": "Parties",
-    "shopBooksReports": "Books reports",
-    "shopEstimates": "Estimates / Proforma",
-    "shopSaleOrders": "Sale orders",
-    "shopPurchaseOrders": "Purchase orders",
-    "shopDeliveryChallans": "Delivery challans",
-    "shopCompliance": "GST compliance",
-    "shopGodowns": "Godowns",
-    "shopGodowns": "Godowns",
-    "shop": "Shop",
-    "cart": "Cart",
-    "scanBarcode": "Scan barcode",
-    "primary": "Primary navigation",
-    "newBooking": "New Booking",
-    "addCustomer": "Add Customer",
-    "addService": "Add Service",
-    "addStaff": "Add Staff",
-    "viewCalendar": "View Calendar",
-    "businessProfile": "Business Profile",
-    "businessIntelligence": "Business intelligence",
-    "newBookingShort": "New booking",
-    "weeklySchedule": "Weekly schedule",
-    "staffAvailability": "Staff availability",
-    "editBusiness": "Edit business",
-    "last30Days": "Last 30 days"
+    "notifications": "الإشعارات",
+    "pos": "البيع",
+    "shopProducts": "المنتجات",
+    "shopProductProfit": "ربح المنتج",
+    "shopLoyalty": "نقاط المكافآت",
+    "shopMasterFiles": "الملفات الرئيسية",
+    "shopOrders": "الطلبات عبر الإنترنت",
+    "shopBilling": "الفوترة",
+    "shopReturns": "المرتجعات",
+    "shopDeliveryZones": "مناطق التوصيل",
+    "shopInstantDelivery": "التوصيل الفوري",
+    "shopCoupons": "القسائم",
+    "automations": "الأتمتة",
+    "shopPets": "الحيوانات الأليفة",
+    "shopBooks": "الدفاتر المحاسبية",
+    "shopSale": "فاتورة بيع",
+    "shopPurchase": "الشراء",
+    "shopExpense": "المصروفات",
+    "shopCashBank": "النقد والبنك",
+    "shopParties": "الأطراف",
+    "shopBooksReports": "تقارير الدفاتر",
+    "shopEstimates": "عروض الأسعار / فاتورة مبدئية",
+    "shopSaleOrders": "أوامر البيع",
+    "shopPurchaseOrders": "أوامر الشراء",
+    "shopDeliveryChallans": "إيصالات التسليم",
+    "shopCompliance": "الامتثال لـ GST",
+    "shopGodowns": "المستودعات",
+    "shop": "المتجر",
+    "cart": "السلة",
+    "scanBarcode": "مسح الباركود",
+    "primary": "التنقل الرئيسي",
+    "newBooking": "حجز جديد",
+    "addCustomer": "إضافة عميل",
+    "addService": "إضافة خدمة",
+    "addStaff": "إضافة موظف",
+    "viewCalendar": "عرض التقويم",
+    "businessProfile": "ملف النشاط التجاري",
+    "businessIntelligence": "ذكاء الأعمال",
+    "newBookingShort": "حجز جديد",
+    "weeklySchedule": "الجدول الأسبوعي",
+    "staffAvailability": "توفر الموظفين",
+    "editBusiness": "تعديل النشاط التجاري",
+    "last30Days": "آخر 30 يومًا"
   },
   "bookings": {
-    "title": "Bookings",
-    "create": "Create booking",
-    "empty": "No bookings yet.",
-    "detail": "Booking detail",
-    "status": "Status",
-    "customer": "Customer",
-    "service": "Service",
-    "staff": "Staff",
-    "when": "When",
-    "todaySchedule": "Today's schedule",
-    "allBookings": "All bookings",
-    "search": "Search bookings",
-    "myAppointments": "My Appointments",
-    "appointment": "Appointment",
-    "upcoming": "Upcoming",
-    "past": "Past",
-    "emptyTitle": "No bookings",
-    "emptyToday": "Nothing scheduled for today yet.",
-    "emptyFiltered": "No bookings match these filters."
+    "title": "الحجوزات",
+    "create": "إنشاء حجز",
+    "empty": "لا توجد حجوزات بعد.",
+    "detail": "تفاصيل الحجز",
+    "status": "الحالة",
+    "customer": "العميل",
+    "service": "الخدمة",
+    "staff": "الموظف",
+    "when": "الموعد",
+    "todaySchedule": "جدول اليوم",
+    "allBookings": "كل الحجوزات",
+    "search": "البحث في الحجوزات",
+    "myAppointments": "مواعيدي",
+    "appointment": "موعد",
+    "upcoming": "القادمة",
+    "past": "السابقة",
+    "emptyTitle": "لا توجد حجوزات",
+    "emptyToday": "لا شيء مجدول لهذا اليوم بعد.",
+    "emptyFiltered": "لا توجد حجوزات تطابق هذه المرشحات."
   },
   "settings": {
-    "title": "Settings",
-    "productsBilling": "Products & billing",
-    "business": "Business",
-    "team": "Team",
-    "languageRegion": "Language & region",
-    "customers": "Customers",
-    "reviews": "Reviews",
-    "services": "Services",
-    "offices": "Offices",
-    "overview": "Overview",
-    "businessProfile": "Business Profile",
-    "products": "Products",
-    "productsPlans": "Products & plans",
-    "teamInvitations": "Team & invitations",
-    "workspaceConfig": "Workspace configuration",
-    "navigation": "Settings navigation"
+    "title": "الإعدادات",
+    "productsBilling": "المنتجات والفوترة",
+    "business": "النشاط التجاري",
+    "team": "الفريق",
+    "languageRegion": "اللغة والمنطقة",
+    "customers": "العملاء",
+    "reviews": "التقييمات",
+    "services": "الخدمات",
+    "offices": "المكاتب",
+    "overview": "نظرة عامة",
+    "businessProfile": "ملف النشاط التجاري",
+    "products": "المنتجات",
+    "productsPlans": "المنتجات والخطط",
+    "teamInvitations": "الفريق والدعوات",
+    "workspaceConfig": "إعدادات مساحة العمل",
+    "navigation": "التنقل في الإعدادات"
   },
   "bi": {
-    "title": "Business Intelligence",
-    "overview": "Overview",
-    "profit": "Profit",
-    "growth": "Growth",
-    "revenue": "Revenue",
-    "forecast": "Forecast",
-    "reports": "Reports",
+    "title": "ذكاء الأعمال",
+    "overview": "نظرة عامة",
+    "profit": "الربح",
+    "growth": "النمو",
+    "revenue": "الإيرادات",
+    "forecast": "التوقعات",
+    "reports": "التقارير",
     "pro": "Pro"
   },
   "help": {
-    "title": "Help & Support",
-    "contactSupport": "Contact support",
-    "articles": "Help articles",
-    "submitTicket": "Submit ticket",
-    "subject": "Subject",
-    "details": "Details",
-    "noArticles": "No published articles yet.",
-    "ticketSubmitted": "Ticket submitted. Our team will follow up by email.",
-    "faqs": "FAQs"
+    "title": "المساعدة والدعم",
+    "contactSupport": "تواصل مع الدعم",
+    "articles": "مقالات المساعدة",
+    "submitTicket": "إرسال تذكرة",
+    "subject": "الموضوع",
+    "details": "التفاصيل",
+    "noArticles": "لا توجد مقالات منشورة بعد.",
+    "ticketSubmitted": "تم إرسال التذكرة. سيتابع فريقنا معك عبر البريد الإلكتروني.",
+    "faqs": "الأسئلة الشائعة"
+  },
+  "public": {
+    "skipToContent": "تخطَّ إلى المحتوى",
+    "homeAria": "الصفحة الرئيسية لـ IE Orbit",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
+    "mainNav": "التنقل الرئيسي",
+    "products": "المنتجات",
+    "socialNav": "وسائل التواصل",
+    "productsDownloads": "المنتجات والتنزيلات",
+    "signIn": "تسجيل الدخول",
+    "createAccount": "إنشاء حساب",
+    "seePricing": "عرض الأسعار",
+    "seeHowItWorks": "كيف يعمل",
+    "getStarted": "ابدأ",
+    "startTrial": "ابدأ تجربة {{days}} يومًا",
+    "tryDays": "جرّب لمدة {{days}} يومًا",
+    "starter": "الأساسية",
+    "pro": "Pro",
+    "perMonth": "₹{{amount}}/شهر",
+    "seePlans": "عرض خطط {{name}}",
+    "nav": {
+      "home": "الرئيسية",
+      "industries": "القطاعات",
+      "pricing": "الأسعار",
+      "integrations": "التكاملات",
+      "about": "من نحن",
+      "contact": "اتصل بنا",
+      "faq": "الأسئلة الشائعة",
+      "features": "الميزات",
+      "apps": "التطبيقات",
+      "privacy": "الخصوصية",
+      "terms": "الشروط",
+      "cookies": "ملفات تعريف الارتباط",
+      "appoint": "Orbit Appoint",
+      "mart": "Orbit Mart",
+      "both": "Orbit Appoint + Mart"
+    },
+    "footer": {
+      "blurb": "تطبيقات عملاء بعلامتك التجارية للشركات الهندية — Orbit Mart للتجزئة وOrbit Appoint للحجوزات.",
+      "startWith": "ابدأ بما تحتاجه",
+      "appointTitle": "حجوزات بلا ذهاب وإياب",
+      "martTitle": "متجر يبدو كأنه لك",
+      "bothTitle": "علامة واحدة للحجز والتسوق",
+      "onDevices": "على iOS وAndroid",
+      "onDevicesBody": "يدير المالكون والموظفون مساحة العمل من الهاتف.",
+      "product": "المنتج",
+      "company": "الشركة",
+      "legal": "قانوني",
+      "copyright": "© {{year}} Indians Empire Technologies"
+    },
+    "cta": {
+      "aria": "إنشاء حساب",
+      "title": "علامتك في جيبهم",
+      "body": "كل خطة تشمل تطبيق عميل بعلامتك. التجربة تشمل أتمتة الذكاء الاصطناعي واستخراج الفواتير. بلا بطاقة. ادفع لاحقًا عبر UPI.",
+      "h1": "تطبيق بعلامتك",
+      "h2": "ذكاء اصطناعي في التجربة",
+      "h3": "بلا بطاقة",
+      "h4": "فوترة UPI"
+    },
+    "ai": {
+      "kicker": "الذكاء الاصطناعي في مساحة العمل",
+      "titleBefore": "أخبر Orbit بما تحتاجه.",
+      "titleEm": "هو يكتب.",
+      "lead": "مساعد لأسئلة اليوم، ومنشئ يحوّل جملة إلى قاعدة، واستخراج لفواتير الموردين.",
+      "askOrbit": "اسأل Orbit",
+      "seePlans": "كيف يناسب الذكاء الاصطناعي الخطط",
+      "assistantKicker": "مساعد الذكاء الاصطناعي",
+      "assistantTitle": "اسأل العمل. تجاوز القوائم.",
+      "assistantPrompt": "من محجوز بعد الرابعة، وأي المواعيد ما زالت متاحة؟",
+      "assistantBody": "تحقق من الحجوزات والطلبات والمخزون والعملاء بلغة بسيطة. لا يتغير شيء حتى تؤكد.",
+      "assistantMeta": "على Pro لـ Orbit Appoint وOrbit Mart، وفي تجربة 45 يومًا · رسائل مجانية يوميًا ثم محفظة المساعد",
+      "autoKicker": "منشئ الأتمتة",
+      "autoTitle": "قاعدة من جملة واحدة.",
+      "autoPrompt": "أرسل عرض عيد ميلاد 10٪ قبل يوم.",
+      "autoBody": "اصنع قواعد مناسبات وأعياد ميلاد وVIP، عاينها وفعّلها. يمكن لـ Mart الخصم. يمكن لـ Appoint التذكير واقتراح العروض.",
+      "autoMeta": "على Pro وتجربة Pro الكاملة 45 يومًا · المسودات تستخدم محفظة الذكاء الاصطناعي",
+      "invoiceKicker": "استخراج فواتير بالذكاء الاصطناعي",
+      "invoiceTitle": "صورة تصبح عملية شراء.",
+      "invoicePrompt": "اقرأ فاتورة المورد ورتّب المخزون.",
+      "invoiceBody": "صوّر الفاتورة، راجع الكمية والسعر وGST، ثم سجّل الشراء ليُحدَّث المخزون.",
+      "invoiceMeta": "Orbit Mart Pro والتجربة · كل مسح يستخدم محفظة الذكاء الاصطناعي"
+    },
+    "home": {
+      "eyebrow": "تطبيق عميل بعلامتك مشمول",
+      "titleBefore": "علامتك في جيبهم.",
+      "titleEm": "ليست علامتنا.",
+      "lead": "كل خطة Starter وPro توفّر تطبيقًا بعلامتك تحت اسم عملك. يحجز العملاء ويتسوقون معك — لا IE Orbit ولا سوق. Orbit Appoint للخدمات، Orbit Mart للتجزئة.",
+      "heroNote": "تطبيق بعلامتك في كل خطة · مساعد ذكاء اصطناعي وأتمتة واستخراج فواتير · تجربة Pro 45 يومًا · UPI · بلا بطاقة",
+      "tagOne": "تجربة مترابطة",
+      "tagTwo": "علامتك في كل مكان",
+      "pathsKicker": "ابدأ بما يهم",
+      "pathsTitleBefore": "مدار واحد.",
+      "pathsTitleEm": "على طريقتك.",
+      "pathsLead": "اختر الزخم الذي تحتاجه اليوم. أضف الباقي لاحقًا.",
+      "pathsAria": "المنتجات",
+      "pathBookingsKicker": "أحتاج حجوزات",
+      "pathBookingsTitle": "مواعيد تدير نفسها.",
+      "pathBookingsBody": "دع العملاء يجدون وقتًا وخدمة وسببًا للعودة.",
+      "pathShopKicker": "أحتاج تجارة إلكترونية",
+      "pathShopTitle": "متجر يبدو كأنه لك.",
+      "pathShopBody": "حوّل منتجاتك إلى قناة مفتوحة دائمًا يحملها عملاؤك.",
+      "pathBothKicker": "أحتاج الاثنين",
+      "pathBothTitle": "تجربة العميل الكاملة.",
+      "pathBothBody": "حجوزات وطلبات تحت علامة واحدة لا تُنسى.",
+      "platformKicker": "المنصة",
+      "platformTitle": "مدمج في كل مساحة عمل",
+      "platformAria": "مزايا المنصة",
+      "benefitWhitelabelTitle": "تطبيق عميل بعلامتك",
+      "benefitWhitelabelBody": "سبب اختيار Orbit بدل أداة فوترة فقط. يحجز العملاء ويتسوقون ويتابعون الطلبات في تطبيق يشبه عملك.",
+      "benefitBiTitle": "ذكاء الأعمال",
+      "benefitBiBody": "ابدأ بـ Overview على Starter. افتح Growth وRevenue وForecast وReports على Pro.",
+      "benefitUpiTitle": "فوترة UPI",
+      "benefitUpiBody": "ادفع بـ UPI ثم أكّد من مساحة العمل. بلا بطاقة للبدء.",
+      "benefitGrowTitle": "انمُ عند الحاجة",
+      "benefitGrowBody": "أضف موظفين ومكاتب. الفوترة السنوية أقل من 12 شهرًا — غالبًا شهران مجانًا.",
+      "howKicker": "كيف يعمل",
+      "howTitle": "من الفكرة إلى مدارك",
+      "howAria": "كيف يعمل",
+      "step1Title": "اختر نقطة البداية",
+      "step1Body": "أخبرنا كيف ينمو عملك اليوم — حجوزات أو منتجات أو كلاهما.",
+      "step2Title": "اجعله لك",
+      "step2Body": "أضف ملف العمل والخدمات أو الكتالوج وادعُ فريقك.",
+      "step3Title": "أبقِ العملاء قريبين",
+      "step3Body": "يحجزون ويتسوقون في تطبيقك. تدير الأرضية من مساحة العمليات.",
+      "pricingKicker": "الأسعار",
+      "pricingTitle": "باقات بسيطة لكل منتج",
+      "pricingAria": "الأسعار",
+      "pricingLead": "تجربة Pro لمدة {{days}} يومًا، ثم Starter ₹{{starter}} أو Pro ₹{{pro}} لكل منتج/شهر. تطبيق بعلامتك في كل خطة.",
+      "productAppointKicker": "الحجوزات",
+      "productAppointBody": "جدولة وتقويم الموظفين والعملاء مع تطبيق الحجز بعلامتك.",
+      "productMartKicker": "التجزئة",
+      "productMartBody": "نقاط بيع وكتالوج وطلبات عبر الإنترنت ودفاتر GST مع تطبيق المتجر بعلامتك."
+    },
+    "about": {
+      "eyebrow": "عن IE Orbit",
+      "title": "برمجيات ترتدي علامتك",
+      "lead": "تبني Indians Empire Technologies أدوات حجز وتجزئة بعلامتك حتى تمتلك الشركات الهندية علاقة العميل — لا تستأجرها من سوق.",
+      "cta": "إنشاء حساب"
+    },
+    "contact": {
+      "eyebrow": "اتصل بنا",
+      "title": "تحدث معنا",
+      "lead": "أسئلة عن الخطط أو الإعداد أو العرض — أرسل رسالة وسنرد.",
+      "name": "الاسم",
+      "email": "البريد",
+      "message": "الرسالة",
+      "topic": "الموضوع",
+      "topicGeneral": "سؤال عام",
+      "topicDemo": "حجز عرض",
+      "topicSupport": "الدعم",
+      "send": "إرسال الرسالة",
+      "sending": "جارٍ الإرسال…",
+      "success": "شكرًا — سنرد عبر البريد قريبًا.",
+      "error": "تعذّر الإرسال. حاول لاحقًا."
+    },
+    "download": {
+      "eyebrow": "التطبيقات",
+      "title": "شغّل Orbit من هاتفك",
+      "lead": "يستخدم المالكون والموظفون تطبيق العمليات على iOS وAndroid. يحصل العملاء على تطبيقك بعد الإطلاق.",
+      "opsTitle": "مساحة العمليات",
+      "opsBody": "حجوزات ونقاط بيع وطلبات وأدوات الفريق أثناء التنقل."
+    },
+    "integrations": {
+      "eyebrow": "التكاملات",
+      "title": "متصل حيث يهم",
+      "lead": "المدفوعات والرسائل والأدوات التي يستخدمها فريقك — داخل Orbit دون حزمة ثانية.",
+      "items": [
+        {
+          "title": "UPI ومطالبات الدفع",
+          "body": "يتم احتساب اشتراكك في IE Orbit بالروبية (INR). ادفع عبر UPI من مساحة العمل، ثم أرسل رقم UTR أو لقطة شاشة ليتمكن الفريق من تأكيد المطالبة."
+        },
+        {
+          "title": "Razorpay",
+          "body": "في خطط Orbit Mart Pro المؤهلة، اربط حسابك على Razorpay ليدفع العملاء لك مباشرةً مقابل طلبات المتجر. تبقى فوترة اشتراك المنصة عبر مطالبات UPI."
+        },
+        {
+          "title": "Cashfree",
+          "body": "يتوفر Cashfree كطريقة دفع في أعلام ميزات المنتج وخيارات الدفع في نقطة البيع (POS) عند تفعيله لمساحة العمل."
+        },
+        {
+          "title": "تسجيل الدخول عبر Google",
+          "body": "يمكن للمالكين المتابعة باستخدام Google أثناء التسجيل. يُستخدم عميل Web OAuth نفسه في الموقع العام وتطبيقات العمليات."
+        },
+        {
+          "title": "خرائط Google وPlaces",
+          "body": "تستخدم عناوين المكاتب والأنشطة التجارية أدوات اختيار Google Maps / Places ليتم حفظ المواقع مع دبوس على الخريطة."
+        },
+        {
+          "title": "تقويم Google",
+          "body": "تزامن اتصالات التقويم مسارات الحجز المؤهلة مع تقويم Google عندما تكون مساحة العمل قد ربطت حسابًا."
+        },
+        {
+          "title": "Google Analytics",
+          "body": "قد تحمّل صفحات التسويق العامة Google Analytics 4 عند ضبط معرّف القياس. لا يتم تحميل التحليلات في إدارة المنصة أو تسجيل الدخول أو مسارات تطبيق مساحة العمل."
+        },
+        {
+          "title": "إعلانات Google (AdMob)",
+          "body": "قد تعرض خطط Starter إعلانات Google (AdMob) في تطبيق العملاء ذي العلامة البيضاء. خطة Pro خالية من الإعلانات. لا يُستخدم AdMob في تطبيق العمليات الخاص بالمالك والموظفين."
+        },
+        {
+          "title": "Firebase Cloud Messaging",
+          "body": "تستخدم الإشعارات الفورية خدمة Firebase Cloud Messaging للتطبيقات التي لديها إذن الإشعارات — تطبيق العمليات وتطبيق العملاء ذو العلامة البيضاء حيثما تم الإعداد."
+        },
+        {
+          "title": "واتساب (Grow)",
+          "body": "تتضمن Orbit Mart Pro Grow رسالة واتساب افتراضية وروابط مشاركة ليتمكن أصحاب المتاجر من المراسلة من داخل العمليات — وليست صفحة منتج منفصلة لـ WhatsApp BSP. تتضمن Starter الحاسبات فقط."
+        },
+        {
+          "title": "Porter وShiprocket",
+          "body": "يستخدم التوصيل الفوري Porter أو Shiprocket Quick عند إعداد بيانات الاعتماد في إعدادات التوصيل الخاصة بالمتجر."
+        },
+        {
+          "title": "الفاتورة الإلكترونية GST وe-way",
+          "body": "تتضمن Orbit Mart Pro تقارير GST والفاتورة الإلكترونية (IRN) وفاتورة e-way كجزء من منتج التجزئة — وليست إضافة مدفوعة من طرف ثالث. تشمل Starter الكاشير ودفتر اليومية والطلبات عبر الإنترنت والمرتجعات."
+        }
+      ],
+      "footer": "تجد طريقة تعامل هذه الجهات المعالِجة مع البيانات في صفحتي <privacy>الخصوصية</privacy> و<cookies>ملفات تعريف الارتباط</cookies>."
+    },
+    "faq": {
+      "eyebrow": "الأسئلة الشائعة",
+      "title": "إجابات قبل أن تبدأ",
+      "lead": "الأسعار والتجربة وتطبيقات العلامة البيضاء وكيف يتكامل Orbit Appoint وOrbit Mart.",
+      "searchPlaceholder": "ابحث في الأسئلة",
+      "jumpTo": "انتقل إلى",
+      "topicsAria": "مواضيع الأسئلة الشائعة",
+      "noMatches": "لا توجد نتائج لـ «{{query}}».",
+      "matchTotal": "النتائج لـ «{{query}}»: {{total}}.",
+      "emptyTitle": "لا توجد نتائج",
+      "emptyBody": "جرّب بحثًا أقصر، أو <contact>تواصل معنا</contact> وسنساعدك مباشرة.",
+      "clearSearch": "مسح البحث",
+      "stillStuck": "ما زلت بحاجة إلى مساعدة؟",
+      "askTeam": "اسأل الفريق",
+      "askBody": "إذا لم تجد الإجابة هنا، أرسل لنا رسالة وسنردّ خلال يومي عمل.",
+      "ctaTitle": "هل أنت مستعد لإعداد نشاطك التجاري؟",
+      "ctaBody": "أنشئ حسابًا — بدون بطاقة ائتمان. ادفع عبر UPI عند الترقية.",
+      "sections": {
+        "overview": {
+          "title": "نظرة عامة على المنصة",
+          "description": "ما هو IE Orbit ولمن هو مخصص.",
+          "items": [
+            {
+              "q": "ما هو IE Orbit؟",
+              "a": {
+                "paragraphs": [
+                  "IE Orbit هو مساحة عمل للأعمال من Indians Empire Technologies. حساب واحد يشغّل Orbit Appoint (المواعيد وعمليات الخدمة) وOrbit Mart (التجزئة ونقاط البيع ودفاتر GST وأدوات Grow). يمكنك الاشتراك في منتج واحد أو في الاثنين معًا — فهما يتشاركان النشاط التجاري والموظفين والعملاء والفوترة.",
+                  "الميزة البارزة هي تطبيق العملاء بالعلامة البيضاء: يحجز العملاء ويتسوقون ويتابعون طلباتهم باسم نشاطك التجاري لا باسم IE Orbit. أما المالكون والموظفون فيستخدمون لوحة التحكم على الويب وتطبيق العمليات."
+                ]
+              }
+            },
+            {
+              "q": "ما هو تطبيق العملاء بالعلامة البيضاء؟",
+              "a": {
+                "paragraphs": [
+                  "هو السبب الرئيسي لاختيار IE Orbit بدلًا من برامج الفوترة فقط. تتضمن كل خطة Starter وPro تطبيق جوال بعلامة نشاطك التجاري. يرى العملاء اسمك وألوانك وعروضك عند الحجز أو التسوق — لا IE Orbit ولا سوقًا عامًا.",
+                  "يواصل المالكون والموظفون استخدام مساحة العمليات. قد تعرض خطة Starter إعلانات Google في تطبيق العملاء؛ أما Pro فخالية من الإعلانات. تأتي روابط التثبيت من نشاطك التجاري، وليس من صفحة متجر عامة على هذا الموقع."
+                ]
+              }
+            },
+            {
+              "q": "لمن صُمّم IE Orbit؟",
+              "a": {
+                "bullets": [
+                  "الصالونات والمنتجعات الصحية والعيادات والمدرّبون وسائر الفرق التي تعمل بالمواعيد (Orbit Appoint)",
+                  "المتاجر والكاونترات وفرق التجزئة التي تحتاج إلى نقطة بيع وكتالوج ودفاتر GST (Orbit Mart)",
+                  "الأعمال التي تدير الخدمات والتجزئة معًا من موقع واحد",
+                  "الأعمال التي تريد تطبيق عملاء بعلامتها الخاصة بدلًا من إدراج عام في سوق إلكتروني"
+                ]
+              }
+            },
+            {
+              "q": "هل يمكنني استخدام Orbit Appoint وOrbit Mart معًا؟",
+              "a": {
+                "paragraphs": [
+                  "نعم. يعمل المنتجان في مساحة العمل نفسها. تختار منتجًا واحدًا أو كليهما أثناء الإعداد ويمكنك إضافة الثاني لاحقًا. يبقى الموظفون والعملاء والمكاتب والفوترة وتطبيق العملاء بالعلامة البيضاء موحّدة — دون حاجة إلى تسجيلات دخول منفصلة أو ملفات نشاط مكررة."
+                ]
+              }
+            }
+          ]
+        },
+        "ai": {
+          "title": "الذكاء الاصطناعي في مساحة العمل",
+          "description": "المساعد والأتمتة وفواتير الموردين واستخدام الذكاء الاصطناعي المدفوع مسبقًا.",
+          "items": [
+            {
+              "q": "ما هو مساعد الذكاء الاصطناعي؟",
+              "a": {
+                "paragraphs": [
+                  "يتيح Business Assistant للمالكين والموظفين السؤال بلغة طبيعية عن الحجوزات والطلبات والمخزون والعملاء. الرسالة هي سؤال ترسله. والتأكيد هو موافقتك على تغيير يقترحه — لا يتم تحديث شيء حتى تقول نعم.",
+                  "تأتي أولًا حصة يومية مجانية من الأسئلة والموافقات. وتستخدم الرسائل والتأكيدات الإضافية محفظة Assistant المدفوعة مسبقًا. Business Assistant متاح في Pro لكل من Orbit Appoint وOrbit Mart، وفي تجربة Pro الكاملة لمدة 45 يومًا. الحدود المجانية الحالية ومبالغ التجاوز موجودة في صفحة الأسعار."
+                ]
+              }
+            },
+            {
+              "q": "ما هو Automation Creator؟",
+              "a": {
+                "paragraphs": [
+                  "صِف عرض عيد ميلاد أو مناسبة أو قاعدة VIP بكلماتك. يصيغ Orbit الأتمتة كمسودة لتعاينها وتفعّلها.",
+                  "يمكن لـ Orbit Mart تطبيق الخصومات. ويمكن لـ Orbit Appoint إرسال التذكيرات واقتراح العروض على الموظفين. Automation Creator متاح في Pro وخلال تجربة Pro الكاملة لمدة 45 يومًا. تستهلك المسودات من محفظة الذكاء الاصطناعي المدفوعة مسبقًا."
+                ]
+              }
+            },
+            {
+              "q": "ما هو استخراج الفواتير بالذكاء الاصطناعي؟",
+              "a": {
+                "paragraphs": [
+                  "في Orbit Mart Pro — وخلال تجربة Pro الكاملة لمدة 45 يومًا — صوّر فاتورة المورّد. راجع البنود والأسعار وGST المستخرجة، ثم سجّل عملية شراء تضيف إلى المخزون. يستهلك كل مسح من محفظة الذكاء الاصطناعي المدفوعة مسبقًا."
+                ]
+              }
+            },
+            {
+              "q": "كيف تعمل فوترة استخدام الذكاء الاصطناعي؟",
+              "a": {
+                "paragraphs": [
+                  "تغطي محفظتان مدفوعتان مسبقًا الذكاء الاصطناعي بعد الحصة اليومية المجانية للمساعد. كلتاهما متاحتان في Pro وخلال تجربة Pro الكاملة لمدة 45 يومًا."
+                ],
+                "bullets": [
+                  "محفظة Assistant — أسئلة إضافية (رسائل) وموافقات (تأكيدات) بعد الحد اليومي المجاني",
+                  "محفظة الذكاء الاصطناعي — التعبئة من صورة العبوة ومسح فواتير الموردين ومسودات الأتمتة (حسب الاستخدام، مع حد أدنى صغير لكل استدعاء)",
+                  "تظهر الحدود اليومية المجانية الحالية ومبالغ التجاوز والحدود الدنيا للمحافظ في صفحة الأسعار لمنطقتك"
+                ]
+              }
+            }
+          ]
+        },
+        "appoint": {
+          "title": "Orbit Appoint",
+          "description": "الحجوزات والتقويم والموظفون والعملاء.",
+          "items": [
+            {
+              "q": "ماذا يتضمن Orbit Appoint؟",
+              "a": {
+                "bullets": [
+                  "تطبيق عملاء بالعلامة البيضاء بعلامة نشاطك التجاري",
+                  "حجوزات عبر الإنترنت من أي جهاز",
+                  "تقويم الموظفين وجداول العمل والتوفّر",
+                  "سجلات العملاء والتذكيرات والتقييمات",
+                  "كتالوج الخدمات وإدارة الحجوزات",
+                  "تذكيرات العملاء عبر WhatsApp في Pro",
+                  "مكتب ثانٍ ومدفوعات وتطبيق عملاء بلا إعلانات في Pro",
+                  "ذكاء الأعمال في Starter (Overview) وذكاء أعمال كامل في Pro",
+                  "نقاط مكافآت للعملاء في Pro (اكتساب واستبدال)",
+                  "مساعد ذكاء اصطناعي للأسئلة بلغة طبيعية عن الحجوزات والعملاء",
+                  "Automation Creator في Pro للتذكيرات واقتراحات العروض للموظفين"
+                ]
+              }
+            },
+            {
+              "q": "ما الأعمال التي تستخدم Orbit Appoint عادةً؟",
+              "a": {
+                "paragraphs": [
+                  "الصالونات والمنتجعات الصحية، والعيادات والرعاية الصحية، واستوديوهات اللياقة والعافية، والخدمات المهنية، والتعليم والتدريب، والخدمات المنزلية، وأي فريق يجدول الأشخاص والأوقات."
+                ]
+              }
+            }
+          ]
+        },
+        "mart": {
+          "title": "Orbit Mart",
+          "description": "التجارة ودفاتر GST وGrow وحزمة Pets الاختيارية.",
+          "items": [
+            {
+              "q": "ماذا يتضمن Orbit Mart؟",
+              "a": {
+                "paragraphs": [
+                  "Orbit Mart منتج واحد بثلاثة مجالات تشغيلية — التجارة والدفاتر وGrow — وليس ثلاثة اشتراكات منفصلة. تشمل Starter الكاونتر ودفتر اليومية والطلبات عبر الإنترنت والمرتجعات؛ وتفتح Pro التوصيل الفوري عبر Porter/Shiprocket وفاتورة GST الإلكترونية / e-way bill وGrow."
+                ],
+                "bullets": [
+                  "تطبيق عملاء بالعلامة البيضاء ليتصفح المتسوقون ويطلبوا بعلامتك",
+                  "Starter: نقطة بيع وكتالوج وطلبات عبر الإنترنت ومرتجعات وفواتير مبيعات وأطراف وصندوق ومصروفات ومخزون — موقع واحد وموظفان (يمكن إضافة موظف إضافي واحد)",
+                  "Pro: التوصيل الفوري عبر Porter/Shiprocket والمشتريات وتقارير GST وe-invoice وe-way bill وGrow عبر WhatsApp / Google والولاء وبوابات الدفع ومكتب ثانٍ",
+                  "استخراج الفواتير بالذكاء الاصطناعي في Pro: صوّر فاتورة المورّد وراجع البنود ثم أضف المخزون",
+                  "Automation Creator في Pro لخصومات أعياد الميلاد والمناسبات وVIP",
+                  "تبقى حزمة Pets إضافة شهرية اختيارية في Orbit Mart"
+                ]
+              }
+            },
+            {
+              "q": "ما هي حزمة Pets؟",
+              "a": {
+                "paragraphs": [
+                  "حزمة Pets إضافة شهرية اختيارية لتجار Orbit Mart الذين يحتاجون إلى سجلات الحيوانات الأليفة. وهي غير مشمولة في خطة Orbit Mart الأساسية.",
+                  "تعمل إلى جانب الكتالوج ونقطة البيع والطلبات والمخزون عند تفعيلها من إعدادات الفوترة."
+                ]
+              }
+            },
+            {
+              "q": "هل يحل Orbit Mart محل برنامج محاسبة منفصل؟",
+              "a": {
+                "paragraphs": [
+                  "بالنسبة إلى كثير من تجار التجزئة الصغار والمتوسطين، يغطي Orbit Mart Books المبيعات والمشتريات والنقد والبنك والمصروفات والأطراف والمخزون والامتثال لـ GST (التقارير وe-invoice وe-way bill) يوميًا داخل مساحة العمل نفسها التي تضم الكاونتر والكتالوج. وقد تتطلب الاحتياجات المحاسبية المعقدة استشارة متخصصة."
+                ]
+              }
+            }
+          ]
+        },
+        "gettingStarted": {
+          "title": "البدء",
+          "description": "إنشاء الحساب والإعداد والوصول.",
+          "items": [
+            {
+              "q": "كيف أنشئ حسابًا؟",
+              "a": {
+                "paragraphs": [
+                  "انقر على «إنشاء حساب» في الموقع أو انتقل إلى /auth/register/start. أكمل المعالج الموجَّه: بيانات النشاط، وحساب المالك، والتفضيلات (العملة والمنطقة الزمنية والمنتجات والحزم)، والهوية البصرية الاختيارية، ثم راجع وأرسل.",
+                  "تتحقق من بريد المالك برمز لمرة واحدة أثناء التسجيل، أو تتابع باستخدام Google في خطوة المالك. لا حاجة إلى بطاقة ائتمان للبدء."
+                ]
+              }
+            },
+            {
+              "q": "ماذا يحدث بعد إنهاء الإعداد؟",
+              "a": {
+                "bullets": [
+                  "يتم تجهيز مساحة عملك تلقائيًا (المستأجر والنشاط والإعدادات الافتراضية)",
+                  "تتحقق من بريدك الإلكتروني قبل الحصول على الوصول الكامل",
+                  "تساعدك قائمة البدء في لوحة التحكم على إضافة الخدمات أو الموظفين أو عناصر الكتالوج",
+                  "تبدأ تجربة Pro الكاملة لمدة 45 يومًا للمنتج أو المنتجات التي اخترتها"
+                ]
+              }
+            },
+            {
+              "q": "هل يستطيع فريقي تسجيل الدخول بشكل منفصل؟",
+              "a": {
+                "paragraphs": [
+                  "نعم. ادعُ الموظفين من مساحة العمل بعد الإعداد. يحصل كل شخص على تسجيل دخول خاص به مع أدوار وصلاحيات. ويدير المالكون الفوترة والإعدادات واشتراكات المنتجات."
+                ]
+              }
+            },
+            {
+              "q": "هل يوجد تطبيق جوال للعملاء؟",
+              "a": {
+                "paragraphs": [
+                  "نعم. يوفّر IE Orbit تطبيق عملاء بالعلامة البيضاء بعلامة نشاطك التجاري في كل خطة مدفوعة وخلال التجربة. بحسب المنتجات التي تستخدمها، يمكن للعملاء حجز المواعيد وتصفح المتجر وتقديم الطلبات ومتابعة حالتها. قد تعرض خطط Starter إعلانات Google في تطبيق العملاء؛ أما Pro فخالية من الإعلانات."
+                ]
+              }
+            },
+            {
+              "q": "ما العملات والمناطق المدعومة؟",
+              "a": {
+                "paragraphs": [
+                  "تختار عملة التشغيل أثناء الإعداد (INR وUSD وEUR وGBP وغيرها). تتبع فوترة اشتراك IE Orbit SaaS منطقة نشاطك: تُفوتر مساحات العمل في الهند بالروبية INR عبر UPI (إضافة إلى Razorpay/Cashfree حيث تتوفر)، وتُفوتر المساحات الدولية بالدولار USD عبر Stripe. غالبًا ما تُعرض الأسعار العامة على هذا الموقع بالروبية INR للهند."
+                ]
+              }
+            }
+          ]
+        },
+        "plans": {
+          "title": "الخطط والتجربة والحدود",
+          "description": "Starter مقابل Pro وقواعد التجربة والإضافات.",
+          "items": [
+            {
+              "q": "كيف تعمل التجربة المجانية؟",
+              "a": {
+                "paragraphs": [
+                  "تحصل كل مساحة عمل جديدة على تجربة لمدة 45 يومًا بوصول Pro كامل للمنتج أو المنتجات التي اخترتها. لا حاجة إلى بطاقة ائتمان للبدء.",
+                  "عند انتهاء التجربة دون ترقية، يُقفل الحساب جزئيًا — يمكنك تسجيل الدخول وعرض البيانات، لكن العمليات اليومية تتوقف حتى تشترك. تبقى بياناتك محفوظة."
+                ]
+              }
+            },
+            {
+              "q": "ما الفرق بين Starter وPro؟",
+              "a": {
+                "bullets": [
+                  "Starter: العمليات الأساسية لموقع واحد (موظفان، ويمكن إضافة موظف واحد)؛ ذكاء الأعمال Overview فقط. يتضمن Orbit Mart Starter الكاونتر ودفتر اليومية والطلبات عبر الإنترنت والمرتجعات (تبقى فاتورة GST الإلكترونية في Pro)",
+                  "Pro: 5 موظفين ومكتبان مشمولان؛ ذكاء أعمال كامل؛ تذكيرات WhatsApp ومدفوعات وتطبيق بلا إعلانات. يضيف Orbit Mart Pro التوصيل الفوري عبر Porter/Shiprocket ودفاتر GST وGrow",
+                  "Pro خالية من الإعلانات؛ وقد تعرض Starter إعلانات Google في تطبيق العملاء",
+                  "المكتب الثاني ضمن Pro. يمكن لـ Starter إضافة موظف واحد؛ والمكاتب الإضافية إضافة ضمن Pro"
+                ],
+                "paragraphs": [
+                  "تعتمد حدود الموظفين والمكاتب الدقيقة على الخطة الموضّحة في صفحة الأسعار لكل منتج."
+                ]
+              }
+            },
+            {
+              "q": "هل يمكنني إضافة موظفين أو مكاتب أو حزمة Pets؟",
+              "a": {
+                "paragraphs": [
+                  "يمكن لـ Starter إضافة موظف واحد. المكاتب الإضافية متاحة في Pro. حزمة Pets إضافة منفصلة في Orbit Mart لسجلات الحيوانات الأليفة.",
+                  "أسعار الإضافات الشهرية الحالية معروضة في صفحة الأسعار لمنطقتك (الهند بالروبية INR أو دوليًا بالدولار USD)."
+                ]
+              }
+            },
+            {
+              "q": "هل يمكنني تغيير الخطة لاحقًا؟",
+              "a": {
+                "paragraphs": [
+                  "نعم. قم بالترقية أو غيّر الحزم من إعدادات الفوترة في مساحة العمل. يمكن جدولة تغييرات الخطة المعلّقة، ويمكنك إلغاء التغيير المعلّق قبل تطبيقه. الفوترة السنوية متاحة بمضاعف مخفّض من الشهري (يظهر في Products & Billing وفي الأسعار)."
+                ]
+              }
+            }
+          ]
+        },
+        "billing": {
+          "title": "الفوترة والمدفوعات",
+          "description": "UPI والمطالبات وما تدفع مقابله.",
+          "items": [
+            {
+              "q": "كيف تعمل فوترة الاشتراك؟",
+              "a": {
+                "paragraphs": [
+                  "الهند: تُفوتر الاشتراكات بالروبية INR. ادفع شهريًا أو سنويًا عبر UPI من Products & Billing (وقد يتوفر Razorpay/Cashfree أيضًا). بعد تحويل UPI، قدّم مطالبة دفع مع UTR أو لقطة شاشة ليؤكد فريقنا التفعيل.",
+                  "دوليًا: تُفوتر الاشتراكات بالدولار USD عبر Stripe Checkout من Products & Billing. وقد تُحسب الضريبة عبر Stripe Tax عند الاقتضاء."
+                ]
+              }
+            },
+            {
+              "q": "هل أحتاج إلى بطاقة ائتمان؟",
+              "a": {
+                "paragraphs": [
+                  "لا حاجة إلى بطاقة ائتمان لبدء التجربة. في الهند يمكنك الترقية عبر UPI (وبوابات اختيارية). خارج الهند يستخدم الاشتراك المدفوع Stripe (البطاقات وطرق أخرى يدعمها Stripe)."
+                ]
+              }
+            },
+            {
+              "q": "كيف تعمل مدفوعات العملاء (Razorpay)؟",
+              "a": {
+                "paragraphs": [
+                  "في خطط Orbit Mart Pro المؤهلة في الهند، يمكنك ربط Razorpay و/أو Cashfree ليدفع لك العملاء ثمن طلبات المتجر. دوليًا قد يتوفر Stripe Connect عند طرحه. تبقى فاتورة IE Orbit SaaS الخاصة بك (INR/UPI أو USD/Stripe) منفصلة دائمًا عن دفع عملائك."
+                ]
+              }
+            },
+            {
+              "q": "ماذا لو انتهت تجربتي ولم أقم بالترقية؟",
+              "a": {
+                "paragraphs": [
+                  "يُقفل الحساب جزئيًا. تُحفظ البيانات. قم بالترقية في أي وقت لاستئناف العمليات. إذا احتجت إلى مساعدة في اختيار الخطة، تواصل معنا قبل انتهاء التجربة."
+                ]
+              }
+            }
+          ]
+        },
+        "bi": {
+          "title": "ذكاء الأعمال والمنصة",
+          "description": "التقارير والمكاتب وميزات مساحة العمل المشتركة.",
+          "items": [
+            {
+              "q": "ما ذكاء الأعمال المتضمَّن؟",
+              "a": {
+                "bullets": [
+                  "Starter: BI Overview — لمحة عامة عن عملياتك",
+                  "Pro: الحزمة الكاملة — Growth وRevenue وForecast وReports",
+                  "ينطبق ذكاء الأعمال على كل منتج مشترك فيه حيث تتوفر التحليلات"
+                ]
+              }
+            },
+            {
+              "q": "كيف تعمل المكاتب (الفروع)؟",
+              "a": {
+                "paragraphs": [
+                  "تتضمن كل خطة مكتبًا واحدًا أو أكثر مع العنوان وموقع الخريطة. يمكن إضافة مكاتب إضافية كإضافة شهرية. يستخدم Orbit Appoint المكاتب للجدولة والتوفّر؛ ويستخدمها Orbit Mart لسياق الكاونتر والمخزون والدفاتر."
+                ]
+              }
+            },
+            {
+              "q": "هل بياناتي آمنة؟",
+              "a": {
+                "paragraphs": [
+                  "مساحات العمل معزولة لكل نشاط تجاري. يُتحكم في الوصول عبر المصادقة والأدوار والصلاحيات.",
+                  "اقرأ سياسة الخصوصية لمعرفة كيف نتعامل مع بيانات الحساب والنشاط. يستخدم تسجيل الدخول رموزًا لمرة واحدة عبر البريد (وفتحًا بيومتريًا اختياريًا على الجوال بعد تسجيل الدخول). تحقق من بريد المالك بعد التسجيل."
+                ]
+              }
+            }
+          ]
+        },
+        "support": {
+          "title": "الحساب والدعم والأمور القانونية",
+          "description": "مساعدة تسجيل الدخول والتواصل والسياسات.",
+          "items": [
+            {
+              "q": "كيف أسجّل الدخول إذا فقدت الوصول إلى تطبيق بريدي؟",
+              "a": {
+                "paragraphs": [
+                  "يستخدم تسجيل الدخول رمزًا لمرة واحدة يُرسل إلى بريد حسابك (تسجيل الدخول عبر OTP على الويب أو الجوال). إذا لم تتمكن من استلام البريد، تواصل مع الدعم بعنوان البريد المسجّل في حسابك لنساعدك على استعادة الوصول."
+                ]
+              }
+            },
+            {
+              "q": "كيف أتحقق من بريدي الإلكتروني؟",
+              "a": {
+                "paragraphs": [
+                  "بعد إنشاء حسابك، أكمل التحقق من البريد عبر الرابط في بريدك الوارد أو من شاشة التحقق من البريد في التطبيق. قد تكون بعض الميزات محدودة حتى يكتمل التحقق."
+                ]
+              }
+            },
+            {
+              "q": "كيف أتواصل مع الدعم أو أطلب عرضًا تجريبيًا؟",
+              "a": {
+                "paragraphs": [
+                  "البريد الإلكتروني: support@indiansempire.com",
+                  "الهاتف: +91 9766855617",
+                  "استخدم صفحة التواصل للعروض التجريبية والمبيعات واستفسارات الشراكة. نهدف إلى الرد خلال يومي عمل."
+                ]
+              }
+            },
+            {
+              "q": "أين الشروط والخصوصية؟",
+              "a": {
+                "paragraphs": [
+                  "شروط الخدمة وسياسة الخصوصية وسياسة ملفات الارتباط مرتبطة في تذييل الموقع وأثناء إنشاء الحساب. يجب قبول الشروط والخصوصية لإكمال تسجيل المالك."
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "notFound": {
+      "title": "الصفحة غير موجودة",
+      "metaTitle": "الصفحة غير موجودة — IE Orbit",
+      "metaDescription": "تعذّر العثور على صفحة IE Orbit هذه.",
+      "body": "تعذّر العثور على الصفحة. جرّب أحد هذه الأقسام."
+    },
+    "legal": {
+      "englishOnly": "يُقدَّم هذا المستند القانوني حاليًا باللغة الإنجليزية."
+    },
+    "plans": {
+      "tryFirst": "جرّب أولاً",
+      "free": "مجاني",
+      "trialDays": "{{days}} يومًا",
+      "mostPopular": "الأكثر شيوعًا",
+      "kickerStarter": "الأفراد والأعمال الصغيرة جدًا",
+      "kickerPro": "الفرق النامية",
+      "perMonth": "/شهر",
+      "appointName": "Orbit Appoint",
+      "martName": "Orbit Mart",
+      "bothName": "Orbit Appoint + Orbit Mart",
+      "trialBullets": {
+        "fullPro": "جميع ميزات Pro في {{product}} خلال الفترة التجريبية",
+        "whiteLabel": "تطبيق عملاء بعلامتك التجارية",
+        "noCard": "لا حاجة إلى بطاقة ائتمان للبدء",
+        "upgrade": "رقِّ خطتك في أي وقت للاحتفاظ ببياناتك"
+      },
+      "combinedTrialBullets": {
+        "fullPro": "Orbit Appoint وOrbit Mart بخطة Pro الكاملة خلال الفترة التجريبية",
+        "oneApp": "تطبيق واحد بعلامتك التجارية للحجز والتسوق",
+        "sharedCustomers": "عملاء مشتركون في مساحة عمل واحدة",
+        "noCard": "لا حاجة إلى بطاقة ائتمان للبدء"
+      },
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (تُحتسب الفاتورة لكل منتج)"
+    },
+    "features": {
+      "createAccount": "إنشاء حساب",
+      "howKicker": "كيف يعمل",
+      "howAria": "كيف يعمل",
+      "benefitsKicker": "المزايا",
+      "benefitsAria": "المزايا",
+      "pricingKicker": "الأسعار",
+      "pricingAria": "الأسعار",
+      "seeFullPricing": "عرض جميع الأسعار",
+      "ctaTitle": "جرّب التطبيق بعلامتك التجارية لمدة {{days}} يومًا",
+      "appoint": {
+        "kicker": "Orbit Appoint",
+        "title": "حجوزات بلا تكرار وتنسيق متعب.",
+        "body": "امنح عملاءك طريقة أنيقة لمعرفة المواعيد المتاحة والحجز فورًا والعودة دائمًا. تغطي Starter موقعًا واحدًا. وتضيف Pro تذكيرات واتساب والمدفوعات ومكتبًا ثانيًا وتطبيقًا بلا إعلانات.",
+        "features": {
+          "f1": "تطبيق عملاء بعلامتك التجارية ليحجز العملاء باسمك",
+          "f2": "مواعيد متاحة ذكية وتقاويم للموظفين",
+          "f3": "تذكيرات تلقائية بالبريد الإلكتروني؛ وواتساب مع Pro",
+          "f4": "تضيف Pro مكتبًا ثانيًا والمدفوعات وذكاء الأعمال الكامل ونقاط المكافآت وتطبيق عملاء بلا إعلانات",
+          "f5": "مساعد ذكاء اصطناعي للإجابة عن أسئلة اليوم بلغة بسيطة",
+          "f6": "منشئ الأتمتة مع Pro للتذكيرات واقتراحات العروض للموظفين"
+        },
+        "howTitle": "كيف يعمل Orbit Appoint",
+        "howLead": "يحجز العملاء في تطبيقك الذي يحمل علامتك. ويدير فريقك اليوم من تقويم واحد.",
+        "how": {
+          "s1": {
+            "title": "انشر الخدمات والموظفين",
+            "body": "حدّد مدة الخدمات والموظفين والغرف وساعات العمل لتكون المواعيد المتاحة حقيقية دائمًا."
+          },
+          "s2": {
+            "title": "يحجز العملاء عبر الإنترنت",
+            "body": "يختارون الوقت في تطبيقك أو في صفحة الحجز على الويب بدل الاتصال بمكتب الاستقبال."
+          },
+          "s3": {
+            "title": "أدِر المواعيد وتابع",
+            "body": "يرى الموظفون التقويم المباشر ويرسلون التذكيرات ويحتفظون بسجل العميل في مكان واحد."
+          }
+        },
+        "benefitsTitle": "لماذا تختار الأعمال Orbit Appoint",
+        "benefitsLead": "مواعيد ضائعة أقل، واتصالات هاتفية أقل، وتطبيق عملاء يشبه علامتك التجارية.",
+        "benefits": {
+          "b1": {
+            "title": "تطبيق حجز بعلامتك التجارية",
+            "body": "يثبّت العملاء علامتك أنت — وليس صفحة عامة لـ IE Orbit — على iOS وAndroid."
+          },
+          "b2": {
+            "title": "تقويم مشترك واحد",
+            "body": "وداعًا للدفاتر ومحادثات واتساب. يرى الجميع من هو متاح وما هو محجوز."
+          },
+          "b3": {
+            "title": "تذكيرات فعّالة",
+            "body": "تذكيرات بالبريد الإلكتروني في كل الخطط؛ وتذكيرات واتساب مع Pro لتقليل الغياب."
+          },
+          "b4": {
+            "title": "انمُ دون فوضى",
+            "body": "أضف مكتبًا ثانيًا والمدفوعات وذكاء الأعمال الكامل وتطبيقًا بلا إعلانات عند الانتقال إلى Pro."
+          }
+        },
+        "pricingTitle": "أسعار Orbit Appoint",
+        "pricingLead": "تجربة Pro كاملة لمدة {{days}} يومًا، ثم Starter بسعر {{starter}} أو Pro بسعر {{pro}} شهريًا. تطبيق العملاء بعلامتك التجارية مشمول في كل خطة.",
+        "starter": {
+          "f1": "تطبيق حجز للعملاء بعلامتك التجارية",
+          "f2": "موقع واحد مع تقويم الموظفين",
+          "f3": "تذكيرات بالبريد الإلكتروني",
+          "f4": "نظرة عامة على ذكاء الأعمال",
+          "f5": "سجلات العملاء والتقييمات"
+        },
+        "pro": {
+          "f1": "كل ما في Starter",
+          "f2": "تذكيرات واتساب",
+          "f3": "المدفوعات ونقاط المكافآت",
+          "f4": "مكتب ثانٍ",
+          "f5": "ذكاء الأعمال الكامل وتطبيق عملاء بلا إعلانات",
+          "f6": "منشئ الأتمتة"
+        }
+      },
+      "mart": {
+        "kicker": "Orbit Mart",
+        "title": "منتجاتك في جيوبهم.",
+        "body": "أنشئ متجرًا يسهّل تصفّح منتجاتك وشراءها وتذكّرها — مع نقطة بيع ودفاتر GST في مساحة العمل نفسها. تشمل Starter الكاونتر والطلبات عبر الإنترنت والمرتجعات؛ وتفتح Pro التوصيل الفوري عبر Porter/Shiprocket والفاتورة الإلكترونية GST وGrow.",
+        "features": {
+          "f1": "تطبيق عملاء بعلامتك التجارية ليشتري المتسوقون باسمك",
+          "f2": "نقطة بيع وكتالوج وطلبات عبر الإنترنت ومرتجعات مع Starter",
+          "f3": "توصيل فوري عبر Porter/Shiprocket مع Pro",
+          "f4": "دفتر اليومية مع Starter؛ وتقارير GST والفاتورة الإلكترونية وGrow وe-way مع Pro",
+          "f5": "استخراج الفواتير بالذكاء الاصطناعي مع Pro — صوّر فاتورة المورّد وراجع البنود ثم أضف المخزون",
+          "f6": "منشئ الأتمتة مع Pro لقواعد أعياد الميلاد والمناسبات وعملاء VIP"
+        },
+        "howTitle": "كيف يعمل Orbit Mart",
+        "howLead": "بِع عند الكاونتر وعبر الإنترنت بعلامتك التجارية، مع بقاء الحسابات في مساحة العمل نفسها.",
+        "how": {
+          "s1": {
+            "title": "ابنِ الكتالوج",
+            "body": "أضف المنتجات والأسعار والمخزون لتبقى نقطة البيع وتطبيق العملاء متزامنين."
+          },
+          "s2": {
+            "title": "بِع في كل مكان",
+            "body": "سجّل مبيعات الزبائن الحاضرين على نقطة البيع واستقبل الطلبات عبر الإنترنت من تطبيق متجرك."
+          },
+          "s3": {
+            "title": "أغلق الدفاتر",
+            "body": "تابع المبيعات في دفتر اليومية مع Starter؛ وافتح تقارير GST والفاتورة الإلكترونية وأدوات Grow مع Pro."
+          }
+        },
+        "benefitsTitle": "لماذا يختار التجار Orbit Mart",
+        "benefitsLead": "مساحة عمل واحدة للكاونتر والمتجر الإلكتروني ودفاتر جاهزة لـ GST.",
+        "benefits": {
+          "b1": {
+            "title": "تطبيق متجر بعلامتك التجارية",
+            "body": "يتصفح العملاء ويطلبون في تطبيق يشبه متجرك، وليس سوقًا إلكترونيًا."
+          },
+          "b2": {
+            "title": "الكاونتر والكتالوج معًا",
+            "body": "تشترك نقطة البيع والمرتجعات والطلبات عبر الإنترنت في المنتجات وقائمة العملاء نفسها."
+          },
+          "b3": {
+            "title": "GST عندما تحتاجه",
+            "body": "دفتر اليومية مع Starter. وتقارير GST والفاتورة الإلكترونية وفاتورة e-way مع Pro."
+          },
+          "b4": {
+            "title": "التوصيل والتسويق مع Pro",
+            "body": "توصيل فوري عبر Porter/Shiprocket بالإضافة إلى مساعدي Grow للعروض والقوائم."
+          }
+        },
+        "pricingTitle": "أسعار Orbit Mart",
+        "pricingLead": "تجربة Pro كاملة لمدة {{days}} يومًا، ثم Starter بسعر {{starter}} أو Pro بسعر {{pro}} شهريًا. تطبيق العملاء بعلامتك التجارية مشمول في كل خطة.",
+        "starter": {
+          "f1": "تطبيق متجر للعملاء بعلامتك التجارية",
+          "f2": "نقطة بيع وكتالوج وطلبات عبر الإنترنت ومرتجعات",
+          "f3": "دفتر اليومية",
+          "f4": "نظرة عامة على ذكاء الأعمال",
+          "f5": "قائمة عملاء مشتركة"
+        },
+        "pro": {
+          "f1": "كل ما في Starter",
+          "f2": "توصيل فوري عبر Porter/Shiprocket",
+          "f3": "تقارير GST والفاتورة الإلكترونية وe-way",
+          "f4": "مساعدو تسويق Grow",
+          "f5": "استخراج الفواتير بالذكاء الاصطناعي",
+          "f6": "تطبيق عملاء بلا إعلانات"
+        }
+      },
+      "both": {
+        "kicker": "Orbit Appoint + Orbit Mart",
+        "title": "علامة واحدة. كل طرق الشراء.",
+        "body": "النسخة الأكمل من IE Orbit — المواعيد والتجارة الإلكترونية بعلاقة واحدة مع العميل.",
+        "features": {
+          "f1": "تطبيق واحد بعلامتك التجارية للحجز والتسوق",
+          "f2": "ملفات عملاء موحّدة",
+          "f3": "بيع متقاطع للحجوزات والمنتجات",
+          "f4": "تجربة واحدة لمدة {{days}} يومًا، ومساحة عمل واحدة، وفوترة عبر UPI",
+          "f5": "مساعد الذكاء الاصطناعي ومنشئ الأتمتة في الحجوزات والمتجر"
+        },
+        "howTitle": "كيف يعمل Appoint وMart معًا",
+        "howLead": "مساحة عمل واحدة وقائمة عملاء واحدة وتطبيق واحد بعلامتك للحجز والتسوق.",
+        "how": {
+          "s1": {
+            "title": "فعّل المنتجين معًا",
+            "body": "اشترك في Orbit Appoint وOrbit Mart ضمن النشاط نفسه ليبقى الموظفون والعملاء موحّدين."
+          },
+          "s2": {
+            "title": "يحجز العملاء ويتسوقون",
+            "body": "يتولى تطبيقك الذي يحمل علامتك المواعيد وطلبات المنتجات تحت علامة واحدة."
+          },
+          "s3": {
+            "title": "أدِر الخدمات والتجزئة معًا",
+            "body": "يتشارك تقويم الخدمات والكاونتر العملاء والسجل والفوترة بتسجيل دخول واحد."
+          }
+        },
+        "benefitsTitle": "لماذا تشغّل الفرق المنتجين معًا",
+        "benefitsLead": "توقف عن تقسيم الحجوزات والتجزئة بين أدوات لا تتحدث إلى بعضها.",
+        "benefits": {
+          "b1": {
+            "title": "تطبيق عملاء واحد بعلامتك",
+            "body": "احجز خدمة واشترِ منتجًا دون مغادرة تجربة علامتك التجارية."
+          },
+          "b2": {
+            "title": "عملاء مشتركون",
+            "body": "يبقى سجل الزيارات وطلبات المتجر والمتابعات في سجل العميل نفسه."
+          },
+          "b3": {
+            "title": "بيع متقاطع طبيعي",
+            "body": "اعرض منتجات للأخذ بعد الخدمة، أو احجز الزيارة التالية من المتجر."
+          },
+          "b4": {
+            "title": "تجربة واحدة ومسار فوترة واحد",
+            "body": "تجربة Pro كاملة لمدة {{days}} يومًا على مساحة العمل، ثم فوترة عبر UPI حسب خطة كل منتج."
+          }
+        },
+        "pricingTitle": "الأسعار عند تشغيل المنتجين معًا",
+        "starter": {
+          "f1": "Orbit Appoint Starter بسعر {{price}}/شهر + Orbit Mart Starter بسعر {{price}}/شهر",
+          "f2": "تطبيق واحد بعلامتك التجارية للحجز والتسوق",
+          "f3": "عملاء مشتركون بين الحجوزات والتجزئة",
+          "f4": "تقويم الموظفين ونقطة البيع والكتالوج ودفتر اليومية",
+          "f5": "تذكيرات البريد الإلكتروني ونظرة عامة على ذكاء الأعمال في المنتجين"
+        },
+        "pro": {
+          "f1": "Orbit Appoint Pro بسعر {{price}}/شهر + Orbit Mart Pro بسعر {{price}}/شهر",
+          "f2": "كل ما في Starter",
+          "f3": "تذكيرات واتساب والمدفوعات ومكتب ثانٍ في Appoint",
+          "f4": "توصيل فوري والفاتورة الإلكترونية GST/e-way وGrow في Mart",
+          "f5": "ذكاء الأعمال الكامل ومنشئ الأتمتة وتطبيق عملاء بلا إعلانات"
+        }
+      }
+    },
+    "pricing": {
+      "products": {
+        "appointie": {
+          "kicker": "Orbit Appoint",
+          "title": "الحجوزات والتقويم والموظفون والعملاء",
+          "lead": "جدولة فردية مع Starter. وتذكيرات واتساب والمدفوعات ومكتب ثانٍ مع Pro."
+        },
+        "shopie": {
+          "kicker": "Orbit Mart",
+          "title": "التجارة والدفاتر وGST",
+          "lead": "الكاونتر والطلبات عبر الإنترنت والمرتجعات مع Starter. والتوصيل الفوري ودفاتر GST وGrow مع Pro."
+        },
+        "both": {
+          "kicker": "Orbit Appoint + Orbit Mart",
+          "title": "مساحة عمل واحدة للحجز والتسوق",
+          "lead": "Starter أو Pro عبر المنتجين. يُفوتَر كل منتج على حدة؛ وتعرض الإجماليات أدناه التكلفة الشهرية المجمّعة."
+        }
+      },
+      "regionIn": "الهند (₹)",
+      "regionIntl": "دولي ($)",
+      "billingUpi": "فوترة عبر UPI",
+      "billingCard": "الدفع بالبطاقة (USD)",
+      "yearly": {
+        "chip": "السنوي = {{months}}× الشهري",
+        "noteFreeOne": "الفوترة السنوية تساوي {{months}}× الشهري ({{free}} شهر مجانًا).",
+        "noteFreeMany": "الفوترة السنوية تساوي {{months}}× الشهري ({{free}} أشهر مجانًا).",
+        "noteNoFree": "الفوترة السنوية تساوي {{months}}× الشهري.",
+        "planLine": "أو {{price}}/سنة ({{months}}× الشهري)"
+      },
+      "fallback": {
+        "freeBlurb": "وصول كامل إلى Pro خلال الفترة التجريبية، ثم قفل جزئي حتى تقوم بالترقية.",
+        "starterBlurb": "العمليات الأساسية ونظرة عامة على ذكاء الأعمال وموقع واحد وتطبيق عملاء بعلامتك التجارية.",
+        "starterBlurbBoth": "Appoint Starter + Mart Starter في مساحة عمل واحدة، مع فوترة لكل منتج.",
+        "proBlurb": "ذكاء الأعمال الكامل ومكتب ثانٍ وأدوات واتساب أو GST وتطبيق بعلامتك التجارية بلا إعلانات. {{note}}",
+        "proBlurbBoth": "Appoint Pro + Mart Pro مع ذكاء الأعمال الكامل وتطبيق بلا إعلانات."
+      },
+      "extras": {
+        "kicker": "الإضافات والذكاء الاصطناعي",
+        "titleBefore": "الموظفون والمكاتب وحزمة Pets و",
+        "titleEm": "استخدام الذكاء الاصطناعي",
+        "seatKicker": "إضافات المقاعد والحزم",
+        "monthlyExtras": "الإضافات الشهرية",
+        "extraStaff": "موظف إضافي",
+        "extraStaffNote": "Starter (بحد أقصى 1) وPro",
+        "extraOffice": "مكتب إضافي",
+        "extraOfficeNote": "Pro فقط",
+        "petsPack": "حزمة Pets",
+        "petsPackNote": "إضافة اختيارية في Orbit Mart",
+        "aiKicker": "استخدام الذكاء الاصطناعي",
+        "aiTitle": "محافظ مدفوعة مسبقًا مع Pro",
+        "freeEachDay": "مجاني كل يوم",
+        "freeEachDayNote": "مشمول قبل خصم رصيد المحفظة",
+        "questions": "أسئلة",
+        "approvals": "موافقات",
+        "extraQuestion": "سؤال إضافي",
+        "extraApproval": "موافقة إضافية",
+        "afterFreeLimit": "بعد الحد اليومي المجاني",
+        "walletCalls": "استدعاءات محفظة الذكاء الاصطناعي",
+        "walletCallsNote": "مسح الفواتير ومسودات الأتمتة",
+        "minPerCall": "حد أدنى / استدعاء"
+      },
+      "ctaTitle": "ابدأ بوصول Pro الكامل"
+    },
+    "industries": {
+      "detail": {
+        "faqTitle": "الأسئلة الشائعة",
+        "relatedTitle": "قطاعات ذات صلة",
+        "alsoSee": "اطّلع أيضًا على <products>المنتجات</products> و<pricing>الأسعار</pricing> و<faq>الأسئلة الشائعة</faq>.",
+        "ctaTitle": "ابدأ تجربة Pro كاملة لمدة 45 يومًا"
+      },
+      "items": {
+        "salon-spa": {
+          "name": "الصالونات والسبا",
+          "h1": "برنامج حجوزات للصالونات والسبا",
+          "lead": "امنح عملاءك تطبيقًا باسم صالونك. يدير Orbit Appoint المقاعد والغرف وتقاويم الموظفين. ويدير Orbit Mart كاونتر البيع في الاستقبال وفواتير GST عندما تبيع منتجات أيضًا.",
+          "problemTitle": "مشكلة أرضية الصالون",
+          "problem": "الزبائن بدون موعد والحجوزات الهاتفية ودفتر المواعيد الورقي تتنافس على المقاعد نفسها. يُحجز المصففون مرتين، وتُفرغ حالات عدم الحضور المواعيد، وتبقى مبيعات المنتجات في صندوق منفصل. لا يستطيع المالكون معرفة من هو متاح أو ما الذي تمت فوترته أو أي الخدمات تحقق ربحًا فعلًا.",
+          "solutionTitle": "كيف يساعد IE Orbit الصالونات والسبا",
+          "solution": "مع Orbit Appoint يحجز العملاء عبر الإنترنت، ويرى الموظفون تقويمًا مباشرًا، وتُرسل التذكيرات قبل الزيارة. وإذا كنت تبيع الشامبو أو الصبغات أو حقائب السبا، أضف Orbit Mart في مساحة العمل نفسها لنقطة البيع والكتالوج ودفاتر GST — تسجيل دخول واحد وقائمة عملاء واحدة.",
+          "featuresTitle": "ميزات تناسب عمل الصالون",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "يحجز العملاء ويتسوقون في تطبيق بعلامة صالونك — لا في إدراج عام باسم IE Orbit."
+            },
+            {
+              "title": "الحجز عبر الإنترنت",
+              "body": "يختار العملاء الخدمة والوقت من أي جهاز بدل الاتصال بالاستقبال."
+            },
+            {
+              "title": "تقويم الموظفين",
+              "body": "اعرف من مع عميل ومن متاح وأي مقعد أو غرفة مشغولة."
+            },
+            {
+              "title": "العملاء والتقييمات",
+              "body": "احتفظ بسجل الزيارات وأرسل التذكيرات واجمع التقييمات بعد الموعد."
+            },
+            {
+              "title": "نقطة بيع التجزئة وGST",
+              "body": "حاسب على المنتجات الجاهزة للحمل عند الكاونتر بمبيعات جاهزة لـ GST عند تفعيل Orbit Mart."
+            }
+          ],
+          "workflowTitle": "يوم نموذجي في الصالون",
+          "workflow": [
+            {
+              "title": "افتح التقويم",
+              "body": "يرى الموظفون حجوزات اليوم وفترات الزبائن بدون موعد قبل وصول أول عميل."
+            },
+            {
+              "title": "أجرِ الزيارة",
+              "body": "سجّل وصول العميل ونفّذ الخدمة واجمع تقييمًا حين تكون جاهزًا."
+            },
+            {
+              "title": "بِع وأغلق اليوم",
+              "body": "إذا كان لديك منتجات للبيع، سجّلها على نقطة بيع Orbit Mart واحتفظ بدفاتر GST في مساحة العمل نفسها."
+            }
+          ],
+          "benefitsTitle": "ما الذي يتغير في النشاط التجاري",
+          "benefits": [
+            "تطبيق عملاء بالعلامة البيضاء بعلامة صالونك",
+            "مواعيد ضائعة أقل بفضل التأكيدات وتقويم مشترك",
+            "سجل عميل واحد للخدمات ومبيعات المنتجات",
+            "فوترة UPI لاشتراكك في IE Orbit — بدون بطاقة ائتمان لبدء التجربة لمدة 45 يومًا"
+          ],
+          "customerTitle": "ما يعيشه العملاء",
+          "customer": "يحجز العملاء قصّة شعر أو صبغة أو موعد سبا في تطبيقك الذي يحمل علامتك أو عبر الحجز على الويب، ويتلقون التذكيرات، ويمكنهم شراء المنتجات الجاهزة للحمل إذا فعّلت Orbit Mart.",
+          "businessTitle": "ما يعيشه المالكون والموظفون",
+          "business": "يحصل المالكون على BI Overview في Starter وعلى Growth وRevenue وForecast وReports كاملة في Pro. ويعمل الموظفون من تقويم واحد بدل دفتر مواعيد وصندوق متجر منفصل.",
+          "faqs": [
+            {
+              "q": "هل IE Orbit مخصص لسلاسل الصالونات الكبيرة فقط؟",
+              "a": "لا. خطتا Starter وPro مصممتان للمواقع المفردة والفرق الصغيرة. أضف موظفين أو مكاتب إضافية لاحقًا كإضافات شهرية."
+            },
+            {
+              "q": "هل يمكننا بيع المنتجات إلى جانب الخدمات؟",
+              "a": "نعم. اشترك في Orbit Mart في مساحة العمل نفسها لنقطة البيع والكتالوج ودفاتر GST. لا تحتاج إلى تسجيل دخول ثانٍ."
+            },
+            {
+              "q": "هل يحتاج العملاء إلى حساب IE Orbit خاص بهم لديكم؟",
+              "a": "يستخدم العملاء تطبيقك بالعلامة البيضاء للحجز وطلبات المتجر. ويستخدم فريقك مساحة العمليات لإدارة الصالون."
+            }
+          ]
+        },
+        "clinic-healthcare": {
+          "name": "العيادات والرعاية الصحية",
+          "h1": "برنامج مواعيد للعيادات",
+          "lead": "يحجز المرضى عبر تطبيقك الذي يحمل علامتك. يجدول Orbit Appoint الممارسين والغرف. ويمكن أن يعمل Orbit Mart بجانبه إذا كنت تدير أيضًا كاونتر للبنود المفوترة مع دفاتر GST.",
+          "problemTitle": "مشكلة مكتب الاستقبال في العيادة",
+          "problem": "يتصل المرضى ويراسلون عبر WhatsApp ويحضرون بدون موعد على المواعيد نفسها. يوازن الاستقبال بين توفر الممارسين وزيارات المتابعة وطابور لا يظهر حتى يقف أحدهم عند المكتب. وإذا كنت تصرف بنودًا أيضًا، فغالبًا ما تكون فوترتها في نظام آخر.",
+          "solutionTitle": "كيف يساعد IE Orbit العيادات",
+          "solution": "يجمع Orbit Appoint الحجوزات وتقاويم الموظفين وسجلات العملاء في مكان واحد حتى لا يكون الاستقبال المصدر الوحيد للحقيقة. وأضف Orbit Mart لمبيعات الكاونتر مع GST ودفاتر البنود التي تبيعها — مع بقاء النشاط والموظفين والفوترة كما هي.",
+          "featuresTitle": "ميزات لعمليات العيادة",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "يحجز المرضى الزيارات أو يديرونها باسم عيادتك بدل سوق إلكتروني عام."
+            },
+            {
+              "title": "تقويم المواعيد",
+              "body": "اربط الزيارات بالممارسين والغرف بدل جدول بيانات مشترك."
+            },
+            {
+              "title": "الحجز عبر الإنترنت",
+              "body": "دع المرضى يطلبون موعدًا دون إشغال خط الهاتف."
+            },
+            {
+              "title": "التذكيرات والسجلات",
+              "body": "احتفظ بسجل العميل وأرسل التذكيرات قبل الزيارة."
+            },
+            {
+              "title": "الكاونتر ودفاتر GST",
+              "body": "استخدم Orbit Mart عند فوترة البنود في الاستقبال مع تقارير GST وe-invoice حيث تستخدمها."
+            }
+          ],
+          "workflowTitle": "كيف يسير يوم العيادة",
+          "workflow": [
+            {
+              "title": "انشر التوفر",
+              "body": "حدد جداول الموظفين ليتشارك الحجز عبر الإنترنت والمرضى بدون موعد التقويم نفسه."
+            },
+            {
+              "title": "أجرِ الجلسة",
+              "body": "استدعِ المريض التالي وأكمل الزيارة واحتفظ بالسجل في ملف العميل."
+            },
+            {
+              "title": "فوتر ما تبيعه",
+              "body": "إذا كنت تبيع مستلزمات أو بنودًا مفوترة، أغلقها على نقطة بيع Orbit Mart في مساحة العمل نفسها."
+            }
+          ],
+          "benefitsTitle": "مزايا للعيادة",
+          "benefits": [
+            "تطبيق عملاء بالعلامة البيضاء لحجوزات المرضى",
+            "حجوزات مزدوجة أقل للممارسين",
+            "قائمة عملاء واحدة للزيارات ومبيعات الكاونتر",
+            "تجربة Pro كاملة لمدة 45 يومًا بدون بطاقة ائتمان"
+          ],
+          "customerTitle": "ما يعيشه المرضى",
+          "customer": "يحجز المرضى الزيارات أو يديرونها عبر تطبيق العملاء بالعلامة البيضاء حيث تفعّله، بدل الاكتفاء بالاتصال بالاستقبال.",
+          "businessTitle": "ما تعيشه العيادة",
+          "business": "يرى الاستقبال تقويمًا واحدًا. يمكن للمالكين البدء بـ BI Overview في Starter وفتح حزمة BI الكاملة في Pro. IE Orbit برنامج عمليات — وليس سجلًا طبيًا إلكترونيًا سريريًا ولا بديلًا عن أنظمة السجلات الطبية.",
+          "faqs": [
+            {
+              "q": "هل يحل هذا محل برنامج السجلات الطبية الإلكترونية في المستشفيات؟",
+              "a": "لا. Orbit Appoint برنامج للمواعيد وعمليات العملاء. ولا يدّعي أنه سجل طبي إلكتروني سريري."
+            },
+            {
+              "q": "هل يمكن لعدة ممارسين مشاركة مساحة عمل واحدة؟",
+              "a": "نعم. ادعُ الموظفين بأدوار وصلاحيات. ويمكن إضافة موظفين قابلين للحجز كإضافة شهرية عندما تتجاوز حد الخطة."
+            },
+            {
+              "q": "هل يمكننا الدفع عبر UPI لفاتورة IE Orbit؟",
+              "a": "نعم. اشتراك المنصة بالروبية INR وعبر UPI مع مطالبة دفع من مساحة العمل. أما مدفوعات المرضى في العيادة فهي منفصلة."
+            }
+          ]
+        },
+        "fitness-wellness": {
+          "name": "اللياقة والعافية",
+          "h1": "برنامج حجوزات للياقة والعافية",
+          "lead": "يحجز الأعضاء عبر تطبيقك الذي يحمل علامتك. يدير Orbit Appoint التقويم. ويغطي Orbit Mart المنتجات الدعائية أو المكملات إذا كنت تبيع من المكتب.",
+          "problemTitle": "مشكلة الجدولة في الاستوديو",
+          "problem": "قوائم الحصص تعيش في مجموعات الدردشة. ومواعيد التدريب الشخصي في هاتف المدرّب. ولا يعرف الاستقبال من سيأتي حتى يصلوا، والبيع (زجاجات وأحزمة وحقائب) درج نقدي جانبي.",
+          "solutionTitle": "كيف يساعد IE Orbit فرق اللياقة والعافية",
+          "solution": "ضع الجلسات في Orbit Appoint ليحجز العملاء وفق التوفر الحقيقي. واحتفظ بالعملاء والتذكيرات والتقييمات مع الزيارة. فعّل Orbit Mart عندما تريد نقطة بيع وكتالوجًا ودفاتر GST لما تبيعه في الاستوديو.",
+          "featuresTitle": "ميزات للاستوديوهات والمدرّبين",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "يثبّت الأعضاء علامة استوديوك لحجز الجلسات وشراء المنتجات."
+            },
+            {
+              "title": "حجز الجلسات",
+              "body": "حجوزات عبر الإنترنت لمواعيد التدريب وجلسات العافية من أي جهاز."
+            },
+            {
+              "title": "توفر الموظفين",
+              "body": "يرى المدرّبون والمعالجون تقويمهم الخاص بدل مجموعة دردشة."
+            },
+            {
+              "title": "سجل العميل",
+              "body": "اعرف من يعود ومن لم يحضر وماذا حجز في المرة الأخيرة."
+            },
+            {
+              "title": "بيع الاستوديو",
+              "body": "نقطة بيع Orbit Mart ودفاتر GST إذا كنت تبيع منتجات دعائية أو منتجات معبأة."
+            }
+          ],
+          "workflowTitle": "كيف يسير أسبوع الاستوديو",
+          "workflow": [
+            {
+              "title": "حدد الجدول",
+              "body": "انشر ساعات الموظفين والخدمات ليحجز العملاء دون مكالمة هاتفية."
+            },
+            {
+              "title": "أجرِ الجلسة",
+              "body": "سجّل الحضور وأكمل الزيارة وتابع بالتذكيرات أو التقييمات."
+            },
+            {
+              "title": "بِع من المكتب",
+              "body": "إذا كان لديك منتجات للبيع، فوترها في Orbit Mart في مساحة العمل نفسها."
+            }
+          ],
+          "benefitsTitle": "مزايا للاستوديو",
+          "benefits": [
+            "تطبيق عملاء بالعلامة البيضاء للحجز والمتجر",
+            "تقويم مشترك بدل حجوزات متفرقة في الدردشات",
+            "بيع اختياري دون تسجيل دخول ثانٍ لبرنامج آخر",
+            "فوترة IE Orbit السنوية بمضاعف مخفّض من الشهري (تظهر الأشهر المجانية عند الدفع)"
+          ],
+          "customerTitle": "ما يعيشه الأعضاء",
+          "customer": "يحجز الأعضاء مدرّبًا أو موعد عافية في تطبيقك الذي يحمل علامتك ويمكنهم شراء منتجات الاستوديو إذا فعّلت Orbit Mart.",
+          "businessTitle": "ما يعيشه المشغّلون",
+          "business": "يرى المشغّلون جلسات اليوم في مكان واحد. ويفتح Pro ذكاء الأعمال الكامل ونقاط المكافآت في Orbit Appoint حيث تتضمنها الخطة.",
+          "faqs": [
+            {
+              "q": "هل يمكننا إدارة الحصص ومتجر صغير معًا؟",
+              "a": "نعم. Orbit Appoint للحجوزات وOrbit Mart لنقطة البيع ودفاتر GST، في مساحة العمل نفسها."
+            },
+            {
+              "q": "هل توجد تجربة مجانية؟",
+              "a": "تحصل مساحات العمل الجديدة على تجربة Pro كاملة لمدة 45 يومًا بدون بطاقة ائتمان. بعد ذلك يُقفل الحساب جزئيًا حتى تشترك."
+            },
+            {
+              "q": "هل نحتاج إلى مكاتب إضافية لعدة استوديوهات؟",
+              "a": "تتضمن الخطط عددًا محددًا من المكاتب. المكاتب الإضافية إضافة شهرية مع العنوان وموقع الخريطة."
+            }
+          ]
+        },
+        "professional-services": {
+          "name": "الخدمات المهنية",
+          "h1": "برنامج حجوزات للمستشارين والمهنيين",
+          "lead": "يحجز العملاء عبر تطبيق باسم شركتك. صُمّم Orbit Appoint للاستشارات، لا لمقعد صالون. أضف Orbit Mart فقط إذا كنت تبيع منتجات معبأة أيضًا.",
+          "problemTitle": "مشكلة تقويم الاستشارات",
+          "problem": "مكالمات الاستكشاف والجلسات المدفوعة والمتابعات تعيش في سلاسل البريد. ويعيد المساعدون كتابة الموعد نفسه ثلاث مرات. لا توجد رؤية مشتركة لمن هو محجوز، وفواتير المنتجات المادية في مكان آخر.",
+          "solutionTitle": "كيف يساعد IE Orbit الخدمات المهنية",
+          "solution": "يحجز العملاء وفق توفرك الحقيقي في Orbit Appoint. وتبقى تقاويم الموظفين والتذكيرات والتقييمات مع سجل العميل. وإذا كنت تبيع حقائب أو كتبًا أو عروضًا معبأة عند الكاونتر، يضيف Orbit Mart نقطة بيع ودفاتر GST دون مساحة عمل ثانية.",
+          "featuresTitle": "ميزات للمستشارين والشركات",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "تجربة حجز احترافية بعلامة ممارستك، لا IE Orbit."
+            },
+            {
+              "title": "استشارات قابلة للحجز",
+              "body": "انشر الخدمات ودع العملاء يختارون وقتًا بدل تبادل الرسائل بالبريد."
+            },
+            {
+              "title": "الموظفون والغرف",
+              "body": "اربط الأشخاص والمكاتب حتى لا تتعارض الفرق ذات المستشارين المتعددين."
+            },
+            {
+              "title": "سجلات العملاء",
+              "body": "احتفظ بمن قابلتَه ومتى وما الذي حجزه بعد ذلك."
+            },
+            {
+              "title": "بيع منتجات اختياري",
+              "body": "Orbit Mart للكتالوج وGST إذا كنت تبيع شيئًا عند المكتب."
+            }
+          ],
+          "workflowTitle": "كيف تُجدول أعمال العملاء",
+          "workflow": [
+            {
+              "title": "حدد الخدمات",
+              "body": "أنشئ أنواع الاستشارات والمدد التي يمكن لعملائك حجزها."
+            },
+            {
+              "title": "احمِ التقويم",
+              "body": "يحدد توفر الموظفين ما يُعرض عبر الإنترنت."
+            },
+            {
+              "title": "تابع",
+              "body": "تُرسل التذكيرات؛ وتبقى التقييمات والسجل مع العميل."
+            }
+          ],
+          "benefitsTitle": "مزايا للممارسة",
+          "benefits": [
+            "تجربة حجز احترافية على تطبيق عملاء بالعلامة البيضاء",
+            "وقت أقل في تنسيق المواعيد عبر البريد",
+            "فوترة اشتراك UPI نفسها كما في منتجات IE Orbit الأخرى",
+            "BI Overview في Starter؛ وذكاء أعمال كامل في Pro"
+          ],
+          "customerTitle": "ما يعيشه العملاء",
+          "customer": "يحجز العملاء استشارة في تطبيقك الذي يحمل علامتك، ويتلقون التذكيرات، ويحضرون في موعد مؤكد.",
+          "businessTitle": "ما تعيشه الشركة",
+          "business": "يرى المستشارون جدولهم الخاص. ويدعو المالكون الموظفين بصلاحيات بدل مشاركة تسجيل دخول واحد. لا يحل IE Orbit محل عقودك أو نظام CRM أو مكتب المحاسبة — بل يدير المواعيد والبيع الاختياري.",
+          "faqs": [
+            {
+              "q": "هل هذا لأعمال التجميل فقط؟",
+              "a": "لا. يتضمن الإعداد الخدمات المهنية كفئة مستقلة. Orbit Appoint جدولة لا ترتبط بقطاع معين."
+            },
+            {
+              "q": "هل يمكننا استخدام تسجيل الدخول بـ Google؟",
+              "a": "نعم. يمكن للمالكين المتابعة باستخدام Google أثناء التسجيل، وتتوفر في المنتج اتصالات Google Calendar لسير العمل المؤهل."
+            },
+            {
+              "q": "كيف نطلب عرضًا تجريبيًا؟",
+              "a": "استخدم صفحة التواصل (أضف intent=demo) أو راسل support@indiansempire.com. الهاتف: +91 9766855617."
+            }
+          ]
+        },
+        "retail": {
+          "name": "التجزئة",
+          "h1": "برنامج نقطة بيع وGST للتجزئة",
+          "lead": "يتصفح المتسوقون عبر تطبيق باسم متجرك. Orbit Mart هو منتج أرضية المتجر. تدير Starter الكاونتر والطلبات عبر الإنترنت والمرتجعات. وتضيف Pro التوصيل الفوري عبر Porter/Shiprocket وفاتورة GST الإلكترونية وe-way وGrow. أضف Orbit Appoint فقط إذا كنت تبيع خدمات بمواعيد أيضًا.",
+          "problemTitle": "مشكلة الكاونتر والدفاتر",
+          "problem": "الصندوق وقائمة المخزون وأوراق GST ثلاث عادات مختلفة. تصل الطلبات عبر الإنترنت في الدردشة. والمرتجعات في دفتر. ويحتفظ تجار الحيوانات الأليفة أيضًا بسجلات حيوانات لا تناسب قائمة SKU عامة.",
+          "solutionTitle": "كيف يساعد Orbit Mart تجار التجزئة",
+          "solution": "أدر في Orbit Mart مبيعات الكاونتر عبر نقطة البيع / GST والكتالوج والمخزون وطلبات الاستلام والتوصيل والمرتجعات. وتغطي الدفاتر المبيعات والمشتريات والنقد والمصروفات والأطراف والمخزون وتقارير GST وe-invoice (IRN) وe-way bill. ويضيف Grow المشاركة عبر WhatsApp ومساعدات الإدراج والحاسبات. وحزمة Pets إضافة اختيارية لسجلات الحيوانات الأليفة.",
+          "featuresTitle": "ميزات التجزئة المتوفرة في المنتج اليوم",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "يتصفح المتسوقون ويطلبون ويتابعون بعلامة متجرك — لا في إدراج بسوق إلكتروني."
+            },
+            {
+              "title": "نقطة البيع والكتالوج",
+              "body": "مبيعات كاونتر بـ GST ومنتجات ومخزون وطلبات عبر الإنترنت ومرتجعات في Starter. وولاء المتجر في Pro."
+            },
+            {
+              "title": "الطلبات والتوصيل",
+              "body": "الطلبات عبر الإنترنت والمرتجعات في Starter. والتوصيل الفوري عبر Porter/Shiprocket في Orbit Mart Pro."
+            },
+            {
+              "title": "دفاتر GST",
+              "body": "دفتر اليومية في Starter. والمشتريات وتقارير GST وe-invoice وe-way bill في Pro."
+            },
+            {
+              "title": "Grow وحزمة Pets",
+              "body": "حاسبات في Starter. وWhatsApp ومساعدات الإدراج في Pro. وحزمة Pets إضافة شهرية اختيارية."
+            }
+          ],
+          "workflowTitle": "كيف يُغلق يوم المتجر",
+          "workflow": [
+            {
+              "title": "بِع عند الكاونتر",
+              "body": "سجّل مبيعات شاملة أو غير شاملة لـ GST على نقطة البيع بالاعتماد على الكتالوج."
+            },
+            {
+              "title": "نفّذ الطلبات",
+              "body": "استلام أو توصيل أو إرجاع باستخدام أدوات الطلبات والمناطق التي فعّلتها."
+            },
+            {
+              "title": "احتفظ بالدفاتر",
+              "body": "تبقى المبيعات والمشتريات والنقد والامتثال لـ GST في منتج Orbit Mart نفسه."
+            }
+          ],
+          "benefitsTitle": "مزايا لتجار التجزئة",
+          "benefits": [
+            "تطبيق عملاء بالعلامة البيضاء ليشتري المتسوقون بعلامتك",
+            "منتج واحد للتجارة والدفاتر وGrow — وليس ثلاثة اشتراكات",
+            "حزمة Pets اختيارية بدل نظام منفصل لمتجر حيوانات أليفة",
+            "اربط Razorpay في خطط Pro المؤهلة ليدفع لك العملاء ثمن طلبات المتجر"
+          ],
+          "customerTitle": "ما يعيشه المتسوقون",
+          "customer": "يستخدم المتسوقون تطبيق العملاء بالعلامة البيضاء للتصفح والطلب والمتابعة — بحسب ما تفعّله — بينما تدير الكاونتر في مساحة العمليات.",
+          "businessTitle": "ما يعيشه المتجر",
+          "business": "يعمل أمناء الصناديق ومديرو المتجر في Orbit Mart. وإذا كنت تقص الشعر أيضًا أو تقدم مواعيد، أضف Orbit Appoint إلى مساحة العمل نفسها بدل مورّد ثانٍ.",
+          "faqs": [
+            {
+              "q": "هل نحتاج إلى Orbit Appoint لاستخدام Orbit Mart؟",
+              "a": "لا. يمكنك الاشتراك في Orbit Mart وحده. أضف Orbit Appoint لاحقًا إذا بدأت بحجز الخدمات."
+            },
+            {
+              "q": "ما هي حزمة Pets؟",
+              "a": "إضافة اختيارية في Orbit Mart (₹500 شهريًا بسعر الكتالوج الافتراضي) لسجلات الحيوانات الأليفة. وهي غير مشمولة في الخطة الأساسية."
+            },
+            {
+              "q": "هل يتضمن Orbit Mart فاتورة e-invoice؟",
+              "a": "في Orbit Mart Pro. تقارير GST وe-invoice (IRN) وe-way bill جزء من Mart Books في Pro. وتغطي Starter الكاونتر والطلبات عبر الإنترنت والمرتجعات ودفتر اليومية."
+            }
+          ]
+        },
+        "education-training": {
+          "name": "التعليم والتدريب",
+          "h1": "برنامج حجوزات للدروس والتدريس الخصوصي",
+          "lead": "يحجز المتعلمون عبر تطبيقك الذي يحمل علامتك. يحتفظ Orbit Appoint بتقويم الحصص. وOrbit Mart اختياري إذا كنت تبيع ملازم أو حقائب أو منتجات دعائية.",
+          "problemTitle": "مشكلة الدفعات والمواعيد",
+          "problem": "تُعلن الدفعات على WhatsApp. ويراسل أولياء الأمور لطلب حصة تعويضية. ويحتفظ المدرّبون بجدول Excel خاص بكل منهم. لا توجد رؤية واحدة لمن في أي موعد، وبيع المواد المطبوعة عملية نقدية جانبية.",
+          "solutionTitle": "كيف يساعد IE Orbit قطاع التعليم والتدريب",
+          "solution": "تعامل مع الحصص ومواعيد التدريس الخصوصي كخدمات قابلة للحجز في Orbit Appoint. تُظهر تقاويم الموظفين من يُدرّس ومتى. ويتلقى العملاء (الطلاب أو أولياء الأمور) التذكيرات. استخدم Orbit Mart إذا احتجت أيضًا إلى كاونتر وكتالوج ودفاتر GST للمواد التي تبيعها.",
+          "featuresTitle": "ميزات لفرق التدريب",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "يحجز المتعلمون أو أولياء الأمور موعدًا باسم مركزك."
+            },
+            {
+              "title": "حصص قابلة للحجز",
+              "body": "انشر أنواع الجلسات ليحجز المتعلمون بأنفسهم بدل ملاحقة المنسّق."
+            },
+            {
+              "title": "تقاويم المدرّبين",
+              "body": "يحدد توفر الموظفين ما يمكن حجزه."
+            },
+            {
+              "title": "سجلات العملاء",
+              "body": "احتفظ بمن حضر ومن يجب أن يعود والتقييمات حيث تجمعها."
+            },
+            {
+              "title": "بيع المواد",
+              "body": "نقطة بيع Orbit Mart وGST إذا كنت تبيع ملازم أو حقائب أو منتجات دعائية."
+            }
+          ],
+          "workflowTitle": "كيف يسير أسبوع التدريب",
+          "workflow": [
+            {
+              "title": "انشر الجدول",
+              "body": "تصبح الخدمات وساعات الموظفين مصدر الحقيقة."
+            },
+            {
+              "title": "أجرِ الجلسة",
+              "body": "سجّل حضور المتعلمين واحتفظ بالسجل في ملف العميل."
+            },
+            {
+              "title": "بِع المواد عند الحاجة",
+              "body": "فوتر الحقائب أو الملازم في Orbit Mart دون مغادرة مساحة العمل."
+            }
+          ],
+          "benefitsTitle": "مزايا للمركز",
+          "benefits": [
+            "تطبيق عملاء بالعلامة البيضاء للحجوزات",
+            "تقويم واحد للمنسّقين والمدرّبين",
+            "نموذج التجربة واشتراك UPI نفسه كما في قطاعات IE Orbit الأخرى",
+            "أضف موظفين أو مكاتب عندما ينمو المركز"
+          ],
+          "customerTitle": "ما يعيشه المتعلمون",
+          "customer": "يحجز المتعلمون أو أولياء الأمور موعدًا في تطبيقك الذي يحمل علامتك ويتلقون تذكيرات قبل الحصة.",
+          "businessTitle": "ما يعيشه المركز",
+          "business": "لم يعد المنسّقون هم الجدول الزمني البشري. IE Orbit ليس نظام إدارة تعلّم (LMS) كاملًا (دون ادعاءات مختلقة عن المناهج) — بل جدولة مع بيع اختياري.",
+          "faqs": [
+            {
+              "q": "هل يمكننا جدولة التدريس الفردي والدفعات الجماعية؟",
+              "a": "نعم، ما دمت تصيغها كخدمات مع توفر الموظفين في Orbit Appoint. أنت تحدد الخدمات؛ ولا يختلق المنتج «نظام LMS» منفصلًا."
+            },
+            {
+              "q": "هل يمكننا بيع الكتب أو الحقائب؟",
+              "a": "أضف Orbit Mart للكتالوج ونقطة البيع ودفاتر GST في مساحة العمل نفسها."
+            },
+            {
+              "q": "هل الأسعار بالروبية INR؟",
+              "a": "أسعار كتالوج الموقع بالروبية INR. يمكنك تخزين عملة أخرى للنشاط أثناء الإعداد؛ وفوترة اشتراك UPI مصممة للأعمال الهندية."
+            }
+          ]
+        },
+        "home-services": {
+          "name": "الخدمات المنزلية",
+          "h1": "برنامج حجوزات للخدمات المنزلية",
+          "lead": "تحجز الأسر الزيارات عبر تطبيق بعلامة مهنتك. يحجز Orbit Appoint المهمة. ويساعد Orbit Mart إذا كنت تبيع قطع غيار أو منتجات مع فواتير GST أيضًا.",
+          "problemTitle": "مشكلة الزيارات الميدانية",
+          "problem": "تُقطع الوعود بالمهام عبر مكالمة هاتفية. ولا يتشارك الفنيون تقويمًا واحدًا. ولا يتلقى العملاء تأكيدًا يمكن الوثوق به. وقطع الغيار، إن بيعت، تُفوتر على إيصال مكتوب بخط اليد.",
+          "solutionTitle": "كيف يساعد IE Orbit فرق الخدمات المنزلية",
+          "solution": "احجز الزيارات وفق توفر الموظفين في Orbit Appoint. واحتفظ بالعميل والتذكير والتقييم مع المهمة. وإذا كنت تبيع قطع غيار أو منتجات معبأة، يضيف Orbit Mart نقطة بيع وكتالوجًا ودفاتر GST — بما في ذلك e-invoice وe-way حيث تستخدمهما.",
+          "featuresTitle": "ميزات للزيارات الميدانية والمنزلية",
+          "features": [
+            {
+              "title": "تطبيق عملاء بالعلامة البيضاء",
+              "body": "تحجز الأسر زيارة باسم مهنتك بدل مجرد وعد هاتفي."
+            },
+            {
+              "title": "حجز الزيارات",
+              "body": "يطلب العملاء موعدًا عبر الإنترنت وفق تقاويم الموظفين الفعلية."
+            },
+            {
+              "title": "عرض توزيع المهام",
+              "body": "اعرف من هو محجوز حتى لا يُرسل فنيان إلى النافذة الزمنية نفسها."
+            },
+            {
+              "title": "سجل العميل",
+              "body": "اعرف ما أُنجز في الزيارة الأخيرة قبل الانطلاق."
+            },
+            {
+              "title": "القطع وGST",
+              "body": "Orbit Mart لقطع الغيار المباعة عند الكاونتر أو المفوترة مع تقارير GST وأدوات e-invoice."
+            }
+          ],
+          "workflowTitle": "كيف تُنجز المهمة",
+          "workflow": [
+            {
+              "title": "استقبل الحجز",
+              "body": "تتشارك الحجوزات عبر الإنترنت أو التي يدخلها الموظفون التقويم نفسه."
+            },
+            {
+              "title": "نفّذ الزيارة",
+              "body": "يرى الموظف المكلَّف الموعد؛ ويتلقى العميل التذكيرات."
+            },
+            {
+              "title": "فوتر القطع عند الحاجة",
+              "body": "بِع القطع عبر Orbit Mart في مساحة عمل النشاط نفسها."
+            }
+          ],
+          "benefitsTitle": "مزايا للمشغّل",
+          "benefits": [
+            "تطبيق عملاء بعلامة مهنتك",
+            "زيارات متداخلة أقل",
+            "بيع منتجات اختياري جاهز لـ GST",
+            "تجربة Pro كاملة لمدة 45 يومًا بدون بطاقة ائتمان"
+          ],
+          "customerTitle": "ما تعيشه الأسر",
+          "customer": "تحجز الأسر زيارة في تطبيقك بالعلامة البيضاء وتتلقى التذكيرات بدل مجرد وعد شفهي.",
+          "businessTitle": "ما يعيشه المشغّل",
+          "business": "ينظر المنسّقون إلى تقويم واحد. Starter موقع واحد (يمكن إضافة موظف واحد). والمكاتب الإضافية و4 موظفين فأكثر ضمن Pro.",
+          "faqs": [
+            {
+              "q": "هل يتضمن IE Orbit تتبع GPS مباشرًا للفنيين؟",
+              "a": "المنتج الموثّق هو عمليات المواعيد والبيع الاختياري وأدوات التوصيل ذات الصلة في Orbit Mart — وليس منتج تتبع GPS مباشر للفنيين. لا تتوقع ميزات غير موجودة في مساحة العمل."
+            },
+            {
+              "q": "هل يمكننا استخدامه مع عدة مناطق خدمة؟",
+              "a": "للمكاتب/الفروع عنوان وموقع على Google Maps. المكاتب الإضافية إضافة شهرية. ويوفر Orbit Mart أيضًا مناطق توصيل لطلبات المتجر."
+            },
+            {
+              "q": "كيف نبدأ؟",
+              "a": "أنشئ حسابًا، واختر Orbit Appoint (وOrbit Mart إذا كنت تبيع قطعًا)، واستخدم تجربة Pro الكاملة لمدة 45 يومًا."
+            }
+          ]
+        }
+      },
+      "shots": {
+        "altHome": "{{name}} الصفحة الرئيسية لتطبيق العملاء",
+        "altShop": "{{name}} متجر العملاء",
+        "altWorkspace": "{{name}} مساحة عمل العمليات",
+        "altCalendar": "{{name}} تقويم المواعيد",
+        "titleHome": "{{name}} · الرئيسية",
+        "titleCalendar": "{{name}} · التقويم",
+        "dotsLabel": "لقطات شاشة حسب القطاع"
+      }
+    }
+  },
+  "dashboard": {
+    "title": "لوحة التحكم",
+    "welcome": "مرحبًا",
+    "welcomeDismiss": "إغلاق",
+    "searchPlaceholder": "ابحث عن عملاء وحجوزات وطلبات…",
+    "quickActions": "إجراءات سريعة",
+    "todayBookings": "حجوزات اليوم",
+    "upcomingBookings": "القادمة",
+    "openOrders": "طلبات مفتوحة",
+    "lowStock": "مخزون منخفض",
+    "revenueToday": "إيراد اليوم",
+    "noResults": "لا نتائج",
+    "viewAll": "عرض الكل",
+    "insights": "رؤى",
+    "gettingStarted": "ابدأ",
+    "yourBusiness": "نشاطك التجاري",
+    "bookingFallback": "حجز",
+    "orderFallback": "طلب",
+    "customerFallback": "عميل",
+    "welcomeBoth": "مساحة عملك المركزية للحجوزات وعمليات المتجر والعمل اليومي.",
+    "welcomeShop": "مساحة عملك المركزية للطلبات والمخزون وعمليات المتجر اليومية.",
+    "welcomeBookings": "مساحة عملك المركزية للحجوزات والعملاء والعمليات اليومية.",
+    "planTrial": "تجريبي",
+    "planLabel": "الخطة",
+    "completedToday": "المكتملة اليوم",
+    "cancelledToday": "الملغاة اليوم",
+    "revenueMonth": "إيرادات هذا الشهر",
+    "activeCustomers": "العملاء النشطون",
+    "newCustomers": "عملاء جدد",
+    "staffOnDuty": "الموظفون في الخدمة",
+    "ordersToday": "طلبات اليوم",
+    "ordersMonth": "طلبات هذا الشهر",
+    "gmvToday": "إجمالي قيمة المبيعات اليوم",
+    "gmvMonth": "إجمالي قيمة المبيعات هذا الشهر",
+    "deliveryFeesMonth": "رسوم التوصيل (الشهر)",
+    "pendingReturns": "المرتجعات المعلقة",
+    "petsEnrolled": "الحيوانات المسجلة",
+    "birthdays7d": "أعياد الميلاد (7 أيام)",
+    "birthdays30d": "أعياد الميلاد (30 يومًا)",
+    "withPhoto": "مع صورة",
+    "refreshIntervalAria": "فاصل تحديث لوحة التحكم",
+    "manualRefresh": "تحديث يدوي",
+    "refreshEvery": "تحديث كل {{seconds}} ث",
+    "insightsSubtitle": "أقوى المؤشرات خلال آخر 30 يومًا.",
+    "openBi": "فتح ذكاء الأعمال",
+    "appointSubtitle": "الحجوزات وعمليات الخدمة",
+    "martSubtitle": "الطلبات والمرتجعات والتوصيل",
+    "petsPack": "باقة الحيوانات الأليفة",
+    "petsPackSubtitle": "السجل وأعياد الميلاد القادمة",
+    "todaysSchedule": "جدول اليوم",
+    "todaysScheduleSubtitle": "مواعيد اليوم الحالي",
+    "bookingNumberFallback": "حجز رقم",
+    "statusUnknown": "الحالة غير معروفة",
+    "recentOrders": "الطلبات الأخيرة",
+    "recentOrdersSubtitle": "آخر نشاط في المتجر",
+    "notificationCenter": "مركز الإشعارات",
+    "unreadCount": "{{count}} غير مقروءة",
+    "notificationFallback": "إشعار",
+    "recentActivity": "النشاط الأخير",
+    "calendarPreview": "معاينة التقويم",
+    "calendarPreviewSubtitle": "اليوم والأسبوع",
+    "availableCapacity": "السعة المتاحة اليوم",
+    "slotsCount": "{{count}} فترات",
+    "capacityCount": "سعة {{count}}",
+    "businessSummary": "ملخص النشاط التجاري",
+    "statusUnavailable": "الحالة غير متاحة",
+    "staffActiveCount": "{{count}} موظفين نشطين",
+    "enabled": "مفعّل",
+    "searchResults": "نتائج البحث",
+    "typeToSearch": "اكتب للبحث",
+    "previewByTerm": "معاينة النتائج حسب المصطلح",
+    "bookingsHeading": "الحجوزات",
+    "customersHeading": "العملاء",
+    "settingsTitle": "إعدادات لوحة التحكم",
+    "layout": "التخطيط",
+    "layoutGrid": "شبكة",
+    "layoutCompact": "مضغوط",
+    "refreshInterval": "فاصل التحديث",
+    "refreshIntervalManual": "يدوي",
+    "intervalSeconds": "{{seconds}} ث"
+  },
+  "errors": {
+    "notFoundTitle": "الصفحة غير موجودة",
+    "notFoundBody": "تعذّر العثور على الصفحة.",
+    "goHome": "الرئيسية",
+    "tryAgain": "حاول مجددًا"
   }
 }

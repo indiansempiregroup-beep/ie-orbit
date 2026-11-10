@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { AppShellHeader } from './AppShellHeader';
 import { EmailVerificationBanner } from './EmailVerificationBanner';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { LanguageSwitcher } from './LanguageSwitcher';
 import { SoftLockBanner } from './SoftLockBanner';
 import { AssistantPanel } from '../features/assistant/AssistantPanel';
 import { useAuth } from '../hooks/useAuth';
@@ -118,6 +119,7 @@ export function Layout() {
         </nav>
 
         <div className="app-shell-footer">
+          <LanguageSwitcher compact className="app-shell-language" />
           <div className="app-shell-user-pill">
             <div className="app-shell-user-avatar">{(auth.user?.full_name ?? 'U').charAt(0).toUpperCase()}</div>
             <div>

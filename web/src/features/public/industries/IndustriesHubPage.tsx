@@ -1,48 +1,32 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Store } from 'lucide-react';
-import { Button } from '../../../components/Button';
+import { useTranslation } from 'react-i18next';
 import { PublicCtaBand } from '../PublicCtaBand';
 import { PublicBreadcrumbs } from '../PublicBreadcrumbs';
-import { INDUSTRIES } from './content';
+import type { TranslateFn } from '../translate';
+import { getIndustries, industryProductLabel } from './content';
 
 export function IndustriesHubPage() {
+  const { t, i18n } = useTranslation();
+  const translate = t as unknown as TranslateFn;
+  const industries = useMemo(() => getIndustries(translate), [translate, i18n.language]);
+
   return (
     <>
-      <section className="public-hero-band">
-        <div className="public-hero-inner public-hero-inner--solo">
-          <div>
-            <p className="public-badge">Orbit Appoint · Orbit Mart</p>
-            <h1>
-              Made for the way <span className="public-gradient-text">your business moves</span>
-            </h1>
-            <p className="public-lead">
-              IE Orbit is not a single-vertical salon app. Every plan includes a white-label customer app under your
-              brand. Orbit Appoint schedules people and time. Orbit Mart runs the counter, catalog, and GST books. Pick
-              the industry page that matches how you actually work.
-            </p>
-            <div className="public-hero-actions">
-              <Link to="/features">
-                <Button variant="primary">See features</Button>
-              </Link>
-              <Link to="/pricing">
-                <Button variant="neutral">See pricing</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
       <div className="public-page">
         <PublicBreadcrumbs path="/industries" />
         <div className="public-product-grid">
-          {INDUSTRIES.map((industry, index) => (
+          {industries.map((industry, index) => (
             <Link key={industry.slug} to={industry.path} className="public-card-link">
-              <article className={`public-card public-card--${['peach', 'blue', 'yellow', 'purple'][index % 4]}`}>
-                <div className={`public-card-icon${industry.products.includes('mart') && !industry.products.includes('appoint') ? ' public-card-icon--teal' : ''}`}>
-                  {industry.products.includes('appoint') ? <CalendarDays size={22} /> : <Store size={22} />}
+              <article className={`public-card public-card--media public-card--${['peach', 'blue', 'yellow', 'purple'][index % 4]}`}>
+                <div className="public-card-media">
+                  <img src={industry.cardGif} alt="" />
                 </div>
-                <p className="public-kicker">{industry.products.includes('appoint') ? 'Orbit Appoint' : 'Orbit Mart'}</p>
-                <h2>{industry.name}</h2>
-                <p style={{ marginBottom: 0 }}>{industry.lead}</p>
+                <div className="public-card-body">
+                  <p className="public-kicker">{industryProductLabel(industry.products, translate)}</p>
+                  <h2>{industry.name}</h2>
+                  <p style={{ marginBottom: 0 }}>{industry.lead}</p>
+                </div>
               </article>
             </Link>
           ))}

@@ -1,182 +1,345 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, BookOpen, PawPrint, Smartphone, Sparkles } from 'lucide-react';
-import { createApiClient } from '@ie-orbit/sdk';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
+import { ArrowRight } from 'lucide-react';
+import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
 import { stripPlanProductPrefix } from '../../config/products';
 import { PlanFeatureList } from './PlanFeatureList';
-import { PublicAiShowcase } from './PublicAiShowcase';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicProductShot } from './PublicProductShot';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
+import { PRO_MONTHLY_INR, STARTER_MONTHLY_INR, TRIAL_DAYS } from '../../seo/config';
+import { trackEvent } from '../../seo/analytics';
 
 const publicClient = createApiClient({ baseUrl: '/api/v1' });
 
-const TAB_IDS = ['mart', 'appoint', 'both'] as const;
-type ProductTabId = (typeof TAB_IDS)[number];
+function formatInr(paise?: number | null) {
+  if (paise == null) return null;
+  const amount = Math.round(paise) / 100;
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `₹${amount}`;
+  }
+}
 
-const productTabs: Array<{
-  id: ProductTabId;
-  label: string;
+function planKicker(plan: BillingPlanCatalogItem, t: TFunction) {
+  const code = plan.plan_code.toLowerCase();
+  if (code.includes('starter')) return t('public.plans.kickerStarter');
+  if (code.includes('pro')) return t('public.plans.kickerPro');
+  return plan.product_code;
+}
+
+const PRODUCT_IDS = ['appoint', 'mart', 'both'] as const;
+type ProductId = (typeof PRODUCT_IDS)[number];
+
+type Tone = 'peach' | 'blue' | 'teal' | 'yellow';
+
+type ProductContent = {
+  id: ProductId;
   kicker: string;
   title: string;
   body: string;
   features: string[];
-}> = [
-  {
-    id: 'mart',
-    label: 'Mart',
-    kicker: 'Orbit Mart',
-    title: 'Your products, in their pocket.',
-    body: 'Create a storefront that makes your products easy to browse, buy, and remember — with POS and GST books in the same workspace. Starter is the counter plus online orders and returns; Pro unlocks Instant Delivery with Porter/Shiprocket, GST e-invoice, and Grow.',
-    features: [
-      'White-label customer app so shoppers buy under your brand',
-      'POS, catalog, online orders, and returns on Starter',
-      'Instant Delivery with Porter/Shiprocket on Pro',
-      'Day-book on Starter; GST reports, e-invoice, Grow, and e-way on Pro',
-      'AI invoice extraction on Pro — photograph a supplier bill, review the lines, then add stock',
-      'Automation Creator on Pro for birthday, occasion, and VIP rules',
-    ],
-  },
-  {
-    id: 'appoint',
-    label: 'Appoint',
-    kicker: 'Orbit Appoint',
-    title: 'Bookings without the back-and-forth.',
-    body: 'Give customers a beautiful way to discover availability, book instantly, and keep coming back. Starter is one location. Pro adds WhatsApp reminders, payments, a second office, and an ad-free app.',
-    features: [
-      'White-label customer app so clients book under your brand',
-      'Smart availability and staff calendars',
-      'Automated email reminders; WhatsApp on Pro',
-      'Pro adds a second office, payments, full BI, reward points, and an ad-free customer app',
-      'AI Assistant for plain-language questions about the day',
-      'Automation Creator on Pro for reminders and staff offer hints',
-    ],
-  },
-  {
-    id: 'both',
-    label: 'Both together',
-    kicker: 'Orbit Appoint + Orbit Mart',
-    title: 'One brand. Every way to buy.',
-    body: 'The most complete version of IE Orbit — appointments and ecommerce sharing one customer relationship.',
-    features: [
-      'One white-label app for book and shop',
-      'Unified customer profiles',
-      'Cross-sell bookings and products',
-      'One 45-day trial, one workspace, UPI billing',
-      'AI Assistant and Automation Creator across bookings and the shop',
-    ],
-  },
-];
+  howTitle: string;
+  howLead: string;
+  howSteps: Array<{ title: string; body: string; tone: Tone }>;
+  benefitsTitle: string;
+  benefitsLead: string;
+  benefits: Array<{ title: string; body: string; tone: Tone }>;
+  pricingTitle: string;
+  pricingLead: string;
+  pricingProduct: 'appointie' | 'shopie' | 'both';
+  packages: Array<{
+    name: string;
+    kicker: string;
+    price: string;
+    features: string[];
+    featured?: boolean;
+  }>;
+};
 
-const extraGroups = [
-  {
-    kicker: 'On every plan',
-    title: 'White-label customer app',
-    lead: 'Customers install your brand on iOS and Android. Starter may show Google Ads; Pro is ad-free. This is not a generic IE Orbit store listing.',
-    icon: Smartphone,
-    tone: 'blue' as const,
-  },
-  {
-    kicker: 'Orbit Mart Books',
-    title: 'Accounting and GST compliance',
-    lead: 'Full books — purchases, GST reports, e-invoice, and e-way bill — ship on Orbit Mart Pro. Starter keeps the counter day-book plus online orders and returns. Not a separate product.',
-    icon: BookOpen,
-    tone: 'yellow' as const,
-  },
-  {
-    kicker: 'Orbit Mart Grow',
-    title: 'Marketing helpers for the shop',
-    lead: 'GST calculators on Starter. WhatsApp share, promo posters, and Google listing helpers on Orbit Mart Pro.',
-    icon: Sparkles,
-    tone: 'purple' as const,
-  },
-  {
-    kicker: 'Pets pack',
-    title: 'Optional add-on for pet retailers',
-    lead: 'Pet records priced as a monthly Orbit Mart add-on. Not included in the base plan.',
-    icon: PawPrint,
-    tone: 'peach' as const,
-  },
-];
+const HOW_TONES: Record<ProductId, Tone[]> = {
+  appoint: ['peach', 'blue', 'teal'],
+  mart: ['blue', 'peach', 'teal'],
+  both: ['peach', 'blue', 'teal'],
+};
+const BENEFIT_TONES: Record<ProductId, Tone[]> = {
+  appoint: ['peach', 'blue', 'teal', 'yellow'],
+  mart: ['blue', 'peach', 'teal', 'yellow'],
+  both: ['peach', 'blue', 'teal', 'yellow'],
+};
+const FEATURE_COUNT: Record<ProductId, number> = { appoint: 6, mart: 6, both: 5 };
+const STARTER_FEATURE_COUNT: Record<ProductId, number> = { appoint: 5, mart: 5, both: 5 };
+const PRO_FEATURE_COUNT: Record<ProductId, number> = { appoint: 6, mart: 6, both: 5 };
+const PRICING_PRODUCT: Record<ProductId, ProductContent['pricingProduct']> = {
+  appoint: 'appointie',
+  mart: 'shopie',
+  both: 'both',
+};
 
-function tabFromHash(hash: string): ProductTabId {
-  const id = hash.replace('#', '') as ProductTabId;
-  return TAB_IDS.includes(id) ? id : 'mart';
+function buildProducts(t: TFunction): ProductContent[] {
+  const starterPrice = `₹${STARTER_MONTHLY_INR}`;
+  const proPrice = `₹${PRO_MONTHLY_INR}`;
+
+  return PRODUCT_IDS.map((id) => {
+    const base = `public.features.${id}`;
+    const list = (path: string, count: number, values?: Record<string, unknown>) =>
+      Array.from({ length: count }, (_, i) => t(`${base}.${path}.f${i + 1}`, values) as string);
+    const isBoth = id === 'both';
+    const trialValues = { days: TRIAL_DAYS };
+    const packageValues = isBoth ? { price: starterPrice } : undefined;
+    const proPackageValues = isBoth ? { price: proPrice } : undefined;
+    const priceMultiplier = isBoth ? 2 : 1;
+
+    return {
+      id,
+      kicker: t(`${base}.kicker`),
+      title: t(`${base}.title`),
+      body: t(`${base}.body`),
+      features: list('features', FEATURE_COUNT[id], trialValues),
+      howTitle: t(`${base}.howTitle`),
+      howLead: t(`${base}.howLead`),
+      howSteps: HOW_TONES[id].map((tone, i) => ({
+        title: t(`${base}.how.s${i + 1}.title`),
+        body: t(`${base}.how.s${i + 1}.body`),
+        tone,
+      })),
+      benefitsTitle: t(`${base}.benefitsTitle`),
+      benefitsLead: t(`${base}.benefitsLead`),
+      benefits: BENEFIT_TONES[id].map((tone, i) => ({
+        title: t(`${base}.benefits.b${i + 1}.title`),
+        body: t(`${base}.benefits.b${i + 1}.body`, trialValues),
+        tone,
+      })),
+      pricingTitle: t(`${base}.pricingTitle`),
+      pricingLead: isBoth
+        ? ''
+        : t(`${base}.pricingLead`, { days: TRIAL_DAYS, starter: starterPrice, pro: proPrice }),
+      pricingProduct: PRICING_PRODUCT[id],
+      packages: [
+        {
+          name: t('public.starter'),
+          kicker: t('public.plans.kickerStarter'),
+          price: `₹${STARTER_MONTHLY_INR * priceMultiplier}`,
+          features: list('starter', STARTER_FEATURE_COUNT[id], packageValues),
+        },
+        {
+          name: t('public.pro'),
+          kicker: t('public.plans.kickerPro'),
+          price: `₹${PRO_MONTHLY_INR * priceMultiplier}`,
+          features: list('pro', PRO_FEATURE_COUNT[id], proPackageValues),
+          featured: true,
+        },
+      ],
+    };
+  });
+}
+
+function productFromHash(hash: string): ProductId {
+  const id = hash.replace('#', '') as ProductId;
+  return PRODUCT_IDS.includes(id) ? id : 'mart';
+}
+
+function ProductPlanCards({
+  plans,
+  productLabel,
+}: {
+  plans: BillingPlanCatalogItem[];
+  productLabel: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="public-pricing-grid">
+      <article className="public-card public-price-card">
+        <p className="public-kicker">{t('public.plans.tryFirst')}</p>
+        <h2>{t('public.plans.free')}</h2>
+        <p className="public-price-amount">{t('public.plans.trialDays', { days: TRIAL_DAYS })}</p>
+        <ul className="public-list">
+          <li>{t('public.plans.trialBullets.fullPro', { product: productLabel })}</li>
+          <li>{t('public.plans.trialBullets.whiteLabel')}</li>
+          <li>{t('public.plans.trialBullets.noCard')}</li>
+          <li>{t('public.plans.trialBullets.upgrade')}</li>
+        </ul>
+      </article>
+      {plans.map((plan) => {
+        const featured = isProPlan(plan);
+        const price = formatInr(plan.amount_paise) ?? (featured ? `₹${PRO_MONTHLY_INR}` : `₹${STARTER_MONTHLY_INR}`);
+        return (
+          <article key={plan.plan_code} className={`public-card public-price-card${featured ? ' is-featured' : ''}`}>
+            {featured ? <span className="public-popular">{t('public.plans.mostPopular')}</span> : null}
+            <p className="public-kicker">{planKicker(plan, t)}</p>
+            <h2>{stripPlanProductPrefix(plan.name)}</h2>
+            <p className="public-price-amount">
+              {price}
+              <span>{t('public.plans.perMonth')}</span>
+            </p>
+            <PlanFeatureList groups={planFeatureDisplay(plan, plans)} />
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function FallbackPlanCards({
+  packages,
+}: {
+  packages: ProductContent['packages'];
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="public-pricing-grid">
+      {packages.map((plan) => (
+        <article
+          key={plan.name}
+          className={`public-card public-price-card${plan.featured ? ' is-featured' : ''}`}
+        >
+          {plan.featured ? <span className="public-popular">{t('public.plans.mostPopular')}</span> : null}
+          <p className="public-kicker">{plan.kicker}</p>
+          <h2>{plan.name}</h2>
+          <p className="public-price-amount">
+            {plan.price}
+            <span>{t('public.plans.perMonth')}</span>
+          </p>
+          <ul className="public-list">
+            {plan.features.map((feature) => (
+              <li key={feature}>{feature}</li>
+            ))}
+          </ul>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CombinedPlanCards({
+  appointPlans,
+  martPlans,
+}: {
+  appointPlans: BillingPlanCatalogItem[];
+  martPlans: BillingPlanCatalogItem[];
+}) {
+  const { t } = useTranslation();
+  const appointStarter = appointPlans.find((plan) => !isProPlan(plan));
+  const appointPro = appointPlans.find((plan) => isProPlan(plan));
+  const martStarter = martPlans.find((plan) => !isProPlan(plan));
+  const martPro = martPlans.find((plan) => isProPlan(plan));
+
+  const tiers = [
+    {
+      key: 'starter',
+      kicker: t('public.plans.kickerStarter'),
+      name: t('public.starter'),
+      featured: false,
+      appoint: appointStarter,
+      mart: martStarter,
+      fallbackPrice: STARTER_MONTHLY_INR * 2,
+    },
+    {
+      key: 'pro',
+      kicker: t('public.plans.kickerPro'),
+      name: t('public.pro'),
+      featured: true,
+      appoint: appointPro,
+      mart: martPro,
+      fallbackPrice: PRO_MONTHLY_INR * 2,
+    },
+  ].filter((tier) => tier.appoint && tier.mart);
+
+  return (
+    <div className="public-pricing-grid">
+      <article className="public-card public-price-card">
+        <p className="public-kicker">{t('public.plans.tryFirst')}</p>
+        <h2>{t('public.plans.free')}</h2>
+        <p className="public-price-amount">{t('public.plans.trialDays', { days: TRIAL_DAYS })}</p>
+        <ul className="public-list">
+          <li>{t('public.plans.combinedTrialBullets.fullPro')}</li>
+          <li>{t('public.plans.combinedTrialBullets.oneApp')}</li>
+          <li>{t('public.plans.combinedTrialBullets.sharedCustomers')}</li>
+          <li>{t('public.plans.combinedTrialBullets.noCard')}</li>
+        </ul>
+      </article>
+      {tiers.map((tier) => {
+        const appointPaise = tier.appoint?.amount_paise ?? null;
+        const martPaise = tier.mart?.amount_paise ?? null;
+        const combinedPaise =
+          appointPaise != null && martPaise != null ? appointPaise + martPaise : null;
+        const combined = formatInr(combinedPaise) ?? `₹${tier.fallbackPrice}`;
+        return (
+          <article
+            key={tier.key}
+            className={`public-card public-price-card${tier.featured ? ' is-featured' : ''}`}
+          >
+            {tier.featured ? <span className="public-popular">{t('public.plans.mostPopular')}</span> : null}
+            <p className="public-kicker">{tier.kicker}</p>
+            <h2>{tier.name}</h2>
+            <p className="public-price-amount">
+              {combined}
+              <span>{t('public.plans.perMonth')}</span>
+            </p>
+            <p className="public-plan-features-note" style={{ marginTop: 0, marginBottom: 12 }}>
+              {t('public.plans.combinedBilledNote', {
+                appoint: formatInr(appointPaise) ?? `₹${STARTER_MONTHLY_INR}`,
+                mart: formatInr(martPaise) ?? `₹${STARTER_MONTHLY_INR}`,
+              })}
+            </p>
+            <div className="public-combined-plan-features">
+              <div>
+                <p className="public-kicker">{t('public.plans.appointName')}</p>
+                <PlanFeatureList groups={planFeatureDisplay(tier.appoint!, appointPlans)} />
+              </div>
+              <div>
+                <p className="public-kicker">{t('public.plans.martName')}</p>
+                <PlanFeatureList groups={planFeatureDisplay(tier.mart!, martPlans)} />
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
 }
 
 export function FeaturesPage() {
+  const { t } = useTranslation();
   const location = useLocation();
-  const [tab, setTab] = useState<ProductTabId>(() => tabFromHash(location.hash));
-  const item = productTabs.find((entry) => entry.id === tab) ?? productTabs[0];
-  const productCode = tab === 'mart' ? 'shopie' : tab === 'appoint' ? 'appointie' : null;
+  const productId = productFromHash(location.hash);
+  const products = useMemo(() => buildProducts(t), [t]);
+  const item = products.find((entry) => entry.id === productId) ?? products[0]!;
+  const pricingHref =
+    item.pricingProduct === 'both' ? '/pricing' : `/pricing?product=${item.pricingProduct}`;
+
   const catalogQuery = useQuery({
     queryKey: ['public', 'plans'],
     queryFn: async () => (await publicClient.billing.publicPlans()).data,
     retry: false,
   });
-  const livePlans = productCode
-    ? (catalogQuery.data?.plans ?? []).filter((plan) => plan.product_code === productCode)
-    : [];
-
-  useEffect(() => {
-    setTab(tabFromHash(location.hash));
-  }, [location.hash]);
-
-  function selectTab(id: ProductTabId) {
-    setTab(id);
-    window.history.replaceState(null, '', `#${id}`);
-  }
+  const appointPlans = (catalogQuery.data?.plans ?? []).filter((plan) => plan.product_code === 'appointie');
+  const martPlans = (catalogQuery.data?.plans ?? []).filter((plan) => plan.product_code === 'shopie');
+  const livePlans =
+    item.pricingProduct === 'appointie'
+      ? appointPlans
+      : item.pricingProduct === 'shopie'
+        ? martPlans
+        : [];
 
   return (
     <>
-      <section className="public-hero-band">
-        <div className="public-hero-inner public-hero-inner--solo">
-          <div>
-            <p className="public-badge">White-label · Mart · Appoint · AI</p>
-            <h1>
-              Your app. Their pocket.
-              <br />
-              <span className="public-gradient-text">Your operations behind it.</span>
-            </h1>
-            <p className="public-lead">
-              The customer-facing app is branded to your business on every plan. Orbit Appoint runs bookings. Orbit Mart
-              runs the counter. Both share one workspace — with an AI assistant, an automation creator, and invoice
-              extraction for supplier bills.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <div className="public-tabs" role="tablist" aria-label="Products">
-        {productTabs.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            className={`public-tab${tab === entry.id ? ' is-active' : ''}`}
-            role="tab"
-            aria-selected={tab === entry.id}
-            id={`product-tab-${entry.id}`}
-            aria-controls={`product-panel-${entry.id}`}
-            onClick={() => selectTab(entry.id)}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </div>
-
-      <section
-        className="public-product-feature"
-        role="tabpanel"
-        id={`product-panel-${item.id}`}
-        aria-labelledby={`product-tab-${item.id}`}
-      >
+      <section className="public-product-feature public-product-feature--page">
         <div className="public-feature-copy">
           <p className="public-kicker">{item.kicker}</p>
-          <h2>{item.title}</h2>
+          <h1>{item.title}</h1>
           <p>{item.body}</p>
           <ul className="public-list">
             {item.features.map((feature) => (
@@ -185,7 +348,7 @@ export function FeaturesPage() {
           </ul>
           <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
             <Button variant="primary">
-              Create account <ArrowRight size={16} aria-hidden="true" />
+              {t('public.features.createAccount')} <ArrowRight size={16} aria-hidden="true" />
             </Button>
           </Link>
         </div>
@@ -194,74 +357,78 @@ export function FeaturesPage() {
         </div>
       </section>
 
-      <PublicAiShowcase />
-
       <div className="public-page">
-        <section className="public-section" style={{ marginTop: 0 }}>
+        <section className="public-section" style={{ marginTop: 0 }} aria-label={t('public.features.howAria')}>
           <div className="public-section__head">
-            <p className="public-kicker">Also in the workspace</p>
-            <h2>White-label, books, Grow, and Pets</h2>
-            <p className="public-lead">
-              The customer app ships with Appoint and Mart. Books and Grow sit on Orbit Mart. Pets pack is an add-on.
-            </p>
+            <p className="public-kicker">{t('public.features.howKicker')}</p>
+            <h2>{item.howTitle}</h2>
+            <p className="public-lead public-lead--wide">{item.howLead}</p>
           </div>
-          <div className="public-product-grid">
-            {extraGroups.map((group) => {
-              const Icon = group.icon;
-              return (
-                <article key={group.title} className={`public-card public-card--${group.tone}`}>
-                  <div className="public-card-icon">
-                    <Icon size={22} />
-                  </div>
-                  <p className="public-kicker">{group.kicker}</p>
-                  <h2>{group.title}</h2>
-                  <p style={{ marginBottom: 0 }}>{group.lead}</p>
-                </article>
-              );
-            })}
+          <div className="public-how-grid">
+            {item.howSteps.map((step, index) => (
+              <article key={step.title} className={`public-product-explain public-product-explain--${step.tone}`}>
+                <span className="public-step__index">0{index + 1}</span>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </article>
+            ))}
           </div>
         </section>
-        {livePlans.length > 0 ? (
-          <section className="public-section">
-            <div className="public-section__head">
-              <p className="public-kicker">Live from the catalog</p>
-              <h2>What {item.kicker} includes</h2>
-              <p className="public-lead">
-                These lists follow the same flags platform admin edits. Starter shows every enabled function. Pro shows
-                what Starter does not include, plus a short explanation for each one.
-              </p>
-            </div>
-            <div className="public-plan-compare">
-              {livePlans.map((plan) => (
-                <article
-                  key={plan.plan_code}
-                  className={`public-card public-price-card${isProPlan(plan) ? ' is-featured' : ''}`}
-                >
-                  <p className="public-kicker">{isProPlan(plan) ? 'Growing teams' : 'Solo & micro'}</p>
-                  <h2>{stripPlanProductPrefix(plan.name)}</h2>
-                  <PlanFeatureList groups={planFeatureDisplay(plan, livePlans)} />
-                </article>
-              ))}
-            </div>
-            <p className="public-plan-features-note">
-              Prices live on <Link to={`/pricing?product=${productCode ?? 'appointie'}`}>Pricing</Link>.
-            </p>
-          </section>
-        ) : tab === 'both' ? (
-          <section className="public-section">
-            <div className="public-section__head">
-              <p className="public-kicker">Live from the catalog</p>
-              <h2>See each product’s plan functions</h2>
-              <p className="public-lead">
-                Appoint and Mart each have their own Starter and Pro flags. Open{' '}
-                <Link to="/features#appoint">Appoint</Link> or <Link to="/features#mart">Mart</Link> to read every
-                function, or compare prices on <Link to="/pricing">Pricing</Link>.
-              </p>
-            </div>
-          </section>
-        ) : null}
+
+        <section className="public-section" aria-label={t('public.features.benefitsAria')}>
+          <div className="public-section__head">
+            <p className="public-kicker">{t('public.features.benefitsKicker')}</p>
+            <h2>{item.benefitsTitle}</h2>
+            <p className="public-lead public-lead--wide">{item.benefitsLead}</p>
+          </div>
+          <div className="public-stats public-stats--benefits">
+            {item.benefits.map((benefit) => (
+              <article key={benefit.title} className={`public-product-explain public-product-explain--${benefit.tone}`}>
+                <h3>{benefit.title}</h3>
+                <p>{benefit.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="public-section" aria-label={t('public.features.pricingAria')}>
+          <div className="public-section__head">
+            <p className="public-kicker">{t('public.features.pricingKicker')}</p>
+            <h2>{item.pricingTitle}</h2>
+            {item.pricingLead ? (
+              <p className="public-lead public-lead--wide">{item.pricingLead}</p>
+            ) : null}
+          </div>
+
+          {item.pricingProduct === 'both' ? (
+            appointPlans.length > 0 && martPlans.length > 0 ? (
+              <CombinedPlanCards appointPlans={appointPlans} martPlans={martPlans} />
+            ) : (
+              <FallbackPlanCards packages={item.packages} />
+            )
+          ) : livePlans.length > 0 ? (
+            <ProductPlanCards plans={livePlans} productLabel={item.kicker} />
+          ) : (
+            <FallbackPlanCards packages={item.packages} />
+          )}
+
+          <div className="public-home-pricing-actions">
+            <Link
+              to={registerStartPath()}
+              state={REGISTER_FRESH_START_STATE}
+              onClick={() => trackEvent('generate_lead', { method: `features_pricing_${item.id}` })}
+            >
+              <Button variant="primary">{t('public.startTrial', { days: TRIAL_DAYS })}</Button>
+            </Link>
+            <Link to={pricingHref}>
+              <Button variant="neutral">
+                {t('public.features.seeFullPricing')} <ArrowRight size={16} aria-hidden="true" />
+              </Button>
+            </Link>
+          </div>
+        </section>
       </div>
-      <PublicCtaBand title="Try the white-label app for 45 days" />
+      <PublicCtaBand title={t('public.features.ctaTitle', { days: TRIAL_DAYS })} />
     </>
   );
 }

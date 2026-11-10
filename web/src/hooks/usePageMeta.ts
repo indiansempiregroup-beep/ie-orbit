@@ -40,7 +40,6 @@ export function applyPageMeta({ title, description, index = false, canonicalPath
   const robots = robotsContent(index);
 
   document.title = title;
-  document.documentElement.lang = 'en';
   upsertMeta('meta[name="description"]', 'name', 'description', desc);
   upsertMeta('meta[name="robots"]', 'name', 'robots', robots);
   upsertMeta('meta[name="theme-color"]', 'name', 'theme-color', THEME_COLOR);

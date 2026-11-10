@@ -1,28 +1,43 @@
 import type { ShopOrder } from '@ie-orbit/sdk';
+import { getI18nInstance } from '@ie-orbit/i18n';
 
-const PARTNER_STATUS_LABELS: Record<string, string> = {
-  packing: 'Preparing delivery',
-  finding_rider: 'Finding rider',
-  rider_assigned: 'Rider assigned',
-  at_pickup: 'Rider at shop',
-  picked_up: 'On the way',
-  out_for_delivery: 'Out for delivery',
-  nearby: 'Nearby',
-  delivered: 'Delivered',
-  failed: 'Delivery failed',
-  cancelled: 'Delivery cancelled',
-};
+const PARTNER_STATUS_KEYS = [
+  'packing',
+  'finding_rider',
+  'rider_assigned',
+  'at_pickup',
+  'picked_up',
+  'out_for_delivery',
+  'nearby',
+  'delivered',
+  'failed',
+  'cancelled',
+] as const;
 
-const ORDER_STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  confirmed: 'Confirmed',
-  ready: 'Ready',
-  out_for_delivery: 'Out for delivery',
-  delivery_failed: 'Delivery failed',
-  completed: 'Completed',
-  returned: 'Returned',
-  cancelled: 'Cancelled',
-};
+const ORDER_STATUS_KEYS = [
+  'pending',
+  'confirmed',
+  'ready',
+  'out_for_delivery',
+  'delivery_failed',
+  'completed',
+  'returned',
+  'cancelled',
+] as const;
+
+function translateKnown(prefix: string, keys: readonly string[], value: string): string | undefined {
+  if (!keys.includes(value)) return undefined;
+  return getI18nInstance().t(`${prefix}.${value}`);
+}
+
+export function shopOrderStatusText(status: string): string {
+  const key = String(status || '').toLowerCase();
+  return translateKnown('shop.orders.statuses', ORDER_STATUS_KEYS, key) ?? key;
+}
+
+function partnerStatusText(status: string): string {
+  return translateKnown('shop.orders.partnerStatuses', PARTNER_STATUS_KEYS, status) ?? '';
+}
 
 export type ShopOrderDeliveryMeta = {
   booking_id?: string;
@@ -44,13 +59,13 @@ export function getShopOrderDeliveryMeta(order: ShopOrder): ShopOrderDeliveryMet
  */
 export function shopOrderStatusLabel(order: ShopOrder): string {
   const status = String(order.status || '').toLowerCase();
-  const fallback = ORDER_STATUS_LABELS[status] ?? status;
+  const fallback = shopOrderStatusText(status);
   const delivery = getShopOrderDeliveryMeta(order);
   if (!delivery.booking_id || ['cancelled', 'delivery_failed', 'returned'].includes(status)) {
     return fallback;
   }
   const partner = String(delivery.partner_status || '').toLowerCase();
-  return PARTNER_STATUS_LABELS[partner] ?? fallback;
+  return partnerStatusText(partner) || fallback;
 }
 
 export function shopOrderDeliveryMethod(order: ShopOrder): string {
@@ -73,6 +88,6 @@ export function shopOrderDeliverySummary(order: ShopOrder): string {
   const status = String(delivery.partner_status || delivery.status || '').toLowerCase();
   const rawEta = delivery.eta_minutes ?? metadata.eta_minutes;
   const eta = rawEta == null ? null : Number(rawEta);
-  const label = PARTNER_STATUS_LABELS[status] ?? '';
-  return [label, Number.isFinite(eta) ? `ETA ${eta} min` : ''].filter(Boolean).join(' · ');
+  const label = partnerStatusText(status);
+  return [label, Number.isFinite(eta) ? getI18nInstance().t('shop.orders.etaMinutes', { minutes: eta }) : ''].filter(Boolean).join(' · ');
 }

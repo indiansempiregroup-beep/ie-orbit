@@ -62,7 +62,7 @@ function AuthField({
 
 export function AuthPage() {
   const { t } = useTranslation();
-  usePageMeta({ title: 'Sign in — IE Orbit' });
+  usePageMeta({ title: `${t('auth.signIn')} — IE Orbit` });
   const auth = useAuthContext();
   const location = useLocation();
   const inviteState = (location.state as AuthLocationState | null) ?? {};
@@ -197,7 +197,7 @@ export function AuthPage() {
 
         {loginChannel === 'whatsapp' ? (
           <AuthField
-            label="Mobile number"
+            label={t('common.phone')}
             required
             error={fieldErrors.email}
             icon={<Phone size={16} strokeWidth={2} />}
@@ -266,7 +266,7 @@ export function AuthPage() {
 
         <button type="button" className="ops-login-remember" onClick={() => setRemember((value) => !value)}>
           <span className={`ops-login-check${remember ? ' is-on' : ''}`}>{remember ? '✓' : null}</span>
-          Remember me
+          {t('auth.rememberMe')}
         </button>
 
         {error ? (
@@ -336,7 +336,7 @@ export function AuthPage() {
             <strong>No business on this Google account</strong>
             <p>You need to create your business before you can sign in. Use the link below to register.</p>
             <Link to={registerStartPath()} state={googleSignup}>
-              Create your business
+              {t('auth.createAccount')}
             </Link>
           </div>
         ) : null}
@@ -348,7 +348,7 @@ export function AuthPage() {
       </div>
 
       <p className="ops-login-footer">
-        New business? <Link to={registerStartPath()}>Register free</Link>
+        New business? <Link to={registerStartPath()}>{t('auth.createAccount')}</Link>
       </p>
     </>
   );

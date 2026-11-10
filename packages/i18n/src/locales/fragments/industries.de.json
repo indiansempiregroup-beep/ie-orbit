@@ -1,0 +1,287 @@
+{
+  "public": {
+    "industries": {
+      "detail": {
+        "faqTitle": "Häufig gestellte Fragen",
+        "relatedTitle": "Verwandte Branchen",
+        "alsoSee": "Siehe auch <products>Produkte</products>, <pricing>Preise</pricing> und die <faq>FAQ</faq>.",
+        "ctaTitle": "Starte eine 45-tägige Pro-Testphase"
+      },
+      "items": {
+        "salon-spa": {
+          "name": "Salon & Spa",
+          "h1": "Buchungssoftware für Salon und Spa",
+          "lead": "Gib deinen Kundinnen und Kunden eine App unter deinem Salonnamen. Orbit Appoint steuert Stühle, Räume und Team-Kalender. Orbit Mart übernimmt die Verkaufstheke am Empfang und GST-Rechnungen, wenn du auch Produkte verkaufst.",
+          "problemTitle": "Das Problem im Salon",
+          "problem": "Laufkundschaft, Telefonbuchungen und ein Papierkalender konkurrieren um dieselben Stühle. Stylisten werden doppelt gebucht, Nichterscheinen leert Slots, und Produktverkäufe landen an einer separaten Kasse. Inhaber sehen nicht, wer frei ist, was abgerechnet wurde oder welche Leistungen wirklich Geld bringen.",
+          "solutionTitle": "So hilft IE Orbit Salons und Spas",
+          "solution": "Mit Orbit Appoint buchen Kunden online, das Team sieht einen Live-Kalender, und Erinnerungen gehen vor dem Termin raus. Wenn du Shampoo, Farbe oder Spa-Sets verkaufst, ergänze Orbit Mart im selben Workspace für POS, Katalog und GST-Buchhaltung — ein Login, eine Kundenliste.",
+          "featuresTitle": "Funktionen für den Salonalltag",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Kunden buchen und kaufen in einer App im Branding deines Salons — nicht in einem allgemeinen IE-Orbit-Eintrag." },
+            { "title": "Online-Buchung", "body": "Kunden wählen Leistung und Zeit von jedem Gerät, statt am Empfang anzurufen." },
+            { "title": "Team-Kalender", "body": "Sieh, wer gerade bei einem Kunden ist, wer frei ist und welcher Stuhl oder Raum belegt ist." },
+            { "title": "Kunden und Bewertungen", "body": "Führe die Besuchshistorie, sende Erinnerungen und sammle nach dem Termin Bewertungen." },
+            { "title": "Retail-POS und GST", "body": "Rechne Produkte zum Mitnehmen an der Kasse mit GST-fähigen Verkäufen ab, wenn Orbit Mart aktiv ist." }
+          ],
+          "workflowTitle": "Ein typischer Salontag",
+          "workflow": [
+            { "title": "Kalender öffnen", "body": "Das Team sieht die heutigen Buchungen und freie Lücken für Laufkundschaft, bevor die erste Kundin kommt." },
+            { "title": "Termin durchführen", "body": "Kunden einchecken, Leistung erbringen und bei Gelegenheit eine Bewertung einholen." },
+            { "title": "Verkaufen und abschließen", "body": "Wenn du Handelsware führst, kassiere sie am Orbit-Mart-POS ab und halte die GST-Buchhaltung im selben Workspace." }
+          ],
+          "benefitsTitle": "Was sich für das Unternehmen ändert",
+          "benefits": [
+            "White-Label-Kunden-App im Branding deines Salons",
+            "Weniger verpasste Slots durch Bestätigungen und einen gemeinsamen Kalender",
+            "Ein Kundendatensatz für Leistungen und Produktverkäufe",
+            "UPI-Abrechnung für dein IE-Orbit-Abo — keine Kreditkarte für die 45-tägige Testphase"
+          ],
+          "customerTitle": "Was Kunden erleben",
+          "customer": "Kunden buchen Haarschnitt, Farbe oder Spa-Termin in deiner Marken-App oder im Web-Buchungsablauf, erhalten Erinnerungen und können Produkte zum Mitnehmen kaufen, wenn du Orbit Mart aktivierst.",
+          "businessTitle": "Was Inhaber und Team erleben",
+          "business": "Inhaber erhalten in Starter das BI Overview und in Pro das volle Growth, Revenue, Forecast und Reports. Das Team arbeitet mit einem Kalender statt Terminbuch plus separater Ladenkasse.",
+          "faqs": [
+            { "q": "Ist IE Orbit nur für große Salonketten?", "a": "Nein. Starter und Pro sind für einzelne Standorte und kleine Teams gemacht. Zusätzliches Team oder weitere Standorte kannst du später als monatliche Add-ons buchen." },
+            { "q": "Können wir neben Leistungen auch Produkte verkaufen?", "a": "Ja. Abonniere Orbit Mart im selben Workspace für POS, Katalog und GST-Buchhaltung. Ein zweites Login brauchst du nicht." },
+            { "q": "Brauchen Kunden ein eigenes IE-Orbit-Konto bei euch?", "a": "Kunden nutzen deine White-Label-App für Buchungen und Shop-Bestellungen. Dein Team nutzt den Ops-Workspace, um den Betrieb zu steuern." }
+          ]
+        },
+        "clinic-healthcare": {
+          "name": "Praxis & Gesundheit",
+          "h1": "Terminsoftware für Praxen",
+          "lead": "Patienten buchen in deiner Marken-App. Orbit Appoint plant Behandler und Räume. Orbit Mart kann daneben laufen, wenn du auch eine Theke für abgerechnete Artikel mit GST-Buchhaltung betreibst.",
+          "problemTitle": "Das Problem am Empfang der Praxis",
+          "problem": "Patienten rufen an, schreiben per WhatsApp und kommen spontan — alles für dieselben Termine. Der Empfang jongliert Verfügbarkeiten der Behandler, Folgetermine und eine Warteschlange, die unsichtbar bleibt, bis jemand am Tresen steht. Wenn du auch Artikel abgibst, läuft die Abrechnung oft in einem anderen System.",
+          "solutionTitle": "So hilft IE Orbit Praxen",
+          "solution": "Orbit Appoint bündelt Buchungen, Team-Kalender und Kundendaten an einem Ort, damit nicht allein der Empfang die einzige Wahrheit ist. Ergänze Orbit Mart für GST-Thekenverkäufe und Buchhaltung der Artikel, die du verkaufst — weiterhin dasselbe Unternehmen, Team und dieselbe Abrechnung.",
+          "featuresTitle": "Funktionen für den Praxisbetrieb",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Patienten buchen oder verwalten Termine unter deinem Praxisnamen statt auf einem allgemeinen Marktplatz." },
+            { "title": "Terminkalender", "body": "Ordne Termine Behandlern und Räumen zu statt einer gemeinsamen Tabelle." },
+            { "title": "Online-Buchung", "body": "Lass Patienten einen Termin anfragen, ohne die Telefonleitung zu blockieren." },
+            { "title": "Erinnerungen und Akten", "body": "Führe die Kundenhistorie und sende Erinnerungen vor dem Termin." },
+            { "title": "Theke und GST-Buchhaltung", "body": "Nutze Orbit Mart, wenn du Artikel am Tresen abrechnest — mit GST-Berichten und E-Invoice, wo du sie einsetzt." }
+          ],
+          "workflowTitle": "So läuft ein Praxistag",
+          "workflow": [
+            { "title": "Verfügbarkeit veröffentlichen", "body": "Lege Dienstpläne fest, damit Online-Buchung und Laufkundschaft denselben Kalender nutzen." },
+            { "title": "Termin durchführen", "body": "Rufe den nächsten Patienten auf, schließe den Besuch ab und halte die Akte im Kundenprofil fest." },
+            { "title": "Verkauftes abrechnen", "body": "Wenn du Material oder abgerechnete Artikel verkaufst, schließe sie am Orbit-Mart-POS im selben Workspace ab." }
+          ],
+          "benefitsTitle": "Vorteile für die Praxis",
+          "benefits": [
+            "White-Label-Kunden-App für Patiententermine",
+            "Weniger doppelt gebuchte Behandler",
+            "Eine einzige Kundenliste für Besuche und Thekenverkäufe",
+            "45-tägige Pro-Testphase ohne Kreditkarte"
+          ],
+          "customerTitle": "Was Patienten erleben",
+          "customer": "Patienten buchen oder verwalten Termine über deine White-Label-Kunden-App, wo du sie aktivierst, statt nur beim Empfang anzurufen.",
+          "businessTitle": "Was die Praxis erlebt",
+          "business": "Der Empfang sieht einen Kalender. Inhaber starten mit dem BI Overview in Starter und schalten in Pro das volle BI-Paket frei. IE Orbit ist Betriebssoftware — kein klinisches EMR und kein Ersatz für Patientenaktensysteme.",
+          "faqs": [
+            { "q": "Ersetzt das eine Krankenhaus-EMR-Software?", "a": "Nein. Orbit Appoint ist Software für Termine und Kundenbetrieb. Sie gibt nicht vor, eine klinische elektronische Patientenakte zu sein." },
+            { "q": "Können mehrere Behandler einen Workspace teilen?", "a": "Ja. Lade Teammitglieder mit Rollen und Berechtigungen ein. Zusätzliche buchbare Personen können als monatliches Add-on dazugebucht werden, wenn du das Tariflimit überschreitest." },
+            { "q": "Können wir für unsere IE-Orbit-Rechnung UPI nutzen?", "a": "Ja. Das Plattform-Abo läuft in INR und UPI mit einer Zahlungsmeldung aus dem Workspace. Patientenzahlungen in der Praxis sind davon getrennt." }
+          ]
+        },
+        "fitness-wellness": {
+          "name": "Fitness & Wellness",
+          "h1": "Buchungssoftware für Fitness und Wellness",
+          "lead": "Mitglieder buchen in deiner Marken-App. Orbit Appoint steuert den Kalender. Orbit Mart deckt Merchandise oder Supplements ab, wenn du am Empfang verkaufst.",
+          "problemTitle": "Das Planungsproblem im Studio",
+          "problem": "Kurslisten leben in Chatgruppen. Personal-Training-Slots stehen auf dem Handy des Trainers. Der Empfang weiß nicht, wer kommt, bis die Leute da sind — und der Verkauf (Flaschen, Bänder, Sets) ist eine Kassenschublade nebenbei.",
+          "solutionTitle": "So hilft IE Orbit Fitness- und Wellness-Teams",
+          "solution": "Lege Einheiten in Orbit Appoint an, damit Kunden gegen echte Verfügbarkeit buchen. Halte Kunden, Erinnerungen und Bewertungen beim Termin. Aktiviere Orbit Mart, wenn du POS, Katalog und GST-Buchhaltung für das willst, was du im Studio verkaufst.",
+          "featuresTitle": "Funktionen für Studios und Trainer",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Mitglieder installieren die Marke deines Studios, um Einheiten zu buchen und Artikel zu kaufen." },
+            { "title": "Einheiten buchen", "body": "Online-Buchungen für Trainingsslots und Wellness-Termine von jedem Gerät." },
+            { "title": "Verfügbarkeit des Teams", "body": "Trainer und Therapeuten sehen ihren eigenen Kalender statt einer Gruppenchat-Flut." },
+            { "title": "Kundenhistorie", "body": "Wisse, wer wiederkommt, wer nicht erschienen ist und was zuletzt gebucht wurde." },
+            { "title": "Studio-Shop", "body": "Orbit Mart POS und GST-Buchhaltung, wenn du Merchandise oder verpackte Produkte verkaufst." }
+          ],
+          "workflowTitle": "So läuft eine Studiowoche",
+          "workflow": [
+            { "title": "Stundenplan festlegen", "body": "Veröffentliche Arbeitszeiten und Leistungen, damit Kunden ohne Anruf buchen können." },
+            { "title": "Einheit durchführen", "body": "Einchecken, Termin abschließen und mit Erinnerungen oder Bewertungen nachfassen." },
+            { "title": "Am Empfang verkaufen", "body": "Wenn du Handelsware führst, rechne sie in Orbit Mart im selben Workspace ab." }
+          ],
+          "benefitsTitle": "Vorteile fürs Studio",
+          "benefits": [
+            "White-Label-Kunden-App für Buchung und Shop",
+            "Ein gemeinsamer Kalender statt verstreuter Chat-Buchungen",
+            "Optionaler Verkauf ohne zweites Software-Login",
+            "Jährliche IE-Orbit-Abrechnung zu einem vergünstigten Vielfachen der Monatsgebühr (gratis Monate werden an der Kasse angezeigt)"
+          ],
+          "customerTitle": "Was Mitglieder erleben",
+          "customer": "Mitglieder buchen in deiner Marken-App einen Trainer oder Wellness-Slot und können Studioprodukte kaufen, wenn du Orbit Mart aktivierst.",
+          "businessTitle": "Was Betreiber erleben",
+          "business": "Betreiber sehen die heutigen Einheiten an einem Ort. Pro schaltet in Orbit Appoint volles BI und Bonuspunkte frei, wo der Tarif sie enthält.",
+          "faqs": [
+            { "q": "Können wir Kurse und einen kleinen Shop betreiben?", "a": "Ja. Orbit Appoint für Buchungen, Orbit Mart für POS und GST-Buchhaltung, im selben Workspace." },
+            { "q": "Gibt es eine kostenlose Testphase?", "a": "Neue Workspaces erhalten eine 45-tägige Pro-Testphase ohne Kreditkarte. Danach wird der Workspace gesperrt, bis du ein Abo abschließt." },
+            { "q": "Brauchen wir für mehrere Studios zusätzliche Standorte?", "a": "Die Tarife enthalten eine bestimmte Anzahl Standorte. Zusätzliche Standorte sind ein monatliches Add-on mit Adresse und Kartenposition." }
+          ]
+        },
+        "professional-services": {
+          "name": "Professionelle Dienstleistungen",
+          "h1": "Buchungssoftware für Berater und Dienstleister",
+          "lead": "Kunden buchen in einer App unter dem Namen deiner Kanzlei oder Firma. Orbit Appoint ist für Beratungen gebaut, nicht für den Salonstuhl. Ergänze Orbit Mart nur, wenn du auch verpackte Produkte verkaufst.",
+          "problemTitle": "Das Kalenderproblem in der Beratung",
+          "problem": "Kennenlerngespräche, bezahlte Sitzungen und Nachfassen verteilen sich auf E-Mail-Threads. Assistenzen tippen denselben Slot dreimal ab. Es gibt keine gemeinsame Sicht darauf, wer gebucht ist, und Rechnungen für physische Produkte liegen woanders.",
+          "solutionTitle": "So hilft IE Orbit professionellen Dienstleistern",
+          "solution": "Kunden buchen in Orbit Appoint gegen deine echte Verfügbarkeit. Team-Kalender, Erinnerungen und Bewertungen bleiben beim Kundendatensatz. Wenn du Sets, Bücher oder Pakete an der Theke verkaufst, ergänzt Orbit Mart POS und GST-Buchhaltung ohne zweiten Workspace.",
+          "featuresTitle": "Funktionen für Berater und Firmen",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Ein professioneller Buchungsablauf im Branding deiner Praxis, nicht von IE Orbit." },
+            { "title": "Buchbare Beratungen", "body": "Veröffentliche Leistungen und lass Kunden eine Zeit wählen, statt E-Mails hin- und herzuschicken." },
+            { "title": "Team und Räume", "body": "Ordne Personen und Standorte zu, damit sich Teams mit mehreren Beratern nicht in die Quere kommen." },
+            { "title": "Kundendaten", "body": "Halte fest, wen du wann getroffen hast und was als Nächstes gebucht wurde." },
+            { "title": "Optionaler Produktverkauf", "body": "Orbit Mart für Katalog und GST, wenn du am Tresen etwas verkaufst." }
+          ],
+          "workflowTitle": "So werden Kundentermine geplant",
+          "workflow": [
+            { "title": "Leistungen definieren", "body": "Lege Beratungsarten und Dauern an, die deine Kunden buchen können." },
+            { "title": "Kalender schützen", "body": "Die Verfügbarkeit des Teams bestimmt, was online angeboten wird." },
+            { "title": "Dranbleiben", "body": "Erinnerungen gehen raus; Bewertungen und Historie bleiben beim Kunden." }
+          ],
+          "benefitsTitle": "Vorteile für die Praxis",
+          "benefits": [
+            "Ein professioneller Buchungsablauf in einer White-Label-Kunden-App",
+            "Weniger Zeitaufwand für die Terminabstimmung per E-Mail",
+            "Dieselbe UPI-Abo-Abrechnung wie bei anderen IE-Orbit-Produkten",
+            "BI Overview in Starter; volles BI in Pro"
+          ],
+          "customerTitle": "Was Kunden erleben",
+          "customer": "Kunden buchen eine Beratung in deiner Marken-App, erhalten Erinnerungen und erscheinen zu einem bestätigten Termin.",
+          "businessTitle": "Was die Firma erlebt",
+          "business": "Berater sehen ihren eigenen Terminplan. Inhaber laden Teammitglieder mit Berechtigungen ein, statt ein Login zu teilen. IE Orbit ersetzt weder deinen Vertrag, dein CRM noch deine Buchhaltungsfirma — es steuert Termine und optionalen Verkauf.",
+          "faqs": [
+            { "q": "Ist das nur für Beauty-Unternehmen?", "a": "Nein. Im Onboarding gibt es Professionelle Dienstleistungen als eigene Kategorie. Orbit Appoint ist branchenunabhängige Terminplanung." },
+            { "q": "Können wir die Google-Anmeldung nutzen?", "a": "Ja. Inhaber können bei der Registrierung mit Google fortfahren, und für geeignete Abläufe gibt es im Produkt Google-Kalender-Verbindungen." },
+            { "q": "Wie fragen wir eine Demo an?", "a": "Nutze die Kontaktseite (intent=demo ergänzen) oder schreib an support@indiansempire.com. Telefon: +91 9766855617." }
+          ]
+        },
+        "retail": {
+          "name": "Einzelhandel",
+          "h1": "Retail-POS- und GST-Software",
+          "lead": "Kunden stöbern in einer App unter deinem Shopnamen. Orbit Mart ist das Produkt für die Verkaufsfläche. Starter steuert Theke, Online-Bestellungen und Retouren. Pro ergänzt Instant Delivery mit Porter/Shiprocket, GST-E-Invoice, E-Way und Grow. Ergänze Orbit Appoint nur, wenn du auch terminbasierte Leistungen verkaufst.",
+          "problemTitle": "Das Problem mit Kasse und Buchhaltung",
+          "problem": "Kasse, Bestandsliste und GST-Papierkram sind drei verschiedene Gewohnheiten. Online-Bestellungen kommen per Chat. Retouren stehen in einem Notizbuch. Zoofachhändler führen zudem Tierdaten, die nicht in eine allgemeine SKU-Liste passen.",
+          "solutionTitle": "So hilft Orbit Mart dem Handel",
+          "solution": "Steuere POS-/GST-Thekenverkäufe, Katalog, Bestand, Abhol- und Lieferbestellungen sowie Retouren in Orbit Mart. Die Buchhaltung deckt Verkäufe, Einkäufe, Kasse, Ausgaben, Geschäftspartner, Bestand, GST-Berichte, E-Invoice (IRN) und E-Way-Bill ab. Grow ergänzt WhatsApp-Teilen, Listing-Hilfen und Rechner. Das Pets-Paket ist ein optionales Add-on für Tierdaten.",
+          "featuresTitle": "Handelsfunktionen, die es heute im Produkt gibt",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Kunden stöbern, bestellen und verfolgen unter deiner Shopmarke — nicht in einem Marktplatzeintrag." },
+            { "title": "POS und Katalog", "body": "GST-Thekenverkäufe, Produkte, Bestand, Online-Bestellungen und Retouren in Starter. Shop-Treueprogramm in Pro." },
+            { "title": "Bestellungen und Lieferung", "body": "Online-Bestellungen und Retouren in Starter. Instant Delivery mit Porter/Shiprocket in Orbit Mart Pro." },
+            { "title": "GST-Buchhaltung", "body": "Tagebuch in Starter. Einkäufe, GST-Berichte, E-Invoice und E-Way-Bill in Pro." },
+            { "title": "Grow und Pets-Paket", "body": "Rechner in Starter. WhatsApp und Listing-Hilfen in Pro. Das Pets-Paket ist ein optionales monatliches Add-on." }
+          ],
+          "workflowTitle": "So schließt ein Ladentag",
+          "workflow": [
+            { "title": "An der Theke verkaufen", "body": "Buche Verkäufe inklusive oder exklusive GST am POS gegen den Katalog." },
+            { "title": "Bestellungen erfüllen", "body": "Abholung, Lieferung oder Retoure über die Bestell- und Zonen-Tools, die du aktiviert hast." },
+            { "title": "Buchhaltung führen", "body": "Verkäufe, Einkäufe, Kasse und GST-Compliance bleiben im selben Orbit-Mart-Produkt." }
+          ],
+          "benefitsTitle": "Vorteile für Händler",
+          "benefits": [
+            "White-Label-Kunden-App, damit Kunden unter deiner Marke kaufen",
+            "Ein Produkt für Handel, Buchhaltung und Grow — nicht drei Abos",
+            "Optionales Pets-Paket statt eines separaten Zoofachhandel-Systems",
+            "Razorpay in geeigneten Pro-Tarifen anbinden, damit Kunden Shop-Bestellungen bei dir bezahlen"
+          ],
+          "customerTitle": "Was Kunden erleben",
+          "customer": "Kunden stöbern, bestellen und verfolgen — je nachdem, was du aktivierst — in deiner White-Label-Kunden-App, während du die Theke im Ops-Workspace führst.",
+          "businessTitle": "Was das Geschäft erlebt",
+          "business": "Kassierende und Filialleitung arbeiten in Orbit Mart. Wenn du auch Haare schneidest oder Termine anbietest, ergänze Orbit Appoint im selben Workspace statt eines zweiten Anbieters.",
+          "faqs": [
+            { "q": "Brauchen wir Orbit Appoint, um Orbit Mart zu nutzen?", "a": "Nein. Du kannst Orbit Mart allein abonnieren. Ergänze Orbit Appoint später, wenn du Leistungen buchbar machst." },
+            { "q": "Was ist das Pets-Paket?", "a": "Ein optionales Orbit-Mart-Add-on (₹500/Monat zum Standardkatalogpreis) für Tierdaten. Es ist nicht im Basistarif enthalten." },
+            { "q": "Enthält Orbit Mart E-Invoice?", "a": "In Orbit Mart Pro. GST-Berichte, E-Invoice (IRN) und E-Way-Bill gehören in Pro zu Mart Books. Starter deckt Theke, Online-Bestellungen, Retouren und Tagebuch ab." }
+          ]
+        },
+        "education-training": {
+          "name": "Bildung & Training",
+          "h1": "Buchungssoftware für Kurse und Nachhilfe",
+          "lead": "Lernende buchen in deiner Marken-App. Orbit Appoint führt den Kurskalender. Orbit Mart ist optional, wenn du Skripte, Sets oder Merchandise verkaufst.",
+          "problemTitle": "Das Problem mit Gruppen und Slots",
+          "problem": "Gruppen werden per WhatsApp angekündigt. Eltern schreiben wegen eines Nachholtermins. Trainer führen ihre eigene Excel-Tabelle. Es gibt keine einheitliche Sicht darauf, wer in welchem Slot ist, und der Verkauf gedruckter Materialien ist ein Barverkauf nebenbei.",
+          "solutionTitle": "So hilft IE Orbit Bildung und Training",
+          "solution": "Behandle Kurse und Nachhilfe-Slots als buchbare Leistungen in Orbit Appoint. Team-Kalender zeigen, wer wann unterrichtet. Kunden (Lernende oder Eltern) erhalten Erinnerungen. Nutze Orbit Mart, wenn du zusätzlich Theke, Katalog und GST-Buchhaltung für Materialien brauchst, die du verkaufst.",
+          "featuresTitle": "Funktionen für Trainingsteams",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Lernende oder Eltern buchen einen Slot unter dem Namen deines Zentrums." },
+            { "title": "Buchbare Kurse", "body": "Veröffentliche Terminarten, damit Lernende selbst buchen, statt einer Koordination hinterherzulaufen." },
+            { "title": "Trainer-Kalender", "body": "Die Verfügbarkeit des Teams bestimmt, was gebucht werden kann." },
+            { "title": "Kundendaten", "body": "Halte fest, wer teilgenommen hat, wer wiederkommen muss, und Bewertungen, wo du sie einholst." },
+            { "title": "Materialverkauf", "body": "Orbit Mart POS und GST, wenn du Skripte, Sets oder Merchandise verkaufst." }
+          ],
+          "workflowTitle": "So läuft eine Trainingswoche",
+          "workflow": [
+            { "title": "Stundenplan veröffentlichen", "body": "Leistungen und Arbeitszeiten des Teams werden zur zentralen Quelle der Wahrheit." },
+            { "title": "Einheit durchführen", "body": "Lernende einchecken und die Akte im Kundenprofil festhalten." },
+            { "title": "Bei Bedarf Materialien verkaufen", "body": "Rechne Sets oder Skripte in Orbit Mart ab, ohne den Workspace zu verlassen." }
+          ],
+          "benefitsTitle": "Vorteile fürs Zentrum",
+          "benefits": [
+            "White-Label-Kunden-App für Buchungen",
+            "Ein Kalender für Koordination und Trainer",
+            "Dasselbe Test- und UPI-Abomodell wie in anderen IE-Orbit-Branchen",
+            "Füge Team oder Standorte hinzu, wenn das Zentrum wächst"
+          ],
+          "customerTitle": "Was Lernende erleben",
+          "customer": "Lernende oder Eltern buchen einen Slot in deiner Marken-App und erhalten vor dem Kurs Erinnerungen.",
+          "businessTitle": "Was das Zentrum erlebt",
+          "business": "Koordinatoren sind nicht mehr der menschliche Stundenplan. IE Orbit ist kein vollständiges LMS (keine erfundenen Lehrplanversprechen) — es ist Terminplanung plus optionaler Verkauf.",
+          "faqs": [
+            { "q": "Können wir Einzelnachhilfe und Gruppenkurse planen?", "a": "Ja, solange du sie in Orbit Appoint als Leistungen mit Verfügbarkeit des Teams abbildest. Du definierst die Leistungen; das Produkt erfindet kein separates „LMS“." },
+            { "q": "Können wir Bücher oder Sets verkaufen?", "a": "Ergänze Orbit Mart für Katalog, POS und GST-Buchhaltung im selben Workspace." },
+            { "q": "Sind die Preise in INR?", "a": "Die Katalogpreise der Website sind in INR. Beim Onboarding kannst du eine andere Geschäftswährung hinterlegen; die UPI-Abo-Abrechnung ist für indische Unternehmen ausgelegt." }
+          ]
+        },
+        "home-services": {
+          "name": "Haushaltsdienste",
+          "h1": "Buchungssoftware für Haushaltsdienste",
+          "lead": "Haushalte buchen Besuche in einer App im Branding deines Gewerks. Orbit Appoint bucht den Auftrag. Orbit Mart hilft, wenn du auch Teile oder Produkte mit GST-Rechnung verkaufst.",
+          "problemTitle": "Das Problem bei Außeneinsätzen",
+          "problem": "Aufträge werden am Telefon zugesagt. Techniker teilen keinen gemeinsamen Kalender. Kunden erhalten keine Bestätigung, der sie vertrauen können. Ersatzteile werden, falls verkauft, auf handgeschriebenen Zetteln abgerechnet.",
+          "solutionTitle": "So hilft IE Orbit Teams für Haushaltsdienste",
+          "solution": "Buche Besuche gegen die Verfügbarkeit des Teams in Orbit Appoint. Halte Kunde, Erinnerung und Bewertung beim Auftrag. Wenn du Teile oder verpackte Produkte verkaufst, ergänzt Orbit Mart POS, Katalog und GST-Buchhaltung — inklusive E-Invoice und E-Way, wo du sie einsetzt.",
+          "featuresTitle": "Funktionen für Außen- und Hausbesuche",
+          "features": [
+            { "title": "White-Label-Kunden-App", "body": "Haushalte buchen einen Besuch unter deinem Firmennamen statt nur per Telefonzusage." },
+            { "title": "Besuchsbuchung", "body": "Kunden fragen online einen Slot gegen echte Team-Kalender an." },
+            { "title": "Einsatzübersicht", "body": "Sieh, wer gebucht ist, damit nicht zwei Techniker ins selbe Zeitfenster geschickt werden." },
+            { "title": "Kundenhistorie", "body": "Wisse, was beim letzten Besuch erledigt wurde, bevor du losfährst." },
+            { "title": "Teile und GST", "body": "Orbit Mart für Theken- oder abgerechnete Teile mit GST-Berichten und E-Invoice-Tools." }
+          ],
+          "workflowTitle": "So wird ein Auftrag erledigt",
+          "workflow": [
+            { "title": "Buchung annehmen", "body": "Online oder vom Team erfasste Buchungen teilen sich denselben Kalender." },
+            { "title": "Besuch durchführen", "body": "Die zugewiesene Person sieht den Slot; der Kunde erhält Erinnerungen." },
+            { "title": "Teile bei Bedarf abrechnen", "body": "Verkaufe Teile in Orbit Mart im selben Unternehmens-Workspace." }
+          ],
+          "benefitsTitle": "Vorteile für Betreiber",
+          "benefits": [
+            "Eine Kunden-App im Branding deines Gewerks",
+            "Weniger sich überschneidende Besuche",
+            "Optionaler GST-fähiger Produktverkauf",
+            "45-tägige Pro-Testphase ohne Kreditkarte"
+          ],
+          "customerTitle": "Was Haushalte erleben",
+          "customer": "Haushalte buchen einen Besuch in deiner White-Label-App und erhalten Erinnerungen statt nur einer mündlichen Zusage.",
+          "businessTitle": "Was der Betreiber erlebt",
+          "business": "Disponenten schauen auf einen Kalender. Starter ist ein Standort (1 zusätzliche Person möglich). Zusätzliche Standorte und 4+ Mitarbeitende gibt es in Pro.",
+          "faqs": [
+            { "q": "Enthält IE Orbit eine Live-GPS-Ortung der Techniker?", "a": "Das dokumentierte Produkt ist Terminbetrieb, optionaler Verkauf und zugehörige Liefer-Tools in Orbit Mart — kein beworbenes Live-GPS-Produkt für Techniker. Erwarte keine Funktionen, die nicht im Workspace vorhanden sind." },
+            { "q": "Können wir das mit mehreren Servicegebieten nutzen?", "a": "Standorte/Filialen haben Adresse und Google-Maps-Position. Zusätzliche Standorte sind ein monatliches Add-on. Orbit Mart hat zudem Lieferzonen für Shop-Bestellungen." },
+            { "q": "Wie starten wir?", "a": "Erstelle ein Konto, wähle Orbit Appoint (und Orbit Mart, wenn du Teile verkaufst) und nutze die 45-tägige Pro-Testphase." }
+          ]
+        }
+      }
+    }
+  }
+}

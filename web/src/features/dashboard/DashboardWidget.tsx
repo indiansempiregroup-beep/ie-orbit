@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Spinner } from '../../components/Spinner';
 import { ErrorState } from '../../components/ErrorState';
@@ -32,19 +33,20 @@ export function DashboardWidget({
   role,
   'aria-label': ariaLabel,
 }: Props) {
+  const { t } = useTranslation();
   let content: React.ReactNode;
 
   if (loading) {
     content = (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 120, gap: 12 }}>
         <Spinner size={32} />
-        <span>Loading…</span>
+        <span>{t('common.loading')}</span>
       </div>
     );
   } else if (error) {
-    content = <ErrorState title="Unable to load" message={error.message} onRetry={onRefresh} />;
+    content = <ErrorState title={t('common.unableToLoad')} message={error.message} onRetry={onRefresh} />;
   } else if (empty) {
-    content = <div style={{ color: '#6b7280', minHeight: 120 }}>No data available yet.</div>;
+    content = <div style={{ color: '#6b7280', minHeight: 120 }}>{t('common.noDataYet')}</div>;
   } else {
     content = children;
   }
@@ -63,9 +65,9 @@ export function DashboardWidget({
               type="button"
               onClick={onRefresh}
               style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}
-              aria-label={`Refresh ${title}`}
+              aria-label={t('common.refreshAria', { title })}
             >
-              Refresh
+              {t('common.refresh')}
             </button>
           ) : null}
         </div>

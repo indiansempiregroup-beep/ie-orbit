@@ -143,7 +143,7 @@ export function DashboardPage() {
     return () => window.clearInterval(intervalId);
   }, [queryClient, settings.preferences.refreshInterval]);
 
-  const businessName = business.data?.business_name ?? business.data?.display_name ?? 'Your business';
+  const businessName = business.data?.business_name ?? business.data?.display_name ?? t('dashboard.yourBusiness');
   const businessCurrency = summary?.currency ?? business.data?.currency ?? workspace.activeBusiness?.currency;
   const formatAmount = (amount: number) => formatMoney(amount, businessCurrency);
   const staffOnDuty = summary?.appointie?.staff_on_duty ?? staff.data?.filter((member) => member.status === 'active').length ?? 0;
@@ -156,21 +156,21 @@ export function DashboardPage() {
     ...(showBookings
       ? todayBookings.data?.slice(0, 3).map((booking) => ({
           id: booking.id,
-          title: booking.booking_number ?? 'Booking',
-          subtitle: booking.status ?? 'Status',
+          title: booking.booking_number ?? t('dashboard.bookingFallback'),
+          subtitle: booking.status ?? t('common.status'),
         })) ?? []
       : []),
     ...(showOrders
       ? recentOrders.slice(0, 3).map((order) => ({
           id: order.id,
-          title: order.order_number ?? 'Order',
-          subtitle: `${order.status ?? 'Status'} · ${formatAmount(Number(order.total ?? 0))}`,
+          title: order.order_number ?? t('dashboard.orderFallback'),
+          subtitle: `${order.status ?? t('common.status')} · ${formatAmount(Number(order.total ?? 0))}`,
         }))
       : []),
     ...(showCustomers
       ? customers.data?.slice(0, 2).map((customer) => ({
           id: customer.id,
-          title: customer.full_name ?? 'Customer',
+          title: customer.full_name ?? t('dashboard.customerFallback'),
           subtitle: customer.email ?? '',
         })) ?? []
       : []),
@@ -178,38 +178,38 @@ export function DashboardPage() {
 
   const welcomeSubtitle = useMemo(() => {
     if (hasAppointie && hasShopie) {
-      return 'Your central workspace for bookings, shop operations, and day-to-day work.';
+      return t('dashboard.welcomeBoth');
     }
     if (hasShopie) {
-      return 'Your central workspace for orders, inventory, and day-to-day shop operations.';
+      return t('dashboard.welcomeShop');
     }
-    return 'Your central workspace for bookings, customers, and day-to-day operations.';
-  }, [hasAppointie, hasShopie]);
+    return t('dashboard.welcomeBookings');
+  }, [hasAppointie, hasShopie, t]);
 
   const planLabel = useMemo(() => {
     const subs = workspace.activeBusiness?.product_subscriptions ?? [];
     const active = subs.find((s) => subscribedIds.includes(s.product_code));
     if (!active) return '—';
     const status = active.status ?? 'trialing';
-    if (status === 'trialing') return 'Trial';
+    if (status === 'trialing') return t('dashboard.planTrial');
     return status.replace(/_/g, ' ');
-  }, [subscribedIds, workspace.activeBusiness?.product_subscriptions]);
+  }, [subscribedIds, workspace.activeBusiness?.product_subscriptions, t]);
 
   const appointieKpis = summary?.appointie && showBookings
     ? [
-        { label: "Today's Bookings", value: summary.appointie.today_bookings },
-        { label: 'Upcoming (7 days)', value: summary.appointie.upcoming_7d },
-        { label: 'Completed Today', value: summary.appointie.today_completed },
-        { label: 'Cancelled Today', value: summary.appointie.today_cancelled },
-        { label: 'Revenue Today', value: formatAmount(summary.appointie.estimated_revenue_today) },
-        { label: 'Revenue This Month', value: formatAmount(summary.appointie.estimated_revenue_month) },
+        { label: t('dashboard.todayBookings'), value: summary.appointie.today_bookings },
+        { label: t('dashboard.upcomingBookings'), value: summary.appointie.upcoming_7d },
+        { label: t('dashboard.completedToday'), value: summary.appointie.today_completed },
+        { label: t('dashboard.cancelledToday'), value: summary.appointie.today_cancelled },
+        { label: t('dashboard.revenueToday'), value: formatAmount(summary.appointie.estimated_revenue_today) },
+        { label: t('dashboard.revenueMonth'), value: formatAmount(summary.appointie.estimated_revenue_month) },
         ...(showCustomers && !staffFilterActive
           ? [
-              { label: 'Active Customers', value: summary.appointie.active_customers },
-              { label: 'New Customers', value: summary.appointie.new_customers_today },
+              { label: t('dashboard.activeCustomers'), value: summary.appointie.active_customers },
+              { label: t('dashboard.newCustomers'), value: summary.appointie.new_customers_today },
             ]
           : []),
-        ...(showStaffKpi ? [{ label: 'Staff On Duty', value: summary.appointie.staff_on_duty }] : []),
+        ...(showStaffKpi ? [{ label: t('dashboard.staffOnDuty'), value: summary.appointie.staff_on_duty }] : []),
       ]
     : [];
 
@@ -217,19 +217,19 @@ export function DashboardPage() {
     ? [
         ...(showOrders || staffFilterActive
           ? [
-              { label: 'Orders Today', value: summary.shopie.orders_today },
-              { label: 'Orders This Month', value: summary.shopie.orders_month },
-              { label: 'Open Orders', value: summary.shopie.open_orders },
+              { label: t('dashboard.ordersToday'), value: summary.shopie.orders_today },
+              { label: t('dashboard.ordersMonth'), value: summary.shopie.orders_month },
+              { label: t('dashboard.openOrders'), value: summary.shopie.open_orders },
             ]
           : []),
         ...(showBooks || showBi || staffFilterActive
           ? [
-              { label: 'GMV Today', value: formatAmount(summary.shopie.gmv_today) },
-              { label: 'GMV This Month', value: formatAmount(summary.shopie.gmv_month) },
-              { label: 'Delivery Fees (Month)', value: formatAmount(summary.shopie.delivery_fee_month) },
+              { label: t('dashboard.gmvToday'), value: formatAmount(summary.shopie.gmv_today) },
+              { label: t('dashboard.gmvMonth'), value: formatAmount(summary.shopie.gmv_month) },
+              { label: t('dashboard.deliveryFeesMonth'), value: formatAmount(summary.shopie.delivery_fee_month) },
             ]
           : []),
-        ...(showReturns ? [{ label: 'Pending Returns', value: summary.shopie.pending_returns }] : []),
+        ...(showReturns ? [{ label: t('dashboard.pendingReturns'), value: summary.shopie.pending_returns }] : []),
       ]
     : [];
 
@@ -243,10 +243,10 @@ export function DashboardPage() {
 
   const petsKpis = summary?.pets && showPetsWidgets
     ? [
-        { label: 'Pets enrolled', value: summary.pets.total },
-        { label: 'Birthdays (7 days)', value: summary.pets.birthdays_next_7d },
-        { label: 'Birthdays (30 days)', value: summary.pets.birthdays_next_30d },
-        { label: 'With photo', value: summary.pets.with_photo },
+        { label: t('dashboard.petsEnrolled'), value: summary.pets.total },
+        { label: t('dashboard.birthdays7d'), value: summary.pets.birthdays_next_7d },
+        { label: t('dashboard.birthdays30d'), value: summary.pets.birthdays_next_30d },
+        { label: t('dashboard.withPhoto'), value: summary.pets.with_photo },
       ]
     : [];
 
@@ -255,9 +255,9 @@ export function DashboardPage() {
       <div className="dashboard-shell" style={{ maxWidth: 1440, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Workspace</p>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>{t('common.workspace')}</p>
             <h1 style={{ margin: 0, fontSize: 36, lineHeight: 1.1 }}>
-              Welcome back, {auth.user?.full_name || auth.user?.first_name || businessName}
+              {t('dashboard.welcome')}, {auth.user?.full_name || auth.user?.first_name || businessName}
             </h1>
             <p style={{ margin: 0, color: '#6b7280' }}>{welcomeSubtitle}</p>
             {canFilter ? (
@@ -282,19 +282,19 @@ export function DashboardPage() {
               onChange={(event) => setSearchTerm(event.target.value)}
               onFocus={() => setSearchActive(true)}
               onBlur={() => setTimeout(() => setSearchActive(false), 200)}
-              placeholder="Search customers, bookings, staff, services"
+              placeholder={t('dashboard.searchPlaceholder')}
               style={{ width: '100%', borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
-              aria-label="Search workspace"
+              aria-label={t('common.search')}
             />
             <select
               value={settings.preferences.refreshInterval}
               onChange={(event) => settings.setRefreshInterval(Number(event.target.value))}
               style={{ borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
-              aria-label="Dashboard refresh interval"
+              aria-label={t('dashboard.refreshIntervalAria')}
             >
               {settings.refreshIntervalOptions.map((interval) => (
                 <option key={interval} value={interval}>
-                  {interval === 0 ? 'Manual refresh' : `Refresh every ${interval / 1000}s`}
+                  {interval === 0 ? t('dashboard.manualRefresh') : t('dashboard.refreshEvery', { seconds: interval / 1000 })}
                 </option>
               ))}
             </select>
@@ -305,13 +305,13 @@ export function DashboardPage() {
           <div>
             {summaryQuery.isLoading && !summary ? (
               <Card style={{ marginBottom: 24, padding: 20 }}>
-                <p style={{ margin: 0, color: '#6b7280' }}>Loading dashboard metrics…</p>
+                <p style={{ margin: 0, color: '#6b7280' }}>{t('common.loading')}</p>
               </Card>
             ) : null}
 
             {showBi && homeInsights.length ? (
               <Card style={{ marginBottom: 24, padding: 20 }}>
-                <SectionHeading title="What to act on" subtitle="The strongest signals from the last 30 days." />
+                <SectionHeading title={t('dashboard.insights')} subtitle={t('dashboard.insightsSubtitle')} />
                 <div style={{ display: 'grid', gap: 12 }}>
                   {homeInsights.map((insight) => (
                     <div key={`${insight.type}-${insight.title}`}>
@@ -321,14 +321,14 @@ export function DashboardPage() {
                   ))}
                 </div>
                 <Button variant="ghost" onClick={() => navigate('/bi/overview')} style={{ marginTop: 12 }}>
-                  Open Business Intelligence
+                  {t('dashboard.openBi')}
                 </Button>
               </Card>
             ) : null}
 
             {appointieKpis.length ? (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeading title="Orbit Appoint" subtitle="Bookings and service operations" />
+                <SectionHeading title="Orbit Appoint" subtitle={t('dashboard.appointSubtitle')} />
                 <div className="dashboard-kpi-grid">
                   {appointieKpis.map((item) => (
                     <KpiCard key={item.label} label={item.label} value={item.value} />
@@ -339,7 +339,7 @@ export function DashboardPage() {
 
             {shopieKpis.length ? (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeading title="Orbit Mart" subtitle="Orders, returns, and delivery" />
+                <SectionHeading title="Orbit Mart" subtitle={t('dashboard.martSubtitle')} />
                 <div className="dashboard-kpi-grid">
                   {shopieKpis.map((item) => (
                     <KpiCard key={item.label} label={item.label} value={item.value} />
@@ -350,7 +350,7 @@ export function DashboardPage() {
 
             {petsKpis.length ? (
               <div style={{ marginBottom: 24 }}>
-                <SectionHeading title="Pets pack" subtitle="Roster and upcoming birthdays" />
+                <SectionHeading title={t('dashboard.petsPack')} subtitle={t('dashboard.petsPackSubtitle')} />
                 <div className="dashboard-kpi-grid">
                   {petsKpis.map((item) => (
                     <KpiCard key={item.label} label={item.label} value={item.value} />
@@ -362,8 +362,8 @@ export function DashboardPage() {
             <div className="dashboard-widget-grid" style={{ marginBottom: 24 }}>
               {showBookings ? (
                 <DashboardWidget
-                  title="Today's Schedule"
-                  subtitle="Appointments for the current day"
+                  title={t('dashboard.todaysSchedule')}
+                  subtitle={t('dashboard.todaysScheduleSubtitle')}
                   loading={schedule.length === 0 && todayBookings.isLoading}
                   error={todayBookings.error as Error | null}
                   empty={!schedule.length && !todayBookings.isLoading}
@@ -372,8 +372,8 @@ export function DashboardPage() {
                   <div style={{ display: 'grid', gap: 12 }}>
                     {schedule.map((booking) => (
                       <div key={booking.id} style={{ borderRadius: 12, padding: 14, background: '#f8fafc', display: 'grid', gap: 4 }}>
-                        <p style={{ margin: 0, fontWeight: 700 }}>{booking.booking_number ?? 'Booking #'}</p>
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{booking.status ?? 'Status unknown'}</p>
+                        <p style={{ margin: 0, fontWeight: 700 }}>{booking.booking_number ?? t('dashboard.bookingNumberFallback')}</p>
+                        <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{booking.status ?? t('dashboard.statusUnknown')}</p>
                       </div>
                     ))}
                   </div>
@@ -382,8 +382,8 @@ export function DashboardPage() {
 
               {showOrders ? (
                 <DashboardWidget
-                  title="Recent Orders"
-                  subtitle="Latest shop activity"
+                  title={t('dashboard.recentOrders')}
+                  subtitle={t('dashboard.recentOrdersSubtitle')}
                   loading={!recentOrders.length && shopOrders.isLoading}
                   error={shopOrders.error as Error | null}
                   empty={!recentOrders.length && !shopOrders.isLoading}
@@ -392,22 +392,22 @@ export function DashboardPage() {
                   <div style={{ display: 'grid', gap: 12 }}>
                     {recentOrders.map((order) => (
                       <div key={order.id} style={{ borderRadius: 12, padding: 14, background: '#f8fafc', display: 'grid', gap: 4 }}>
-                        <p style={{ margin: 0, fontWeight: 700 }}>{order.order_number ?? 'Order'}</p>
+                        <p style={{ margin: 0, fontWeight: 700 }}>{order.order_number ?? t('dashboard.orderFallback')}</p>
                         <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-                          {order.status ?? 'Status'} · {formatAmount(Number(order.total ?? 0))}
+                          {order.status ?? t('common.status')} · {formatAmount(Number(order.total ?? 0))}
                         </p>
                       </div>
                     ))}
                     <Button variant="ghost" onClick={() => navigate('/shop/orders')} style={{ width: '100%' }}>
-                      View all orders
+                      {t('dashboard.viewAll')}
                     </Button>
                   </div>
                 </DashboardWidget>
               ) : null}
 
               <DashboardWidget
-                title="Notification Center"
-                subtitle={`${unreadNotifications} unread`}
+                title={t('dashboard.notificationCenter')}
+                subtitle={t('dashboard.unreadCount', { count: unreadNotifications })}
                 loading={notifications.isLoading}
                 error={notifications.error as Error | null}
                 empty={!notifications.data?.length && !notifications.isLoading}
@@ -416,19 +416,19 @@ export function DashboardPage() {
                 <div style={{ display: 'grid', gap: 12 }}>
                   {notifications.data?.slice(0, 4).map((note) => (
                     <div key={note.id} style={{ borderRadius: 12, padding: 14, background: note.is_read ? '#f8fafc' : '#eff6ff' }}>
-                      <p style={{ margin: 0, fontWeight: 700 }}>{note.subject ?? 'Notification'}</p>
+                      <p style={{ margin: 0, fontWeight: 700 }}>{note.subject ?? t('dashboard.notificationFallback')}</p>
                       <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>{note.body ?? ''}</p>
                     </div>
                   ))}
                   <Button variant="ghost" onClick={() => navigate('/notifications')} style={{ width: '100%' }}>
-                    View all notifications
+                    {t('dashboard.viewAll')}
                   </Button>
                 </div>
               </DashboardWidget>
             </div>
 
             <div className="dashboard-summary-grid" style={{ marginBottom: 24 }}>
-              <DashboardWidget title="Recent Activity" loading={false} error={null} empty={!activity.length}>
+              <DashboardWidget title={t('dashboard.recentActivity')} loading={false} error={null} empty={!activity.length}>
                 <div style={{ display: 'grid', gap: 12 }}>
                   {activity.map((item) => (
                     <div key={item.id} style={{ padding: 14, borderRadius: 12, background: '#f8fafc' }}>
@@ -440,15 +440,15 @@ export function DashboardPage() {
               </DashboardWidget>
 
               {showBookings && isEnabled('calendar') ? (
-                <DashboardWidget title="Calendar Preview" subtitle="Today & week" loading={availability.isLoading} error={availability.error as Error | null} empty={!availability.data?.length && !availability.isLoading}>
+                <DashboardWidget title={t('dashboard.calendarPreview')} subtitle={t('dashboard.calendarPreviewSubtitle')} loading={availability.isLoading} error={availability.error as Error | null} empty={!availability.data?.length && !availability.isLoading}>
                   <div style={{ display: 'grid', gap: 12 }}>
-                    <p style={{ margin: 0, fontWeight: 700 }}>Today&apos;s available capacity</p>
-                    <p style={{ margin: 0, color: '#6b7280' }}>{availability.data?.length ?? 0} slots</p>
+                    <p style={{ margin: 0, fontWeight: 700 }}>{t('dashboard.availableCapacity')}</p>
+                    <p style={{ margin: 0, color: '#6b7280' }}>{t('dashboard.slotsCount', { count: availability.data?.length ?? 0 })}</p>
                     <div style={{ display: 'grid', gap: 8 }}>
                       {(availability.data ?? []).slice(0, 4).map((slot, index) => (
                         <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                           <span>{todayKey}</span>
-                          <span>{slot.capacity} capacity</span>
+                          <span>{t('dashboard.capacityCount', { count: slot.capacity })}</span>
                         </div>
                       ))}
                     </div>
@@ -456,14 +456,14 @@ export function DashboardPage() {
                 </DashboardWidget>
               ) : null}
 
-              <DashboardWidget title="Business Summary" loading={business.isLoading} error={business.error as Error | null} empty={!business.data && !business.isLoading}>
+              <DashboardWidget title={t('dashboard.businessSummary')} loading={business.isLoading} error={business.error as Error | null} empty={!business.data && !business.isLoading}>
                 {business.data ? (
                   <div style={{ display: 'grid', gap: 12 }}>
                     <p style={{ margin: 0, fontWeight: 700 }}>{businessName}</p>
-                    <p style={{ margin: 0, color: '#6b7280' }}>{business.data.status ?? 'Status unavailable'}</p>
-                    {showStaffKpi && hasAppointie ? <p style={{ margin: 0, color: '#6b7280' }}>{staffOnDuty} staff active</p> : null}
+                    <p style={{ margin: 0, color: '#6b7280' }}>{business.data.status ?? t('dashboard.statusUnavailable')}</p>
+                    {showStaffKpi && hasAppointie ? <p style={{ margin: 0, color: '#6b7280' }}>{t('dashboard.staffActiveCount', { count: staffOnDuty })}</p> : null}
                     <p style={{ margin: 0, color: '#6b7280' }}>
-                      Products:{' '}
+                      {t('common.products')}:{' '}
                       {(summary?.products?.length ? summary.products : subscribedIds).map((id) => getProductName(id)).join(', ') || '—'}
                     </p>
                   </div>
@@ -476,35 +476,36 @@ export function DashboardPage() {
             {showWelcome ? <GettingStartedChecklist onDismiss={() => setShowWelcome(false)} /> : null}
 
             <Card>
-              <p style={{ margin: 0, fontWeight: 700 }}>Workspace</p>
+              <p style={{ margin: 0, fontWeight: 700 }}>{t('common.workspace')}</p>
               <div style={{ marginTop: 12, display: 'grid', gap: 8, color: '#6b7280', fontSize: 14 }}>
                 <p style={{ margin: 0 }}>
-                  <strong>Business:</strong> {businessName}
+                  <strong>{t('common.business')}:</strong> {businessName}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>Status:</strong> {business.data?.status ?? workspace.activeBusiness?.status ?? 'Active'}
+                  <strong>{t('common.status')}:</strong>{' '}
+                  {business.data?.status ?? workspace.activeBusiness?.status ?? t('common.active')}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>Products:</strong>{' '}
+                  <strong>{t('common.products')}:</strong>{' '}
                   {(summary?.products?.length ? summary.products : subscribedIds).map((id) => getProductName(id)).join(', ') ||
                     getProductName(workspace.activeProduct ?? business.data?.selected_product)}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>Plan:</strong> {planLabel}
+                  <strong>{t('dashboard.planLabel')}:</strong> {planLabel}
                 </p>
                 <p style={{ margin: 0 }}>
-                  <strong>Currency:</strong> {businessCurrency ?? '—'}
+                  <strong>{t('common.currency')}:</strong> {businessCurrency ?? '—'}
                 </p>
                 {hasPets ? (
                   <p style={{ margin: 0 }}>
-                    <strong>Pets pack:</strong> Enabled
+                    <strong>{t('dashboard.petsPack')}:</strong> {t('dashboard.enabled')}
                   </p>
                 ) : null}
               </div>
             </Card>
             <DashboardWidget
-              title="Search results"
-              subtitle={searchActive ? 'Type to search' : 'Preview results by term'}
+              title={t('dashboard.searchResults')}
+              subtitle={searchActive ? t('dashboard.typeToSearch') : t('dashboard.previewByTerm')}
               loading={searchResults.isLoading}
               error={searchResults.error as Error | null}
               empty={
@@ -517,18 +518,18 @@ export function DashboardPage() {
             >
               <div style={{ display: 'grid', gap: 12 }}>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 700 }}>Bookings</p>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{t('dashboard.bookingsHeading')}</p>
                   {(searchResults.data?.bookings ?? []).slice(0, 3).map((item) => (
                     <div key={item.id} style={{ padding: 10, borderRadius: 12, background: '#f8fafc', marginTop: 6 }}>
-                      <p style={{ margin: 0 }}>{item.booking_number ?? 'Booking'}</p>
+                      <p style={{ margin: 0 }}>{item.booking_number ?? t('dashboard.bookingFallback')}</p>
                     </div>
                   ))}
                 </div>
                 <div>
-                  <p style={{ margin: 0, fontWeight: 700 }}>Customers</p>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{t('dashboard.customersHeading')}</p>
                   {(searchResults.data?.customers ?? []).slice(0, 3).map((item) => (
                     <div key={item.id} style={{ padding: 10, borderRadius: 12, background: '#f8fafc', marginTop: 6 }}>
-                      <p style={{ margin: 0 }}>{item.full_name ?? 'Customer'}</p>
+                      <p style={{ margin: 0 }}>{item.full_name ?? t('dashboard.customerFallback')}</p>
                     </div>
                   ))}
                 </div>
@@ -536,23 +537,25 @@ export function DashboardPage() {
             </DashboardWidget>
 
             <Card>
-              <p style={{ margin: 0, fontWeight: 700 }}>Dashboard settings</p>
+              <p style={{ margin: 0, fontWeight: 700 }}>{t('dashboard.settingsTitle')}</p>
               <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
                 <div style={{ display: 'grid', gap: 10 }}>
-                  <label style={{ fontSize: 14, color: '#6b7280' }}>Layout</label>
+                  <label style={{ fontSize: 14, color: '#6b7280' }}>{t('dashboard.layout')}</label>
                   <select
                     value={settings.preferences.layout}
                     onChange={(event) => settings.setLayout(event.target.value as 'grid' | 'compact')}
                     style={{ width: '100%', borderRadius: 10, border: '1px solid #e5e7eb', padding: '12px 14px', background: '#fff', color: '#111827' }}
                   >
-                    <option value="grid">Grid</option>
-                    <option value="compact">Compact</option>
+                    <option value="grid">{t('dashboard.layoutGrid')}</option>
+                    <option value="compact">{t('dashboard.layoutCompact')}</option>
                   </select>
                 </div>
                 <div style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ color: '#6b7280' }}>Refresh interval</span>
+                  <span style={{ color: '#6b7280' }}>{t('dashboard.refreshInterval')}</span>
                   <span style={{ fontWeight: 700 }}>
-                    {settings.preferences.refreshInterval === 0 ? 'Manual' : `${settings.preferences.refreshInterval / 1000}s`}
+                    {settings.preferences.refreshInterval === 0
+                      ? t('dashboard.refreshIntervalManual')
+                      : t('dashboard.intervalSeconds', { seconds: settings.preferences.refreshInterval / 1000 })}
                   </span>
                 </div>
               </div>

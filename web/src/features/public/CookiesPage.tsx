@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ORGANIZATION_NAME } from '../../seo/config';
-import { LegalContactBlock, LegalDocument, LegalToc } from './LegalDocument';
+import { LegalContactBlock, LegalDocument } from './LegalDocument';
 
 const toc = [
   { id: 'what', label: 'What this policy covers' },
@@ -18,14 +18,22 @@ const toc = [
 
 export function CookiesPage() {
   return (
-    <LegalDocument path="/cookies" title="Cookie Policy">
-      <p>
-        This Cookie Policy explains how {ORGANIZATION_NAME} uses cookies and similar storage when you use the IE Orbit
-        website, sign-in, and workspace in a browser. It should be read with the{' '}
-        <Link to="/privacy">Privacy Policy</Link>.
-      </p>
-      <LegalToc items={toc} />
-
+    <LegalDocument
+      path="/cookies"
+      title="Cookie Policy"
+      toc={toc}
+      related={[
+        { to: '/privacy', label: 'Privacy Policy' },
+        { to: '/terms', label: 'Terms & Conditions' },
+      ]}
+      lead={
+        <p>
+          This Cookie Policy explains how {ORGANIZATION_NAME} uses cookies and similar storage when you use the IE Orbit
+          website, sign-in, and workspace in a browser. It should be read with the{' '}
+          <Link to="/privacy">Privacy Policy</Link>.
+        </p>
+      }
+    >
       <h2 id="what">What this policy covers</h2>
       <p>
         It covers ie-orbit.com and the web workspace (including registration, sign-in, owner and staff dashboards, and
@@ -133,7 +141,7 @@ export function CookiesPage() {
       <h2 id="analytics">Analytics</h2>
       <p>
         On the public marketing website we may load Google Analytics 4 when a measurement ID is configured. That helps
-        us see which pages (Home, Pricing, Features, and similar) are used. We configure analytics not to run on:
+        us see which pages (Home, Pricing, Products, and similar) are used. We configure analytics not to run on:
       </p>
       <ul>
         <li>Platform Admin</li>

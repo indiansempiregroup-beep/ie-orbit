@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicBreadcrumbs } from './PublicBreadcrumbs';
@@ -7,25 +8,22 @@ import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 
 export function DownloadPage() {
+  const { t } = useTranslation();
+
   return (
     <>
       <section className="public-hero-band">
         <div className="public-hero-inner public-hero-inner--solo">
           <div>
-            <p className="public-badge">White-label customer app</p>
-            <h1>
-              Customers install <span className="public-gradient-text">your brand</span>
-            </h1>
-            <p className="public-lead">
-              There is no single consumer “IE Orbit” store listing for every business. Customers use a white-label app
-              branded to the business they book or shop with. Owners and staff use the ops workspace.
-            </p>
+            <p className="public-badge">{t('public.download.eyebrow')}</p>
+            <h1>{t('public.download.title')}</h1>
+            <p className="public-lead public-lead--wide">{t('public.download.lead')}</p>
             <div className="public-hero-actions">
               <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
-                <Button variant="primary">Create account</Button>
+                <Button variant="primary">{t('public.createAccount')}</Button>
               </Link>
               <Link to="/contact">
-                <Button variant="neutral">Contact support</Button>
+                <Button variant="neutral">{t('public.nav.contact')}</Button>
               </Link>
             </div>
           </div>
@@ -43,11 +41,8 @@ export function DownloadPage() {
             </p>
           </article>
           <article className="public-card">
-            <h2>Owners and staff</h2>
-            <p>
-              Operators sign in on the web and on the IE Orbit ops app for day-to-day work. Download it for iOS or
-              Android, then start on this website with a 45-day full-Pro trial — no credit card required.
-            </p>
+            <h2>{t('public.download.opsTitle')}</h2>
+            <p>{t('public.download.opsBody')}</p>
             <OpsStoreBadges />
           </article>
         </div>

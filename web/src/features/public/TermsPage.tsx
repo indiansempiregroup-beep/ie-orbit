@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ORGANIZATION_NAME, TRIAL_DAYS } from '../../seo/config';
-import { LegalContactBlock, LegalDocument, LegalToc } from './LegalDocument';
+import { LegalContactBlock, LegalDocument } from './LegalDocument';
 
 const toc = [
   { id: 'agreement', label: 'Agreement' },
@@ -28,19 +28,30 @@ const toc = [
 
 export function TermsPage() {
   return (
-    <LegalDocument path="/terms" title="Terms & Conditions">
-      <p>
-        These Terms &amp; Conditions (“Terms”) are a contract between you and {ORGANIZATION_NAME} for use of IE Orbit,
-        including Orbit Appoint, Orbit Mart, the public website, owner and staff apps, Platform Admin (for our staff),
-        and the white-label customer app. By creating an account, ticking acceptance during registration, or using the
-        service, you agree to these Terms and the <Link to="/privacy">Privacy Policy</Link>.
-      </p>
-      <p>
-        If you use IE Orbit on behalf of a business, you confirm you have authority to bind that business. “You” means
-        that business and its authorised users.
-      </p>
-      <LegalToc items={toc} />
-
+    <LegalDocument
+      path="/terms"
+      title="Terms & Conditions"
+      toc={toc}
+      related={[
+        { to: '/privacy', label: 'Privacy Policy' },
+        { to: '/cookies', label: 'Cookie Policy' },
+      ]}
+      lead={
+        <>
+          <p>
+            These Terms &amp; Conditions (“Terms”) are a contract between you and {ORGANIZATION_NAME} for use of IE
+            Orbit, including Orbit Appoint, Orbit Mart, the public website, owner and staff apps, Platform Admin (for
+            our staff), and the white-label customer app. By creating an account, ticking acceptance during
+            registration, or using the service, you agree to these Terms and the{' '}
+            <Link to="/privacy">Privacy Policy</Link>.
+          </p>
+          <p>
+            If you use IE Orbit on behalf of a business, you confirm you have authority to bind that business. “You”
+            means that business and its authorised users.
+          </p>
+        </>
+      }
+    >
       <h2 id="agreement">Agreement</h2>
       <p>
         These Terms, the <Link to="/privacy">Privacy Policy</Link>, the <Link to="/cookies">Cookie Policy</Link>, and
@@ -266,8 +277,7 @@ export function TermsPage() {
       <LegalContactBlock />
       <p>
         Privacy practices are described in the <Link to="/privacy">Privacy Policy</Link>. Browser storage is described
-        in the <Link to="/cookies">Cookie Policy</Link>. Product questions are covered in the <Link to="/faq">FAQ</Link>{' '}
-        and <Link to="/help">Help Center</Link>.
+        in the <Link to="/cookies">Cookie Policy</Link>. Product questions are covered in the <Link to="/faq">FAQ</Link>.
       </p>
     </LegalDocument>
   );

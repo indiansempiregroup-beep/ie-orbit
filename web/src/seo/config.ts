@@ -35,6 +35,44 @@ export function trimOrigin(value: string): string {
   return value.trim().replace(/\/$/, '');
 }
 
+function envUrl(name: string, fallback = ''): string {
+  return trimOrigin(String(import.meta.env?.[name] ?? '')) || fallback;
+}
+
+/** Public social profiles shown in the footer. Override with VITE_SOCIAL_* env vars. */
+export const SOCIAL_LINKS = [
+  {
+    id: 'instagram',
+    label: 'Instagram',
+    href: envUrl('VITE_SOCIAL_INSTAGRAM', 'https://www.instagram.com/indiansempire'),
+  },
+  {
+    id: 'linkedin',
+    label: 'LinkedIn',
+    href: envUrl('VITE_SOCIAL_LINKEDIN', 'https://www.linkedin.com/company/indians-empire'),
+  },
+  {
+    id: 'facebook',
+    label: 'Facebook',
+    href: envUrl('VITE_SOCIAL_FACEBOOK', 'https://www.facebook.com/indiansempire'),
+  },
+  {
+    id: 'youtube',
+    label: 'YouTube',
+    href: envUrl('VITE_SOCIAL_YOUTUBE', 'https://www.youtube.com/@indiansempire'),
+  },
+  {
+    id: 'x',
+    label: 'X',
+    href: envUrl('VITE_SOCIAL_X', 'https://x.com/indiansempire'),
+  },
+  {
+    id: 'whatsapp',
+    label: 'WhatsApp',
+    href: envUrl('VITE_SOCIAL_WHATSAPP', `https://wa.me/${CONTACT_PHONE_TEL.replace('+', '')}`),
+  },
+].filter((link) => Boolean(link.href));
+
 export const OPS_ANDROID_STORE_URL =
   trimOrigin(String(import.meta.env?.VITE_OPS_ANDROID_STORE_URL ?? '')) ||
   `https://play.google.com/store/apps/details?id=${OPS_ANDROID_PACKAGE_ID}&hl=en_IN`;

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useShopOrders, useShopProductMutations } from './shopHooks';
@@ -14,6 +15,7 @@ import {
 import { SaleInsightChips } from './SaleInsightChips';
 
 export function ShopOrdersPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [fulfillment, setFulfillment] = useState('');
@@ -51,7 +53,7 @@ export function ShopOrdersPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search order number, product, status…"
+          searchPlaceholder={t('shop.orders.searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setStatus('');
@@ -60,43 +62,43 @@ export function ShopOrdersPage() {
           filters={[
             {
               id: 'status',
-              label: 'Status',
+              label: t('common.status'),
               value: status,
               onChange: setStatus,
               options: [
-                { value: '', label: 'All statuses' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'confirmed', label: 'Confirmed' },
-                { value: 'ready', label: 'Ready' },
-                { value: 'out_for_delivery', label: 'Out for delivery' },
-                { value: 'delivery_failed', label: 'Delivery failed' },
-                { value: 'completed', label: 'Completed' },
-                { value: 'returned', label: 'Returned' },
-                { value: 'cancelled', label: 'Cancelled' },
+                { value: '', label: t('shop.orders.allStatuses') },
+                { value: 'pending', label: t('shop.orders.statuses.pending') },
+                { value: 'confirmed', label: t('shop.orders.statuses.confirmed') },
+                { value: 'ready', label: t('shop.orders.statuses.ready') },
+                { value: 'out_for_delivery', label: t('shop.orders.statuses.out_for_delivery') },
+                { value: 'delivery_failed', label: t('shop.orders.statuses.delivery_failed') },
+                { value: 'completed', label: t('shop.orders.statuses.completed') },
+                { value: 'returned', label: t('shop.orders.statuses.returned') },
+                { value: 'cancelled', label: t('shop.orders.statuses.cancelled') },
               ],
             },
             {
               id: 'fulfillment',
-              label: 'Fulfillment',
+              label: t('shop.orders.fulfillment'),
               value: fulfillment,
               onChange: setFulfillment,
               options: [
-                { value: '', label: 'All modes' },
-                { value: 'pos', label: 'POS' },
-                { value: 'pickup', label: 'Pickup' },
-                { value: 'delivery', label: 'Delivery' },
+                { value: '', label: t('shop.orders.allModes') },
+                { value: 'pos', label: t('shop.orders.modes.pos') },
+                { value: 'pickup', label: t('shop.orders.modes.pickup') },
+                { value: 'delivery', label: t('shop.orders.modes.delivery') },
               ],
             },
           ]}
           action={
             <Link to="/shop/pos">
               <Button type="button" variant="primary">
-                Open POS
+                {t('shop.orders.openPos')}
               </Button>
             </Link>
           }
         />
-        {orders.isLoading ? <p>Loading…</p> : null}
+        {orders.isLoading ? <p>{t('common.loading')}</p> : null}
         {orders.error ? <p role="alert">{(orders.error as Error).message}</p> : null}
         <div style={{ display: 'grid', gap: 12 }}>
           {filtered.map((order) => {
@@ -110,12 +112,12 @@ export function ShopOrdersPage() {
             const fulfillmentLabel =
               order.fulfillment_mode === 'delivery'
                 ? deliveryMethod === 'instant'
-                  ? 'Deliver now'
-                  : 'Standard delivery'
+                  ? t('shop.orders.deliverNow')
+                  : t('shop.orders.standardDelivery')
                 : order.fulfillment_mode === 'pickup'
-                  ? 'Pickup'
+                  ? t('shop.orders.modes.pickup')
                   : order.fulfillment_mode === 'pos'
-                    ? 'Counter sale'
+                    ? t('shop.orders.counterSale')
                     : order.fulfillment_mode;
             return (
               <div key={order.id} style={{ borderBottom: '1px solid var(--border, #ddd)', paddingBottom: 10 }}>
@@ -151,7 +153,7 @@ export function ShopOrdersPage() {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {due && order.customer_id ? (
                       <Link to={`/customers/${order.customer_id}`}>
-                        <Button type="button">Record payment on customer</Button>
+                        <Button type="button">{t('shop.orders.recordPayment')}</Button>
                       </Link>
                     ) : null}
                     {order.status === 'pending' ? (
@@ -159,7 +161,7 @@ export function ShopOrdersPage() {
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'confirmed' })}
                       >
-                        Confirm
+                        {t('shop.orders.confirm')}
                       </Button>
                     ) : null}
                     {order.status === 'confirmed' ? (
@@ -167,7 +169,7 @@ export function ShopOrdersPage() {
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'ready' })}
                       >
-                        Ready
+                        {t('shop.orders.markReady')}
                       </Button>
                     ) : null}
                     {order.status === 'ready' && order.fulfillment_mode !== 'delivery' ? (
@@ -175,7 +177,7 @@ export function ShopOrdersPage() {
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
                       >
-                        Complete
+                        {t('shop.orders.complete')}
                       </Button>
                     ) : null}
                     {order.status === 'ready' &&
@@ -185,7 +187,7 @@ export function ShopOrdersPage() {
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'out_for_delivery' })}
                       >
-                        Mark out for delivery
+                        {t('shop.orders.markOutForDelivery')}
                       </Button>
                     ) : null}
                     {order.fulfillment_mode === 'delivery' &&
@@ -194,16 +196,16 @@ export function ShopOrdersPage() {
                         type="button"
                         onClick={() => setOrderStatus.mutate({ orderId: order.id, status: 'completed' })}
                       >
-                        Mark delivered
+                        {t('shop.orders.markDelivered')}
                       </Button>
                     ) : null}
-                    <Link to={`/shop/orders/${order.id}`}>Open</Link>
+                    <Link to={`/shop/orders/${order.id}`}>{t('shop.orders.open')}</Link>
                   </div>
                 </div>
               </div>
             );
           })}
-          {!orders.isLoading && !filtered.length ? <p>No shop orders match these filters.</p> : null}
+          {!orders.isLoading && !filtered.length ? <p>{t('shop.orders.empty')}</p> : null}
         </div>
       </Card>
     </div>

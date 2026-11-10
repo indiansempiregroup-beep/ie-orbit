@@ -1,8 +1,8 @@
-import { createAppI18n } from '@ie-orbit/i18n';
+import { createAppI18n, syncDocumentLocale } from '@ie-orbit/i18n';
 
 const STORAGE_KEY = 'ie:i18n:language';
 
-function readStoredLanguage(): string | null {
+export function readStoredLanguage(): string | null {
   try {
     return localStorage.getItem(STORAGE_KEY);
   } catch {
@@ -18,16 +18,17 @@ export function persistLanguagePreference(language: string) {
   }
 }
 
+const initialLanguage =
+  readStoredLanguage() || (typeof navigator !== 'undefined' ? navigator.language : 'en');
+
 export const i18n = createAppI18n({
-  language: readStoredLanguage() || (typeof navigator !== 'undefined' ? navigator.language : 'en'),
+  language: initialLanguage,
   onLanguageChanged: (language) => {
-    persistLanguagePreference(language);
-    if (typeof document !== 'undefined') {
-      document.documentElement.lang = language;
-    }
+    // Keep stored preference when catalog language collapses (e.g. en-IN → en).
+    const preferred = readStoredLanguage() || language;
+    persistLanguagePreference(preferred);
+    syncDocumentLocale(preferred);
   },
 });
 
-if (typeof document !== 'undefined') {
-  document.documentElement.lang = i18n.language;
-}
+syncDocumentLocale(initialLanguage);

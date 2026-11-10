@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { CONTACT_EMAIL, ORGANIZATION_NAME, TRIAL_DAYS } from '../../seo/config';
-import { LegalContactBlock, LegalDocument, LegalToc } from './LegalDocument';
+import { LegalContactBlock, LegalDocument } from './LegalDocument';
 
 const toc = [
   { id: 'who-we-are', label: 'Who we are' },
@@ -22,19 +22,25 @@ const toc = [
 
 export function PrivacyPage() {
   return (
-    <LegalDocument path="/privacy" title="Privacy Policy">
-      <p>
-        This Privacy Policy explains how {ORGANIZATION_NAME} (“we”, “us”, “our”) collects, uses, stores, and shares
-        personal and business information when you use IE Orbit — including Orbit Appoint, Orbit Mart, the public
-        website, owner and staff apps, and the white-label customer app branded to a business.
-      </p>
-      <p>
-        Related documents: <Link to="/terms">Terms &amp; Conditions</Link> and{' '}
-        <Link to="/cookies">Cookie Policy</Link>. Creating an owner account requires accepting this policy and the
-        Terms.
-      </p>
-      <LegalToc items={toc} />
-
+    <LegalDocument
+      path="/privacy"
+      title="Privacy Policy"
+      toc={toc}
+      related={[
+        { to: '/terms', label: 'Terms & Conditions' },
+        { to: '/cookies', label: 'Cookie Policy' },
+      ]}
+      lead={
+        <>
+          <p>
+            This Privacy Policy explains how {ORGANIZATION_NAME} (“we”, “us”, “our”) collects, uses, stores, and shares
+            personal and business information when you use IE Orbit — including Orbit Appoint, Orbit Mart, the public
+            website, owner and staff apps, and the white-label customer app branded to a business.
+          </p>
+          <p>Creating an owner account requires accepting this policy and the Terms.</p>
+        </>
+      }
+    >
       <h2 id="who-we-are">Who we are</h2>
       <p>
         IE Orbit is a business workspace from {ORGANIZATION_NAME}. Orbit Appoint covers bookings, staff calendars,

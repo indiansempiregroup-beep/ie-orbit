@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { useBusinessBillingSnapshotQuery } from '../features/settings/billingHooks';
 import { getProductName } from '../config/products';
 
 export function SoftLockBanner() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const billing = billingQuery.data;
@@ -16,6 +18,7 @@ export function SoftLockBanner() {
     const names = [...new Set(pending.flatMap((row) => row.product_codes ?? [row.product_code]).filter(Boolean))].map(
       (code) => getProductName(String(code)),
     );
+    const joined = names.join(` ${t('common.and')} `) || t('common.softLock.yourPayment');
     return (
       <div
         role="status"
@@ -33,9 +36,9 @@ export function SoftLockBanner() {
         }}
       >
         <div>
-          <strong style={{ display: 'block' }}>Payment under review</strong>
+          <strong style={{ display: 'block' }}>{t('common.softLock.reviewTitle')}</strong>
           <span style={{ fontSize: 14, opacity: 0.85 }}>
-            {names.join(' and ') || 'Your payment'} was submitted. Access restores after IE confirms (usually same day).
+            {t('common.softLock.reviewBody', { names: joined })}
           </span>
         </div>
         <Link
@@ -50,14 +53,16 @@ export function SoftLockBanner() {
             whiteSpace: 'nowrap',
           }}
         >
-          Status
+          {t('common.status')}
         </Link>
       </div>
     );
   }
 
   if (locked.length === 0 && !billing?.soft_locked) return null;
-  const names = (locked.length ? locked.map((row) => getProductName(row.product_code)) : ['this product']).join(' and ');
+  const names = (locked.length ? locked.map((row) => getProductName(row.product_code)) : [t('common.softLock.thisProduct')]).join(
+    ` ${t('common.and')} `,
+  );
 
   return (
     <div
@@ -76,9 +81,9 @@ export function SoftLockBanner() {
       }}
     >
       <div>
-        <strong style={{ display: 'block' }}>Renew {names}</strong>
+        <strong style={{ display: 'block' }}>{t('common.softLock.renewTitle', { names })}</strong>
         <span style={{ fontSize: 14, opacity: 0.85 }}>
-          You can still view data. New bookings, staff, and offices stay locked until you pay this period.
+          {t('common.softLock.renewBody')}
         </span>
       </div>
       <Link
@@ -93,7 +98,7 @@ export function SoftLockBanner() {
           whiteSpace: 'nowrap',
         }}
       >
-        Renew now
+        {t('common.softLock.renewNow')}
       </Link>
     </div>
   );

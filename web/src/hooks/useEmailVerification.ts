@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createAuthenticatedClient } from '../lib/apiClient';
 import { getApiErrorMessage } from '../lib/apiClient';
 import { useAuth } from './useAuth';
 
 export function useEmailVerification() {
+  const { t } = useTranslation();
   const auth = useAuth();
   const [resendState, setResendState] = useState<'idle' | 'loading' | 'sent'>('idle');
   const [message, setMessage] = useState<string | null>(null);
@@ -15,7 +17,7 @@ export function useEmailVerification() {
   const resendVerification = useCallback(async (emailOverride?: string) => {
     const email = (emailOverride || auth.user?.email || '').trim();
     if (!auth.token && !email) {
-      setMessage('Enter your email or sign in to resend the verification email.');
+      setMessage(t('auth.verifyBanner.needEmail'));
       return false;
     }
     setResendState('loading');
@@ -29,16 +31,16 @@ export function useEmailVerification() {
       setDebugToken(nextDebugToken);
       setMessage(
         nextDebugToken
-          ? `Verification email sent. Local code: ${nextDebugToken}`
-          : 'Verification email sent. Check your inbox for the 6-digit code.',
+          ? t('auth.verifyBanner.sentDebug', { code: nextDebugToken })
+          : t('auth.verifyBanner.sentMessage'),
       );
       return true;
     } catch (error) {
       setResendState('idle');
-      setMessage(getApiErrorMessage(error, 'Unable to resend verification email.'));
+      setMessage(getApiErrorMessage(error, t('auth.verifyBanner.resendFailed')));
       return false;
     }
-  }, [auth.token, auth.user?.email]);
+  }, [auth.token, auth.user?.email, t]);
 
   return {
     isVerified,
