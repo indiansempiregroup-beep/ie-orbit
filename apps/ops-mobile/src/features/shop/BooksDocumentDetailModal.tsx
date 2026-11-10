@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -21,9 +22,9 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatMoney, formatVoucherDateTime, voucherLineProductId } from './shopBooksHelpers';
 
 const STATUS_CHIPS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'draft', labelKey: 'shop.booksDocDialog.statusDraft' },
+  { value: 'confirmed', labelKey: 'shop.booksDocDialog.statusConfirmed' },
+  { value: 'cancelled', labelKey: 'shop.booksDocDialog.statusCancelled' },
 ] as const;
 
 function docStatus(doc: ShopBooksDocument | null) {
@@ -66,6 +67,7 @@ export function BooksDocumentDetailModal({
   onConvert?: (doc: ShopBooksDocument) => void;
   onUpdated?: (doc: ShopBooksDocument) => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
@@ -115,9 +117,17 @@ export function BooksDocumentDetailModal({
   const partyName =
     localDoc?.supplier_name?.trim() ||
     localDoc?.customer_name?.trim() ||
-    (docType === 'purchase_order' ? 'No supplier' : 'No customer');
+    (docType === 'purchase_order'
+      ? t('opsApp.shop.common.noSupplier')
+      : t('opsApp.shop.common.noCustomer'));
   const convertLabel =
-    docType === 'purchase_order' ? 'Convert to purchase' : isChallan ? 'Create invoice' : 'Convert to sale';
+    docType === 'purchase_order'
+      ? t('shop.booksDocuments.convertToPurchase')
+      : isChallan
+        ? t('shop.booksDocDialog.createInvoice')
+        : t('shop.booksDocuments.convertToSale');
+  const statusLabel = (value: string) =>
+    t(`opsApp.shop.common.status.${value}`, { defaultValue: value });
 
   async function changeStatus(next: string) {
     if (!client || !localDoc || !editable || next === status || busyStatus) return;
@@ -126,10 +136,16 @@ export function BooksDocumentDetailModal({
       const response = await client.shop.updateDocument(localDoc.id, { status: next });
       setLocalDoc(response.data);
       onUpdated?.(response.data);
-      toast.push(`Marked ${response.data.document_number} as ${next}`, 'success');
+      toast.push(
+        t('opsApp.shop.booksDocDetail.markedAs', {
+          number: response.data.document_number,
+          status: statusLabel(next),
+        }),
+        'success',
+      );
       if (next === 'cancelled') onClose();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't update this document."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.booksDocDialog.updateFailed')), 'error');
     } finally {
       setBusyStatus(false);
     }
@@ -169,14 +185,20 @@ export function BooksDocumentDetailModal({
                     .join(' · ')}
                 </Text>
               </View>
-              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel={t('common.close')}>
                 <Feather name="x" size={18} color={colors.primaryForeground} />
               </Pressable>
             </View>
             <View style={styles.heroBadges}>
               <View style={[styles.heroBadge, converted ? styles.heroBadgePaid : styles.heroBadgeDue]}>
                 <Text style={[styles.heroBadgeText, { color: converted ? '#047857' : '#92400e' }]}>
-                  {converted ? 'Converted' : dispatched ? 'Dispatched' : status || 'Confirmed'}
+                  {converted
+                    ? t('opsApp.shop.booksDocDetail.badgeConverted')
+                    : dispatched
+                      ? t('opsApp.shop.booksDocDetail.badgeDispatched')
+                      : status
+                        ? statusLabel(status)
+                        : t('shop.booksDocDialog.statusConfirmed')}
                 </Text>
               </View>
             </View>
@@ -191,12 +213,12 @@ export function BooksDocumentDetailModal({
 
             {editable ? (
               <>
-                <Text style={styles.section}>Status</Text>
+                <Text style={styles.section}>{t('common.status')}</Text>
                 <View style={styles.chipRow}>
                   {STATUS_CHIPS.map((item) => (
                     <Chip
                       key={item.value}
-                      label={item.label}
+                      label={t(item.labelKey)}
                       active={status === item.value}
                       onPress={() => void changeStatus(item.value)}
                     />
@@ -206,22 +228,26 @@ export function BooksDocumentDetailModal({
             ) : (
               <Text style={styles.meta}>
                 {converted
-                  ? 'This document has been converted and can no longer be edited.'
+                  ? t('shop.booksDocDialog.lockedConverted')
                   : dispatched
-                    ? 'Goods have left. Create an invoice when you bill the customer.'
+                    ? t('shop.booksDocDialog.lockedDispatched')
                     : status === 'cancelled'
-                      ? 'This document is cancelled.'
-                      : `Status: ${status}`}
+                      ? t('shop.booksDocDialog.lockedCancelled')
+                      : t('opsApp.shop.booksDocDetail.statusLine', {
+                          status: statusLabel(status),
+                        })}
               </Text>
             )}
 
-            <Text style={styles.section}>Items · {lines.length}</Text>
+            <Text style={styles.section}>
+              {t('opsApp.shop.booksDocDetail.itemsCount', { count: lines.length })}
+            </Text>
             {lines.length === 0 ? (
-              <Text style={styles.meta}>No line items on this document.</Text>
+              <Text style={styles.meta}>{t('shop.booksDocDialog.noLines')}</Text>
             ) : (
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const name = String(line.name || line.product_name || t('shop.booksDocDialog.itemFallback', { n: index + 1 }));
                 const productId = voucherLineProductId(line);
                 const qty = Number(line.quantity ?? line.qty ?? 0);
                 const rate = Number(line.unit_price ?? line.rate ?? 0);
@@ -232,7 +258,7 @@ export function BooksDocumentDetailModal({
                       <Text style={[styles.lineName, productId ? styles.lineNameLink : null]}>{name}</Text>
                       <Text style={styles.meta}>
                         {qty} × {formatMoney(rate)}
-                        {gst ? ` · GST ${gst}%` : ''}
+                        {gst ? ` · ${t('opsApp.shop.booksDocDetail.gstPct', { rate: gst })}` : ''}
                       </Text>
                     </View>
                     <Text style={styles.lineTotal}>{formatMoney(lineTotal(line))}</Text>
@@ -257,7 +283,7 @@ export function BooksDocumentDetailModal({
                       navigation.navigate('ShopProductAdd', { productId });
                     }}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${name}`}
+                    accessibilityLabel={t('opsApp.shop.booksDocDetail.openItem', { name })}
                   >
                     {body}
                   </Pressable>
@@ -267,22 +293,22 @@ export function BooksDocumentDetailModal({
 
             <View style={styles.totals}>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Subtotal</Text>
+                <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.subtotal')}</Text>
                 <Text style={styles.meta}>{formatMoney(localDoc.subtotal)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Tax</Text>
+                <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.tax')}</Text>
                 <Text style={styles.meta}>{formatMoney(localDoc.tax_total)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.payableLabel}>Total</Text>
+                <Text style={styles.payableLabel}>{t('shop.booksInvoiceDrawer.total')}</Text>
                 <Text style={styles.payableValue}>{formatMoney(localDoc.total)}</Text>
               </View>
             </View>
 
             {localDoc.notes ? (
               <>
-                <Text style={styles.section}>Notes</Text>
+                <Text style={styles.section}>{t('opsApp.shop.common.notes')}</Text>
                 <Text style={styles.meta}>{localDoc.notes}</Text>
               </>
             ) : null}
@@ -291,7 +317,7 @@ export function BooksDocumentDetailModal({
           <View style={styles.footer}>
             {converted && localDoc.converted_voucher ? (
               <Button
-                label="Open converted bill"
+                label={t('shop.booksDocDialog.openConverted')}
                 fullWidth
                 onPress={() => {
                   onClose();
@@ -304,19 +330,25 @@ export function BooksDocumentDetailModal({
             ) : null}
             {locked ? (
               <Text style={styles.meta}>
-                {converted ? 'Converted documents cannot be edited.' : 'Cancelled documents cannot be edited.'}
+                {converted
+                  ? t('opsApp.shop.booksDocDetail.convertedLocked')
+                  : t('opsApp.shop.booksDocDetail.cancelledLocked')}
               </Text>
             ) : (
               <View style={styles.footerPrimaryRow}>
                 {editable && onEdit ? (
                   <View style={styles.footerEditBtn}>
-                    <Button label="Edit" fullWidth icon="edit-2" onPress={() => onEdit(localDoc)} />
+                    <Button label={t('opsApp.shop.common.edit')} fullWidth icon="edit-2" onPress={() => onEdit(localDoc)} />
                   </View>
                 ) : null}
                 {isChallan && !dispatched && onDispatch ? (
                   <View style={styles.footerConvertBtn}>
                     <Button
-                      label={converting ? 'Dispatching…' : 'Dispatch'}
+                      label={
+                        converting
+                          ? t('opsApp.shop.booksDocDetail.dispatching')
+                          : t('shop.booksDocDialog.dispatch')
+                      }
                       variant="outline"
                       fullWidth
                       loading={converting}
@@ -328,7 +360,7 @@ export function BooksDocumentDetailModal({
                 {onConvert && (isChallan ? dispatched || editable : editable) ? (
                   <View style={styles.footerConvertBtn}>
                     <Button
-                      label={converting ? 'Working…' : convertLabel}
+                      label={converting ? t('shop.booksDocDialog.working') : convertLabel}
                       variant={isChallan && !dispatched ? 'ghost' : 'outline'}
                       fullWidth
                       loading={converting}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Pencil, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ShopBooksVoucher, ShopSupplier } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -82,6 +83,9 @@ function billMatches(voucher: ShopBooksVoucher, search: string, payment: string)
 }
 
 export function ShopPartiesPage() {
+  const { t } = useTranslation();
+  const tp = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.parties.${key}`, options));
   const workspace = useWorkspace();
   const client = useApiClient();
   const navigate = useNavigate();
@@ -182,7 +186,7 @@ export function ShopPartiesPage() {
         setBills((current) => (cursor ? [...current, ...page] : page));
         setBillCursor(response.meta?.pagination?.next_cursor ?? null);
       } catch (error) {
-        snackbar.push(getApiErrorMessage(error, "Couldn't load this supplier's invoices."), 'error');
+        snackbar.push(getApiErrorMessage(error, tp('loadInvoicesFailed')), 'error');
       } finally {
         setBillsLoading(false);
       }
@@ -267,7 +271,7 @@ export function ShopPartiesPage() {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't export these invoices."), 'error');
+      snackbar.push(getApiErrorMessage(error, tp('exportFailed')), 'error');
     }
   }
 
@@ -288,7 +292,7 @@ export function ShopPartiesPage() {
     try {
       if (editingId) {
         const saved = await update.mutateAsync({ supplierId: editingId, body: payload });
-        snackbar.push('Supplier details saved.', 'success');
+        snackbar.push(tp('supplierSaved'), 'success');
         if (editingHere) {
           setStatementSupplier(saved);
           setEditingHere(false);
@@ -296,21 +300,21 @@ export function ShopPartiesPage() {
         }
       } else {
         await create.mutateAsync(payload);
-        snackbar.push('Supplier added.', 'success');
+        snackbar.push(tp('supplierAdded'), 'success');
       }
       dialog.hide();
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't save this supplier. Try again."));
+      setMessage(getApiErrorMessage(error, tp('saveFailed')));
     }
   }
 
   async function handleDelete(supplier: ShopSupplier) {
-    if (!window.confirm(`Remove ${supplier.name}?`)) return;
+    if (!window.confirm(tp('confirmRemove', { name: supplier.name }))) return;
     try {
       await remove.mutateAsync(supplier.id);
-      snackbar.push('Supplier removed.', 'success');
+      snackbar.push(tp('supplierRemoved'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't remove this supplier. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tp('removeFailed')), 'error');
     }
   }
 
@@ -319,12 +323,12 @@ export function ShopPartiesPage() {
   return (
     <div className="page-stack">
       <div className="invoice-page-header">
-        <h1 className="invoice-page-title">Parties</h1>
+        <h1 className="invoice-page-title">{tp('title')}</h1>
         {tab === 'suppliers' ? (
           <Button type="button" variant="primary" onClick={openAddDialog}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Plus size={16} aria-hidden="true" />
-              Add supplier
+              {tp('addSupplier')}
             </span>
           </Button>
         ) : null}
@@ -332,24 +336,24 @@ export function ShopPartiesPage() {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <TabButton active={tab === 'customers'} onClick={() => setTab('customers')}>
-          Customers
+          {tp('tabCustomers')}
         </TabButton>
         <TabButton active={tab === 'suppliers'} onClick={() => setTab('suppliers')}>
-          Suppliers
+          {tp('tabSuppliers')}
         </TabButton>
       </div>
 
       {tab === 'customers' ? (
         <Card>
-          <h3 style={{ marginTop: 0 }}>Customers</h3>
+          <h3 style={{ marginTop: 0 }}>{tp('tabCustomers')}</h3>
           <p style={{ color: 'var(--muted-foreground)' }}>
-            Customer records, borrow balances, and contact details are managed in the shared Customers workspace.
+            {tp('customersBody')}
           </p>
           <Link to="/customers">
             <Button type="button" variant="primary">
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <ExternalLink size={16} aria-hidden="true" />
-                Open Customers
+                {tp('openCustomers')}
               </span>
             </Button>
           </Link>
@@ -359,10 +363,10 @@ export function ShopPartiesPage() {
           <ShopFilterBar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search suppliers"
+            searchPlaceholder={tp('searchSuppliers')}
             onClear={() => setSearch('')}
           />
-          {suppliers.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+          {suppliers.isLoading ? <p className="invoice-muted">{t('common.loading')}</p> : null}
           <div className="invoice-list">
             {filtered.map((supplier) => (
               <div key={supplier.id} className="invoice-row">
@@ -374,29 +378,29 @@ export function ShopPartiesPage() {
                 >
                   <strong>{supplier.name}</strong>
                   <span>
-                    {supplier.phone || 'No phone'}
+                    {supplier.phone || tp('noPhone')}
                     {supplier.gstin ? ` · ${supplier.gstin}` : ''}
                     {supplier.billing_state ? ` · ${supplier.billing_state}` : ''}
                   </span>
                 </button>
                 <div className="invoice-row__side">
                   <Button type="button" variant="ghost" onClick={() => openStatement(supplier)}>
-                    Statement
+                    {tp('statement')}
                   </Button>
                 </div>
                 <Button type="button" variant="ghost" onClick={() => openEditDialog(supplier)}>
                   <Pencil size={14} aria-hidden="true" />
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => void handleDelete(supplier)}>
-                  Remove
+                  {tp('remove')}
                 </Button>
               </div>
             ))}
             {!suppliers.isLoading && !filtered.length ? (
               <div className="invoice-empty">
-                <p>No suppliers yet. Add one to start recording purchases.</p>
+                <p>{tp('empty')}</p>
                 <Button type="button" variant="primary" onClick={openAddDialog}>
-                  Add supplier
+                  {tp('addSupplier')}
                 </Button>
               </div>
             ) : null}
@@ -407,51 +411,51 @@ export function ShopPartiesPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title={editingId ? 'Edit supplier' : 'Add supplier'}
+        title={editingId ? tp('editSupplier') : tp('addSupplier')}
         labelledBy="supplier-dialog"
         busy={saving}
       >
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Supplier name</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('supplierName')}</span>
               <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Phone</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('phone')}</span>
               <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Email</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('email')}</span>
               <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>GSTIN</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('gstin')}</span>
               <input value={form.gstin} onChange={(event) => setForm({ ...form, gstin: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Billing state</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('billingState')}</span>
               <input value={form.billing_state} onChange={(event) => setForm({ ...form, billing_state: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Credit limit</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('creditLimit')}</span>
               <input type="number" min={0} value={form.credit_limit} onChange={(event) => setForm({ ...form, credit_limit: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Opening balance (payable)</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('openingBalancePayable')}</span>
               <input type="number" value={form.opening_balance} onChange={(event) => setForm({ ...form, opening_balance: event.target.value })} style={fieldStyle} />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Billing address</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('billingAddress')}</span>
               <textarea value={form.billing_address} onChange={(event) => setForm({ ...form, billing_address: event.target.value })} rows={2} style={fieldStyle} />
             </label>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Update supplier' : 'Save supplier'}
+              {saving ? tp('saving') : editingId ? tp('updateSupplier') : tp('saveSupplier')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
-              Cancel
+              {tp('cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
@@ -464,7 +468,7 @@ export function ShopPartiesPage() {
           setEditingHere(false);
           statementDialog.hide();
         }}
-        title={statementSupplier ? `Statement · ${statementSupplier.name}` : 'Statement'}
+        title={statementSupplier ? tp('statementTitle', { name: statementSupplier.name }) : tp('statement')}
         labelledBy="supplier-statement-dialog"
       >
         <div style={{ minWidth: 340, marginTop: 12 }}>
@@ -472,44 +476,44 @@ export function ShopPartiesPage() {
             <form onSubmit={submit} style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
               <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Supplier name</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('supplierName')}</span>
                   <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Phone</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('phone')}</span>
                   <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Email</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('email')}</span>
                   <input value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>GSTIN</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('gstin')}</span>
                   <input value={form.gstin} onChange={(event) => setForm({ ...form, gstin: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Billing state</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('billingState')}</span>
                   <input value={form.billing_state} onChange={(event) => setForm({ ...form, billing_state: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Credit limit</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('creditLimit')}</span>
                   <input type="number" min={0} value={form.credit_limit} onChange={(event) => setForm({ ...form, credit_limit: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Opening balance</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('openingBalance')}</span>
                   <input type="number" value={form.opening_balance} onChange={(event) => setForm({ ...form, opening_balance: event.target.value })} style={fieldStyle} />
                 </label>
                 <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Billing address</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('billingAddress')}</span>
                   <textarea value={form.billing_address} onChange={(event) => setForm({ ...form, billing_address: event.target.value })} rows={2} style={fieldStyle} />
                 </label>
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <Button type="button" variant="ghost" onClick={() => setEditingHere(false)} disabled={saving}>
-                  Cancel
+                  {tp('cancel')}
                 </Button>
                 <Button type="submit" variant="primary" disabled={saving}>
-                  {saving ? 'Saving…' : 'Update supplier'}
+                  {saving ? tp('saving') : tp('updateSupplier')}
                 </Button>
               </div>
               {message ? <p role="status">{message}</p> : null}
@@ -517,7 +521,7 @@ export function ShopPartiesPage() {
           ) : null}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
             <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-              From
+              {tp('from')}
               <input
                 type="date"
                 value={statementFrom}
@@ -526,7 +530,7 @@ export function ShopPartiesPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-              To
+              {tp('to')}
               <input
                 type="date"
                 value={statementTo}
@@ -535,11 +539,11 @@ export function ShopPartiesPage() {
               />
             </label>
           </div>
-          {statement.isLoading ? <p>Loading…</p> : null}
+          {statement.isLoading ? <p>{t('common.loading')}</p> : null}
           {statement.data ? (
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Opening balance</span>
+                <span>{tp('openingBalance')}</span>
                 <strong>{formatMoney(Number(statement.data.opening_balance ?? 0), currency)}</strong>
               </div>
               <div style={{ display: 'grid', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
@@ -556,7 +560,10 @@ export function ShopPartiesPage() {
                     .join(' · ');
                   const amount = (
                     <span>
-                      {formatMoney(Number(entry.amount ?? 0), currency)} → bal {formatMoney(Number(entry.balance_after ?? 0), currency)}
+                      {tp('balanceArrow', {
+                        amount: formatMoney(Number(entry.amount ?? 0), currency),
+                        balance: formatMoney(Number(entry.balance_after ?? 0), currency),
+                      })}
                     </span>
                   );
                   if (!canOpen || !entry.voucher) {
@@ -587,49 +594,55 @@ export function ShopPartiesPage() {
                     </Link>
                   );
                 })}
-                {!statement.data.entries.length ? <p>No ledger entries yet.</p> : null}
+                {!statement.data.entries.length ? <p>{tp('noLedger')}</p> : null}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #eee', paddingTop: 8 }}>
-                <span>Closing balance</span>
+                <span>{tp('closingBalance')}</span>
                 <strong>{formatMoney(Number(statement.data.closing_balance ?? 0), currency)}</strong>
               </div>
             </div>
           ) : null}
           <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-            <strong>Invoices</strong>
+            <strong>{tp('invoices')}</strong>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
-                aria-label="Search invoices"
+                aria-label={tp('searchInvoicesAria')}
                 value={billSearch}
                 onChange={(event) => setBillSearch(event.target.value)}
-                placeholder="Search number or notes"
+                placeholder={tp('searchNumberNotes')}
                 style={{ ...fieldStyle, flex: '1 1 180px' }}
               />
-              <select aria-label="Invoice type" value={billType} onChange={(event) => setBillType(event.target.value)} style={fieldStyle}>
-                <option value="">All types</option>
-                <option value="purchase">Purchase</option>
-                <option value="debit_note">Debit note</option>
-                <option value="payment_out">Payment</option>
+              <select aria-label={tp('invoiceTypeAria')} value={billType} onChange={(event) => setBillType(event.target.value)} style={fieldStyle}>
+                <option value="">{tp('allTypes')}</option>
+                <option value="purchase">{tp('types.purchase')}</option>
+                <option value="debit_note">{tp('types.debit_note')}</option>
+                <option value="payment_out">{tp('types.payment_out')}</option>
               </select>
-              <select aria-label="Invoice status" value={billStatus} onChange={(event) => setBillStatus(event.target.value)} style={fieldStyle}>
-                <option value="">Any status</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="void">Void</option>
+              <select aria-label={tp('invoiceStatusAria')} value={billStatus} onChange={(event) => setBillStatus(event.target.value)} style={fieldStyle}>
+                <option value="">{tp('anyStatus')}</option>
+                <option value="confirmed">{tp('confirmed')}</option>
+                <option value="void">{tp('void')}</option>
               </select>
-              <select aria-label="Payment" value={billPayment} onChange={(event) => setBillPayment(event.target.value)} style={fieldStyle}>
-                <option value="">Any payment</option>
-                <option value="due">Due</option>
-                <option value="paid">Paid</option>
+              <select aria-label={tp('paymentAria')} value={billPayment} onChange={(event) => setBillPayment(event.target.value)} style={fieldStyle}>
+                <option value="">{tp('anyPayment')}</option>
+                <option value="due">{tp('due')}</option>
+                <option value="paid">{tp('paid')}</option>
               </select>
             </div>
-            {billsLoading && !bills.length ? <p>Loading invoices…</p> : null}
+            {billsLoading && !bills.length ? <p>{tp('loadingInvoices')}</p> : null}
             <div style={{ display: 'grid', gap: 6, maxHeight: 280, overflowY: 'auto' }}>
               {bills.filter((voucher) => billMatches(voucher, billSearch, billPayment)).map((voucher) => {
                 const due = billDue(voucher);
                 const kind = (voucher.voucher_type || '').toLowerCase();
                 const href = kind === 'purchase' || kind === 'debit_note' ? `/shop/books/purchase/${voucher.id}` : '';
-                const label = `${voucher.voucher_number} · ${kind.replace(/_/g, ' ')} · ${voucher.voucher_date || ''}`;
-                const amount = `${formatMoney(Number(voucher.total ?? 0), currency)} · ${due > 0.009 ? 'due' : voucher.status}`;
+                const kindLabel = ['purchase', 'debit_note', 'payment_out'].includes(kind)
+                  ? tp(`types.${kind}`)
+                  : kind.replace(/_/g, ' ');
+                const statusText = ['confirmed', 'void'].includes(String(voucher.status))
+                  ? tp(String(voucher.status))
+                  : voucher.status;
+                const label = `${voucher.voucher_number} · ${kindLabel} · ${voucher.voucher_date || ''}`;
+                const amount = `${formatMoney(Number(voucher.total ?? 0), currency)} · ${due > 0.009 ? tp('due') : statusText}`;
                 if (!href) {
                   return (
                     <div key={voucher.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
@@ -654,12 +667,12 @@ export function ShopPartiesPage() {
                 );
               })}
               {!billsLoading && !bills.filter((voucher) => billMatches(voucher, billSearch, billPayment)).length ? (
-                <p style={{ margin: 0 }}>No invoices match these filters.</p>
+                <p style={{ margin: 0 }}>{tp('noInvoices')}</p>
               ) : null}
             </div>
             {billCursor ? (
               <Button type="button" variant="ghost" onClick={() => void loadBills(billCursor)} disabled={billsLoading}>
-                {billsLoading ? 'Loading…' : 'Load more'}
+                {billsLoading ? t('common.loading') : tp('loadMore')}
               </Button>
             ) : null}
           </div>
@@ -670,17 +683,17 @@ export function ShopPartiesPage() {
                 variant="neutral"
                 onClick={() => beginEdit(statementSupplier)}
               >
-                Edit supplier
+                {tp('editSupplier')}
               </Button>
             ) : null}
             <Button type="button" variant="neutral" onClick={() => void downloadInvoicesCsv()} disabled={!statementSupplier}>
-              Export invoices
+              {tp('exportInvoices')}
             </Button>
             <Button type="button" variant="neutral" onClick={downloadStatementCsv} disabled={!statement.data}>
-              CSV for CA
+              {tp('csvForCa')}
             </Button>
             <Button type="button" variant="ghost" onClick={statementDialog.hide}>
-              Close
+              {tp('close')}
             </Button>
           </div>
         </div>

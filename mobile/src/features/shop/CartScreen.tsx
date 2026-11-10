@@ -19,6 +19,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import QRCode from 'react-native-qrcode-svg';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -38,7 +39,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { buildUpiPayUrl, openUpiInApp } from '../../utils/upi';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
-import { addressSingleLine, addressTypeMeta, deliveryAddressLine } from './addressUtils';
+import { addressSingleLine, addressTypeLabel, addressTypeMeta, deliveryAddressLine } from './addressUtils';
 import { QtyStepper } from './QtyStepper';
 import { formatShopMoney, formatShopDateIso, formatShopDateLabel, formatShopTimeLabel, isPickupTimeAfterNow, nextAvailablePickupTime, shopLinePayable } from './shopHelpers';
 import {
@@ -69,7 +70,6 @@ import {
 type CheckoutPaymentMethod = 'cash' | 'upi' | 'razorpay' | 'cashfree';
 
 const PLACE_ORDER_TIMEOUT_MS = 45000;
-const PLACE_ORDER_BUSY_MESSAGE = 'Server is busy. Please try again in a moment.';
 
 function tomorrowIso() {
   const value = new Date();
@@ -77,15 +77,20 @@ function tomorrowIso() {
   return formatShopDateIso(value);
 }
 
-function couponHeadline(offer: ShopCouponOffer, currency: string) {
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+function couponHeadline(offer: ShopCouponOffer, currency: string, t: Translate) {
   const value = Number(offer.discount_value || 0);
   if (String(offer.discount_type) === 'percent') {
-    const cap = offer.max_discount_amount
-      ? ` up to ${formatShopMoney(Number(offer.max_discount_amount), currency)}`
-      : '';
-    return `${value}% OFF${cap}`;
+    if (offer.max_discount_amount) {
+      return t('customerApp.cart.percentOffCap', {
+        value,
+        cap: formatShopMoney(Number(offer.max_discount_amount), currency),
+      });
+    }
+    return t('customerApp.cart.percentOff', { value });
   }
-  return `${formatShopMoney(value, currency)} OFF`;
+  return t('customerApp.cart.amountOff', { amount: formatShopMoney(value, currency) });
 }
 
 function isAutomationOffer(offer: ShopCouponOffer) {
@@ -118,6 +123,7 @@ type StandardDeliveryOption = {
 };
 
 export function CartScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -190,9 +196,10 @@ export function CartScreen() {
   const canPayRazorpay = Boolean(business?.razorpay?.can_accept_payments);
   const canPayCashfree = Boolean(business?.cashfree?.can_accept_payments);
   const canPayOnline = canPayRazorpay || canPayCashfree || canPayQr;
-  const cashPaymentLabel = fulfillment === 'delivery' ? 'Cash on delivery' : 'Pay at pickup';
+  const cashPaymentLabel =
+    fulfillment === 'delivery' ? t('customerApp.cart.cashOnDelivery') : t('customerApp.cart.payAtPickup');
   const cashPaymentHint =
-    fulfillment === 'delivery' ? 'Pay when you receive your order' : 'Pay when you collect your order';
+    fulfillment === 'delivery' ? t('customerApp.cart.cashHintDelivery') : t('customerApp.cart.cashHintPickup');
   const pickupAddress =
     business?.formatted_address ||
     [business?.address_line1, business?.city, business?.postal_code].filter(Boolean).join(', ');
@@ -307,20 +314,20 @@ export function CartScreen() {
 
   async function uploadCheckoutUpiProof(source: 'camera' | 'library') {
     if (!token || !tenantSlug || !businessCode) {
-      setError('Sign in to upload a payment screenshot.');
+      setError(t('customerApp.cart.signInToUpload'));
       return;
     }
     if (Platform.OS !== 'web') {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Allow camera access to capture the payment screenshot.');
+          Alert.alert(t('customerApp.cart.permissionNeeded'), t('customerApp.cart.cameraPermission'));
           return;
         }
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Allow photo library access to upload a screenshot.');
+          Alert.alert(t('customerApp.cart.permissionNeeded'), t('customerApp.cart.libraryPermission'));
           return;
         }
       }
@@ -350,17 +357,17 @@ export function CartScreen() {
         body: form,
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error?.message || 'Upload failed');
+      if (!res.ok) throw new Error(json?.error?.message || t('customerApp.cart.uploadFailed'));
       const mediaId = String(json?.data?.media_id || '').trim();
       const proof =
         String(json?.data?.payment_proof_url || '').trim() ||
         (mediaId ? `/api/v1/media/${mediaId}/file` : '');
-      if (!proof) throw new Error('Upload did not return a proof URL.');
+      if (!proof) throw new Error(t('customerApp.cart.uploadNoProofUrl'));
       setUpiProofUrl(proof);
     } catch (err) {
       setUpiProofUrl('');
       setUpiProofPreview('');
-      setError(err instanceof Error ? err.message : 'Unable to upload payment screenshot.');
+      setError(err instanceof Error ? err.message : t('customerApp.cart.uploadScreenshotFailed'));
     } finally {
       setUpiProofUploading(false);
     }
@@ -371,13 +378,13 @@ export function CartScreen() {
       void uploadCheckoutUpiProof('library');
       return;
     }
-    Alert.alert('Payment screenshot', 'Capture the UPI success screen after you pay.', [
-      { text: 'Take photo', onPress: () => void uploadCheckoutUpiProof('camera') },
+    Alert.alert(t('customerApp.cart.paymentScreenshotTitle'), t('customerApp.cart.paymentScreenshotBody'), [
+      { text: t('customerApp.cart.takePhoto'), onPress: () => void uploadCheckoutUpiProof('camera') },
       {
-        text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery',
+        text: Platform.OS === 'ios' ? t('customerApp.cart.photoLibrary') : t('customerApp.cart.gallery'),
         onPress: () => void uploadCheckoutUpiProof('library'),
       },
-      { text: 'Cancel', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -606,7 +613,7 @@ export function CartScreen() {
         if (response?.data.available) {
           instant = {
             fee: Number(response.data.customer_fee || 0),
-            providerLabel: response.data.provider_label || 'Instant delivery',
+            providerLabel: response.data.provider_label || t('customerApp.cart.instantDeliveryFallback'),
             quoteId: response.data.quote_id || '',
             etaMinutes: response.data.eta_minutes ?? null,
           };
@@ -654,7 +661,7 @@ export function CartScreen() {
         if (closeSheet) setCouponSheetOpen(false);
       } catch (err) {
         setAppliedCoupon(null);
-        setCouponError(err instanceof Error ? err.message : 'This coupon could not be applied.');
+        setCouponError(err instanceof Error ? err.message : t('customerApp.cart.errCouponFailed'));
       } finally {
         setCouponBusy(false);
       }
@@ -672,7 +679,7 @@ export function CartScreen() {
       setCouponDraft('');
       setCouponError(null);
       setAppliedAutomation({
-        label: String(offer.label || offer.name || 'Special offer'),
+        label: String(offer.label || offer.name || t('customerApp.cart.specialOffer')),
         discount_type: dtype,
         discount_value: value,
         discount:
@@ -772,43 +779,43 @@ export function CartScreen() {
   function validateCheckoutBasics(): boolean {
     if (!lines.length) return false;
     if (fulfillment === 'pickup' && (!preferredDate || !preferredTime || !isPickupTimeAfterNow(preferredDate, preferredTime))) {
-      setError('Choose a pickup time after now.');
+      setError(t('customerApp.cart.errPickupTime'));
       return false;
     }
     if (fulfillment === 'delivery' && !selectedAddress) {
-      setError('Add or select a delivery address.');
+      setError(t('customerApp.cart.errSelectAddress'));
       return false;
     }
     if (fulfillment === 'delivery' && deliveryOptionsLoading) {
-      setError('Please wait while we check delivery options.');
+      setError(t('customerApp.cart.errWaitDelivery'));
       return false;
     }
     if (fulfillment === 'delivery' && !selectedDelivery) {
-      setError('The selected delivery option is not available for this address.');
+      setError(t('customerApp.cart.errDeliveryOptionUnavailable'));
       return false;
     }
     if (fulfillment === 'delivery' && !String(selectedAddress?.phone_number || '').trim()) {
-      setError('Add a phone number to this delivery address before ordering.');
+      setError(t('customerApp.cart.errAddressPhone'));
       return false;
     }
     if (!canPayCash && !canPayOnline) {
-      setError('This shop has not set up online payments yet. Contact the shop to order.');
+      setError(t('customerApp.cart.errNoOnlinePayments'));
       return false;
     }
     if (paymentMethod === 'cash' && !canPayCash) {
-      setError('Cash on delivery is not available for this shop.');
+      setError(t('customerApp.cart.errCodUnavailable'));
       return false;
     }
     if (paymentMethod === 'upi' && !canPayQr) {
-      setError('Shop has not configured UPI payments yet.');
+      setError(t('customerApp.cart.errUpiNotConfigured'));
       return false;
     }
     if (paymentMethod === 'razorpay' && !canPayRazorpay) {
-      setError('Online payment is not available for this shop.');
+      setError(t('customerApp.cart.errOnlineUnavailable'));
       return false;
     }
     if (paymentMethod === 'cashfree' && !canPayCashfree) {
-      setError('Cashfree payment is not available for this shop.');
+      setError(t('customerApp.cart.errCashfreeUnavailable'));
       return false;
     }
     setError(null);
@@ -827,7 +834,7 @@ export function CartScreen() {
   async function placeOrder() {
     if (!validateCheckoutBasics()) return;
     if (paymentMethod === 'upi' && !upiProofUrl.trim() && !upiUtr.trim()) {
-      setError('Upload a payment screenshot or enter a UPI / UTR reference.');
+      setError(t('customerApp.cart.errNeedProof'));
       return;
     }
     setSubmitting(true);
@@ -865,7 +872,7 @@ export function CartScreen() {
         })),
       });
       const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(PLACE_ORDER_BUSY_MESSAGE)), PLACE_ORDER_TIMEOUT_MS);
+        setTimeout(() => reject(new Error(t('customerApp.cart.busy'))), PLACE_ORDER_TIMEOUT_MS);
       });
       const response = await Promise.race([orderRequest, timeout]);
       const orderId = response.data.id;
@@ -894,22 +901,22 @@ export function CartScreen() {
           toast.push(
             gatewayErr instanceof Error
               ? gatewayErr.message
-              : 'Order placed. Complete payment from order details.',
+              : t('customerApp.cart.orderPlacedPayFromDetails'),
             'error',
           );
           navigation.replace('ShopOrderDetail', { orderId, placed: true });
           return;
         }
       }
-      toast.push('Order placed.', 'success');
+      toast.push(t('customerApp.cart.orderPlaced'), 'success');
       navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } catch (err) {
       if (err instanceof ApiClientError && (err.status === 504 || err.status === 502 || err.status === 503)) {
-        setError(PLACE_ORDER_BUSY_MESSAGE);
+        setError(t('customerApp.cart.busy'));
       } else if (err instanceof Error && /timeout|gateway|504/i.test(err.message)) {
-        setError(PLACE_ORDER_BUSY_MESSAGE);
+        setError(t('customerApp.cart.busy'));
       } else {
-        setError(err instanceof Error ? err.message : 'Checkout failed');
+        setError(err instanceof Error ? err.message : t('customerApp.cart.errCheckoutFailed'));
       }
     } finally {
       setSubmitting(false);
@@ -941,10 +948,10 @@ export function CartScreen() {
           result: result.payload,
         });
       }
-      toast.push('Payment received.', 'success');
+      toast.push(t('customerApp.cart.paymentReceived'), 'success');
       navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details.", 'error');
+      toast.push(err instanceof Error ? err.message : t('customerApp.cart.verifyFailed'), 'error');
       navigation.replace('ShopOrderDetail', { orderId, placed: true });
     } finally {
       setPendingGatewayOrderId(null);
@@ -964,7 +971,7 @@ export function CartScreen() {
   return (
     <View style={styles.screen}>
       <ScreenHeader
-        title={itemCount ? `Cart (${itemCount})` : 'Cart'}
+        title={itemCount ? t('customerApp.cart.titleCount', { count: itemCount }) : t('customerApp.cart.title')}
         onBack={() => navigation.goBack()}
       />
 
@@ -972,11 +979,11 @@ export function CartScreen() {
         <View style={styles.emptyWrap}>
           <EmptyState
             icon="shopping-cart"
-            title="Your cart is empty"
-            description="Add products from the shop and they will show up here."
+            title={t('customerApp.cart.emptyTitle')}
+            description={t('customerApp.cart.emptyDescription')}
           />
           <Button
-            label="Continue shopping"
+            label={t('customerApp.cart.continueShopping')}
             primaryColor={primary}
             onPress={() => navigation.goBack()}
             style={{ alignSelf: 'center', marginTop: spacing.lg }}
@@ -994,7 +1001,7 @@ export function CartScreen() {
             }}
           >
             <Text style={styles.subtotalTop}>
-              Items ({itemCount} {itemCount === 1 ? 'item' : 'items'}):{' '}
+              {t('customerApp.cart.itemsTop', { label: itemCount === 1 ? t('customerApp.cart.itemOne') : t('customerApp.cart.itemMany', { n: itemCount }) })}{' '}
               <Text style={{ color: primary }}>
                 {formatShopMoney(totals.merchandiseGross, currency)}
               </Text>
@@ -1029,7 +1036,7 @@ export function CartScreen() {
                         primaryColor={primary}
                       />
                       <Pressable onPress={() => setQuantity(line.product.id, 0)} hitSlop={8}>
-                        <Text style={styles.delete}>Delete</Text>
+                        <Text style={styles.delete}>{t('customerApp.cart.delete')}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -1046,9 +1053,9 @@ export function CartScreen() {
                     <Feather name="gift" size={16} color={primary} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[styles.specialOffersEyebrow, { color: primary }]}>Just for you</Text>
+                    <Text style={[styles.specialOffersEyebrow, { color: primary }]}>{t('customerApp.cart.justForYou')}</Text>
                     <Text style={styles.specialOffersTitle}>
-                      {automationOffers.length === 1 ? 'Special offer' : 'Special offers'}
+                      {automationOffers.length === 1 ? t('customerApp.cart.specialOffer') : t('customerApp.cart.specialOffers')}
                     </Text>
                   </View>
                 </View>
@@ -1091,19 +1098,19 @@ export function CartScreen() {
                             { color: active ? colors.primaryForeground : primary },
                           ]}
                         >
-                          {couponHeadline(offer, currency)}
+                          {couponHeadline(offer, currency, t)}
                         </Text>
                       </View>
                       <View style={{ flex: 1, gap: 2 }}>
                         <Text style={styles.specialOfferLabel} numberOfLines={2}>
-                          {offer.label || offer.name || 'Special offer'}
+                          {offer.label || offer.name || t('customerApp.cart.specialOffer')}
                         </Text>
                         <Text style={[styles.meta, active ? { color: colors.success, fontWeight: '600' } : null]}>
                           {active
-                            ? `Applied · you save ${formatShopMoney(automationDiscount, currency)}`
+                            ? t('customerApp.cart.appliedYouSave', { amount: formatShopMoney(automationDiscount, currency) })
                             : savings > 0
-                              ? `Tap to save ${formatShopMoney(savings, currency)}`
-                              : 'Tap to apply'}
+                              ? t('customerApp.cart.tapToSave', { amount: formatShopMoney(savings, currency) })
+                              : t('customerApp.cart.tapToApply')}
                         </Text>
                       </View>
                       <Feather
@@ -1127,26 +1134,32 @@ export function CartScreen() {
               <View style={styles.couponEntryBody}>
                 {appliedCoupon ? (
                   <>
-                    <Text style={styles.couponEntryTitle}>{appliedCoupon.code} applied</Text>
+                    <Text style={styles.couponEntryTitle}>
+                      {t('customerApp.cart.couponApplied', { name: appliedCoupon.code })}
+                    </Text>
                     <Text style={styles.couponOk}>
-                      You save {formatShopMoney(couponDiscount, currency)}
+                      {t('customerApp.cart.youSave', { amount: formatShopMoney(couponDiscount, currency) })}
                       {appliedCoupon.name ? ` · ${appliedCoupon.name}` : ''}
                     </Text>
                   </>
                 ) : appliedAutomation ? (
                   <>
-                    <Text style={styles.couponEntryTitle}>{appliedAutomation.label} applied</Text>
+                    <Text style={styles.couponEntryTitle}>
+                      {t('customerApp.cart.couponApplied', { name: appliedAutomation.label })}
+                    </Text>
                     <Text style={styles.couponOk}>
-                      You save {formatShopMoney(automationDiscount, currency)}
+                      {t('customerApp.cart.youSave', { amount: formatShopMoney(automationDiscount, currency) })}
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Text style={styles.couponEntryTitle}>Apply coupon or offer</Text>
+                    <Text style={styles.couponEntryTitle}>{t('customerApp.cart.applyCouponOrOffer')}</Text>
                     <Text style={styles.meta}>
                       {couponOffers.length
-                        ? `${couponOffers.length} ${couponOffers.length === 1 ? 'offer' : 'offers'} available`
-                        : 'View offers and apply a code'}
+                        ? couponOffers.length === 1
+                          ? t('customerApp.cart.offerOneAvailable')
+                          : t('customerApp.cart.offersManyAvailable', { n: couponOffers.length })
+                        : t('customerApp.cart.viewOffersApplyCode')}
                     </Text>
                   </>
                 )}
@@ -1160,15 +1173,15 @@ export function CartScreen() {
                   }}
                   hitSlop={8}
                 >
-                  <Text style={styles.delete}>Remove</Text>
+                  <Text style={styles.delete}>{t('customerApp.cart.remove')}</Text>
                 </Pressable>
               ) : (
-                <Text style={[styles.viewCoupons, { color: primary }]}>View coupons</Text>
+                <Text style={[styles.viewCoupons, { color: primary }]}>{t('customerApp.cart.viewCoupons')}</Text>
               )}
               <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
             </Pressable>
 
-            <Text style={styles.section}>How do you want it?</Text>
+            <Text style={styles.section}>{t('customerApp.cart.howDoYouWantIt')}</Text>
             <View style={styles.modeRow}>
               {(['pickup', 'delivery'] as const).map((mode) => (
                 <Pressable
@@ -1181,7 +1194,7 @@ export function CartScreen() {
                     size={16}
                     color={fulfillment === mode ? primary : colors.mutedForeground}
                   />
-                  <Text style={styles.modeText}>{mode === 'pickup' ? 'Store pickup' : 'Home delivery'}</Text>
+                  <Text style={styles.modeText}>{mode === 'pickup' ? t('customerApp.cart.storePickup') : t('customerApp.cart.homeDelivery')}</Text>
                 </Pressable>
               ))}
             </View>
@@ -1190,26 +1203,26 @@ export function CartScreen() {
               <View style={styles.panel}>
                 <View style={styles.panelHead}>
                   <Feather name="home" size={16} color={primary} />
-                  <Text style={styles.panelTitle}>Pickup from shop</Text>
+                  <Text style={styles.panelTitle}>{t('customerApp.cart.pickupFromShop')}</Text>
                 </View>
                 {pickupAddress ? <Text style={styles.meta}>{pickupAddress}</Text> : null}
-                <Text style={styles.fieldLabel}>Preferred pickup date</Text>
+                <Text style={styles.fieldLabel}>{t('customerApp.cart.preferredPickupDate')}</Text>
                 <CalendarPicker value={preferredDate} onChange={setPreferredDate} primaryColor={primary} />
                 <TimePicker
-                  label="Preferred pickup time"
+                  label={t('customerApp.cart.preferredPickupTime')}
                   value={preferredTime}
                   onChange={setPreferredTime}
                   minTime={pickupMinTime}
                   primaryColor={primary}
                   helperText={
                     preferredDate === today
-                      ? 'Today’s remaining times only — pick a time after now.'
-                      : 'Choose when you will collect the order.'
+                      ? t('customerApp.cart.todayRemainingTimes')
+                      : t('customerApp.cart.chooseWhenCollect')
                   }
                 />
                 <TextInput
                   style={styles.noteInput}
-                  placeholder="Note for the shop (optional)"
+                  placeholder={t('customerApp.cart.noteForShop')}
                   placeholderTextColor={colors.mutedForeground}
                   value={fulfillmentNote}
                   onChangeText={setFulfillmentNote}
@@ -1219,7 +1232,7 @@ export function CartScreen() {
               <View style={styles.panel}>
                 <View style={styles.panelHead}>
                   <Feather name="truck" size={16} color={primary} />
-                  <Text style={styles.panelTitle}>Deliver to</Text>
+                  <Text style={styles.panelTitle}>{t('customerApp.cart.deliverTo')}</Text>
                 </View>
                 {selectedAddress ? (
                   <View style={[styles.addressCard, { borderColor: primary, backgroundColor: `${primary}10` }]}>
@@ -1230,34 +1243,38 @@ export function CartScreen() {
                         color={primary}
                       />
                       <Text style={[styles.name, styles.addressCardTitle]}>
-                        {addressTypeMeta(selectedAddress.address_type).label}
-                        {selectedAddress.is_default ? ' · Default' : ''}
+                        {addressTypeLabel(selectedAddress.address_type, t)}
+                        {selectedAddress.is_default ? ` · ${t('customerApp.cart.defaultTag')}` : ''}
                       </Text>
                       {addresses.length > 1 ? (
                         <Pressable onPress={openAddressPicker} hitSlop={8}>
-                          <Text style={[styles.addressAction, { color: primary }]}>Change</Text>
+                          <Text style={[styles.addressAction, { color: primary }]}>
+                            {t('customerApp.cart.change')}
+                          </Text>
                         </Pressable>
                       ) : null}
                     </View>
                     <Text style={styles.meta}>{addressSingleLine(selectedAddress)}</Text>
                     {selectedAddress.phone_number ? (
-                      <Text style={styles.meta}>Phone: {selectedAddress.phone_number}</Text>
+                      <Text style={styles.meta}>
+                        {t('customerApp.cart.phoneLine', { phone: selectedAddress.phone_number })}
+                      </Text>
                     ) : (
-                      <Text style={styles.error}>Add a phone number to this address.</Text>
+                      <Text style={styles.error}>{t('customerApp.cart.addPhoneToAddress')}</Text>
                     )}
                   </View>
                 ) : (
-                  <Text style={styles.meta}>Add an address so we can check delivery for your area.</Text>
+                  <Text style={styles.meta}>{t('customerApp.cart.addAddressPrompt')}</Text>
                 )}
                 <Pressable onPress={addresses.length ? openAddressPicker : openAddressForm}>
                   <Text style={{ color: primary, fontWeight: '700' }}>
-                    {addresses.length ? 'Add or manage addresses' : 'Add a delivery address'}
+                    {addresses.length ? t('customerApp.cart.addOrManageAddresses') : t('customerApp.cart.addDeliveryAddress')}
                   </Text>
                 </Pressable>
                 {selectedAddress ? (
                   <View style={styles.deliveryOptions}>
                     <View style={styles.deliveryOptionsHead}>
-                      <Text style={styles.fieldLabel}>Delivery speed</Text>
+                      <Text style={styles.fieldLabel}>{t('customerApp.cart.deliverySpeed')}</Text>
                       {deliveryOptionsLoading ? <ActivityIndicator size="small" color={primary} /> : null}
                     </View>
 
@@ -1278,10 +1295,10 @@ export function CartScreen() {
                       </View>
                       <View style={styles.deliveryOptionBody}>
                         <View style={styles.deliveryOptionTitleRow}>
-                          <Text style={styles.deliveryOptionTitle}>Deliver now</Text>
+                          <Text style={styles.deliveryOptionTitle}>{t('customerApp.cart.deliverNow')}</Text>
                           {instantDelivery?.etaMinutes ? (
                             <Text style={[styles.deliveryBadge, { color: primary }]}>
-                              ~{instantDelivery.etaMinutes} min
+                              {t('customerApp.cart.etaMinutes', { n: instantDelivery.etaMinutes })}
                             </Text>
                           ) : null}
                         </View>
@@ -1290,20 +1307,20 @@ export function CartScreen() {
                             ? `${instantDelivery.providerLabel} · ${
                                 instantDelivery.fee > 0
                                   ? formatShopMoney(instantDelivery.fee, currency)
-                                  : 'Free delivery'
+                                  : t('customerApp.cart.freeDelivery')
                               }`
                             : !standardDelivery
-                              ? 'This address is outside the shop’s delivery zones.'
+                              ? t('customerApp.cart.outsideZones')
                               : !standardDelivery.instantEnabled
-                                ? `Deliver now is not enabled for ${standardDelivery.zoneName}.`
+                                ? t('customerApp.cart.nowNotEnabledZone', { zone: standardDelivery.zoneName })
                                 : selectedAddress.latitude == null ||
                                     selectedAddress.longitude == null
-                                  ? 'Add a map pin to this address for an instant quote.'
-                                  : 'The delivery partner is unavailable right now.'}
+                                  ? t('customerApp.cart.addMapPin')
+                                  : t('customerApp.cart.partnerUnavailable')}
                         </Text>
                         {instantDelivery ? (
                           <Text style={styles.deliveryHint}>
-                            Rider requested after the shop finishes packing.
+                            {t('customerApp.cart.riderAfterPacking')}
                           </Text>
                         ) : null}
                       </View>
@@ -1338,28 +1355,28 @@ export function CartScreen() {
                         <Feather name="truck" size={18} color={colors.foreground} />
                       </View>
                       <View style={styles.deliveryOptionBody}>
-                        <Text style={styles.deliveryOptionTitle}>Standard delivery</Text>
+                        <Text style={styles.deliveryOptionTitle}>{t('customerApp.cart.standardDelivery')}</Text>
                         <Text style={styles.meta}>
                           {standardDelivery
                             ? `${
                                 standardDelivery.isCatchAll
-                                  ? 'We deliver to your area'
+                                  ? t('customerApp.cart.weDeliverToArea')
                                   : standardDelivery.zoneName
                               } · ${
                                 standardDelivery.fee > 0
                                   ? formatShopMoney(standardDelivery.fee, currency)
-                                  : 'Free delivery'
+                                  : t('customerApp.cart.freeDelivery')
                               }`
-                            : 'No delivery zone matches this address.'}
+                            : t('customerApp.cart.noZoneMatches')}
                         </Text>
                         {standardDelivery ? (
                           <Text style={styles.deliveryHint}>
                             {standardDelivery.deliveryPromise?.label ||
                               (standardDelivery.sameDay
-                                ? 'Same-day delivery is available.'
-                                : 'The shop will confirm the delivery schedule.')}
+                                ? t('customerApp.cart.sameDayAvailable')
+                                : t('customerApp.cart.shopWillConfirmSchedule'))}
                             {standardDelivery.minOrderTotal > merchandiseAfterCoupon
-                              ? ` · Min order ${formatShopMoney(standardDelivery.minOrderTotal, currency)}`
+                              ? t('customerApp.cart.minOrderSuffix', { amount: formatShopMoney(standardDelivery.minOrderTotal, currency) })
                               : ''}
                           </Text>
                         ) : null}
@@ -1380,13 +1397,13 @@ export function CartScreen() {
                     </Pressable>
 
                     {!deliveryOptionsLoading && !instantDelivery && !standardDelivery ? (
-                      <Text style={styles.error}>Delivery is not available for this address.</Text>
+                      <Text style={styles.error}>{t('customerApp.cart.deliveryNotAvailable')}</Text>
                     ) : null}
                   </View>
                 ) : null}
                 <TextInput
                   style={styles.noteInput}
-                  placeholder="Delivery instructions (gate, landmark, phone)"
+                  placeholder={t('customerApp.cart.deliveryInstructions')}
                   placeholderTextColor={colors.mutedForeground}
                   value={fulfillmentNote}
                   onChangeText={setFulfillmentNote}
@@ -1394,7 +1411,7 @@ export function CartScreen() {
               </View>
             )}
 
-            <Text style={styles.section}>Payment</Text>
+            <Text style={styles.section}>{t('customerApp.cart.payment')}</Text>
             <View style={styles.modeRow}>
               {canPayRazorpay ? (
                 <Pressable
@@ -1409,7 +1426,7 @@ export function CartScreen() {
                     size={16}
                     color={paymentMethod === 'razorpay' ? primary : colors.mutedForeground}
                   />
-                  <Text style={styles.modeText}>Pay online</Text>
+                  <Text style={styles.modeText}>{t('customerApp.cart.payOnline')}</Text>
                 </Pressable>
               ) : null}
               {canPayCashfree ? (
@@ -1437,7 +1454,7 @@ export function CartScreen() {
                   onPress={() => setPaymentMethod('upi')}
                 >
                   <Feather name="smartphone" size={16} color={paymentMethod === 'upi' ? primary : colors.mutedForeground} />
-                  <Text style={styles.modeText}>Pay by UPI</Text>
+                  <Text style={styles.modeText}>{t('customerApp.cart.payByUpi')}</Text>
                 </Pressable>
               ) : null}
               {canPayCash ? (
@@ -1455,25 +1472,28 @@ export function CartScreen() {
             ) : null}
             {paymentMethod === 'razorpay' || paymentMethod === 'cashfree' ? (
               <Text style={styles.meta}>
-                Secure checkout opens after you place the order. Cards, UPI, and netbanking are supported.
+                {t('customerApp.cart.secureCheckout')}
               </Text>
             ) : null}
             {paymentMethod === 'upi' && (previewUpiUrl || business?.payment_qr_url) ? (
               <Text style={styles.meta}>
-                After you tap Place order, pay {formatShopMoney(grandTotal, currency)} in UPI, then
-                upload the payment confirmation screenshot to place the order.
+                {t('customerApp.cart.upiAfterPlace', { amount: formatShopMoney(grandTotal, currency) })}
               </Text>
             ) : null}
             {paymentMethod === 'upi' && !previewUpiUrl && !business?.payment_qr_url ? (
-              <Text style={styles.meta}>Shop UPI is not configured yet.</Text>
+              <Text style={styles.meta}>{t('customerApp.cart.shopUpiNotConfigured')}</Text>
             ) : null}
 
             {loyaltyEnabled ? (
               <>
-                <Text style={styles.section}>Use reward points</Text>
+                <Text style={styles.section}>{t('customerApp.cart.useRewardPoints')}</Text>
                 <View style={styles.panel}>
                   <Text style={styles.meta}>
-                    Balance {loyaltyBalance} pts · {pointsPerCurrency} pts = {formatShopMoney(1, currency)}
+                    {t('customerApp.cart.balanceLine', {
+                      balance: loyaltyBalance,
+                      rate: pointsPerCurrency,
+                      amount: formatShopMoney(1, currency),
+                    })}
                   </Text>
                   {maxRedeemablePoints >= minRedeemPoints ? (
                     <>
@@ -1490,7 +1510,7 @@ export function CartScreen() {
                         >
                           <Feather name="minus" size={16} color={colors.foreground} />
                         </Pressable>
-                        <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
+                        <Text style={styles.redeemValue}>{t('customerApp.cart.ptsValue', { n: pointsToRedeem })}</Text>
                         <Pressable
                           style={styles.redeemBtn}
                           onPress={() =>
@@ -1506,13 +1526,13 @@ export function CartScreen() {
                       </View>
                       {pointsToRedeem > 0 ? (
                         <Text style={styles.meta}>
-                          Saves {formatShopMoney(loyaltySavingsPayable, currency)}
+                          {t('customerApp.cart.saves', { amount: formatShopMoney(loyaltySavingsPayable, currency) })}
                         </Text>
                       ) : null}
                     </>
                   ) : (
                     <Text style={styles.meta}>
-                      Earn points on paid orders. You need at least {minRedeemPoints} pts to redeem.
+                      {t('customerApp.cart.earnNeedMin', { n: minRedeemPoints })}
                     </Text>
                   )}
                 </View>
@@ -1520,14 +1540,14 @@ export function CartScreen() {
             ) : null}
 
             <View style={styles.summary}>
-              <Text style={styles.summaryTitle}>Bill summary</Text>
+              <Text style={styles.summaryTitle}>{t('customerApp.cart.billSummary')}</Text>
               <View style={styles.summaryRow}>
-                <Text style={styles.meta}>Items</Text>
+                <Text style={styles.meta}>{t('customerApp.cart.items')}</Text>
                 <Text style={styles.meta}>{formatShopMoney(totals.merchandiseGross, currency)}</Text>
               </View>
               {automationDiscount > 0 ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.meta}>{appliedAutomation?.label || 'Bill discount'}</Text>
+                  <Text style={styles.meta}>{appliedAutomation?.label || t('customerApp.cart.billDiscount')}</Text>
                   <Text style={[styles.meta, styles.discountValue]}>
                     −{formatShopMoney(automationDiscount, currency)}
                   </Text>
@@ -1536,7 +1556,9 @@ export function CartScreen() {
               {couponDiscount > 0 ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.meta}>
-                    Coupon{appliedCoupon?.code ? ` ${appliedCoupon.code}` : ''}
+                    {appliedCoupon?.code
+                      ? t('customerApp.cart.couponCode', { code: appliedCoupon.code })
+                      : t('customerApp.cart.coupon')}
                   </Text>
                   <Text style={[styles.meta, styles.discountValue]}>
                     −{formatShopMoney(couponDiscount, currency)}
@@ -1546,7 +1568,9 @@ export function CartScreen() {
               {totals.loyaltyDiscountAmount > 0 ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.meta}>
-                    Reward points{pointsToRedeem > 0 ? ` (${pointsToRedeem} pts)` : ''}
+                    {pointsToRedeem > 0
+                      ? t('customerApp.cart.rewardPointsN', { n: pointsToRedeem })
+                      : t('customerApp.cart.rewardPoints')}
                   </Text>
                   <Text style={[styles.meta, styles.discountValue]}>
                     −{formatShopMoney(loyaltySavingsPayable, currency)}
@@ -1554,21 +1578,21 @@ export function CartScreen() {
                 </View>
               ) : null}
               <View style={styles.summaryRow}>
-                <Text style={styles.meta}>Taxable value</Text>
+                <Text style={styles.meta}>{t('customerApp.cart.taxableValue')}</Text>
                 <Text style={styles.meta}>{formatShopMoney(totals.taxableSubtotal, currency)}</Text>
               </View>
               {fulfillment === 'delivery' ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.meta}>
-                    {deliveryMethod === 'instant' ? 'Delivery (now)' : 'Delivery'}
+                    {deliveryMethod === 'instant' ? t('customerApp.cart.deliveryNow') : t('customerApp.cart.delivery')}
                   </Text>
                   <Text style={styles.meta}>
-                    {deliveryFeeAmount > 0 ? formatShopMoney(deliveryFeeAmount, currency) : 'Free'}
+                    {deliveryFeeAmount > 0 ? formatShopMoney(deliveryFeeAmount, currency) : t('customerApp.cart.free')}
                   </Text>
                 </View>
               ) : (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.meta}>Pickup</Text>
+                  <Text style={styles.meta}>{t('customerApp.cart.pickup')}</Text>
                   <Text style={styles.meta}>
                     {formatShopDateLabel(preferredDate)} · {formatShopTimeLabel(preferredTime)}
                   </Text>
@@ -1599,22 +1623,22 @@ export function CartScreen() {
                 </View>
               )}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.totalLabel}>Payable</Text>
+                <Text style={styles.totalLabel}>{t('customerApp.cart.payable')}</Text>
                 <Text style={[styles.totalLabel, { color: primary }]}>
                   {formatShopMoney(grandTotal, currency)}
                 </Text>
               </View>
               {orderEarnPoints > 0 ? (
                 <Text style={styles.earnHint}>
-                  You'll earn {orderEarnPoints} pts when this order is paid.
+                  {t('customerApp.cart.earnHint', { n: orderEarnPoints })}
                 </Text>
               ) : null}
             </View>
             {whatsappUpdatesAvailable ? (
               <View style={styles.whatsappRow}>
                 <View style={{ flex: 1, paddingRight: spacing.md }}>
-                  <Text style={styles.whatsappTitle}>WhatsApp updates</Text>
-                  <Text style={styles.barHint}>Get order status updates on WhatsApp</Text>
+                  <Text style={styles.whatsappTitle}>{t('customerApp.cart.whatsappUpdates')}</Text>
+                  <Text style={styles.barHint}>{t('customerApp.cart.whatsappUpdatesHint')}</Text>
                 </View>
                 <Switch value={whatsappOptIn} onValueChange={setWhatsappOptIn} trackColor={{ true: primary }} />
               </View>
@@ -1632,14 +1656,16 @@ export function CartScreen() {
             ]}
           >
             <View>
-              <Text style={styles.barHint}>{itemCount} {itemCount === 1 ? 'item' : 'items'}</Text>
+              <Text style={styles.barHint}>
+                {itemCount === 1 ? t('customerApp.cart.itemOne') : t('customerApp.cart.itemMany', { n: itemCount })}
+              </Text>
               <Text style={[styles.barTotal, { color: primary }]}>{formatShopMoney(grandTotal, currency)}</Text>
               {orderEarnPoints > 0 ? (
-                <Text style={styles.barEarn}>Earn {orderEarnPoints} pts</Text>
+                <Text style={styles.barEarn}>{t('customerApp.cart.earnBar', { n: orderEarnPoints })}</Text>
               ) : null}
             </View>
             <Button
-              label={submitting ? 'Placing…' : 'Place order'}
+              label={submitting ? t('customerApp.cart.placing') : t('customerApp.cart.placeOrder')}
               primaryColor={primary}
               loading={submitting}
               disabled={!lines.length || submitting}
@@ -1668,7 +1694,7 @@ export function CartScreen() {
             onPress={() => {
               if (!submitting && !upiProofUploading) setUpiPaySheetOpen(false);
             }}
-            accessibilityLabel="Close UPI payment"
+            accessibilityLabel={t('customerApp.cart.closeUpiPayment')}
           />
           <View
             style={[
@@ -1681,16 +1707,16 @@ export function CartScreen() {
               </View>
               <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetTitle}>Pay with UPI</Text>
+                  <Text style={styles.sheetTitle}>{t('customerApp.cart.payWithUpi')}</Text>
                   <Text style={styles.sheetSubtitle}>
-                    Pay first, then upload the confirmation screenshot below
+                    {t('customerApp.cart.payFirstThenUpload')}
                   </Text>
                 </View>
                 <Pressable
                   style={styles.closeBtn}
                   disabled={submitting || upiProofUploading}
                   onPress={() => setUpiPaySheetOpen(false)}
-                  accessibilityLabel="Close"
+                  accessibilityLabel={t('common.close')}
                 >
                   <Feather name="x" size={18} color={colors.foreground} />
                 </Pressable>
@@ -1703,20 +1729,20 @@ export function CartScreen() {
                 contentContainerStyle={styles.upiPayBody}
               >
                 <View style={styles.upiSteps}>
-                  <Text style={styles.upiStepsTitle}>How to pay</Text>
+                  <Text style={styles.upiStepsTitle}>{t('customerApp.cart.howToPay')}</Text>
                   <Text style={styles.upiStepItem}>
-                    1. Scan the QR or open Google Pay / PhonePe and pay the exact amount
+                    {t('customerApp.cart.upiStep1')}
                   </Text>
                   <Text style={styles.upiStepItem}>
-                    2. After payment succeeds, take a screenshot of the confirmation in your UPI app
+                    {t('customerApp.cart.upiStep2')}
                   </Text>
                   <Text style={styles.upiStepItem}>
-                    3. Upload that screenshot below (UTR optional), then confirm & place order
+                    {t('customerApp.cart.upiStep3')}
                   </Text>
                 </View>
 
                 <View style={styles.upiAmountCard}>
-                  <Text style={styles.upiAmountLabel}>Amount to pay</Text>
+                  <Text style={styles.upiAmountLabel}>{t('customerApp.cart.amountToPay')}</Text>
                   <Text style={[styles.upiAmountValue, { color: primary }]}>
                     {formatShopMoney(grandTotal, currency)}
                   </Text>
@@ -1733,7 +1759,7 @@ export function CartScreen() {
                       resizeMode="contain"
                     />
                   ) : null}
-                  <Text style={styles.upiQrHint}>Scan with any UPI app, or open one below</Text>
+                  <Text style={styles.upiQrHint}>{t('customerApp.cart.scanWithAnyUpi')}</Text>
                   {previewUpiUrl ? (
                     <View style={styles.upiAppRow}>
                       <Pressable
@@ -1755,7 +1781,7 @@ export function CartScreen() {
                 </View>
 
                 <Text style={styles.upiAfterPayHint}>
-                  After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+                  {t('customerApp.cart.afterPayUploadHint')}
                 </Text>
 
                 <Pressable
@@ -1776,9 +1802,9 @@ export function CartScreen() {
                       />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.upiUploadTitle}>
-                          {upiProofUploading ? 'Uploading…' : 'Screenshot attached'}
+                          {upiProofUploading ? t('customerApp.cart.uploading') : t('customerApp.cart.screenshotAttached')}
                         </Text>
-                        <Text style={styles.upiUploadHint}>Tap to change</Text>
+                        <Text style={styles.upiUploadHint}>{t('customerApp.cart.tapToChange')}</Text>
                       </View>
                       {!upiProofUploading ? (
                         <Feather name="check-circle" size={20} color={colors.success} />
@@ -1792,11 +1818,11 @@ export function CartScreen() {
                         <Feather name="camera" size={20} color={primary} />
                       </View>
                       <Text style={[styles.upiUploadTitle, { color: primary }]}>
-                        {upiProofUploading ? 'Uploading…' : 'Upload payment screenshot'}
+                        {upiProofUploading ? t('customerApp.cart.uploading') : t('customerApp.cart.uploadPaymentScreenshot')}
                       </Text>
                       <Text style={styles.upiUploadHint}>
-                        Screenshot the UPI success screen after you pay
-                        {upiUtr.trim() ? ' · UTR optional if screenshot is attached' : ''}
+                        {t('customerApp.cart.screenshotUpiSuccess')}
+                        {upiUtr.trim() ? t('customerApp.cart.utrOptionalWithScreenshot') : ''}
                       </Text>
                     </View>
                   )}
@@ -1805,18 +1831,18 @@ export function CartScreen() {
                 <Input
                   label={
                     upiProofUrl
-                      ? 'UTR / UPI reference (optional)'
-                      : 'UTR / UPI reference'
+                      ? t('customerApp.cart.utrOptionalLabel')
+                      : t('customerApp.cart.utrLabel')
                   }
                   value={upiUtr}
                   onChangeText={setUpiUtr}
-                  placeholder="From your UPI app"
+                  placeholder={t('customerApp.cart.utrPlaceholder')}
                   autoCapitalize="characters"
                 />
 
                 {!upiProofUrl && !upiUtr.trim() ? (
                   <Text style={[styles.meta, { color: colors.destructive }]}>
-                    Screenshot or UPI reference is required.
+                    {t('customerApp.cart.proofRequired')}
                   </Text>
                 ) : null}
 
@@ -1825,7 +1851,7 @@ export function CartScreen() {
 
               <View style={styles.upiPayFooter}>
                 <Button
-                  label={submitting ? 'Placing…' : 'Confirm & place order'}
+                  label={submitting ? t('customerApp.cart.placing') : t('customerApp.cart.confirmPlaceOrder')}
                   primaryColor={primary}
                   loading={submitting}
                   fullWidth
@@ -1848,7 +1874,7 @@ export function CartScreen() {
         onRequestClose={() => setCouponSheetOpen(false)}
       >
         <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={() => setCouponSheetOpen(false)} accessibilityLabel="Close coupons" />
+          <Pressable style={styles.backdrop} onPress={() => setCouponSheetOpen(false)} accessibilityLabel={t('customerApp.cart.closeCoupons')} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <Animated.View
               style={[
@@ -1863,25 +1889,25 @@ export function CartScreen() {
                 style={styles.grabArea}
                 {...sheetPan.panHandlers}
                 accessibilityRole="adjustable"
-                accessibilityLabel={sheetExpanded ? 'Collapse coupons' : 'Expand coupons'}
-                accessibilityHint="Drag up or down to resize the coupon list"
+                accessibilityLabel={sheetExpanded ? t('customerApp.cart.collapseCoupons') : t('customerApp.cart.expandCoupons')}
+                accessibilityHint={t('customerApp.cart.resizeHint')}
               >
                 <View style={styles.handle} />
               </View>
               <View style={styles.sheetHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetTitle}>Coupons</Text>
+                  <Text style={styles.sheetTitle}>{t('customerApp.cart.couponsTitle')}</Text>
                   <Text style={styles.sheetSubtitle}>
                     {couponOffers.length
-                      ? 'Apply an offer or enter a code'
-                      : 'Enter a coupon code if you have one'}
+                      ? t('customerApp.cart.applyOfferOrCode')
+                      : t('customerApp.cart.enterCodeIfHave')}
                   </Text>
                 </View>
                 <Pressable
                   style={styles.closeBtn}
                   onPress={() => snapSheet(sheetExpanded ? 'collapsed' : 'expanded')}
                   hitSlop={8}
-                  accessibilityLabel={sheetExpanded ? 'Collapse coupon list' : 'Expand coupon list'}
+                  accessibilityLabel={sheetExpanded ? t('customerApp.cart.collapseCouponList') : t('customerApp.cart.expandCouponList')}
                 >
                   <Feather
                     name={sheetExpanded ? 'chevron-down' : 'chevron-up'}
@@ -1897,7 +1923,7 @@ export function CartScreen() {
               <View style={styles.couponRow}>
                 <TextInput
                   style={[styles.noteInput, styles.couponInput]}
-                  placeholder="Enter code"
+                  placeholder={t('customerApp.cart.enterCode')}
                   placeholderTextColor={colors.mutedForeground}
                   autoCapitalize="characters"
                   value={couponDraft}
@@ -1913,7 +1939,7 @@ export function CartScreen() {
                   onPress={() => void applyCoupon(couponDraft, true)}
                 >
                   <Text style={[styles.panelTitle, { color: primary }]}>
-                    {couponBusy ? 'Checking…' : 'Apply'}
+                    {couponBusy ? t('customerApp.cart.checking') : t('customerApp.cart.apply')}
                   </Text>
                 </Pressable>
               </View>
@@ -1953,9 +1979,9 @@ export function CartScreen() {
                         />
                         <View style={styles.offerBody}>
                           <Text style={styles.offerCode}>
-                            {automation ? 'SPECIAL' : offer.code}
+                            {automation ? t('customerApp.cart.specialBadge') : offer.code}
                           </Text>
-                          <Text style={styles.offerHeadline}>{couponHeadline(offer, currency)}</Text>
+                          <Text style={styles.offerHeadline}>{couponHeadline(offer, currency, t)}</Text>
                           {offer.name ? <Text style={styles.offerName}>{offer.name}</Text> : null}
                           {offer.description ? (
                             <Text style={styles.offerDesc} numberOfLines={2}>
@@ -1964,21 +1990,20 @@ export function CartScreen() {
                           ) : null}
                           {offer.applicable || applied ? (
                             <Text style={styles.couponOk}>
-                              {applied ? 'Applied · ' : ''}Save{' '}
-                              {formatShopMoney(
-                                applied
-                                  ? automation
-                                    ? automationDiscount
-                                    : couponDiscount
-                                  : savings,
-                                currency,
-                              )}
+                              {applied
+                                ? t('customerApp.cart.appliedSaveAmount', {
+                                    amount: formatShopMoney(
+                                      automation ? automationDiscount : couponDiscount,
+                                      currency,
+                                    ),
+                                  })
+                                : t('customerApp.cart.saveAmount', { amount: formatShopMoney(savings, currency) })}
                             </Text>
                           ) : (
                             <Text style={styles.offerLocked}>
                               {remaining > 0
-                                ? `Add ${formatShopMoney(remaining, currency)} more to unlock`
-                                : offer.reason || 'Not available on this cart'}
+                                ? t('customerApp.cart.addMoreToUnlock', { amount: formatShopMoney(remaining, currency) })
+                                : offer.reason || t('customerApp.cart.notAvailableOnCart')}
                             </Text>
                           )}
                         </View>
@@ -1995,7 +2020,7 @@ export function CartScreen() {
                               setCouponError(null);
                             }}
                           >
-                            <Text style={styles.delete}>Remove</Text>
+                            <Text style={styles.delete}>{t('customerApp.cart.remove')}</Text>
                           </Pressable>
                         ) : offer.applicable ? (
                           <Pressable
@@ -2013,17 +2038,17 @@ export function CartScreen() {
                             }}
                           >
                             <Text style={[styles.panelTitle, { color: primary }]}>
-                              {couponBusy && !automation && couponDraft === offer.code ? '…' : 'APPLY'}
+                              {couponBusy && !automation && couponDraft === offer.code ? '…' : t('customerApp.cart.applyCaps')}
                             </Text>
                           </Pressable>
                         ) : (
-                          <Text style={styles.offerLockedBtn}>Locked</Text>
+                          <Text style={styles.offerLockedBtn}>{t('customerApp.cart.locked')}</Text>
                         )}
                       </View>
                     );
                   })
                 ) : (
-                  <Text style={styles.meta}>No offers to show for this cart yet.</Text>
+                  <Text style={styles.meta}>{t('customerApp.cart.noOffers')}</Text>
                 )}
               </ScrollView>
             </Animated.View>

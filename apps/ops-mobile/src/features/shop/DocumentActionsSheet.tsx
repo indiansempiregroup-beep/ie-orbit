@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SheetHandle } from '../../components/SheetHandle';
@@ -62,6 +63,7 @@ export function DocumentActionsSheet({
   allowNewBill = false,
   onNewBill,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
     0.92,
@@ -124,7 +126,7 @@ export function DocumentActionsSheet({
         setBillTotal(String(doc?.data?.total || share.data.total || ''));
         setPaymentLabel(String(doc?.data?.payment_label || share.data.payment_label || ''));
       } catch (err) {
-        if (!cancelled) toast.push(getApiErrorMessage(err, 'Could not prepare share link'), 'error');
+        if (!cancelled) toast.push(getApiErrorMessage(err, t('shop.docSheet.prepareFailed')), 'error');
       } finally {
         if (!cancelled) setLoadingShare(false);
       }
@@ -135,7 +137,7 @@ export function DocumentActionsSheet({
   }, [visible, target?.id, target?.kind, target?.businessId, target?.phone, target?.email, client]);
 
   async function ensureShare() {
-    if (!client || !target) throw new Error('Not ready');
+    if (!client || !target) throw new Error(t('opsApp.shop.docActions.notReady'));
     if (publicUrl) return { url: publicUrl, text: message || publicUrl };
     const share = await client.shop.createShopDocumentShareLink(target.kind, target.id, {
       business_id: target.businessId,
@@ -161,7 +163,7 @@ export function DocumentActionsSheet({
         publicUrl: publicUrl || undefined,
       });
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'View failed'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.docActions.viewFailed')), 'error');
     }
   }
 
@@ -175,7 +177,7 @@ export function DocumentActionsSheet({
         layout,
       });
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'PDF share failed'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.docActions.pdfShareFailed')), 'error');
     }
   }
 
@@ -186,10 +188,10 @@ export function DocumentActionsSheet({
       else if (channel === 'sms') await openUrl(deviceSmsUrl(phone, share.text));
       else
         await openUrl(
-          deviceMailtoUrl(email, `${title || 'Document'} ${target?.number || ''}`.trim(), share.text),
+          deviceMailtoUrl(email, `${title || t('shop.docSheet.document')} ${target?.number || ''}`.trim(), share.text),
         );
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Share failed'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.docActions.shareFailed')), 'error');
     }
   }
 
@@ -197,12 +199,12 @@ export function DocumentActionsSheet({
     try {
       const share = await ensureShare();
       const url = toShareableShopDocUrl(share.url);
-      if (!url) throw new Error('Link not ready yet');
+      if (!url) throw new Error(t('shop.docSheet.linkNotReady'));
       await copyTextToClipboard(url);
       setPublicUrl((prev) => prev || share.url);
-      toast.push('Link copied', 'success');
+      toast.push(t('shop.docSheet.linkCopied'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Could not copy link'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.docActions.copyLinkFailed')), 'error');
     }
   }
 
@@ -220,17 +222,17 @@ export function DocumentActionsSheet({
       const parts = Object.entries(result.data.channels || {}).map(
         ([channel, info]) => `${channel}: ${info.status || 'ok'}`,
       );
-      toast.push(parts.join(' · ') || 'Sent', 'success');
+      toast.push(parts.join(' · ') || t('shop.docSheet.sent'), 'success');
       if (result.data.public_url) setPublicUrl(result.data.public_url);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't send. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.docSheet.sendFailed')), 'error');
     } finally {
       setSending(false);
     }
   }
 
   const due = Number(amountDue || 0);
-  const heading = title || `Document ${target?.number || ''}`.trim();
+  const heading = title || t('opsApp.shop.docActions.headingFallback', { number: target?.number || '' }).trim();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -244,16 +246,22 @@ export function DocumentActionsSheet({
           <View style={styles.headerText}>
             <Text style={styles.kicker}>
               {target?.kind === 'delivery_challan'
-                ? 'Send challan'
+                ? t('opsApp.shop.docActions.sendChallan')
                 : target?.kind === 'quotation'
-                  ? 'Send quotation'
-                  : 'Send invoice'}
+                  ? t('opsApp.shop.docActions.sendQuotation')
+                  : t('opsApp.shop.docActions.sendInvoice')}
             </Text>
             <Text style={styles.title} numberOfLines={1}>
               {heading}
             </Text>
           </View>
-          <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+          <Pressable
+            onPress={onClose}
+            hitSlop={10}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+          >
             <Feather name="x" size={18} color={colors.mutedForeground} />
           </Pressable>
         </View>
@@ -263,16 +271,21 @@ export function DocumentActionsSheet({
             <Feather name={due > 0 ? 'alert-circle' : 'check-circle'} size={16} color="#92400e" />
             <Text style={styles.dueText}>
               {paymentLabel ? `${paymentLabel} · ` : ''}
-              Total {formatMoney(Number(billTotal || 0), activeBusiness?.currency)}
+              {t('opsApp.shop.docActions.totalLine', {
+                amount: formatMoney(Number(billTotal || 0), activeBusiness?.currency),
+              })}
               {' · '}
-              Received {formatMoney(Number(amountPaid || 0), activeBusiness?.currency)}
+              {t('opsApp.shop.docActions.receivedLine', {
+                amount: formatMoney(Number(amountPaid || 0), activeBusiness?.currency),
+              })}
               {due > 0 ? (
                 <>
                   {' · '}
-                  Due <Text style={styles.dueStrong}>{formatMoney(due, activeBusiness?.currency)}</Text>
+                  {t('opsApp.shop.docActions.dueLabel')}{' '}
+                  <Text style={styles.dueStrong}>{formatMoney(due, activeBusiness?.currency)}</Text>
                 </>
               ) : (
-                ' · Paid in full'
+                ` · ${t('opsApp.shop.docActions.paidInFull')}`
               )}
             </Text>
           </View>
@@ -284,14 +297,14 @@ export function DocumentActionsSheet({
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick actions</Text>
+            <Text style={styles.sectionTitle}>{t('opsApp.shop.docActions.quickActions')}</Text>
             <View style={styles.actionGrid}>
-              <ActionTile icon="eye" label="View" onPress={() => void onView()} />
-              <ActionTile icon="download" label="PDF" onPress={() => void onSharePdf('a4')} />
-              <ActionTile icon="printer" label="Thermal" onPress={() => void onSharePdf('thermal')} />
+              <ActionTile icon="eye" label={t('shop.docSheet.view')} onPress={() => void onView()} />
+              <ActionTile icon="download" label={t('shop.docSheet.pdf')} onPress={() => void onSharePdf('a4')} />
+              <ActionTile icon="printer" label={t('shop.docSheet.thermal')} onPress={() => void onSharePdf('thermal')} />
               <ActionTile
                 icon="link"
-                label="Copy link"
+                label={t('shop.docSheet.copyLink')}
                 disabled={loadingShare && !publicUrl}
                 onPress={() => void onCopy()}
               />
@@ -300,21 +313,21 @@ export function DocumentActionsSheet({
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Customer contact</Text>
+              <Text style={styles.sectionTitle}>{t('opsApp.shop.docActions.customerContact')}</Text>
               {loadingShare ? <ActivityIndicator size="small" color={colors.primary} /> : null}
             </View>
             <Text style={styles.sectionHint}>
-              Prefills from the customer when available. Edit before sending.
+              {t('opsApp.shop.docActions.prefillHint')}
             </Text>
             <Input
-              label="Phone"
+              label={t('common.phone')}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
-              placeholder="WhatsApp / SMS"
+              placeholder={t('shop.docSheet.phonePlaceholder')}
             />
             <Input
-              label="Email"
+              label={t('common.email')}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -324,16 +337,20 @@ export function DocumentActionsSheet({
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Send on device</Text>
+            <Text style={styles.sectionTitle}>{t('opsApp.shop.docActions.sendOnDevice')}</Text>
             <View style={styles.row}>
               <Button label="WhatsApp" onPress={() => void onDevice('whatsapp')} />
               <Button label="SMS" variant="secondary" onPress={() => void onDevice('sms')} />
-              <Button label="Email" variant="secondary" onPress={() => void onDevice('email')} />
+              <Button
+                label={t('common.email')}
+                variant="secondary"
+                onPress={() => void onDevice('email')}
+              />
             </View>
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Send from server</Text>
+            <Text style={styles.sectionTitle}>{t('opsApp.shop.docActions.sendFromServer')}</Text>
             <View style={styles.row}>
               <Button
                 label="WhatsApp"
@@ -342,14 +359,14 @@ export function DocumentActionsSheet({
                 onPress={() => void onServerSend(['whatsapp'])}
               />
               <Button
-                label="Email"
+                label={t('common.email')}
                 variant="secondary"
                 disabled={sending || !email}
                 onPress={() => void onServerSend(['email'])}
               />
               {due > 0 ? (
                 <Button
-                  label="Remind"
+                  label={t('opsApp.shop.docActions.remind')}
                   variant="ghost"
                   disabled={sending}
                   onPress={() => void onServerSend(['whatsapp', 'email'], true)}
@@ -364,13 +381,13 @@ export function DocumentActionsSheet({
         <View style={styles.footer}>
           {allowNewBill ? (
             <Button
-              label="New bill"
+              label={t('shop.docSheet.newBill')}
               onPress={() => {
                 onNewBill?.();
               }}
             />
           ) : null}
-          <Button label="Done" variant="ghost" onPress={onClose} />
+          <Button label={t('common.done')} variant="ghost" onPress={onClose} />
         </View>
       </ExpandableSheetView>
     </Modal>

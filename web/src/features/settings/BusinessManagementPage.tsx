@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { PRODUCT_CATALOG, getProductName } from '../../config/products';
@@ -11,6 +12,7 @@ import { BranchesPanel } from './BranchesPanel';
 import { BusinessProfileView } from './BusinessProfileView';
 
 export function BusinessManagementPage() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const workspace = useWorkspace();
   const businessListQuery = useBusinessListQuery();
@@ -30,7 +32,7 @@ export function BusinessManagementPage() {
 
   async function handleCreateBusiness() {
     if (!newBusinessName.trim() || !newDisplayName.trim()) {
-      snackbar.push('Business name and display name are required.', 'warning');
+      snackbar.push(t('settings.businessMgmt.namesRequired'), 'warning');
       return;
     }
 
@@ -46,9 +48,9 @@ export function BusinessManagementPage() {
       setSearchParams({});
       setNewBusinessName('');
       setNewDisplayName('');
-      snackbar.push('Business created.', 'success');
+      snackbar.push(t('settings.businessMgmt.created'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't save business details. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('settings.businessEdit.saveFailed'), 'error');
     }
   }
 
@@ -57,23 +59,23 @@ export function BusinessManagementPage() {
       <Card style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>Your businesses</p>
-            <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>Manage businesses</h2>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>{t('settings.businessMgmt.kicker')}</p>
+            <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>{t('settings.businessMgmt.title')}</h2>
             <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-              Each business can run its own product. Switch businesses from the header or below.
+              {t('settings.businessMgmt.lead')}
             </p>
           </div>
           <Button variant="primary" onClick={() => setShowAddForm((current) => !current)}>
-            {showAddForm ? 'Cancel' : 'Add business'}
+            {showAddForm ? t('common.cancel') : t('settings.businessMgmt.addBusiness')}
           </Button>
         </div>
 
         {showAddForm ? (
           <div style={{ marginTop: 20, padding: 16, borderRadius: 14, border: '1px solid #dbeafe', background: '#f8fbff', display: 'grid', gap: 14 }}>
-            <h3 style={{ margin: 0, fontSize: 18 }}>Create a new business</h3>
+            <h3 style={{ margin: 0, fontSize: 18 }}>{t('settings.businessMgmt.createTitle')}</h3>
             <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
               <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Business name</span>
+                <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessMgmt.businessName')}</span>
                 <input
                   value={newBusinessName}
                   onChange={(event) => {
@@ -81,22 +83,22 @@ export function BusinessManagementPage() {
                     setNewBusinessName(value);
                     if (!newDisplayName) setNewDisplayName(value);
                   }}
-                  placeholder="Empire Clinic"
+                  placeholder={t('settings.businessMgmt.namePlaceholder')}
                   style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
                 />
               </label>
               <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Display name</span>
+                <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessEdit.displayName')}</span>
                 <input
                   value={newDisplayName}
                   onChange={(event) => setNewDisplayName(event.target.value)}
-                  placeholder="Empire Clinic"
+                  placeholder={t('settings.businessMgmt.namePlaceholder')}
                   style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
                 />
               </label>
             </div>
             <label style={{ display: 'grid', gap: 8 }}>
-              <span style={{ color: '#6b7280', fontSize: 13 }}>Product for this business</span>
+              <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessMgmt.productFor')}</span>
               <select
                 value={newProduct}
                 onChange={(event) => setNewProduct(event.target.value)}
@@ -109,16 +111,16 @@ export function BusinessManagementPage() {
             </label>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button variant="primary" onClick={handleCreateBusiness} disabled={createBusiness.isPending}>
-                {createBusiness.isPending ? 'Creating…' : 'Create business'}
+                {createBusiness.isPending ? t('settings.businessMgmt.creating') : t('settings.businessMgmt.create')}
               </Button>
             </div>
           </div>
         ) : null}
 
         <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
-          {businessListQuery.isLoading ? <p>Loading businesses…</p> : null}
+          {businessListQuery.isLoading ? <p>{t('settings.businessMgmt.loading')}</p> : null}
           {!businessListQuery.isLoading && businesses.length === 0 ? (
-            <p style={{ color: '#6b7280' }}>No businesses yet. Click "Add business" to create one.</p>
+            <p style={{ color: '#6b7280' }}>{t('settings.businessMgmt.empty')}</p>
           ) : null}
           {businesses.map((item) => {
             const isActive = workspace.businessId === item.id;
@@ -139,15 +141,18 @@ export function BusinessManagementPage() {
                 <div>
                   <strong>{item.display_name ?? item.business_name}</strong>
                   <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>
-                    {item.business_code} · Product: {item.selected_product ? getProductName(item.selected_product) : 'not set'}
+                    {t('settings.businessMgmt.productLine', {
+                      code: item.business_code,
+                      product: item.selected_product ? getProductName(item.selected_product) : t('settings.businessMgmt.productNotSet'),
+                    })}
                   </p>
                 </div>
                 {!isActive ? (
                   <Button variant="ghost" onClick={() => workspace.switchBusiness(item.id!)}>
-                    Switch to this business
+                    {t('settings.businessMgmt.switchTo')}
                   </Button>
                 ) : (
-                  <span style={{ color: '#1a56db', fontWeight: 600, fontSize: 13 }}>Active</span>
+                  <span style={{ color: '#1a56db', fontWeight: 600, fontSize: 13 }}>{t('settings.businessMgmt.active')}</span>
                 )}
               </div>
             );

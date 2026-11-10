@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ShopGstCompliance, ShopGstComplianceProvider } from '@ie-orbit/sdk';
 import { AlertTriangle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Card } from '../../components/Card';
@@ -9,11 +10,11 @@ import { useSnackbar } from '../../hooks/useSnackbar';
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { useShopComplianceSettings, useShopComplianceSettingsMutations } from './shopHooks';
 
-const PROVIDER_OPTIONS: Array<{ value: ShopGstComplianceProvider; label: string }> = [
-  { value: 'mock', label: 'Mock (demo, no credentials required)' },
-  { value: 'nic_sandbox', label: 'NIC / GSP sandbox' },
-  { value: 'nic_production', label: 'NIC / GSP production' },
-  { value: 'custom', label: 'Custom GSP endpoint' },
+const PROVIDER_OPTIONS: Array<{ value: ShopGstComplianceProvider; labelKey: string }> = [
+  { value: 'mock', labelKey: 'shop.compliance.providerMock' },
+  { value: 'nic_sandbox', labelKey: 'shop.compliance.providerNicSandbox' },
+  { value: 'nic_production', labelKey: 'shop.compliance.providerNicProduction' },
+  { value: 'custom', labelKey: 'shop.compliance.providerCustom' },
 ];
 
 const EMPTY_COMPLIANCE: Required<ShopGstCompliance> = {
@@ -35,6 +36,7 @@ const EMPTY_COMPLIANCE: Required<ShopGstCompliance> = {
 const fieldStyle: React.CSSProperties = { marginBottom: 0 };
 
 export function ShopComplianceSettingsPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const settings = useShopComplianceSettings();
   const { update } = useShopComplianceSettingsMutations();
@@ -68,11 +70,11 @@ export function ShopComplianceSettingsPage() {
       compliance.provider === 'mock' ||
       Boolean(compliance.username.trim() && compliance.password.trim() && compliance.client_id.trim() && compliance.client_secret.trim());
     if ((einvoiceEnabled || ewayEnabled) && !sellerComplete) {
-      setValidationError('Complete the seller legal name, address, city, 6-digit PIN, and 2-digit GST state code.');
+      setValidationError(t('shop.compliance.errSeller'));
       return;
     }
     if ((einvoiceEnabled || ewayEnabled) && !credentialsComplete) {
-      setValidationError('Complete the provider credentials before enabling live GST compliance.');
+      setValidationError(t('shop.compliance.errCredentials'));
       return;
     }
     setValidationError(null);
@@ -82,9 +84,9 @@ export function ShopComplianceSettingsPage() {
         eway_enabled: ewayEnabled,
         gst_compliance: compliance,
       });
-      snackbar.push('GST compliance settings saved.', 'success');
+      snackbar.push(t('shop.compliance.toastSaved'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't save compliance settings. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.compliance.errSave')), 'error');
     }
   }
 
@@ -92,29 +94,29 @@ export function ShopComplianceSettingsPage() {
   const readiness = useMemo(
     () => [
       {
-        label: 'Compliance service',
+        label: t('shop.compliance.readyService'),
         ready: einvoiceEnabled || ewayEnabled,
-        detail: einvoiceEnabled || ewayEnabled ? 'At least one service is enabled' : 'Enable e-invoice or e-way bill',
+        detail: einvoiceEnabled || ewayEnabled ? t('shop.compliance.readyServiceOn') : t('shop.compliance.readyServiceOff'),
       },
       {
-        label: 'Seller identity',
+        label: t('shop.compliance.readySeller'),
         ready: Boolean(compliance.seller_legal_name.trim() && compliance.seller_addr1.trim() && compliance.seller_loc.trim()),
-        detail: 'Legal name and registered address',
+        detail: t('shop.compliance.readySellerDetail'),
       },
       {
-        label: 'GST location',
+        label: t('shop.compliance.readyLocation'),
         ready: /^\d{6}$/.test(compliance.seller_pin.trim()) && /^\d{2}$/.test(compliance.seller_state_code.trim()),
-        detail: '6-digit PIN and 2-digit state code',
+        detail: t('shop.compliance.readyLocationDetail'),
       },
       {
-        label: 'Provider connection',
+        label: t('shop.compliance.readyProvider'),
         ready:
           compliance.provider === 'mock' ||
           Boolean(compliance.username.trim() && compliance.password.trim() && compliance.client_id.trim() && compliance.client_secret.trim()),
-        detail: compliance.provider === 'mock' ? 'Demo provider selected' : 'Live credentials configured',
+        detail: compliance.provider === 'mock' ? t('shop.compliance.readyProviderMock') : t('shop.compliance.readyProviderLive'),
       },
     ],
-    [compliance, einvoiceEnabled, ewayEnabled],
+    [compliance, einvoiceEnabled, ewayEnabled, t],
   );
   const readyCount = readiness.filter((item) => item.ready).length;
 
@@ -123,20 +125,19 @@ export function ShopComplianceSettingsPage() {
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ShieldCheck size={24} color="var(--primary)" aria-hidden="true" />
-          <h2 style={{ margin: 0 }}>GST e-invoice &amp; e-way bill</h2>
+          <h2 style={{ margin: 0 }}>{t('shop.compliance.title')}</h2>
         </div>
         <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-          Turn on IRN (e-invoice) and e-way bill generation for your GST sale vouchers. Defaults to a mock
-          provider so you can try it out without NIC/GSP credentials.
+          {t('shop.compliance.intro')}
         </p>
       </Card>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15 }}>Setup readiness</h3>
+            <h3 style={{ margin: 0, fontSize: 15 }}>{t('shop.compliance.setupReadiness')}</h3>
             <p style={{ margin: '3px 0 0', color: 'var(--muted-foreground)', fontSize: 13 }}>
-              {readyCount} of {readiness.length} checks complete
+              {t('shop.compliance.checksComplete', { done: readyCount, total: readiness.length })}
             </p>
           </div>
           <strong style={{ color: readyCount === readiness.length ? '#15803d' : '#b45309' }}>
@@ -161,20 +162,20 @@ export function ShopComplianceSettingsPage() {
 
       {settings.isLoading ? (
         <Card>
-          <p style={{ margin: 0 }}>Loading…</p>
+          <p style={{ margin: 0 }}>{t('common.loading')}</p>
         </Card>
       ) : null}
       {settings.error ? (
         <Card>
           <p role="alert" style={{ margin: 0 }}>
-            {getApiErrorMessage(settings.error, 'Unable to load compliance settings.')}
+            {getApiErrorMessage(settings.error, t('shop.compliance.errLoad'))}
           </p>
         </Card>
       ) : null}
 
       <form onSubmit={handleSave}>
         <Card>
-          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>Enable compliance</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>{t('shop.compliance.enableCompliance')}</h3>
           <div style={{ display: 'grid', gap: 10 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               <input
@@ -182,7 +183,7 @@ export function ShopComplianceSettingsPage() {
                 checked={einvoiceEnabled}
                 onChange={(event) => setEinvoiceEnabled(event.target.checked)}
               />
-              Enable e-invoice (IRN) generation for sale vouchers
+              {t('shop.compliance.enableEinvoice')}
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               <input
@@ -190,57 +191,56 @@ export function ShopComplianceSettingsPage() {
                 checked={ewayEnabled}
                 onChange={(event) => setEwayEnabled(event.target.checked)}
               />
-              Enable e-way bill generation for movement of goods
+              {t('shop.compliance.enableEway')}
             </label>
           </div>
         </Card>
 
         <Card style={{ marginTop: 16 }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>GSP / portal provider</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>{t('shop.compliance.providerSection')}</h3>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
             <Select
-              label="Provider"
+              label={t('shop.compliance.provider')}
               style={fieldStyle}
               value={compliance.provider}
               onChange={(event) => setField('provider', event.target.value as ShopGstComplianceProvider)}
-              options={PROVIDER_OPTIONS}
+              options={PROVIDER_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
             />
           </div>
           {!showCredentials ? (
             <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--muted-foreground)' }}>
-              Mock mode simulates IRN/e-way bill numbers locally so you can demo the flow. Switch to an NIC or
-              custom GSP provider when you have live credentials.
+              {t('shop.compliance.mockNote')}
             </p>
           ) : (
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', marginTop: 12 }}>
               <Input
-                label="Username"
+                label={t('shop.compliance.username')}
                 style={fieldStyle}
                 value={compliance.username}
                 onChange={(event) => setField('username', event.target.value)}
               />
               <Input
-                label="Password"
+                label={t('shop.compliance.password')}
                 type="password"
                 style={fieldStyle}
                 value={compliance.password}
                 onChange={(event) => setField('password', event.target.value)}
               />
               <Input
-                label="Client ID"
+                label={t('shop.compliance.clientId')}
                 style={fieldStyle}
                 value={compliance.client_id}
                 onChange={(event) => setField('client_id', event.target.value)}
               />
               <Input
-                label="Client secret"
+                label={t('shop.compliance.clientSecret')}
                 type="password"
                 style={fieldStyle}
                 value={compliance.client_secret}
                 onChange={(event) => setField('client_secret', event.target.value)}
               />
               <Input
-                label="Base URL"
+                label={t('shop.compliance.baseUrl')}
                 style={fieldStyle}
                 value={compliance.base_url}
                 onChange={(event) => setField('base_url', event.target.value)}
@@ -251,43 +251,43 @@ export function ShopComplianceSettingsPage() {
         </Card>
 
         <Card style={{ marginTop: 16 }}>
-          <h3 style={{ marginTop: 0, marginBottom: 4, fontSize: 15 }}>Seller address (as per GST registration)</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4, fontSize: 15 }}>{t('shop.compliance.sellerSection')}</h3>
           <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--muted-foreground)' }}>
-            Used on the e-invoice/e-way bill payload sent to the GST portal.
+            {t('shop.compliance.sellerHint')}
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
             <Input
-              label="Legal name"
+              label={t('shop.compliance.legalName')}
               style={fieldStyle}
               value={compliance.seller_legal_name}
               onChange={(event) => setField('seller_legal_name', event.target.value)}
             />
             <Input
-              label="Trade name"
+              label={t('shop.compliance.tradeName')}
               style={fieldStyle}
               value={compliance.seller_trade_name}
               onChange={(event) => setField('seller_trade_name', event.target.value)}
             />
             <Input
-              label="Address line 1"
+              label={t('shop.compliance.addr1')}
               style={fieldStyle}
               value={compliance.seller_addr1}
               onChange={(event) => setField('seller_addr1', event.target.value)}
             />
             <Input
-              label="Address line 2"
+              label={t('shop.compliance.addr2')}
               style={fieldStyle}
               value={compliance.seller_addr2}
               onChange={(event) => setField('seller_addr2', event.target.value)}
             />
             <Input
-              label="City / locality"
+              label={t('shop.compliance.cityLocality')}
               style={fieldStyle}
               value={compliance.seller_loc}
               onChange={(event) => setField('seller_loc', event.target.value)}
             />
             <Input
-              label="PIN code"
+              label={t('shop.compliance.pinCode')}
               style={fieldStyle}
               value={compliance.seller_pin}
                 inputMode="numeric"
@@ -295,13 +295,13 @@ export function ShopComplianceSettingsPage() {
                 onChange={(event) => setField('seller_pin', event.target.value.replace(/\D/g, ''))}
             />
             <Input
-              label="State code (GST)"
+              label={t('shop.compliance.stateCode')}
               style={fieldStyle}
               value={compliance.seller_state_code}
                 inputMode="numeric"
                 maxLength={2}
                 onChange={(event) => setField('seller_state_code', event.target.value.replace(/\D/g, ''))}
-              placeholder="e.g. 27"
+              placeholder={t('shop.compliance.statePlaceholder')}
             />
           </div>
         </Card>
@@ -311,10 +311,10 @@ export function ShopComplianceSettingsPage() {
         ) : null}
         <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center' }}>
           <Button type="submit" variant="primary" disabled={update.isPending || settings.isLoading}>
-            {update.isPending ? 'Saving…' : 'Save compliance settings'}
+            {update.isPending ? t('common.saving') : t('shop.compliance.saveSettings')}
           </Button>
           <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
-            Credentials are stored securely and are never shown in reports.
+            {t('shop.compliance.credentialsNote')}
           </span>
         </div>
       </form>

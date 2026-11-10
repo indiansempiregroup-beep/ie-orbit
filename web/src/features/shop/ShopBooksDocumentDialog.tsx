@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import type { ShopBooksDocument, ShopBooksDocumentType, ShopBooksVoucher } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -10,9 +11,9 @@ import { formatMoney } from '../../lib/currency';
 import { useShopBooksDocumentMutations } from './shopHooks';
 
 const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'draft', labelKey: 'shop.booksDocDialog.statusDraft' },
+  { value: 'confirmed', labelKey: 'shop.booksDocDialog.statusConfirmed' },
+  { value: 'cancelled', labelKey: 'shop.booksDocDialog.statusCancelled' },
 ];
 
 function isLocked(doc: ShopBooksDocument) {
@@ -37,6 +38,7 @@ export function ShopBooksDocumentDialog({
   onClose: () => void;
   onMessage: (message: string) => void;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { update, convert } = useShopBooksDocumentMutations();
   const [status, setStatus] = useState('confirmed');
@@ -54,7 +56,7 @@ export function ShopBooksDocumentDialog({
   const dispatched = (document?.status || '').toLowerCase() === 'dispatched';
   const converted = Boolean(document?.converted_voucher || (document?.status || '').toLowerCase() === 'converted');
   const isChallan = docType === 'delivery_challan';
-  const party = document?.supplier_name || document?.customer_name || (docType === 'purchase_order' ? 'No supplier' : 'No customer');
+  const party = document?.supplier_name || document?.customer_name || (docType === 'purchase_order' ? t('shop.booksDocuments.noSupplier') : t('shop.booksDocuments.noCustomer'));
 
   async function save() {
     if (!document) return;
@@ -67,10 +69,10 @@ export function ShopBooksDocumentDialog({
           document_date: documentDate || null,
         },
       });
-      onMessage(`${document.document_number} updated.`);
+      onMessage(t('shop.booksDocDialog.updated', { number: document.document_number }));
       onClose();
     } catch (error) {
-      onMessage(getApiErrorMessage(error, "Couldn't update this document. Try again."));
+      onMessage(getApiErrorMessage(error, t('shop.booksDocDialog.updateFailed')));
     }
   }
 
@@ -78,10 +80,12 @@ export function ShopBooksDocumentDialog({
     if (!document) return;
     const dispatching = isChallan && action !== 'to_invoice';
     const prompt = dispatching
-      ? `Mark ${document.document_number} as dispatched and reduce stock?`
+      ? t('shop.booksDocDialog.confirmDispatch', { number: document.document_number })
       : isChallan
-        ? `Create a sale invoice from ${document.document_number}?`
-        : `Convert ${document.document_number} into a ${docType === 'purchase_order' ? 'purchase bill' : 'sale invoice'}?`;
+        ? t('shop.booksDocDialog.confirmChallanInvoice', { number: document.document_number })
+        : docType === 'purchase_order'
+          ? t('shop.booksDocuments.confirmConvertPurchase', { number: document.document_number })
+          : t('shop.booksDocuments.confirmConvertSale', { number: document.document_number });
     if (!window.confirm(prompt)) return;
     try {
       const result = await convert.mutateAsync({
@@ -89,7 +93,7 @@ export function ShopBooksDocumentDialog({
         action,
       });
       if (isVoucher(result)) {
-        onMessage(`Converted to ${result.voucher_number}.`);
+        onMessage(t('shop.booksDocuments.convertedTo', { number: result.voucher_number }));
         onClose();
         navigate(
           docType === 'purchase_order'
@@ -98,10 +102,14 @@ export function ShopBooksDocumentDialog({
         );
         return;
       }
-      onMessage(dispatching ? `${document.document_number} dispatched.` : `${document.document_number} updated.`);
+      onMessage(
+        dispatching
+          ? t('shop.booksDocDialog.dispatched', { number: document.document_number })
+          : t('shop.booksDocDialog.updated', { number: document.document_number }),
+      );
       onClose();
     } catch (error) {
-      onMessage(getApiErrorMessage(error, "Couldn't convert this document. Try again."));
+      onMessage(getApiErrorMessage(error, t('shop.booksDocuments.errConvert')));
     }
   }
 
@@ -109,7 +117,7 @@ export function ShopBooksDocumentDialog({
     <Dialog
       open={Boolean(document)}
       onClose={onClose}
-      title={document?.document_number || 'Document'}
+      title={document?.document_number || t('shop.booksDocDialog.defaultTitle')}
       labelledBy="books-document-dialog"
       busy={update.isPending || convert.isPending}
     >
@@ -121,7 +129,7 @@ export function ShopBooksDocumentDialog({
           <div style={{ display: 'grid', gap: 6 }}>
             {((document.line_items as Array<Record<string, unknown>> | undefined) ?? []).map((line, index) => {
               const productId = String(line.product_id || '').trim();
-              const name = String(line.name || `Item ${index + 1}`);
+              const name = String(line.name || t('shop.booksDocDialog.itemFallback', { n: index + 1 }));
               const qty = line.quantity ?? line.qty ?? 0;
               const label = `${name} × ${qty}`;
               return (
@@ -135,22 +143,27 @@ export function ShopBooksDocumentDialog({
                 </div>
               );
             })}
-            {!document.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
+            {!document.line_items?.length ? <p style={{ margin: 0 }}>{t('shop.booksDocDialog.noLines')}</p> : null}
           </div>
           {locked ? (
             <p style={{ margin: 0, fontSize: 13 }}>
               {converted
-                ? 'This document has been converted and can no longer be edited.'
+                ? t('shop.booksDocDialog.lockedConverted')
                 : dispatched
-                  ? 'Goods have left. Create an invoice when you bill the customer.'
-                  : 'This document is cancelled.'}
+                  ? t('shop.booksDocDialog.lockedDispatched')
+                  : t('shop.booksDocDialog.lockedCancelled')}
             </p>
           ) : (
             <>
-              <Select label="Status" value={status} onChange={(event) => setStatus(event.target.value)} options={STATUS_OPTIONS} />
-              <Input label="Date" type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} />
+              <Select
+                label={t('common.status')}
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+              />
+              <Input label={t('shop.booksDocDialog.date')} type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} />
               <label className="ui-field">
-                <span className="ui-field-label">Notes</span>
+                <span className="ui-field-label">{t('shop.booksDocDialog.notes')}</span>
                 <textarea className="ui-control" rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} />
               </label>
             </>
@@ -165,17 +178,17 @@ export function ShopBooksDocumentDialog({
                   navigate(`/shop/pos?mode=${docType}&document=${document.id}`);
                 }}
               >
-                Edit items
+                {t('shop.booksDocDialog.editItems')}
               </Button>
             ) : null}
             {!locked ? (
               <Button type="button" variant="neutral" onClick={() => void save()} disabled={update.isPending}>
-                {update.isPending ? 'Saving…' : 'Save'}
+                {update.isPending ? t('common.saving') : t('common.save')}
               </Button>
             ) : null}
             {isChallan && !converted && !dispatched ? (
               <Button type="button" variant="ghost" onClick={() => void runConvert('dispatch')} disabled={convert.isPending}>
-                Dispatch
+                {t('shop.booksDocDialog.dispatch')}
               </Button>
             ) : null}
             {converted && document.converted_voucher ? (
@@ -190,7 +203,7 @@ export function ShopBooksDocumentDialog({
                   );
                 }}
               >
-                Open converted bill
+                {t('shop.booksDocDialog.openConverted')}
               </Button>
             ) : null}
             {!converted && (docType !== 'delivery_challan' || dispatched || !locked) ? (
@@ -200,16 +213,16 @@ export function ShopBooksDocumentDialog({
                 disabled={convert.isPending || (docType !== 'delivery_challan' && locked)}
               >
                 {convert.isPending
-                  ? 'Working…'
+                  ? t('shop.booksDocDialog.working')
                   : isChallan
-                    ? 'Create invoice'
+                    ? t('shop.booksDocDialog.createInvoice')
                     : docType === 'purchase_order'
-                      ? 'Convert to purchase'
-                      : 'Convert to sale'}
+                      ? t('shop.booksDocuments.convertToPurchase')
+                      : t('shop.booksDocuments.convertToSale')}
               </Button>
             ) : null}
             <Button type="button" variant="ghost" onClick={onClose}>
-              Close
+              {t('common.close')}
             </Button>
           </div>
         </div>

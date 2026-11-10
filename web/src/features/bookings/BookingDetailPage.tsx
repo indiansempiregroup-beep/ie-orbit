@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -42,6 +43,7 @@ function qrImageSrc(upiPayUrl: string) {
 }
 
 export function BookingDetailPage() {
+  const { t } = useTranslation();
   const { bookingId } = useParams<{ bookingId: string }>();
   const navigate = useNavigate();
   const snackbar = useSnackbar();
@@ -143,12 +145,12 @@ export function BookingDetailPage() {
   const staffName =
     booking?.staff_name?.trim() ||
     (booking?.staff_id ? staffMap.get(String(booking.staff_id)) : undefined) ||
-    'Unassigned';
+    t('bookings.unassigned');
   const serviceTitle =
     booking?.service_label?.trim() ||
     (booking?.service_id ? serviceMap.get(String(booking.service_id)) : undefined) ||
     booking?.booking_number ||
-    'Booking';
+    t('dashboard.bookingFallback');
   const loyalty = booking
     ? readLoyaltyDocument({
         ...(booking as unknown as Record<string, unknown>),
@@ -169,7 +171,7 @@ export function BookingDetailPage() {
 
   async function uploadUpiProof(file: File) {
     if (!auth.token || !tenantId || !businessId) {
-      setProofError('Sign in to a business before uploading a screenshot.');
+      setProofError(t('bookings.signInToUpload'));
       return;
     }
     setProofUploading(true);
@@ -193,50 +195,57 @@ export function BookingDetailPage() {
         },
         body: form,
       });
-      if (!response.ok) throw new Error('Unable to upload screenshot.');
+      if (!response.ok) throw new Error(t('bookings.uploadFailed'));
       const payload = (await response.json()) as {
         data?: { id?: string; public_url?: string; private_url?: string };
       };
       const id = String(payload.data?.id || '');
       const url = payload.data?.public_url || payload.data?.private_url || '';
-      if (!id) throw new Error('Upload did not return a media id.');
+      if (!id) throw new Error(t('bookings.noMediaId'));
       setProofMediaId(id);
       setProofUrl(url);
     } catch (err) {
       setProofMediaId('');
       setProofUrl('');
-      setProofError(getApiErrorMessage(err, 'Unable to upload payment screenshot.'));
+      setProofError(getApiErrorMessage(err, t('bookings.uploadPaymentFailed')));
     } finally {
       setProofUploading(false);
     }
   }
 
   async function runAction(
-    label: string,
+    kind: 'confirm' | 'checkIn' | 'cancel',
     mutation: { mutateAsync: (value?: string) => Promise<unknown> },
     value?: string,
   ) {
-    setActiveAction(label);
-    const successByLabel: Record<string, string> = {
-      Confirm: 'Booking confirmed.',
-      'Check in': 'Customer checked in.',
-      Cancel: 'Booking cancelled.',
-    };
+    const progressByKind = {
+      confirm: t('bookings.confirming'),
+      checkIn: t('bookings.checkingIn'),
+      cancel: t('bookings.cancelling'),
+    } as const;
+    const successByKind = {
+      confirm: t('bookings.bookingConfirmed'),
+      checkIn: t('bookings.checkedIn'),
+      cancel: t('bookings.bookingCancelled'),
+    } as const;
+    const failedByKind = {
+      confirm: t('bookings.confirmFailed'),
+      checkIn: t('bookings.checkInFailed'),
+      cancel: t('bookings.cancelFailed'),
+    } as const;
+    setActiveAction(progressByKind[kind]);
     try {
       await mutation.mutateAsync(value);
-      snackbar.push(successByLabel[label] ?? `${label} successful.`, 'success');
+      snackbar.push(successByKind[kind], 'success');
     } catch (error) {
-      snackbar.push(
-        error instanceof Error ? error.message : `Couldn't ${label.toLowerCase()} this booking. Try again.`,
-        'error',
-      );
+      snackbar.push(error instanceof Error ? error.message : failedByKind[kind], 'error');
     } finally {
       setActiveAction(null);
     }
   }
 
   async function runComplete() {
-    setActiveAction('Complete');
+    setActiveAction(t('bookings.completing'));
     try {
       const body: {
         reason?: string;
@@ -252,10 +261,10 @@ export function BookingDetailPage() {
         }
         if (paymentMethod === 'upi' && receivedAmount > 0) {
           if (proofUploading) {
-            throw new Error('Wait for the payment screenshot to finish uploading.');
+            throw new Error(t('bookings.waitUpload'));
           }
           if (!proofMediaId && !proofUrl) {
-            throw new Error('Capture and upload a UPI payment screenshot before completing.');
+            throw new Error(t('bookings.captureFirst'));
           }
           if (proofUrl) body.payment_proof_url = proofUrl;
           if (proofMediaId) body.payment_proof_media_id = proofMediaId;
@@ -263,9 +272,9 @@ export function BookingDetailPage() {
       }
       await actions.complete.mutateAsync(body);
       setShowCollect(false);
-      snackbar.push('Booking completed.', 'success');
+      snackbar.push(t('bookings.completed'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't complete this booking. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('bookings.completeFailed'), 'error');
     } finally {
       setActiveAction(null);
     }
@@ -273,27 +282,30 @@ export function BookingDetailPage() {
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
-      <SubmitOverlay show={isSubmitting} message={activeAction ? `${activeAction}…` : 'Processing…'} />
+      <SubmitOverlay show={isSubmitting} message={activeAction ?? t('bookings.processing')} />
       <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <Link to="/bookings" style={{ color: '#6b7280', textDecoration: 'none' }}>← Back to bookings</Link>
+            <Link to="/bookings" style={{ color: '#6b7280', textDecoration: 'none' }}>{t('bookings.backToBookings')}</Link>
             <h1 style={{ margin: '12px 0 0', fontSize: 32 }}>{serviceTitle}</h1>
             <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-              #{booking?.booking_number ?? bookingId} · Status: {status}
+              {t('bookings.statusLine', {
+                number: booking?.booking_number ?? bookingId,
+                status: t(`bookings.statuses.${status}`, { defaultValue: status }),
+              })}
             </p>
           </div>
-          <Button variant="neutral" onClick={() => navigate('/bookings')}>Close</Button>
+          <Button variant="neutral" onClick={() => navigate('/bookings')}>{t('common.close')}</Button>
         </div>
 
-        {bookingQuery.isLoading ? <Card><p>Loading booking…</p></Card> : null}
+        {bookingQuery.isLoading ? <Card><p>{t('bookings.loadingBooking')}</p></Card> : null}
         {bookingQuery.error ? <Card><p style={{ color: '#dc2626' }}>{bookingQuery.error.message}</p></Card> : null}
 
         {booking ? (
           <>
             <Card style={{ padding: 20, display: 'grid', gap: 12 }}>
               <div>
-                <strong>Customer:</strong>{' '}
+                <strong>{t('bookings.detailCustomer')}</strong>{' '}
                 {booking.customer_id ? (
                   <Link to={`/customers/${booking.customer_id}`} style={{ color: '#2563eb', fontWeight: 600 }}>
                     {customerName}
@@ -302,10 +314,10 @@ export function BookingDetailPage() {
                   customerName
                 )}
               </div>
-              {booking.customer_phone ? <div><strong>Mobile:</strong> {booking.customer_phone}</div> : null}
+              {booking.customer_phone ? <div><strong>{t('bookings.detailMobile')}</strong> {booking.customer_phone}</div> : null}
               {booking.line_items?.length ? (
                 <div>
-                  <strong>Services:</strong>
+                  <strong>{t('bookings.detailServices')}</strong>
                   <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
                     {booking.line_items.map((item, index) => (
                       <div key={item.id} style={{ padding: 10, borderRadius: 10, background: '#f9fafb' }}>
@@ -315,9 +327,9 @@ export function BookingDetailPage() {
                         </div>
                         <div style={{ color: '#6b7280', fontSize: 13 }}>
                           {item.start_at ? formatDateTime(item.start_at) : '—'}
-                          {item.duration_minutes ? ` · ${item.duration_minutes} min` : ''}
+                          {item.duration_minutes ? ` · ${t('bookings.minutesShort', { n: item.duration_minutes })}` : ''}
                           {item.staff_name || item.staff_id
-                            ? ` · ${item.staff_name || staffMap.get(String(item.staff_id)) || 'Staff'}`
+                            ? ` · ${item.staff_name || staffMap.get(String(item.staff_id)) || t('bookings.staff')}`
                             : ''}
                         </div>
                       </div>
@@ -325,12 +337,12 @@ export function BookingDetailPage() {
                   </div>
                 </div>
               ) : (
-                <div><strong>Service:</strong> {serviceMap.get(String(booking.service_id)) ?? booking.service_id ?? '—'}</div>
+                <div><strong>{t('bookings.detailService')}</strong> {serviceMap.get(String(booking.service_id)) ?? booking.service_id ?? '—'}</div>
               )}
-              <div><strong>Staff:</strong> {staffName}</div>
-              <div><strong>Starts:</strong> {booking.start_at ? formatDateTime(booking.start_at) : '—'}</div>
-              <div><strong>Ends:</strong> {booking.end_at ? formatDateTime(booking.end_at) : '—'}</div>
-              <div><strong>Duration:</strong> {booking.duration_minutes ?? '—'} min</div>
+              <div><strong>{t('bookings.detailStaff')}</strong> {staffName}</div>
+              <div><strong>{t('bookings.detailStarts')}</strong> {booking.start_at ? formatDateTime(booking.start_at) : '—'}</div>
+              <div><strong>{t('bookings.detailEnds')}</strong> {booking.end_at ? formatDateTime(booking.end_at) : '—'}</div>
+              <div><strong>{t('bookings.detailDuration')}</strong> {t('bookings.minutesShort', { n: booking.duration_minutes ?? '—' })}</div>
               <RewardPointsBanner
                 earned={loyalty?.pointsEarned ?? 0}
                 pending={isOpenBooking && (loyalty?.pointsEarned ?? 0) <= 0 ? expectedEarn : 0}
@@ -343,25 +355,35 @@ export function BookingDetailPage() {
               />
               {recordedPaymentMethod || recordedProofUrl ? (
                 <div style={{ display: 'grid', gap: 10, marginTop: 4 }}>
-                  <strong>Payment</strong>
+                  <strong>{t('bookings.payment')}</strong>
                   {recordedPaymentMethod ? (
                     <div>
-                      Method:{' '}
-                      {recordedPaymentMethod === 'borrow'
-                        ? 'Credit'
-                        : recordedPaymentMethod.charAt(0).toUpperCase() + recordedPaymentMethod.slice(1)}
+                      {t('bookings.paymentMethodLine', {
+                        method:
+                          recordedPaymentMethod === 'borrow'
+                            ? t('bookings.methodCredit')
+                            : recordedPaymentMethod === 'cash'
+                              ? t('bookings.methodCash')
+                              : recordedPaymentMethod === 'upi'
+                                ? t('bookings.methodUpi')
+                                : recordedPaymentMethod === 'card'
+                                  ? t('bookings.methodCard')
+                                  : recordedPaymentMethod.charAt(0).toUpperCase() + recordedPaymentMethod.slice(1),
+                      })}
                     </div>
                   ) : null}
                   {recordedPayment?.amount_paid != null && String(recordedPayment.amount_paid) !== '' ? (
-                    <div>Amount paid: ₹{Number(recordedPayment.amount_paid).toFixed(2)}</div>
+                    <div>
+                      {t('bookings.amountPaidLine', { amount: `₹${Number(recordedPayment.amount_paid).toFixed(2)}` })}
+                    </div>
                   ) : null}
                   {recordedProofUrl ? (
                     <div style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Payment proof</span>
+                      <span style={{ color: '#6b7280', fontSize: 13 }}>{t('bookings.paymentProof')}</span>
                       <a href={recordedProofUrl} target="_blank" rel="noreferrer">
                         <img
                           src={recordedProofUrl}
-                          alt="Payment proof"
+                          alt={t('bookings.paymentProof')}
                           style={{
                             width: 180,
                             height: 180,
@@ -378,13 +400,13 @@ export function BookingDetailPage() {
             </Card>
 
             <Card style={{ padding: 20, display: 'grid', gap: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 18 }}>Actions</h2>
+              <h2 style={{ margin: 0, fontSize: 18 }}>{t('bookings.actions')}</h2>
               <label style={{ display: 'grid', gap: 8 }}>
-                <span style={{ color: '#6b7280', fontSize: 13 }}>Reason (optional)</span>
+                <span style={{ color: '#6b7280', fontSize: 13 }}>{t('bookings.reasonOptional')}</span>
                 <input
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  placeholder="Add a note for this action"
+                  placeholder={t('bookings.reasonPlaceholder')}
                   style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                 />
               </label>
@@ -393,29 +415,29 @@ export function BookingDetailPage() {
                   <Button
                     variant="primary"
                     loading={actions.confirm.isPending}
-                    loadingLabel="Confirming…"
+                    loadingLabel={t('bookings.confirming')}
                     disabled={isSubmitting && !actions.confirm.isPending}
-                    onClick={() => runAction('Confirm', actions.confirm, reason || undefined)}
+                    onClick={() => runAction('confirm', actions.confirm, reason || undefined)}
                   >
-                    Confirm
+                    {t('bookings.confirm')}
                   </Button>
                 ) : null}
                 {['confirmed', 'pending'].includes(status) ? (
                   <Button
                     variant="neutral"
                     loading={actions.checkIn.isPending}
-                    loadingLabel="Checking in…"
+                    loadingLabel={t('bookings.checkingIn')}
                     disabled={isSubmitting && !actions.checkIn.isPending}
-                    onClick={() => runAction('Check in', actions.checkIn, reason || undefined)}
+                    onClick={() => runAction('checkIn', actions.checkIn, reason || undefined)}
                   >
-                    Check in
+                    {t('bookings.checkIn')}
                   </Button>
                 ) : null}
                 {['confirmed', 'checked_in', 'in_progress'].includes(status) ? (
                   <Button
                     variant="neutral"
                     loading={actions.complete.isPending}
-                    loadingLabel="Completing…"
+                    loadingLabel={t('bookings.completing')}
                     disabled={isSubmitting && !actions.complete.isPending}
                     onClick={() => {
                       if (billTotal > 0) {
@@ -431,18 +453,18 @@ export function BookingDetailPage() {
                       }
                     }}
                   >
-                    Complete
+                    {t('bookings.complete')}
                   </Button>
                 ) : null}
                 {!['cancelled', 'completed', 'rejected'].includes(status) ? (
                   <Button
                     variant="ghost"
                     loading={actions.cancel.isPending}
-                    loadingLabel="Cancelling…"
+                    loadingLabel={t('bookings.cancelling')}
                     disabled={isSubmitting && !actions.cancel.isPending}
-                    onClick={() => runAction('Cancel', actions.cancel, reason || undefined)}
+                    onClick={() => runAction('cancel', actions.cancel, reason || undefined)}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 ) : null}
               </div>
@@ -457,15 +479,15 @@ export function BookingDetailPage() {
                     background: '#f9fafb',
                   }}
                 >
-                  <strong>Collect payment</strong>
-                  <div>Bill total: ₹{billTotal.toFixed(2)}</div>
+                  <strong>{t('bookings.collectPayment')}</strong>
+                  <div>{t('bookings.billTotal', { amount: `₹${billTotal.toFixed(2)}` })}</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {(
                       [
-                        ['cash', 'Cash'],
-                        ['upi', 'UPI'],
-                        ['card', 'Card'],
-                        ['borrow', 'Credit'],
+                        ['cash', t('bookings.methodCash')],
+                        ['upi', t('bookings.methodUpi')],
+                        ['card', t('bookings.methodCard')],
+                        ['borrow', t('bookings.methodCredit')],
                       ] as const
                     ).map(([value, label]) => (
                       <button
@@ -493,7 +515,7 @@ export function BookingDetailPage() {
                   </div>
                   <label style={{ display: 'grid', gap: 8 }}>
                     <span style={{ color: '#6b7280', fontSize: 13 }}>
-                      {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                      {paymentMethod === 'borrow' ? t('bookings.amountPaidNowOptional') : t('bookings.amountReceived')}
                     </span>
                     <input
                       value={amountPaid}
@@ -514,12 +536,12 @@ export function BookingDetailPage() {
                         background: '#fff',
                       }}
                     >
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Scan to pay</span>
+                      <span style={{ color: '#6b7280', fontSize: 13 }}>{t('bookings.scanToPay')}</span>
                       {upiPayUrl ? (
                         <>
                           <img
                             src={qrImageSrc(upiPayUrl)}
-                            alt="UPI payment QR"
+                            alt={t('bookings.upiQrAlt')}
                             width={188}
                             height={188}
                             style={{ borderRadius: 8 }}
@@ -531,29 +553,29 @@ export function BookingDetailPage() {
                         <>
                           <img
                             src={paymentQrImageUrl}
-                            alt="Payment QR"
+                            alt={t('bookings.paymentQrAlt')}
                             width={188}
                             height={188}
                             style={{ borderRadius: 8, objectFit: 'contain' }}
                           />
-                          <div style={{ fontSize: 13, color: '#6b7280' }}>Static payment QR</div>
+                          <div style={{ fontSize: 13, color: '#6b7280' }}>{t('bookings.staticQr')}</div>
                         </>
                       ) : (
                         <div style={{ color: '#b91c1c', fontSize: 13 }}>
-                          Add a UPI ID in Business Profile to show a payment QR.
+                          {t('bookings.addUpiId')}
                         </div>
                       )}
                       <div style={{ display: 'grid', gap: 8, width: '100%', justifyItems: 'stretch' }}>
                         <span style={{ color: '#6b7280', fontSize: 13 }}>
-                          Payment screenshot <span style={{ color: '#b91c1c' }}>*</span>
+                          {t('bookings.paymentScreenshot')} <span style={{ color: '#b91c1c' }}>*</span>
                         </span>
                         <span style={{ color: '#6b7280', fontSize: 13 }}>
-                          After the customer pays, take a photo of their UPI success screen.
+                          {t('bookings.screenshotHint')}
                         </span>
                         {proofPreview || proofUrl ? (
                           <img
                             src={proofPreview || proofUrl}
-                            alt="UPI payment proof"
+                            alt={t('bookings.upiProofAlt')}
                             style={{
                               width: 160,
                               height: 160,
@@ -579,7 +601,7 @@ export function BookingDetailPage() {
                               fontSize: 14,
                             }}
                           >
-                            {proofPreview || proofUrl ? 'Retake photo' : 'Take photo'}
+                            {proofPreview || proofUrl ? t('bookings.retakePhoto') : t('bookings.takePhoto')}
                             <input
                               type="file"
                               accept="image/*"
@@ -608,7 +630,7 @@ export function BookingDetailPage() {
                               fontSize: 14,
                             }}
                           >
-                            Gallery
+                            {t('bookings.gallery')}
                             <input
                               type="file"
                               accept="image/*"
@@ -623,7 +645,7 @@ export function BookingDetailPage() {
                           </label>
                         </div>
                         {proofUploading ? (
-                          <span style={{ color: '#6b7280', fontSize: 13 }}>Uploading proof…</span>
+                          <span style={{ color: '#6b7280', fontSize: 13 }}>{t('bookings.uploadingProof')}</span>
                         ) : null}
                         {proofError ? (
                           <span style={{ color: '#b91c1c', fontSize: 13 }}>{proofError}</span>
@@ -633,12 +655,12 @@ export function BookingDetailPage() {
                   ) : null}
                   <div style={{ display: 'flex', gap: 10 }}>
                     <Button variant="ghost" onClick={() => setShowCollect(false)}>
-                      Cancel
+                      {t('common.cancel')}
                     </Button>
                     <Button
                       variant="primary"
                       loading={actions.complete.isPending || proofUploading}
-                      loadingLabel={proofUploading ? 'Uploading…' : 'Completing…'}
+                      loadingLabel={proofUploading ? t('bookings.uploading') : t('bookings.completing')}
                       disabled={
                         proofUploading ||
                         (paymentMethod === 'upi' &&
@@ -648,7 +670,7 @@ export function BookingDetailPage() {
                       }
                       onClick={() => void runComplete()}
                     >
-                      Complete &amp; collect
+                      {t('bookings.completeCollect')}
                     </Button>
                   </div>
                 </div>
@@ -657,7 +679,7 @@ export function BookingDetailPage() {
                 <>
                   <div style={{ display: 'grid', gap: 10 }}>
                     <label style={{ display: 'grid', gap: 8 }}>
-                      <span style={{ color: '#6b7280', fontSize: 13 }}>Reschedule to</span>
+                      <span style={{ color: '#6b7280', fontSize: 13 }}>{t('bookings.rescheduleTo')}</span>
                       <input
                         type="datetime-local"
                         value={rescheduleAt}
@@ -668,34 +690,34 @@ export function BookingDetailPage() {
                     <Button
                       variant="primary"
                       loading={actions.reschedule.isPending}
-                      loadingLabel="Rescheduling…"
+                      loadingLabel={t('bookings.rescheduling')}
                       disabled={!rescheduleAt || (isSubmitting && !actions.reschedule.isPending)}
                       onClick={async () => {
-                        setActiveAction('Reschedule');
+                        setActiveAction(t('bookings.rescheduling'));
                         try {
                           await actions.reschedule.mutateAsync({
                             start_at: new Date(rescheduleAt).toISOString(),
                             reason: reason || undefined,
                           });
-                          snackbar.push('Booking rescheduled.', 'success');
+                          snackbar.push(t('bookings.rescheduled'), 'success');
                         } catch (error) {
-                          snackbar.push(error instanceof Error ? error.message : "Couldn't reschedule this booking. Try again.", 'error');
+                          snackbar.push(error instanceof Error ? error.message : t('bookings.rescheduleFailed'), 'error');
                         } finally {
                           setActiveAction(null);
                         }
                       }}
                     >
-                      Reschedule
+                      {t('bookings.reschedule')}
                     </Button>
                   </div>
                   <div style={{ display: 'grid', gap: 10 }}>
                     <span style={{ color: '#6b7280', fontSize: 13 }}>
                       {usePerLineReassign
-                        ? 'Reassign staff per service (staff assigned to each service are listed)'
-                        : 'Reassign staff (staff who can perform this booking are listed)'}
+                        ? t('bookings.reassignPerService')
+                        : t('bookings.reassignSingle')}
                     </span>
                     {reassignableStaffQuery.isLoading ? (
-                      <p style={{ margin: 0, color: '#6b7280' }}>Loading available staff…</p>
+                      <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.loadingStaff')}</p>
                     ) : null}
                     {reassignableStaffQuery.error ? (
                       <p style={{ margin: 0, color: '#dc2626' }}>{reassignableStaffQuery.error.message}</p>
@@ -714,7 +736,7 @@ export function BookingDetailPage() {
                             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                             disabled={reassignableStaffQuery.isLoading}
                           >
-                            <option value="">Auto-assign</option>
+                            <option value="">{t('bookings.autoAssign')}</option>
                             {(reassignableStaff?.mode === 'per_line'
                               ? reassignableStaff.line_item_options?.[item.id] ?? []
                               : []
@@ -734,7 +756,7 @@ export function BookingDetailPage() {
                           style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                           disabled={reassignableStaffQuery.isLoading}
                         >
-                          <option value="">Auto-assign</option>
+                          <option value="">{t('bookings.autoAssign')}</option>
                           {(reassignableStaff?.mode === 'single' ? reassignableStaff.staff_options ?? [] : []).map(
                             (member) => (
                               <option key={member.id} value={member.id}>
@@ -749,13 +771,13 @@ export function BookingDetailPage() {
                     reassignableStaff?.mode === 'single' &&
                     (reassignableStaff.staff_options?.length ?? 0) === 0 ? (
                       <p style={{ margin: 0, color: '#6b7280' }}>
-                        No staff are assigned to these services. Assign services on each staff profile first.
+                        {t('bookings.noStaffAssigned')}
                       </p>
                     ) : null}
                     <Button
                       variant="neutral"
                       loading={actions.updateStaff.isPending || actions.updateLineItemStaff.isPending}
-                      loadingLabel="Saving…"
+                      loadingLabel={t('common.saving')}
                       disabled={
                         reassignableStaffQuery.isLoading ||
                         (isSubmitting &&
@@ -763,7 +785,7 @@ export function BookingDetailPage() {
                           !actions.updateLineItemStaff.isPending)
                       }
                       onClick={async () => {
-                        setActiveAction('Reassign staff');
+                        setActiveAction(t('common.saving'));
                         try {
                           if (usePerLineReassign) {
                             await actions.updateLineItemStaff.mutateAsync(
@@ -775,10 +797,10 @@ export function BookingDetailPage() {
                           } else {
                             await actions.updateStaff.mutateAsync(staffId || null);
                           }
-                          snackbar.push("Staff updated — they've been notified.", 'success');
+                          snackbar.push(t('bookings.staffUpdated'), 'success');
                         } catch (error) {
                           snackbar.push(
-                            error instanceof Error ? error.message : "Couldn't change the staff. Try again.",
+                            error instanceof Error ? error.message : t('bookings.staffChangeFailed'),
                             'error',
                           );
                         } finally {
@@ -786,7 +808,7 @@ export function BookingDetailPage() {
                         }
                       }}
                     >
-                      Save staff assignment
+                      {t('bookings.saveStaffAssignment')}
                     </Button>
                   </div>
                 </>

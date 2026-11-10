@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
@@ -17,6 +18,7 @@ import {
 const ASSIGNABLE_ROLES = ['manager', 'staff'];
 
 export function TeamSettingsPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const membersQuery = useTeamMembersQuery();
   const rolesQuery = useIamRolesQuery();
@@ -34,15 +36,14 @@ export function TeamSettingsPage() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <Card>
-        <p className="public-kicker">Team</p>
-        <h2 style={{ margin: '8px 0' }}>Members and roles</h2>
+        <p className="public-kicker">{t('settings.team')}</p>
+        <h2 style={{ margin: '8px 0' }}>{t('settings.teamPage.title')}</h2>
         <p style={{ color: 'var(--muted-foreground)', marginTop: 0 }}>
-          Invite managers or staff, assign workspace roles, and manage pending invitations. Staff accounts
-          cannot see the teammate directory.
+          {t('settings.teamPage.lead')}
         </p>
 
         {membersQuery.isLoading ? (
-          <p>Loading members…</p>
+          <p>{t('settings.teamPage.loadingMembers')}</p>
         ) : (
           <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
             {(membersQuery.data ?? []).map((member) => (
@@ -83,13 +84,13 @@ export function TeamSettingsPage() {
                             removeRole.mutate(
                               { userId: member.id, roleCode: role.code },
                               {
-                                onSuccess: () => snackbar.push('Role removed.', 'success'),
+                                onSuccess: () => snackbar.push(t('settings.teamPage.roleRemoved'), 'success'),
                                 onError: (error: Error) => snackbar.push(error.message, 'error'),
                               },
                             )
                           }
                           style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#1d4ed8' }}
-                          aria-label={`Remove ${role.name}`}
+                          aria-label={t('settings.teamPage.removeAria', { role: role.name })}
                         >
                           ×
                         </button>
@@ -106,14 +107,14 @@ export function TeamSettingsPage() {
                         assignRole.mutate(
                           { userId: member.id, roleCode: role.code },
                           {
-                            onSuccess: () => snackbar.push(`${role.name} assigned.`, 'success'),
+                            onSuccess: () => snackbar.push(t('settings.teamPage.roleAssigned', { role: role.name }), 'success'),
                             onError: (error: Error) => snackbar.push(error.message, 'error'),
                           },
                         )
                       }
                       disabled={member.roles.some((assigned) => assigned.code === role.code)}
                     >
-                      Add {role.name}
+                      {t('settings.teamPage.addRole', { role: role.name })}
                     </Button>
                   ))}
                 </div>
@@ -124,7 +125,7 @@ export function TeamSettingsPage() {
       </Card>
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Invite team member</h3>
+        <h3 style={{ marginTop: 0 }}>{t('settings.teamPage.inviteTitle')}</h3>
         <form
           style={{ display: 'grid', gap: 12, maxWidth: 480 }}
           onSubmit={(event) => {
@@ -133,7 +134,7 @@ export function TeamSettingsPage() {
               { email: inviteEmail, platform_role_code: inviteRole },
               {
                 onSuccess: () => {
-                  snackbar.push('Invite sent.', 'success');
+                  snackbar.push(t('settings.teamPage.inviteSent'), 'success');
                   setInviteEmail('');
                 },
                 onError: (error) => snackbar.push(error.message, 'error'),
@@ -142,38 +143,38 @@ export function TeamSettingsPage() {
           }}
         >
           <label style={{ display: 'grid', gap: 8 }}>
-            <span>Email</span>
+            <span>{t('common.email')}</span>
             <Input
               type="email"
               value={inviteEmail}
               onChange={(event) => setInviteEmail(event.target.value)}
-              placeholder="colleague@example.com"
+              placeholder={t('settings.teamPage.emailPlaceholder')}
               required
             />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            <span>Role</span>
+            <span>{t('settings.teamPage.role')}</span>
             <select
               value={inviteRole}
               onChange={(event) => setInviteRole(event.target.value as 'manager' | 'staff')}
               style={{ padding: 12, borderRadius: 10, border: '1px solid var(--border)' }}
             >
-              <option value="staff">Staff</option>
-              <option value="manager">Manager</option>
+              <option value="staff">{t('settings.roleMenusPage.staff')}</option>
+              <option value="manager">{t('settings.roleMenusPage.manager')}</option>
             </select>
           </label>
           <Button type="submit" variant="primary" disabled={createInvitation.isPending}>
-            {createInvitation.isPending ? 'Sending…' : 'Send invitation'}
+            {createInvitation.isPending ? t('settings.teamPage.sending') : t('settings.teamPage.sendInvite')}
           </Button>
         </form>
       </Card>
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Pending invitations</h3>
+        <h3 style={{ marginTop: 0 }}>{t('settings.teamPage.pendingTitle')}</h3>
         {invitationsQuery.isLoading ? (
-          <p>Loading invitations…</p>
+          <p>{t('settings.teamPage.loadingInvites')}</p>
         ) : (invitationsQuery.data ?? []).filter((item) => item.status === 'pending').length === 0 ? (
-          <p style={{ color: 'var(--muted-foreground)' }}>No pending invitations.</p>
+          <p style={{ color: 'var(--muted-foreground)' }}>{t('settings.teamPage.noPending')}</p>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
             {(invitationsQuery.data ?? [])
@@ -194,19 +195,22 @@ export function TeamSettingsPage() {
                   <div>
                     <strong>{invitation.email}</strong>
                     <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)' }}>
-                      {invitation.platform_role_code} · expires {new Date(invitation.expires_at).toLocaleDateString()}
+                      {t('settings.teamPage.expires', {
+                        role: invitation.platform_role_code,
+                        date: new Date(invitation.expires_at).toLocaleDateString(),
+                      })}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     onClick={() =>
                       revokeInvitation.mutate(invitation.id, {
-                        onSuccess: () => snackbar.push('Invite cancelled.', 'success'),
+                        onSuccess: () => snackbar.push(t('settings.teamPage.inviteCancelled'), 'success'),
                         onError: (error: Error) => snackbar.push(error.message, 'error'),
                       })
                     }
                   >
-                    Revoke
+                    {t('settings.teamPage.revoke')}
                   </Button>
                 </div>
               ))}
@@ -215,7 +219,7 @@ export function TeamSettingsPage() {
       </Card>
 
       <Link to="/settings">
-        <Button variant="ghost">Back to settings</Button>
+        <Button variant="ghost">{t('settings.teamPage.backToSettings')}</Button>
       </Link>
     </div>
   );

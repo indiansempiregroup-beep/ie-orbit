@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -39,13 +40,14 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 /** In-place books invoice preview — no navigation away from the current page. */
 export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
   const voucherQuery = useShopVoucher(open ? voucherId : null);
   const voucher = voucherQuery.data;
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const isSale = String(voucher?.voucher_type || '').toLowerCase() === 'sale';
-  const sourceLabel = voucher ? saleInvoiceSourceLabel(voucher) : '';
+  const sourceLabel = voucher ? saleInvoiceSourceLabel(voucher, undefined, t) : '';
 
   const meta = asRecord(voucher?.metadata);
   const returnHistory = (
@@ -70,14 +72,14 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
       <Dialog
         open={open}
         onClose={onClose}
-        title={voucher?.voucher_number || (voucherQuery.isLoading ? 'Loading…' : 'Books invoice')}
+        title={voucher?.voucher_number || (voucherQuery.isLoading ? t('common.loading') : t('shop.booksInvoiceDrawer.titleFallback'))}
         labelledBy="books-invoice-drawer"
       >
         <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320, maxWidth: 520 }}>
-          {voucherQuery.isLoading ? <p style={{ margin: 0 }}>Loading invoice…</p> : null}
+          {voucherQuery.isLoading ? <p style={{ margin: 0 }}>{t('shop.booksInvoiceDrawer.loadingInvoice')}</p> : null}
           {voucherQuery.isError ? (
             <p role="alert" style={{ margin: 0 }}>
-              Couldn&apos;t load this books invoice.
+              {t('shop.booksInvoiceDrawer.loadFailed')}
             </p>
           ) : null}
 
@@ -109,12 +111,12 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                       color: '#92400e',
                     }}
                   >
-                    Returns · {returnHistory.length || 1}
+                    {t('shop.booksInvoiceDrawer.returnsBadge', { count: returnHistory.length || 1 })}
                   </span>
                 ) : null}
                 <span style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
                   {formatVoucherWhen(voucher.voucher_date, voucher.created_at) || voucher.voucher_date} ·{' '}
-                  {voucher.customer_name || voucher.supplier_name || 'Cash'} · {voucher.status}
+                  {voucher.customer_name || voucher.supplier_name || t('shop.booksInvoiceDrawer.cash')} · {voucher.status}
                 </span>
               </div>
 
@@ -124,14 +126,14 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                 {((voucher.line_items as LineItem[] | undefined) ?? []).map((line, index) => (
                   <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, gap: 12 }}>
                     <span>
-                      {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
+                      {line.name} {line.hsn_sac ? `· ${t('shop.booksInvoiceDrawer.hsn', { code: line.hsn_sac })}` : ''} × {line.qty}
                     </span>
                     <strong>
                       {formatMoney(voucherLineGrossAmount(line as Record<string, unknown>), currency)}
                     </strong>
                   </div>
                 ))}
-                {!voucher.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
+                {!voucher.line_items?.length ? <p style={{ margin: 0 }}>{t('shop.booksInvoiceDrawer.noLines')}</p> : null}
               </div>
 
               <div
@@ -144,44 +146,44 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Subtotal</span>
+                  <span>{t('shop.booksInvoiceDrawer.subtotal')}</span>
                   <span>{formatMoney(Number(voucher.subtotal ?? 0), currency)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Tax{hasReturns ? ' (original)' : ''}</span>
+                  <span>{hasReturns ? t('shop.booksInvoiceDrawer.taxOriginal') : t('shop.booksInvoiceDrawer.tax')}</span>
                   <span>{formatMoney(Number(voucher.tax_total ?? 0), currency)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                  <span>Total{hasReturns ? ' (original)' : ''}</span>
+                  <span>{hasReturns ? t('shop.booksInvoiceDrawer.totalOriginal') : t('shop.booksInvoiceDrawer.total')}</span>
                   <span>{formatMoney(Number(voucher.total ?? 0), currency)}</span>
                 </div>
                 {hasReturns ? (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#b45309' }}>
-                      <span>Returned</span>
+                      <span>{t('shop.booksInvoiceDrawer.returned')}</span>
                       <span>−{formatMoney(returnedTotal, currency)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                      <span>Net total</span>
+                      <span>{t('shop.booksInvoiceDrawer.netTotal')}</span>
                       <span>{formatMoney(netTotal, currency)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>Net tax</span>
+                      <span>{t('shop.booksInvoiceDrawer.netTax')}</span>
                       <span>{formatMoney(netTax, currency)}</span>
                     </div>
                   </>
                 ) : null}
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Paid</span>
+                  <span>{t('shop.booksInvoiceDrawer.paid')}</span>
                   <span>{formatMoney(displayPaid, currency)}</span>
                 </div>
               </div>
 
               {hasReturns ? (
                 <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Return history</div>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{t('shop.booksInvoiceDrawer.returnHistory')}</div>
                   {returnHistory.map((row, index) => {
-                    const returnNumber = String(row.return_number || `Return ${index + 1}`);
+                    const returnNumber = String(row.return_number || t('shop.booksInvoiceDrawer.returnFallback', { n: index + 1 }));
                     const cnNumber = String(row.credit_note_number || '');
                     const at = typeof row.at === 'string' ? formatVoucherWhen(row.at, row.at) : '';
                     return (
@@ -204,9 +206,9 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                         <div style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
                           {[
                             at,
-                            cnNumber ? `CN ${cnNumber}` : '',
+                            cnNumber ? t('shop.booksInvoiceDrawer.creditNote', { number: cnNumber }) : '',
                             row.tax_total != null && row.tax_total !== ''
-                              ? `GST ${formatMoney(Number(row.tax_total), currency)}`
+                              ? t('shop.booksInvoiceDrawer.gst', { amount: formatMoney(Number(row.tax_total), currency) })
                               : '',
                           ]
                             .filter(Boolean)
@@ -218,7 +220,7 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                 </div>
               ) : null}
 
-              {voucher.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {voucher.notes}</p> : null}
+              {voucher.notes ? <p style={{ margin: 0, fontSize: 13 }}>{t('shop.booksInvoiceDrawer.notes', { notes: voucher.notes })}</p> : null}
 
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                 {isSale && workspace.businessId ? (
@@ -235,11 +237,11 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
                       })
                     }
                   >
-                    View / Print / Share
+                    {t('shop.booksInvoiceDrawer.viewPrintShare')}
                   </Button>
                 ) : null}
                 <Button type="button" variant="ghost" onClick={onClose}>
-                  Close
+                  {t('common.close')}
                 </Button>
               </div>
             </>
@@ -251,7 +253,7 @@ export function BooksInvoiceDrawer({ voucherId, open, onClose }: Props) {
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+        title={docActions ? t('shop.booksInvoiceDrawer.saleTitle', { number: docActions.number || '' }) : t('shop.booksInvoiceDrawer.saleInvoice')}
       />
     </>
   );

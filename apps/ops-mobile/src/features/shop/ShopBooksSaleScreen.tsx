@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -73,13 +74,6 @@ import { shopListRefreshControl } from './shopRefreshControl';
 import { SearchBar } from '../../components/SearchBar';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 
-const EWAY_TRANSPORT_MODES = [
-  { value: '1', label: 'Road' },
-  { value: '2', label: 'Rail' },
-  { value: '3', label: 'Air' },
-  { value: '4', label: 'Ship' },
-];
-
 type SaleLine = {
   key: string;
   productId: string;
@@ -123,8 +117,18 @@ function ComplianceModal({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
+  const ewayTransportModes = useMemo(
+    () => [
+      { value: '1', label: t('shop.vouchers.transport.road') },
+      { value: '2', label: t('shop.vouchers.transport.rail') },
+      { value: '3', label: t('shop.vouchers.transport.air') },
+      { value: '4', label: t('shop.vouchers.transport.ship') },
+    ],
+    [t],
+  );
   const { lift, bottomPad, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
     0.82,
     visible && voucher?.id,
@@ -160,11 +164,11 @@ function ComplianceModal({
       const ewayData = ewayRes.data ?? [];
       setEway(ewayData.find((item) => item.status !== 'cancelled') ?? ewayData[0] ?? null);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Failed to load compliance data'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.sale.complianceLoadFailed')), 'error');
     } finally {
       setLoading(false);
     }
-  }, [client, voucher, toast]);
+  }, [client, voucher, toast, t]);
 
   useEffect(() => {
     if (!visible || !voucher) return;
@@ -186,9 +190,14 @@ function ComplianceModal({
     try {
       const response = await client.shop.generateEInvoice(voucher.id);
       setEinvoice(response.data);
-      toast.push(`E-invoice generated${response.data.irn ? ` · IRN ${response.data.irn}` : ''}`, 'success');
+      toast.push(
+        response.data.irn
+          ? t('shop.vouchers.gst.einvoiceGeneratedIrn', { irn: response.data.irn })
+          : t('shop.vouchers.gst.einvoiceGenerated'),
+        'success',
+      );
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't generate e-invoice. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.vouchers.gst.einvoiceFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -202,9 +211,9 @@ function ComplianceModal({
       setEinvoice(response.data);
       setShowEinvoiceCancel(false);
       setEinvoiceCancelReason('');
-      toast.push('E-invoice cancelled', 'success');
+      toast.push(t('shop.vouchers.gst.einvoiceCancelled'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't cancel e-invoice. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.vouchers.gst.einvoiceCancelFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -222,9 +231,14 @@ function ComplianceModal({
       });
       setEway(response.data);
       setShowEwayForm(false);
-      toast.push(`E-way bill generated${response.data.ewb_no ? ` · EWB ${response.data.ewb_no}` : ''}`, 'success');
+      toast.push(
+        response.data.ewb_no
+          ? t('shop.vouchers.gst.ewayGeneratedNo', { ewb: response.data.ewb_no })
+          : t('shop.vouchers.gst.ewayGenerated'),
+        'success',
+      );
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't generate e-way bill. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.vouchers.gst.ewayFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -238,9 +252,9 @@ function ComplianceModal({
       setEway(response.data);
       setShowEwayCancel(false);
       setEwayCancelReason('');
-      toast.push('E-way bill cancelled', 'success');
+      toast.push(t('shop.vouchers.gst.ewayCancelled'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't cancel e-way bill. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.vouchers.gst.ewayCancelFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -252,7 +266,7 @@ function ComplianceModal({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
         <ExpandableSheetView
           onLayout={onSheetLayout}
           style={[
@@ -267,7 +281,7 @@ function ComplianceModal({
           <SheetHandle {...handleProps} tone="muted" />
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.sheetTitle}>GST compliance</Text>
+              <Text style={styles.sheetTitle}>{t('shop.vouchers.gst.title')}</Text>
               <Text style={styles.sheetSubtitle}>{voucher?.voucher_number}</Text>
             </View>
             <Pressable style={styles.closeBtn} onPress={onClose} hitSlop={8}>
@@ -286,27 +300,27 @@ function ComplianceModal({
               <>
                 <View style={styles.complianceCard}>
                   <View style={styles.complianceHeader}>
-                    <Text style={styles.complianceTitle}>E-invoice (IRN)</Text>
+                    <Text style={styles.complianceTitle}>{t('shop.vouchers.gst.einvoiceIrn')}</Text>
                     {einvoice ? (
                       <View style={[styles.badge, { backgroundColor: complianceStatusStyle(einvoice.status).bg }]}>
                         <Text style={[styles.badgeText, { color: complianceStatusStyle(einvoice.status).text }]}>
-                          {einvoice.status}
+                          {t(`shop.vouchers.badge.${einvoice.status}`, { defaultValue: einvoice.status })}
                         </Text>
                       </View>
                     ) : null}
                   </View>
                   {einvoiceActive && einvoice ? (
                     <View style={{ gap: 2 }}>
-                      {einvoice.irn ? <Text style={styles.meta}>IRN: {einvoice.irn}</Text> : null}
-                      {einvoice.ack_no ? <Text style={styles.meta}>Ack no: {einvoice.ack_no}</Text> : null}
-                      {einvoice.ack_date ? <Text style={styles.meta}>Ack date: {einvoice.ack_date}</Text> : null}
-                      {einvoice.signed_qr ? <Text style={styles.meta}>QR payload available</Text> : null}
+                      {einvoice.irn ? <Text style={styles.meta}>{t('shop.vouchers.gst.irn', { value: einvoice.irn })}</Text> : null}
+                      {einvoice.ack_no ? <Text style={styles.meta}>{t('shop.vouchers.gst.ackNo', { value: einvoice.ack_no })}</Text> : null}
+                      {einvoice.ack_date ? <Text style={styles.meta}>{t('shop.vouchers.gst.ackDate', { value: einvoice.ack_date })}</Text> : null}
+                      {einvoice.signed_qr ? <Text style={styles.meta}>{t('shop.vouchers.gst.qrAvailable')}</Text> : null}
                     </View>
                   ) : null}
 
                   {!einvoiceActive ? (
                     <Button
-                      label={busy ? 'Generating…' : 'Generate e-invoice'}
+                      label={busy ? t('shop.vouchers.gst.generating') : t('shop.vouchers.gst.generateEinvoice')}
                       loading={busy}
                       size="sm"
                       onPress={() => void handleGenerateEInvoice()}
@@ -315,62 +329,62 @@ function ComplianceModal({
                   ) : showEinvoiceCancel ? (
                     <View style={{ gap: spacing.sm }}>
                       <Input
-                        label="Cancellation reason"
+                        label={t('opsApp.shop.common.cancellationReason')}
                         required
                         value={einvoiceCancelReason}
                         onChangeText={setEinvoiceCancelReason}
-                        placeholder="e.g. Data entry error"
+                        placeholder={t('opsApp.shop.sale.reasonPlaceholderEinvoice')}
                       />
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         <Button
-                          label={busy ? 'Cancelling…' : 'Confirm cancel'}
+                          label={busy ? t('shop.vouchers.gst.cancelling') : t('opsApp.shop.common.confirmCancel')}
                           variant="destructive"
                           size="sm"
                           loading={busy}
                           onPress={() => void handleCancelEInvoice()}
                           disabled={!einvoiceCancelReason.trim()}
                         />
-                        <Button label="Back" variant="ghost" size="sm" onPress={() => setShowEinvoiceCancel(false)} />
+                        <Button label={t('common.back')} variant="ghost" size="sm" onPress={() => setShowEinvoiceCancel(false)} />
                       </View>
                     </View>
                   ) : (
-                    <Button label="Cancel e-invoice" variant="outline" size="sm" onPress={() => setShowEinvoiceCancel(true)} />
+                    <Button label={t('shop.vouchers.gst.cancelEinvoice')} variant="outline" size="sm" onPress={() => setShowEinvoiceCancel(true)} />
                   )}
                 </View>
 
                 <View style={styles.complianceCard}>
                   <View style={styles.complianceHeader}>
-                    <Text style={styles.complianceTitle}>E-way bill</Text>
+                    <Text style={styles.complianceTitle}>{t('shop.vouchers.gst.ewayBill')}</Text>
                     {eway ? (
                       <View style={[styles.badge, { backgroundColor: complianceStatusStyle(eway.status).bg }]}>
                         <Text style={[styles.badgeText, { color: complianceStatusStyle(eway.status).text }]}>
-                          {eway.status}
+                          {t(`shop.vouchers.badge.${eway.status}`, { defaultValue: eway.status })}
                         </Text>
                       </View>
                     ) : null}
                   </View>
                   {ewayActive && eway ? (
                     <View style={{ gap: 2 }}>
-                      {eway.ewb_no ? <Text style={styles.meta}>EWB no: {eway.ewb_no}</Text> : null}
-                      {eway.valid_upto ? <Text style={styles.meta}>Valid upto: {eway.valid_upto}</Text> : null}
-                      {eway.vehicle_no ? <Text style={styles.meta}>Vehicle: {eway.vehicle_no}</Text> : null}
+                      {eway.ewb_no ? <Text style={styles.meta}>{t('shop.vouchers.gst.ewbNo', { value: eway.ewb_no })}</Text> : null}
+                      {eway.valid_upto ? <Text style={styles.meta}>{t('shop.vouchers.gst.validUpto', { value: eway.valid_upto })}</Text> : null}
+                      {eway.vehicle_no ? <Text style={styles.meta}>{t('shop.vouchers.gst.vehicle', { value: eway.vehicle_no })}</Text> : null}
                     </View>
                   ) : null}
 
                   {!ewayActive && showEwayForm ? (
                     <View style={{ gap: spacing.sm }}>
-                      <Input label="Vehicle number" required value={vehicleNo} onChangeText={setVehicleNo} placeholder="MH12AB1234" autoCapitalize="characters" />
-                      <SelectField label="Transport mode" required value={transportMode} options={EWAY_TRANSPORT_MODES} onChange={setTransportMode} />
-                      <Input label="Distance (km)" optional value={distanceKm} onChangeText={(value) => setDistanceKm(value.replace(/[^0-9]/g, ''))} keyboardType="number-pad" />
-                      <Input label="Transporter name" optional value={transporterName} onChangeText={setTransporterName} />
+                      <Input label={t('shop.vouchers.gst.vehicleNumber')} required value={vehicleNo} onChangeText={setVehicleNo} placeholder="MH12AB1234" autoCapitalize="characters" />
+                      <SelectField label={t('shop.vouchers.gst.transportMode')} required value={transportMode} options={ewayTransportModes} onChange={setTransportMode} />
+                      <Input label={t('shop.vouchers.gst.distanceKm')} optional value={distanceKm} onChangeText={(value) => setDistanceKm(value.replace(/[^0-9]/g, ''))} keyboardType="number-pad" />
+                      <Input label={t('shop.vouchers.gst.transporterName')} optional value={transporterName} onChangeText={setTransporterName} />
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                        <Button label={busy ? 'Generating…' : 'Generate'} size="sm" loading={busy} onPress={() => void handleGenerateEway()} />
-                        <Button label="Cancel" variant="ghost" size="sm" onPress={() => setShowEwayForm(false)} />
+                        <Button label={busy ? t('shop.vouchers.gst.generating') : t('opsApp.shop.common.generate')} size="sm" loading={busy} onPress={() => void handleGenerateEway()} />
+                        <Button label={t('common.cancel')} variant="ghost" size="sm" onPress={() => setShowEwayForm(false)} />
                       </View>
                     </View>
                   ) : !ewayActive ? (
                     <Button
-                      label="Generate e-way bill"
+                      label={t('shop.vouchers.gst.generateEway')}
                       size="sm"
                       onPress={() => setShowEwayForm(true)}
                       disabled={voucher?.status === 'void'}
@@ -378,26 +392,26 @@ function ComplianceModal({
                   ) : showEwayCancel ? (
                     <View style={{ gap: spacing.sm }}>
                       <Input
-                        label="Cancellation reason"
+                        label={t('opsApp.shop.common.cancellationReason')}
                         required
                         value={ewayCancelReason}
                         onChangeText={setEwayCancelReason}
-                        placeholder="e.g. Vehicle breakdown"
+                        placeholder={t('opsApp.shop.sale.reasonPlaceholderEway')}
                       />
                       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
                         <Button
-                          label={busy ? 'Cancelling…' : 'Confirm cancel'}
+                          label={busy ? t('shop.vouchers.gst.cancelling') : t('opsApp.shop.common.confirmCancel')}
                           variant="destructive"
                           size="sm"
                           loading={busy}
                           onPress={() => void handleCancelEway()}
                           disabled={!ewayCancelReason.trim()}
                         />
-                        <Button label="Back" variant="ghost" size="sm" onPress={() => setShowEwayCancel(false)} />
+                        <Button label={t('common.back')} variant="ghost" size="sm" onPress={() => setShowEwayCancel(false)} />
                       </View>
                     </View>
                   ) : (
-                    <Button label="Cancel e-way bill" variant="outline" size="sm" onPress={() => setShowEwayCancel(true)} />
+                    <Button label={t('shop.vouchers.gst.cancelEway')} variant="outline" size="sm" onPress={() => setShowEwayCancel(true)} />
                   )}
                 </View>
               </>
@@ -410,6 +424,7 @@ function ComplianceModal({
 }
 
 export function ShopBooksSaleScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksSale'>>();
@@ -461,7 +476,7 @@ export function ShopBooksSaleScreen() {
         <Pressable
           onPress={() => navigation.navigate('ShopPos', { mode: 'sale' })}
           accessibilityRole="button"
-          accessibilityLabel="New sale"
+          accessibilityLabel={t('shop.vouchers.newSale')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -469,7 +484,7 @@ export function ShopBooksSaleScreen() {
         </Pressable>
       ),
     });
-  }, [navigation]);
+  }, [navigation, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -487,11 +502,11 @@ export function ShopBooksSaleScreen() {
       setCustomers(customersRes.data ?? []);
       setAccounts(accountsRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load sales');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.sale.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -508,21 +523,21 @@ export function ShopBooksSaleScreen() {
         if (!cancelled && response.data) setDetailVoucher(response.data);
       } catch (err) {
         if (!cancelled) {
-          toast.push(getApiErrorMessage(err, "Couldn't open that books invoice."), 'error');
+          toast.push(getApiErrorMessage(err, t('shop.vouchers.openFailed')), 'error');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [openVoucherId, client, toast]);
+  }, [openVoucherId, client, toast, t]);
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
   const filterCustomerOptions = useMemo(
     () => [
-      { value: '', label: 'All customers' },
-      { value: '__walkin__', label: 'Walk-in / cash sale' },
+      { value: '', label: t('opsApp.shop.common.allCustomers') },
+      { value: '__walkin__', label: t('opsApp.shop.sale.walkInOrCash') },
       ...customers.map((customer) => ({
         value: customer.id,
         label:
@@ -534,7 +549,7 @@ export function ShopBooksSaleScreen() {
           customer.id,
       })),
     ],
-    [customers],
+    [customers, t],
   );
 
   const filteredVouchers = useMemo(() => {
@@ -576,7 +591,7 @@ export function ShopBooksSaleScreen() {
 
   const customerOptions = useMemo(
     () => [
-      { value: '', label: 'Cash sale (no customer)' },
+      { value: '', label: t('opsApp.shop.sale.cashNoCustomer') },
       ...customers.map((customer) => ({
         value: customer.id,
         label:
@@ -588,7 +603,7 @@ export function ShopBooksSaleScreen() {
           customer.id,
       })),
     ],
-    [customers],
+    [customers, t],
   );
 
   function setLine(key: string, patch: Partial<SaleLine>) {
@@ -650,7 +665,7 @@ export function ShopBooksSaleScreen() {
     if (!client || !businessId) return;
     const validLines = lines.filter((line) => line.productId && Number(line.qty) > 0);
     if (!validLines.length) {
-      toast.push('Add at least one product line', 'error');
+      toast.push(t('opsApp.shop.sale.addLine'), 'error');
       return;
     }
     setBusy(true);
@@ -672,11 +687,11 @@ export function ShopBooksSaleScreen() {
         cash_account_id: amountPaid ? cashAccountId || undefined : undefined,
         notes: notes.trim() || undefined,
       });
-      toast.push(`Sale ${response.data.voucher_number} recorded`, 'success');
+      toast.push(t('opsApp.shop.sale.recorded', { number: response.data.voucher_number }), 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't record this sale. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.sale.recordFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -684,19 +699,19 @@ export function ShopBooksSaleScreen() {
 
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
-    Alert.alert('Void sale', `Void ${voucher.voucher_number}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('opsApp.shop.sale.voidTitle'), t('shop.vouchers.confirmVoid', { number: voucher.voucher_number }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Void',
+        text: t('opsApp.shop.sale.void'),
         style: 'destructive',
         onPress: async () => {
           try {
             await client.shop.voidVoucher(voucher.id);
-            toast.push('Sale voided', 'success');
+            toast.push(t('shop.vouchers.voided', { number: voucher.voucher_number }), 'success');
             setDetailVoucher((current) => (current?.id === voucher.id ? null : current));
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : "Couldn't void this sale. Try again.", 'error');
+            toast.push(err instanceof Error ? err.message : t('shop.vouchers.voidFailed'), 'error');
           }
         },
       },
@@ -719,7 +734,7 @@ export function ShopBooksSaleScreen() {
             style={styles.searchFlex}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search invoices"
+            placeholder={t('shop.vouchers.searchInvoices')}
           />
           <FilterButton count={activeFilterCount} onPress={() => setFilterOpen(true)} />
         </View>
@@ -732,7 +747,7 @@ export function ShopBooksSaleScreen() {
             hitSlop={8}
             style={styles.resetRow}
           >
-            <Text style={styles.clear}>Clear search & filters</Text>
+            <Text style={styles.clear}>{t('shop.vouchers.clearFilters')}</Text>
           </Pressable>
         ) : null}
 
@@ -758,10 +773,16 @@ export function ShopBooksSaleScreen() {
             const walkIn = !item.customer;
             return (
               <BooksDocumentRow
-                title={party === '—' ? 'Walk-in sale' : party}
+                title={party === '—' ? t('opsApp.shop.sale.walkInSale') : party}
                 amount={formatMoney(listTotal)}
-                meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}${returnedHint > 0 ? ` · returned ${formatMoney(returnedHint)}` : ''}`}
-                badge={voided ? item.status : paid ? 'Paid' : `Due ${formatMoney(balance)}`}
+                meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}${returnedHint > 0 ? ` · ${t('opsApp.shop.sale.returnedAmount', { amount: formatMoney(returnedHint) })}` : ''}`}
+                badge={
+                  voided
+                    ? t(`shop.vouchers.status.${item.status}`, { defaultValue: item.status })
+                    : paid
+                      ? t('shop.vouchers.stripPaid')
+                      : t('shop.vouchers.dueAmount', { amount: formatMoney(balance) })
+                }
                 badgeKind={voided ? 'void' : paid ? 'paid' : 'due'}
                 icon={voided ? 'slash' : walkIn ? 'shopping-bag' : 'user'}
                 iconTone={voided ? 'rose' : paid ? 'green' : 'amber'}
@@ -771,11 +792,11 @@ export function ShopBooksSaleScreen() {
                   businessId
                     ? [
                         {
-                          label: 'View',
+                          label: t('shop.vouchers.view'),
                           icon: 'eye',
                           onPress: () => {
                             if (!auth.token) {
-                              toast.push('Sign in again to view this invoice', 'error');
+                              toast.push(t('opsApp.shop.common.signInAgain'), 'error');
                               return;
                             }
                             void openShopDocumentHtmlView({
@@ -788,12 +809,12 @@ export function ShopBooksSaleScreen() {
                               token: auth.token,
                               tenantId,
                             }).catch((err) =>
-                              toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                              toast.push(getApiErrorMessage(err, t('shop.vouchers.viewFailed')), 'error'),
                             );
                           },
                         },
                         {
-                          label: 'Share',
+                          label: t('shop.vouchers.share'),
                           icon: 'share-2',
                           onPress: () => {
                             const customer =
@@ -822,14 +843,20 @@ export function ShopBooksSaleScreen() {
             !loading ? (
               <EmptyState
                 icon="shopping-bag"
-                title={activeFilterCount || search.trim() ? 'No matching sales' : 'No sales yet'}
+                title={
+                  activeFilterCount || search.trim()
+                    ? t('opsApp.shop.sale.noMatching')
+                    : t('opsApp.shop.sale.noSales')
+                }
                 message={
                   activeFilterCount || search.trim()
-                    ? 'Try clearing filters or adjusting your search.'
-                    : 'Sales from the counter appear here. Tap Sale in the menu to bill a customer.'
+                    ? t('opsApp.shop.sale.tryClearing')
+                    : t('opsApp.shop.sale.emptyHint')
                 }
                 actionLabel={
-                  activeFilterCount || search.trim() ? 'Clear filters' : 'Open Sale counter'
+                  activeFilterCount || search.trim()
+                    ? t('opsApp.shop.common.clearFilters')
+                    : t('opsApp.shop.sale.openCounter')
                 }
                 onAction={
                   activeFilterCount || search.trim()
@@ -878,7 +905,11 @@ export function ShopBooksSaleScreen() {
           visible={Boolean(docActions)}
           onClose={() => setDocActions(null)}
           target={docActions}
-          title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+          title={
+            docActions
+              ? t('shop.vouchers.saleDoc', { number: docActions.number || '' })
+              : t('shop.vouchers.saleInvoice')
+          }
         />
 
         <FilterSheet
@@ -890,52 +921,52 @@ export function ShopBooksSaleScreen() {
           }}
         >
           <FilterChoiceGroup
-            label="Period"
+            label={t('opsApp.shop.common.period')}
             value={periodFilter}
             options={[
-              { value: 'all', label: 'All time' },
-              { value: 'today', label: 'Today' },
-              { value: '7d', label: 'Last 7 days' },
-              { value: 'month', label: 'This month' },
+              { value: 'all', label: t('opsApp.shop.common.allTime') },
+              { value: 'today', label: t('common.today') },
+              { value: '7d', label: t('opsApp.shop.common.last7Days') },
+              { value: 'month', label: t('opsApp.shop.common.thisMonth') },
             ]}
             onChange={(value) => setPeriodFilter(value as VoucherPeriodFilter)}
           />
           <FilterChoiceGroup
-            label="Payment"
+            label={t('shop.vouchers.paymentFilter')}
             value={payFilter}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'unpaid', label: 'Due' },
+              { value: 'all', label: t('common.all') },
+              { value: 'paid', label: t('shop.vouchers.stripPaid') },
+              { value: 'unpaid', label: t('shop.vouchers.stripDue') },
             ]}
             onChange={(value) => setPayFilter(value as VoucherPayFilter)}
           />
           <FilterChoiceGroup
-            label="Customer"
+            label={t('opsApp.shop.common.customer')}
             value={customerFilter}
             options={filterCustomerOptions}
             onChange={setCustomerFilter}
             searchable
           />
           <FilterChoiceGroup
-            label="Invoice type"
+            label={t('opsApp.shop.common.invoiceType')}
             value={invoiceTypeFilter}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'b2b', label: 'B2B' },
-              { value: 'b2c', label: 'B2C' },
+              { value: 'all', label: t('common.all') },
+              { value: 'b2b', label: t('opsApp.shop.sale.b2b') },
+              { value: 'b2c', label: t('opsApp.shop.sale.b2c') },
             ]}
             onChange={(value) => setInvoiceTypeFilter(value as VoucherInvoiceTypeFilter)}
           />
           <FilterChoiceGroup
-            label="Sort"
+            label={t('opsApp.shop.common.sort')}
             value={sortBy}
             options={[
-              { value: 'newest', label: 'Newest' },
-              { value: 'oldest', label: 'Oldest' },
-              { value: 'amount_desc', label: 'Amount high–low' },
-              { value: 'amount_asc', label: 'Amount low–high' },
-              { value: 'party', label: 'Customer' },
+              { value: 'newest', label: t('opsApp.shop.common.newest') },
+              { value: 'oldest', label: t('opsApp.shop.common.oldest') },
+              { value: 'amount_desc', label: t('opsApp.shop.common.amountHighLow') },
+              { value: 'amount_asc', label: t('opsApp.shop.common.amountLowHigh') },
+              { value: 'party', label: t('opsApp.shop.common.customer') },
             ]}
             onChange={setSortBy}
           />

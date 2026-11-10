@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Banknote,
   Building2,
@@ -105,6 +106,8 @@ function QuickLink({
 }
 
 export function ShopBooksDashboardPage() {
+  const { t } = useTranslation();
+  const tb = (key: string) => String(t(`shop.booksDashboard.${key}`));
   const workspace = useWorkspace();
   const dashboard = useShopBooksDashboard();
   const { isEnabled, isPathEnabled } = useRoleMenus();
@@ -120,9 +123,9 @@ export function ShopBooksDashboardPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
-            <h2 style={{ margin: 0 }}>Orbit Mart Books</h2>
+            <h2 style={{ margin: 0 }}>{tb('title')}</h2>
             <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-              Cash, GST sales/purchases, party ledgers, and compliance reports for your shop.
+              {tb('subtitle')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -131,7 +134,7 @@ export function ShopBooksDashboardPage() {
               <Button type="button" variant="primary">
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Sale
+                  {tb('sale')}
                 </span>
               </Button>
             </Link>
@@ -141,7 +144,7 @@ export function ShopBooksDashboardPage() {
               <Button type="button" variant="neutral">
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Purchase
+                  {tb('purchase')}
                 </span>
               </Button>
             </Link>
@@ -151,7 +154,7 @@ export function ShopBooksDashboardPage() {
               <Button type="button" variant="neutral">
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Expense
+                  {tb('expense')}
                 </span>
               </Button>
             </Link>
@@ -161,7 +164,7 @@ export function ShopBooksDashboardPage() {
               <Button type="button" variant="neutral">
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Party
+                  {tb('party')}
                 </span>
               </Button>
             </Link>
@@ -173,31 +176,31 @@ export function ShopBooksDashboardPage() {
       {dashboard.error ? <p role="alert">{(dashboard.error as Error).message}</p> : null}
 
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
-        {isEnabled('booksCash') ? <KpiTile label="Cash in hand" value={formatMoney(cash, currency)} icon={Wallet} accent="#16a34a" /> : null}
-        {isEnabled('booksCash') ? <KpiTile label="Bank balance" value={formatMoney(bank, currency)} icon={Landmark} accent="#2563eb" /> : null}
-        {isEnabled('booksParties') ? <KpiTile label="To collect" value={formatMoney(toCollect, currency)} icon={Banknote} accent="#d97706" /> : null}
-        {isEnabled('booksParties') ? <KpiTile label="To pay" value={formatMoney(toPay, currency)} icon={Building2} accent="#dc2626" /> : null}
+        {isEnabled('booksCash') ? <KpiTile label={tb('cashInHand')} value={formatMoney(cash, currency)} icon={Wallet} accent="#16a34a" /> : null}
+        {isEnabled('booksCash') ? <KpiTile label={tb('bankBalance')} value={formatMoney(bank, currency)} icon={Landmark} accent="#2563eb" /> : null}
+        {isEnabled('booksParties') ? <KpiTile label={tb('toCollect')} value={formatMoney(toCollect, currency)} icon={Banknote} accent="#d97706" /> : null}
+        {isEnabled('booksParties') ? <KpiTile label={tb('toPay')} value={formatMoney(toPay, currency)} icon={Building2} accent="#dc2626" /> : null}
       </div>
 
       <Card>
-        <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>Quick links</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>{tb('quickLinks')}</h3>
         <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
-          {isPathEnabled('/shop/books/sale') ? <QuickLink to="/shop/books/sale" label="Sales" description="GST invoices to customers" icon={ShoppingCart} /> : null}
-          {isPathEnabled('/shop/books/purchase') ? <QuickLink to="/shop/books/purchase" label="Purchases" description="Bills from suppliers" icon={ShoppingBag} /> : null}
-          {isPathEnabled('/shop/books/expense') ? <QuickLink to="/shop/books/expense" label="Expenses" description="Shop running costs" icon={FileSpreadsheet} /> : null}
-          {isPathEnabled('/shop/books/cash') ? <QuickLink to="/shop/books/cash" label="Cash & bank" description="Accounts, payments, transfers" icon={Landmark} /> : null}
-          {isPathEnabled('/shop/books/parties') ? <QuickLink to="/shop/books/parties" label="Parties" description="Customers & suppliers ledger" icon={UsersRound} /> : null}
-          {isPathEnabled('/shop/billing') ? <QuickLink to="/shop/billing" label="Estimates / Proforma" description="Open, update, and convert to sale" icon={FileSpreadsheet} /> : null}
-          {isPathEnabled('/shop/books/sale-orders') ? <QuickLink to="/shop/books/sale-orders" label="Sale orders" description="Open, update, and convert to sale" icon={FileSpreadsheet} /> : null}
-          {isPathEnabled('/shop/books/purchase-orders') ? <QuickLink to="/shop/books/purchase-orders" label="Purchase orders" description="Open, update, and convert to purchase" icon={FileSpreadsheet} /> : null}
-          {isPathEnabled('/shop/books/delivery-challans') ? <QuickLink to="/shop/books/delivery-challans" label="Delivery challans" description="Open, update, dispatch, then invoice" icon={Truck} /> : null}
-          {isPathEnabled('/shop/godowns') ? <QuickLink to="/shop/godowns" label="Godowns" description="Warehouses, stock locations, transfers" icon={Warehouse} /> : null}
-          {isPathEnabled('/shop/books/reports') ? <QuickLink to="/shop/books/reports" label="Reports" description="Daybook, GSTR-1/3B, P&L" icon={FileSpreadsheet} /> : null}
+          {isPathEnabled('/shop/books/sale') ? <QuickLink to="/shop/books/sale" label={tb('links.sales')} description={tb('links.salesDesc')} icon={ShoppingCart} /> : null}
+          {isPathEnabled('/shop/books/purchase') ? <QuickLink to="/shop/books/purchase" label={tb('links.purchases')} description={tb('links.purchasesDesc')} icon={ShoppingBag} /> : null}
+          {isPathEnabled('/shop/books/expense') ? <QuickLink to="/shop/books/expense" label={tb('links.expenses')} description={tb('links.expensesDesc')} icon={FileSpreadsheet} /> : null}
+          {isPathEnabled('/shop/books/cash') ? <QuickLink to="/shop/books/cash" label={tb('links.cashBank')} description={tb('links.cashBankDesc')} icon={Landmark} /> : null}
+          {isPathEnabled('/shop/books/parties') ? <QuickLink to="/shop/books/parties" label={tb('links.parties')} description={tb('links.partiesDesc')} icon={UsersRound} /> : null}
+          {isPathEnabled('/shop/billing') ? <QuickLink to="/shop/billing" label={tb('links.estimates')} description={tb('links.estimatesDesc')} icon={FileSpreadsheet} /> : null}
+          {isPathEnabled('/shop/books/sale-orders') ? <QuickLink to="/shop/books/sale-orders" label={tb('links.saleOrders')} description={tb('links.estimatesDesc')} icon={FileSpreadsheet} /> : null}
+          {isPathEnabled('/shop/books/purchase-orders') ? <QuickLink to="/shop/books/purchase-orders" label={tb('links.purchaseOrders')} description={tb('links.purchaseOrdersDesc')} icon={FileSpreadsheet} /> : null}
+          {isPathEnabled('/shop/books/delivery-challans') ? <QuickLink to="/shop/books/delivery-challans" label={tb('links.challans')} description={tb('links.challansDesc')} icon={Truck} /> : null}
+          {isPathEnabled('/shop/godowns') ? <QuickLink to="/shop/godowns" label={tb('links.godowns')} description={tb('links.godownsDesc')} icon={Warehouse} /> : null}
+          {isPathEnabled('/shop/books/reports') ? <QuickLink to="/shop/books/reports" label={tb('links.reports')} description={tb('links.reportsDesc')} icon={FileSpreadsheet} /> : null}
           {isPathEnabled('/shop/books/compliance') ? (
           <QuickLink
             to="/shop/books/compliance"
-            label="GST compliance"
-            description="E-invoice (IRN) & e-way bill settings"
+            label={tb('links.compliance')}
+            description={tb('links.complianceDesc')}
             icon={ShieldCheck}
           />
           ) : null}
@@ -206,7 +209,7 @@ export function ShopBooksDashboardPage() {
 
       {isEnabled('booksCash') && dashboard.data?.accounts?.length ? (
         <Card>
-          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>Accounts</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 15 }}>{tb('accounts')}</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {dashboard.data.accounts.map((account) => (
               <div key={account.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>

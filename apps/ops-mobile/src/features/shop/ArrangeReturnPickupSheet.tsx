@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SheetHandle } from '../../components/SheetHandle';
 import {
@@ -28,11 +29,6 @@ import { useToast } from '../../contexts/ToastContext';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import { formatMoney } from './posPayment';
-
-const MODE_OPTIONS = [
-  { value: 'instant', label: 'Instant rider' },
-  { value: 'manual', label: 'Manual / courier' },
-];
 
 type QuoteSnapshot = {
   available: boolean;
@@ -61,7 +57,12 @@ export function ArrangeReturnPickupSheet({
   onClose,
   onDone,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const modeOptions = [
+    { value: 'instant', label: t('opsApp.shop.returnPickup.modeInstant') },
+    { value: 'manual', label: t('opsApp.shop.returnPickup.modeManual') },
+  ];
   const { driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
     0.92,
     visible && shopReturn?.id,
@@ -105,7 +106,7 @@ export function ArrangeReturnPickupSheet({
       } catch (err) {
         if (!cancelled) {
           setQuote(null);
-          setError(getApiErrorMessage(err, "Couldn't load pickup quote."));
+          setError(getApiErrorMessage(err, t('shop.returnsPage.quoteFailed')));
         }
       } finally {
         if (!cancelled) setQuoteBusy(false);
@@ -136,16 +137,16 @@ export function ArrangeReturnPickupSheet({
       const awaiting = String(res.data.status || '').toLowerCase() === 'awaiting_customer';
       toast.push(
         awaiting
-          ? 'Sent to customer — waiting for them to accept or cancel.'
+          ? t('shop.returnsPage.sentToCustomer')
           : mode === 'instant'
-            ? 'Pickup rider dispatched.'
-            : 'Pickup arranged.',
+            ? t('shop.returnsPage.riderDispatched')
+            : t('shop.returnsPage.pickupArranged'),
         'success',
       );
       onDone(res.data);
       onClose();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Couldn't arrange pickup."));
+      setError(getApiErrorMessage(err, t('opsApp.shop.returnPickup.arrangeFailed')));
     } finally {
       setBusy(false);
     }
@@ -158,12 +159,12 @@ export function ArrangeReturnPickupSheet({
     quoteReady &&
     (mode === 'manual' || Boolean(quote?.available));
   const primaryLabel = busy
-    ? 'Saving…'
+    ? t('shop.returnsPage.saving')
     : chargeCustomer
-      ? 'Send for customer approval'
+      ? t('opsApp.shop.returnPickup.sendForApproval')
       : mode === 'instant'
-        ? 'Dispatch rider'
-        : 'Arrange pickup';
+        ? t('opsApp.shop.returnPickup.dispatchRider')
+        : t('opsApp.shop.returnPickup.arrangePickup');
 
   return (
     <Modal
@@ -177,7 +178,7 @@ export function ArrangeReturnPickupSheet({
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('common.close')} />
         <ExpandableSheetView
           onLayout={onSheetLayout}
           style={[
@@ -189,11 +190,13 @@ export function ArrangeReturnPickupSheet({
           <SheetHandle {...handleProps} tone="muted" />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Arrange return pickup</Text>
+              <Text style={styles.title}>{t('opsApp.shop.returnPickup.title')}</Text>
               <Text style={styles.subtitle}>
                 {shopReturn?.return_number
-                  ? `${shopReturn.return_number} · choose rider or courier`
-                  : 'Choose rider or courier'}
+                  ? t('opsApp.shop.returnPickup.subtitleWithNumber', {
+                      number: shopReturn.return_number,
+                    })
+                  : t('opsApp.shop.returnPickup.subtitle')}
               </Text>
             </View>
             <Pressable style={styles.close} onPress={onClose} hitSlop={8}>
@@ -209,10 +212,10 @@ export function ArrangeReturnPickupSheet({
             contentContainerStyle={styles.body}
           >
             <SelectField
-              label="How will you collect it?"
+              label={t('opsApp.shop.returnPickup.howCollect')}
               required
               value={mode}
-              options={MODE_OPTIONS}
+              options={modeOptions}
               onChange={(value) => {
                 setMode(value);
                 setError(null);
@@ -227,33 +230,47 @@ export function ArrangeReturnPickupSheet({
                 ) : quote?.available ? (
                   <>
                     <Text style={styles.quoteTitle}>
-                      {quote.provider_label || quote.provider || 'Rider'} quote
+                      {t('opsApp.shop.returnPickup.riderQuote', {
+                        provider:
+                          quote.provider_label ||
+                          quote.provider ||
+                          t('opsApp.shop.returnPickup.defaultRider'),
+                      })}
                     </Text>
                     <Text style={styles.quoteFee}>
                       {formatMoney(quote.quoted_fee ?? 0, currency)}
-                      {quote.eta_minutes != null ? ` · ~${quote.eta_minutes} min` : ''}
+                      {quote.eta_minutes != null
+                        ? ` · ${t('opsApp.shop.returnPickup.eta', { minutes: quote.eta_minutes })}`
+                        : ''}
                     </Text>
                     <Text style={styles.meta}>
-                      Product refund {formatMoney(quote.refund_total ?? shopReturn?.refund_total ?? 0, currency)}
+                      {t('opsApp.shop.returnPickup.productRefund', {
+                        amount: formatMoney(
+                          quote.refund_total ?? shopReturn?.refund_total ?? 0,
+                          currency,
+                        ),
+                      })}
                     </Text>
                     {chargeCustomer ? (
                       <Text style={styles.meta}>
-                        Customer net refund{' '}
-                        {formatMoney(
-                          quote.customer_net_refund_if_charged ?? 0,
-                          currency,
-                        )}{' '}
-                        (fee deducted)
+                        {t('opsApp.shop.returnPickup.netRefund', {
+                          amount: formatMoney(
+                            quote.customer_net_refund_if_charged ?? 0,
+                            currency,
+                          ),
+                        })}
                       </Text>
                     ) : (
-                      <Text style={styles.meta}>Shop pays the pickup fee</Text>
+                      <Text style={styles.meta}>{t('opsApp.shop.returnPickup.shopPays')}</Text>
                     )}
                   </>
                 ) : (
                   <Text style={styles.error}>
                     {quote?.reason
-                      ? `Instant pickup unavailable (${String(quote.reason).replace(/_/g, ' ')})`
-                      : error || 'Instant pickup quote unavailable.'}
+                      ? t('opsApp.shop.returnPickup.instantUnavailable', {
+                          reason: String(quote.reason).replace(/_/g, ' '),
+                        })
+                      : error || t('opsApp.shop.returnPickup.quoteUnavailable')}
                   </Text>
                 )}
               </View>
@@ -262,10 +279,9 @@ export function ArrangeReturnPickupSheet({
             {(mode === 'manual' || quote?.available) ? (
               <View style={styles.switchCard}>
                 <View style={{ flex: 1, paddingRight: spacing.md }}>
-                  <Text style={styles.switchLabel}>Charge customer</Text>
+                  <Text style={styles.switchLabel}>{t('opsApp.shop.returnPickup.chargeCustomer')}</Text>
                   <Text style={styles.meta}>
-                    Customer must accept the fee (or cancel the return) before pickup. Off = shop
-                    bears the cost.
+                    {t('opsApp.shop.returnPickup.chargeHint')}
                   </Text>
                 </View>
                 <Switch
@@ -280,7 +296,7 @@ export function ArrangeReturnPickupSheet({
               <>
                 {chargeCustomer ? (
                   <Input
-                    label="Courier / pickup fee"
+                    label={t('opsApp.shop.returnPickup.courierFee')}
                     value={manualFee}
                     onChangeText={setManualFee}
                     placeholder="0.00"
@@ -288,25 +304,25 @@ export function ArrangeReturnPickupSheet({
                   />
                 ) : null}
                 <Input
-                  label="AWB / tracking number"
+                  label={t('opsApp.shop.returnPickup.awb')}
                   value={tracking}
                   onChangeText={setTracking}
-                  placeholder="Optional"
+                  placeholder={t('opsApp.shop.common.optional')}
                   autoCapitalize="characters"
                 />
                 <Input
-                  label="Notes"
+                  label={t('opsApp.shop.common.notes')}
                   value={notes}
                   onChangeText={setNotes}
-                  placeholder="Courier / self-collect notes"
+                  placeholder={t('opsApp.shop.returnPickup.courierNotesPlaceholder')}
                 />
               </>
             ) : (
               <Input
-                label="Notes (optional)"
+                label={t('opsApp.shop.returnPickup.notesOptional')}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Gate code, call on arrival…"
+                placeholder={t('opsApp.shop.returnPickup.notesPlaceholder')}
               />
             )}
 
@@ -318,7 +334,7 @@ export function ArrangeReturnPickupSheet({
 
           <View style={styles.footer}>
             <Button
-              label="Cancel"
+              label={t('common.cancel')}
               variant="soft"
               icon="x"
               disabled={busy}

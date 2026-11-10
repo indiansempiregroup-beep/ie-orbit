@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { CommonActions, useNavigation, useRoute } from '@react-navigation/native';
@@ -60,6 +61,7 @@ const StableBarcodeCamera = React.memo(function StableBarcodeCamera({
 });
 
 export function BarcodeScannerScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
@@ -104,15 +106,16 @@ export function BarcodeScannerScreen() {
           setAddedCount((count) => count + 1);
           setBillLines(basket.length);
           setMessage(
-            `Added ${response.data.name}${
-              line && line.quantity > 1 ? ` (×${line.quantity})` : ''
-            }. Point at the next product.`,
+            t('opsApp.shop.scanner.addedNext', {
+              name: response.data.name,
+              qty: line && line.quantity > 1 ? ` (×${line.quantity})` : '',
+            }),
           );
           return;
         }
         if (forAddMany) {
           if (hasBulkScanCode(code) || suppressCodeRef.current === code) {
-            setMessage('Already in this batch. Point at the next product.');
+            setMessage(t('opsApp.shop.scanner.alreadyInBatch'));
             return;
           }
           const response = await client.shop.enrichBarcode({
@@ -130,8 +133,8 @@ export function BarcodeScannerScreen() {
           setLastScanName(name);
           setMessage(
             result.added
-              ? `Added ${name}. Point at the next.`
-              : 'Already in this batch. Point at the next product.',
+              ? t('opsApp.shop.scanner.addedNextShort', { name })
+              : t('opsApp.shop.scanner.alreadyInBatch'),
           );
           return;
         }
@@ -243,9 +246,9 @@ export function BarcodeScannerScreen() {
         }
         const response = await client.shop.lookupBarcode({ business_id: businessId, code });
         setLastProduct(response.data);
-        setMessage(`Found: ${response.data.name}`);
+        setMessage(t('opsApp.shop.scanner.found', { name: response.data.name }));
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Barcode not found');
+        setMessage(err instanceof Error ? err.message : t('opsApp.shop.scanner.notFound'));
       } finally {
         busyRef.current = false;
       }
@@ -255,8 +258,8 @@ export function BarcodeScannerScreen() {
   if (!permission) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.title}>Camera</Text>
-        <Text style={styles.meta}>Checking camera permission…</Text>
+        <Text style={styles.title}>{t('opsApp.shop.scanner.camera')}</Text>
+        <Text style={styles.meta}>{t('opsApp.shop.scanner.checkingPermission')}</Text>
       </View>
     );
   }
@@ -264,12 +267,12 @@ export function BarcodeScannerScreen() {
   if (!permission.granted) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.title}>Camera scan</Text>
+        <Text style={styles.title}>{t('opsApp.shop.scanner.cameraScan')}</Text>
         <Text style={styles.meta}>
-          Allow camera access to scan product barcodes and RFID EPC labels.
+          {t('opsApp.shop.scanner.allowCameraExplain')}
         </Text>
         <Pressable style={styles.button} onPress={() => void requestPermission()}>
-          <Text style={styles.buttonText}>Allow camera</Text>
+          <Text style={styles.buttonText}>{t('opsApp.shop.scanner.allowCamera')}</Text>
         </Pressable>
       </View>
     );
@@ -288,36 +291,36 @@ export function BarcodeScannerScreen() {
         <View style={styles.statusPanel}>
           <Text style={styles.titleLight}>
             {forPos
-              ? 'Scan into sale basket'
+              ? t('opsApp.shop.scanner.titlePos')
               : forAddMany
-                ? 'Scan products into Add many'
+                ? t('opsApp.shop.scanner.titleAddMany')
                 : forAddManyRow
-                  ? 'Scan barcode into this row'
+                  ? t('opsApp.shop.scanner.titleRow')
                   : forAddProduct
-                    ? 'Scan barcode to add product'
-                    : 'Scan barcode / RFID'}
+                    ? t('opsApp.shop.scanner.titleAddProduct')
+                    : t('opsApp.shop.scanner.titleDefault')}
           </Text>
           {forPos || forAddMany ? (
             <Text style={styles.metaLight}>
-              Move to the next product after each add. Holding still won’t add the same item again.
+              {t('opsApp.shop.scanner.moveNext')}
             </Text>
           ) : null}
           {forPos ? (
             <Text style={styles.statLine}>
-              Scanned {addedCount} · bill has {billLines} line{billLines === 1 ? '' : 's'}
+              {t('opsApp.shop.scanner.scannedBill', { count: addedCount, lines: billLines })}
             </Text>
           ) : null}
           {forAddMany ? (
             <Text style={styles.statLine}>
-              Scanned {addedCount} product{addedCount === 1 ? '' : 's'}
+              {t('opsApp.shop.scanner.scannedProducts', { count: addedCount })}
             </Text>
           ) : null}
           {lastProduct ? (
             <Text style={styles.statLine}>
-              Last: {lastProduct.name} · {lastProduct.price}
+              {t('opsApp.shop.scanner.lastWithPrice', { name: lastProduct.name, price: lastProduct.price })}
             </Text>
           ) : null}
-          {forAddMany && lastScanName ? <Text style={styles.statLine}>Last: {lastScanName}</Text> : null}
+          {forAddMany && lastScanName ? <Text style={styles.statLine}>{t('opsApp.shop.scanner.last', { name: lastScanName })}</Text> : null}
           {message ? <Text style={styles.messageLine}>{message}</Text> : null}
           {forPos && lastProduct ? (
             <Pressable
@@ -327,10 +330,15 @@ export function BarcodeScannerScreen() {
                 setAddedCount((count) => count + 1);
                 setBillLines(basket.length);
                 const line = basket.find((row) => row.product.id === lastProduct.id);
-                setMessage(`Added another ${lastProduct.name}${line ? ` (×${line.quantity})` : ''}.`);
+                setMessage(
+                  t('opsApp.shop.scanner.addedAnother', {
+                    name: lastProduct.name,
+                    qty: line ? ` (×${line.quantity})` : '',
+                  }),
+                );
               }}
             >
-              <Text style={styles.buttonText}>Add another of last item</Text>
+              <Text style={styles.buttonText}>{t('opsApp.shop.scanner.addAnotherLast')}</Text>
             </Pressable>
           ) : null}
           <Pressable
@@ -343,7 +351,7 @@ export function BarcodeScannerScreen() {
               }
             }}
           >
-            <Text style={styles.buttonText}>{forPos ? 'Back to bill' : forAddMany ? 'Done' : 'Done'}</Text>
+            <Text style={styles.buttonText}>{forPos ? t('opsApp.shop.scanner.backToBill') : t('opsApp.shop.scanner.done')}</Text>
           </Pressable>
         </View>
       </View>

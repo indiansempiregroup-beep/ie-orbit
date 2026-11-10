@@ -1,4 +1,5 @@
 import type { BIReportsBundle, BIShopieReports } from '@ie-orbit/sdk';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatMoney } from '../../lib/currency';
@@ -17,23 +18,24 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 function AppointieReports({ data }: { data: BIReportsBundle }) {
+  const { t } = useTranslation();
   const operations = data.operations;
   const currency = data.revenue?.currency;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Appoint" subtitle="Bookings, revenue, and customer reporting." />
+      <SectionHeading title={t('public.nav.appoint')} subtitle={t('bi.appointReportsSub')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="Bookings" value={data.summary?.bookings ?? 0} />
-        <StatCard label="Completion rate" value={`${Math.round((data.summary?.completion_rate ?? 0) * 100)}%`} />
-        <StatCard label="Revenue" value={formatMoney(data.revenue?.estimated_revenue ?? 0, currency)} />
-        <StatCard label="Repeat rate" value={`${Math.round((data.growth?.repeat_rate ?? 0) * 100)}%`} />
-        <StatCard label="New customers" value={data.growth?.new_customers ?? 0} />
-        <StatCard label="No-shows" value={data.summary?.no_shows ?? 0} />
+        <StatCard label={t('bi.bookings')} value={data.summary?.bookings ?? 0} />
+        <StatCard label={t('bi.completionRate')} value={`${Math.round((data.summary?.completion_rate ?? 0) * 100)}%`} />
+        <StatCard label={t('bi.revenue')} value={formatMoney(data.revenue?.estimated_revenue ?? 0, currency)} />
+        <StatCard label={t('bi.repeatRate')} value={`${Math.round((data.growth?.repeat_rate ?? 0) * 100)}%`} />
+        <StatCard label={t('bi.newCustomers')} value={data.growth?.new_customers ?? 0} />
+        <StatCard label={t('bi.noShows')} value={data.summary?.no_shows ?? 0} />
       </div>
 
       {(data.insights ?? []).length ? (
         <Card>
-          <h3 style={{ marginTop: 0 }}>Insights</h3>
+          <h3 style={{ marginTop: 0 }}>{t('dashboard.insights')}</h3>
           <div style={{ display: 'grid', gap: 10 }}>
             {(data.insights ?? []).map((insight) => (
               <div key={`${insight.type}-${insight.title}`}>
@@ -46,24 +48,28 @@ function AppointieReports({ data }: { data: BIReportsBundle }) {
       ) : null}
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Trend</h3>
-        {data.trends?.rows?.length ? <TrendChart rows={data.trends.rows} /> : <p>No data in range.</p>}
+        <h3 style={{ marginTop: 0 }}>{t('bi.trend')}</h3>
+        {data.trends?.rows?.length ? <TrendChart rows={data.trends.rows} /> : <p>{t('bi.noDataInRange')}</p>}
       </Card>
 
       {(operations?.by_staff ?? []).length ? (
         <Card>
-          <h3 style={{ marginTop: 0 }}>Staff performance</h3>
+          <h3 style={{ marginTop: 0 }}>{t('bi.staffPerformance')}</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {(operations?.by_staff ?? []).map((row) => (
               <div key={row.staff_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{row.staff_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    {row.completed} completed · {row.cancelled} cancelled · {row.no_shows} no-show
+                    {t('bi.completedCancelledNoShow', {
+                      completed: row.completed,
+                      cancelled: row.cancelled,
+                      noShows: row.no_shows,
+                    })}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 700 }}>{row.bookings} bookings</div>
+                  <div style={{ fontWeight: 700 }}>{t('bi.bookingsN', { n: row.bookings })}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
                     {formatMoney(row.revenue, currency)}
                   </div>
@@ -78,22 +84,23 @@ function AppointieReports({ data }: { data: BIReportsBundle }) {
 }
 
 function ShopieReports({ data }: { data: BIShopieReports }) {
+  const { t } = useTranslation();
   const currency = data.currency ?? data.revenue?.currency ?? undefined;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Mart" subtitle="Orders, GMV, and shopper repeat for the last 30 days." />
+      <SectionHeading title={t('public.nav.mart')} subtitle={t('bi.martReportsSub')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="Orders" value={data.orders ?? 0} />
-        <StatCard label="GMV" value={formatMoney(data.gmv ?? 0, currency)} />
-        <StatCard label="Avg order value" value={formatMoney(data.avg_order_value ?? 0, currency)} />
-        <StatCard label="Repeat rate" value={`${Math.round((data.growth?.repeat_rate ?? 0) * 100)}%`} />
-        <StatCard label="New customers" value={data.growth?.new_customers ?? 0} />
-        <StatCard label="Returns" value={data.returns ?? 0} />
+        <StatCard label={t('bi.orders')} value={data.orders ?? 0} />
+        <StatCard label={t('bi.gmv')} value={formatMoney(data.gmv ?? 0, currency)} />
+        <StatCard label={t('bi.avgOrderValue')} value={formatMoney(data.avg_order_value ?? 0, currency)} />
+        <StatCard label={t('bi.repeatRate')} value={`${Math.round((data.growth?.repeat_rate ?? 0) * 100)}%`} />
+        <StatCard label={t('bi.newCustomers')} value={data.growth?.new_customers ?? 0} />
+        <StatCard label={t('bi.returns')} value={data.returns ?? 0} />
       </div>
 
       {(data.insights ?? []).length ? (
         <Card>
-          <h3 style={{ marginTop: 0 }}>Commerce insights</h3>
+          <h3 style={{ marginTop: 0 }}>{t('bi.commerceInsights')}</h3>
           <div style={{ display: 'grid', gap: 10 }}>
             {(data.insights ?? []).map((insight) => (
               <div key={`${insight.type}-${insight.title}`}>
@@ -106,7 +113,7 @@ function ShopieReports({ data }: { data: BIShopieReports }) {
       ) : null}
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Order trend</h3>
+        <h3 style={{ marginTop: 0 }}>{t('bi.orderTrend')}</h3>
         {data.trend?.length ? (
           <TrendChart
             rows={data.trend.map((row) => ({
@@ -117,7 +124,7 @@ function ShopieReports({ data }: { data: BIShopieReports }) {
             }))}
           />
         ) : (
-          <p>No data in range.</p>
+          <p>{t('bi.noDataInRange')}</p>
         )}
       </Card>
     </div>
@@ -125,7 +132,8 @@ function ShopieReports({ data }: { data: BIShopieReports }) {
 }
 
 export function BIReportsPage() {
-  usePageMeta({ title: 'BI Reports — Orbit' });
+  const { t } = useTranslation();
+  usePageMeta({ title: `${t('bi.pageReports')} — Orbit` });
   const { showAppointie, showShopie } = useBiProductVisibility('reports');
   const { product, setProduct, showSwitcher } = useBiProductTab(showAppointie, showShopie);
   const reportsQuery = useBIReportsQuery();
@@ -138,10 +146,9 @@ export function BIReportsPage() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card>
-        <h1 style={{ marginTop: 0 }}>BI Reports</h1>
+        <h1 style={{ marginTop: 0 }}>{t('bi.pageReports')}</h1>
         <p style={{ color: 'var(--muted-foreground)', marginBottom: showSwitcher ? 12 : undefined }}>
-          Combined reporting for the last 30 days
-          {showSwitcher ? '. Switch between Orbit Appoint and Orbit Mart.' : '.'}
+          {showSwitcher ? t('bi.reportsIntroSwitch') : t('bi.reportsIntro')}
         </p>
         <BiProductTabs
           showAppointie={showAppointie}
@@ -150,13 +157,13 @@ export function BIReportsPage() {
           onChange={setProduct}
         />
       </Card>
-      {reportsQuery.isLoading && !data ? <Card>Loading reports…</Card> : null}
+      {reportsQuery.isLoading && !data ? <Card>{t('bi.loadingReports')}</Card> : null}
       {product === 'appointie' && showAppointie && appointie ? <AppointieReports data={appointie} /> : null}
       {product === 'shopie' && showShopie && shopie ? <ShopieReports data={shopie} /> : null}
       {!reportsQuery.isLoading && !appointie && !shopie ? (
         <Card>
           <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
-            No reports for your subscribed products in this period yet.
+            {t('bi.reportsEmpty')}
           </p>
         </Card>
       ) : null}

@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -42,6 +43,7 @@ import {
   isVoucherFullyPaid,
   orderReturnWindow,
   saleInvoiceSourceLabel,
+  statusText,
   voucherAmount,
   voucherBalanceDue,
   voucherDisplayPaid,
@@ -66,6 +68,7 @@ export function SaleInvoiceDetailModal({
   onReturned?: () => Promise<void> | void;
   onVoid?: (voucher: ShopBooksVoucher) => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
@@ -118,11 +121,11 @@ export function SaleInvoiceDetailModal({
       setReturns(returnsRes.data ?? []);
       if (voucherRes?.data) setLocalVoucher(voucherRes.data);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to load return history'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.saleDetail.historyLoadFailed')), 'error');
     } finally {
       setLoadingExtra(false);
     }
-  }, [client, businessId, voucher?.linked_order, voucher?.id, toast]);
+  }, [client, businessId, voucher?.linked_order, voucher?.id, toast, t]);
 
   useEffect(() => {
     if (!visible || !voucher?.linked_order) return;
@@ -206,7 +209,7 @@ export function SaleInvoiceDetailModal({
     }, 0);
   }, [returnableLines, qtyByLine]);
 
-  const returnWindow = orderReturnWindow(order);
+  const returnWindow = orderReturnWindow(order, t);
   const canReturn =
     Boolean(voucher?.linked_order) &&
     !isVoidedVoucher(voucher?.status) &&
@@ -233,7 +236,7 @@ export function SaleInvoiceDetailModal({
       }))
       .filter((row) => row.quantity > 0);
     if (!lines.length) {
-      toast.push('Select at least one product quantity to return.', 'error');
+      toast.push(t('opsApp.shop.saleDetail.selectQty'), 'error');
       return;
     }
     setBusy(true);
@@ -254,8 +257,14 @@ export function SaleInvoiceDetailModal({
       const cnNumber = String(meta.books_credit_note_number || '');
       toast.push(
         cnNumber
-          ? `Return ${response.data.return_number} · GST credit note ${cnNumber}`
-          : `Return ${response.data.return_number} completed · ${formatMoney(response.data.refund_total)}`,
+          ? t('opsApp.shop.saleDetail.returnWithCreditNote', {
+              number: response.data.return_number,
+              cn: cnNumber,
+            })
+          : t('opsApp.shop.saleDetail.returnCompleted', {
+              number: response.data.return_number,
+              amount: formatMoney(response.data.refund_total),
+            }),
         'success',
       );
       setReturnMode(false);
@@ -264,7 +273,7 @@ export function SaleInvoiceDetailModal({
       await loadExtra();
       await onReturned?.();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't process this return. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.saleDetail.returnFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -283,19 +292,22 @@ export function SaleInvoiceDetailModal({
   const saleCustomer = localVoucher.customer
     ? loyaltyCustomers.find((row) => row.id === String(localVoucher.customer))
     : null;
-  const loyaltyHighlight = loyaltyBillHighlight({
-    enabled: loyaltyPrefs.enabled,
-    pointsEarned: bill.pointsEarned,
-    pointsToEarn: bill.pointsToEarn,
-    pointsReversed: bill.pointsReversed,
-    reversalReason: bill.reversalReason,
-    pointsBalance: saleCustomer ? Number(saleCustomer.loyalty_points ?? 0) : null,
-  });
+  const loyaltyHighlight = loyaltyBillHighlight(
+    {
+      enabled: loyaltyPrefs.enabled,
+      pointsEarned: bill.pointsEarned,
+      pointsToEarn: bill.pointsToEarn,
+      pointsReversed: bill.pointsReversed,
+      reversalReason: bill.reversalReason,
+      pointsBalance: saleCustomer ? Number(saleCustomer.loyalty_points ?? 0) : null,
+    },
+    t,
+  );
   const lines = Array.isArray(localVoucher.line_items) ? localVoucher.line_items : [];
   const meta =
     localVoucher.metadata && typeof localVoucher.metadata === 'object' ? localVoucher.metadata : {};
   const gstin = typeof meta.customer_gstin === 'string' ? meta.customer_gstin : '';
-  const sourceLabel = saleInvoiceSourceLabel(localVoucher, order);
+  const sourceLabel = saleInvoiceSourceLabel(localVoucher, order, t);
   const returnHistory = Array.isArray(meta.returns) ? meta.returns : [];
   const returnedTotal = Number(meta.returned_total ?? 0);
   const returnedTax = Number(meta.returned_tax_total ?? 0);
@@ -340,7 +352,7 @@ export function SaleInvoiceDetailModal({
                     .join(' · ')}
                 </Text>
               </View>
-              <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+              <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel={t('common.close')}>
                 <Feather name="x" size={18} color={colors.primaryForeground} />
               </Pressable>
             </View>
@@ -357,7 +369,9 @@ export function SaleInvoiceDetailModal({
                     { color: paid ? '#047857' : '#92400e' },
                   ]}
                 >
-                  {paid ? 'Paid' : `Due ${formatMoney(balance)}`}
+                  {paid
+                    ? t('shop.voucherDetail.paidStatus')
+                    : t('opsApp.shop.saleDetail.dueBadge', { amount: formatMoney(balance) })}
                 </Text>
               </View>
               {bill.paymentLabel ? (
@@ -386,7 +400,7 @@ export function SaleInvoiceDetailModal({
               ) : null}
               <View style={[detailStyles.heroBadge, detailStyles.heroBadgeMuted]}>
                 <Text style={[detailStyles.heroBadgeText, detailStyles.heroBadgeTextMuted]}>
-                  {gstin ? `B2B · ${gstin}` : 'B2C'}
+                  {gstin ? `${t('opsApp.shop.sale.b2b')} · ${gstin}` : t('opsApp.shop.sale.b2c')}
                 </Text>
               </View>
             </View>
@@ -394,12 +408,12 @@ export function SaleInvoiceDetailModal({
 
           <View style={detailStyles.payStrip}>
             <View style={detailStyles.payCell}>
-              <Text style={detailStyles.payLabel}>Received</Text>
+              <Text style={detailStyles.payLabel}>{t('shop.vouchers.summary.received')}</Text>
               <Text style={detailStyles.payValue}>{formatMoney(displayPaid)}</Text>
             </View>
             <View style={detailStyles.payDivider} />
             <View style={detailStyles.payCell}>
-              <Text style={detailStyles.payLabel}>Balance due</Text>
+              <Text style={detailStyles.payLabel}>{t('shop.vouchers.summary.balanceDue')}</Text>
               <Text style={[detailStyles.payValue, balance > 0 && { color: colors.warning }]}>
                 {formatMoney(balance)}
               </Text>
@@ -419,13 +433,15 @@ export function SaleInvoiceDetailModal({
               />
             ) : null}
 
-            <Text style={detailStyles.section}>Items · {lines.length}</Text>
+            <Text style={detailStyles.section}>
+              {t('opsApp.shop.booksDocDetail.itemsCount', { count: lines.length })}
+            </Text>
             {lines.length === 0 ? (
-              <Text style={detailStyles.meta}>No line items on this voucher.</Text>
+              <Text style={detailStyles.meta}>{t('shop.booksInvoiceDrawer.noLines')}</Text>
             ) : (
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const name = String(line.name || line.product_name || t('shop.booksDocDialog.itemFallback', { n: index + 1 }));
                 const productId = voucherLineProductId(line);
                 const productKey = String(line.product_id || name)
                   .trim()
@@ -449,9 +465,13 @@ export function SaleInvoiceDetailModal({
                       </Text>
                       <Text style={detailStyles.meta}>
                         {qty} × {formatMoney(rate)}
-                        {gst ? ` · GST ${gst}%${inclusive ? ' incl.' : ''}` : ''}
+                        {gst
+                          ? ` · ${t('opsApp.shop.booksDocDetail.gstPct', { rate: gst })}${
+                              inclusive ? ` ${t('opsApp.shop.purchaseDetail.inclShort')}` : ''
+                            }`
+                          : ''}
                         {alreadyReturned > 0
-                          ? ` · returned ${alreadyReturned}${
+                          ? ` · ${t('opsApp.shop.saleDetail.itemReturned', { count: alreadyReturned })}${
                               returnedAt ? ` · ${formatVoucherDateTime(returnedAt, returnedAt)}` : ''
                             }`
                           : ''}
@@ -486,7 +506,7 @@ export function SaleInvoiceDetailModal({
                       navigation.navigate('ShopProductAdd', { productId });
                     }}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${name}`}
+                    accessibilityLabel={t('opsApp.shop.booksDocDetail.openItem', { name })}
                   >
                     {body}
                   </Pressable>
@@ -495,13 +515,13 @@ export function SaleInvoiceDetailModal({
             )}
 
             <View style={detailStyles.totals}>
-              <Text style={[detailStyles.section, { marginTop: 0 }]}>Bill summary</Text>
+              <Text style={[detailStyles.section, { marginTop: 0 }]}>{t('opsApp.shop.saleDetail.billSummary')}</Text>
               <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>Items</Text>
+                <Text style={detailStyles.meta}>{t('shop.vouchers.summary.items')}</Text>
                 <Text style={detailStyles.meta}>{formatMoney(bill.merchandiseGross)}</Text>
               </View>
               <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>Product discount</Text>
+                <Text style={detailStyles.meta}>{t('shop.vouchers.summary.productDiscount')}</Text>
                 <Text style={detailStyles.meta}>
                   {bill.lineDiscountTotal > 0
                     ? `-${formatMoney(bill.lineDiscountTotal)}`
@@ -509,21 +529,23 @@ export function SaleInvoiceDetailModal({
                 </Text>
               </View>
               <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>Subtotal</Text>
+                <Text style={detailStyles.meta}>{t('shop.vouchers.summary.subtotal')}</Text>
                 <Text style={detailStyles.meta}>
                   {formatMoney(bill.merchandiseAfterLineDiscount)}
                 </Text>
               </View>
               {bill.billDiscount > 0 ? (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>Bill discount</Text>
+                  <Text style={detailStyles.meta}>{t('shop.vouchers.summary.billDiscount')}</Text>
                   <Text style={detailStyles.meta}>-{formatMoney(bill.billDiscount)}</Text>
                 </View>
               ) : null}
               {bill.couponDiscount > 0 ? (
                 <View style={detailStyles.totalRow}>
                   <Text style={detailStyles.meta}>
-                    Coupon{bill.couponCode ? ` ${bill.couponCode}` : ''}
+                    {bill.couponCode
+                      ? t('shop.vouchers.summary.couponNamed', { code: bill.couponCode })
+                      : t('shop.vouchers.summary.coupon')}
                   </Text>
                   <Text style={detailStyles.meta}>-{formatMoney(bill.couponDiscount)}</Text>
                 </View>
@@ -532,70 +554,72 @@ export function SaleInvoiceDetailModal({
                 <View style={detailStyles.totalRow}>
                   <Text style={detailStyles.meta}>
                     {loyaltyPrefs.enabled
-                      ? `Points used${bill.rewardPoints > 0 ? ` (${bill.rewardPoints})` : ''}`
-                      : 'Discount'}
+                      ? bill.rewardPoints > 0
+                        ? t('shop.vouchers.summary.pointsUsedCount', { count: bill.rewardPoints })
+                        : t('shop.vouchers.summary.pointsUsed')
+                      : t('shop.vouchers.summary.discount')}
                   </Text>
                   <Text style={detailStyles.meta}>-{formatMoney(bill.rewardDiscount)}</Text>
                 </View>
               ) : null}
               <View style={detailStyles.totalRow}>
-                <Text style={detailStyles.meta}>Taxable</Text>
+                <Text style={detailStyles.meta}>{t('shop.vouchers.summary.taxable')}</Text>
                 <Text style={detailStyles.meta}>{formatMoney(bill.taxableSubtotal)}</Text>
               </View>
               {bill.taxTotal > 0 ? (
                 bill.isInterstate || bill.igst > 0 ? (
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>IGST</Text>
+                    <Text style={detailStyles.meta}>{t('shop.vouchers.summary.igst')}</Text>
                     <Text style={detailStyles.meta}>{formatMoney(bill.igst || bill.taxTotal)}</Text>
                   </View>
                 ) : (
                   <>
                     <View style={detailStyles.totalRow}>
-                      <Text style={detailStyles.meta}>CGST</Text>
+                      <Text style={detailStyles.meta}>{t('shop.vouchers.summary.cgst')}</Text>
                       <Text style={detailStyles.meta}>{formatMoney(bill.cgst)}</Text>
                     </View>
                     <View style={detailStyles.totalRow}>
-                      <Text style={detailStyles.meta}>SGST</Text>
+                      <Text style={detailStyles.meta}>{t('shop.vouchers.summary.sgst')}</Text>
                       <Text style={detailStyles.meta}>{formatMoney(bill.sgst)}</Text>
                     </View>
                   </>
                 )
               ) : (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>Tax</Text>
+                  <Text style={detailStyles.meta}>{t('shop.vouchers.summary.tax')}</Text>
                   <Text style={detailStyles.meta}>{formatMoney(bill.taxTotal)}</Text>
                 </View>
               )}
               {returnedTotal > 0 ? (
                 <>
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Original invoice</Text>
+                    <Text style={detailStyles.meta}>{t('opsApp.shop.saleDetail.originalInvoice')}</Text>
                     <Text style={detailStyles.meta}>{formatMoney(localVoucher.total)}</Text>
                   </View>
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Returned</Text>
+                    <Text style={detailStyles.meta}>{t('shop.booksInvoiceDrawer.returned')}</Text>
                     <Text style={[detailStyles.meta, { color: colors.destructive }]}>
                       -{formatMoney(returnedTotal)}
                     </Text>
                   </View>
                   {returnedTax > 0 ? (
                     <View style={detailStyles.totalRow}>
-                      <Text style={detailStyles.meta}>Returned GST</Text>
+                      <Text style={detailStyles.meta}>{t('opsApp.shop.saleDetail.returnedGst')}</Text>
                       <Text style={detailStyles.meta}>-{formatMoney(returnedTax)}</Text>
                     </View>
                   ) : null}
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.payableLabel}>Net total</Text>
+                    <Text style={detailStyles.payableLabel}>{t('shop.booksInvoiceDrawer.netTotal')}</Text>
                     <Text style={detailStyles.payableValue}>{formatMoney(netTotal)}</Text>
                   </View>
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Net GST</Text>
+                    <Text style={detailStyles.meta}>{t('opsApp.shop.saleDetail.netGst')}</Text>
                     <Text style={detailStyles.meta}>{formatMoney(netTax)}</Text>
                   </View>
                 </>
               ) : (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.payableLabel}>Total</Text>
+                  <Text style={detailStyles.payableLabel}>{t('shop.vouchers.summary.total')}</Text>
                   <Text style={detailStyles.payableValue}>{formatMoney(displayTotal)}</Text>
                 </View>
               )}
@@ -622,7 +646,7 @@ export function SaleInvoiceDetailModal({
               ) : null}
               {returnMode && pendingReturnTotal > 0 ? (
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.dueLabel}>This return</Text>
+                  <Text style={detailStyles.dueLabel}>{t('opsApp.shop.saleDetail.thisReturn')}</Text>
                   <Text style={detailStyles.dueValue}>-{formatMoney(pendingReturnTotal)}</Text>
                 </View>
               ) : null}
@@ -631,7 +655,9 @@ export function SaleInvoiceDetailModal({
             {loadingExtra ? <ActivityIndicator color={colors.primary} /> : null}
             {!loadingExtra && (returns.length > 0 || returnHistory.length > 0) ? (
               <Text style={detailStyles.section}>
-                Returns · {returns.length || returnHistory.length}
+                {t('opsApp.shop.saleDetail.returnsCount', {
+                  count: returns.length || returnHistory.length,
+                })}
               </Text>
             ) : null}
             {returns.map((shopReturn) => {
@@ -657,14 +683,16 @@ export function SaleInvoiceDetailModal({
                     <Text style={detailStyles.lineTotal}>{formatMoney(shopReturn.refund_total)}</Text>
                   </View>
                   <Text style={detailStyles.meta}>
-                    {shopReturn.status}
+                    {statusText(shopReturn.status, t)}
                     {shopReturn.return_method
-                      ? ` · ${String(shopReturn.return_method).replace(/_/g, ' ')}`
+                      ? ` · ${t(`shop.returnsPage.methods.${shopReturn.return_method}`, {
+                          defaultValue: String(shopReturn.return_method).replace(/_/g, ' '),
+                        })}`
                       : ''}
                     {shopReturn.created_at
                       ? ` · ${formatVoucherDateTime(shopReturn.created_at, shopReturn.created_at)}`
                       : ''}
-                    {cnNumber ? ` · CN ${cnNumber}` : ''}
+                    {cnNumber ? ` · ${t('shop.booksInvoiceDrawer.creditNote', { number: cnNumber })}` : ''}
                   </Text>
                   {shopReturn.reason ? (
                     <Text style={detailStyles.meta}>{shopReturn.reason}</Text>
@@ -673,14 +701,14 @@ export function SaleInvoiceDetailModal({
                     <View style={detailStyles.returnActionRow}>
                       {canArrange ? (
                         <Button
-                          label="Arrange pickup"
+                          label={t('opsApp.shop.returns.arrangePickup')}
                           variant="secondary"
                           disabled={busy}
                           onPress={() => setArrangeReturnTarget(shopReturn)}
                         />
                       ) : null}
                       <Button
-                        label="Mark received"
+                        label={t('opsApp.shop.returns.markReceived')}
                         disabled={busy}
                         onPress={() =>
                           void (async () => {
@@ -689,11 +717,11 @@ export function SaleInvoiceDetailModal({
                               await client.shop.receiveReturn(shopReturn.id, {
                                 business_id: businessId,
                               });
-                              toast.push('Return received.', 'success');
+                              toast.push(t('opsApp.shop.saleDetail.returnReceived'), 'success');
                               await loadExtra();
                               await onReturned?.();
                             } catch (err) {
-                              toast.push(getApiErrorMessage(err, "Couldn't mark received."), 'error');
+                              toast.push(getApiErrorMessage(err, t('opsApp.shop.saleDetail.markReceivedFailed')), 'error');
                             } finally {
                               setBusy(false);
                             }
@@ -701,7 +729,7 @@ export function SaleInvoiceDetailModal({
                         }
                       />
                       <Button
-                        label="Reject"
+                        label={t('opsApp.shop.returns.reject')}
                         variant="secondary"
                         disabled={busy}
                         onPress={() =>
@@ -711,10 +739,10 @@ export function SaleInvoiceDetailModal({
                               await client.shop.rejectReturn(shopReturn.id, {
                                 business_id: businessId,
                               });
-                              toast.push('Return rejected.', 'success');
+                              toast.push(t('shop.returnsPage.rejected'), 'success');
                               await loadExtra();
                             } catch (err) {
-                              toast.push(getApiErrorMessage(err, "Couldn't reject return."), 'error');
+                              toast.push(getApiErrorMessage(err, t('opsApp.shop.saleDetail.rejectFailed')), 'error');
                             } finally {
                               setBusy(false);
                             }
@@ -729,7 +757,9 @@ export function SaleInvoiceDetailModal({
             {returns.length === 0
               ? returnHistory.map((raw, index) => {
                   const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                  const returnNumber = String(row.return_number || `Return ${index + 1}`);
+                  const returnNumber = String(
+                    row.return_number || t('shop.booksInvoiceDrawer.returnFallback', { n: index + 1 }),
+                  );
                   const cnNumber = String(row.credit_note_number || '');
                   const at =
                     typeof row.at === 'string' ? formatVoucherDateTime(row.at, row.at) : '';
@@ -744,9 +774,9 @@ export function SaleInvoiceDetailModal({
                       <Text style={detailStyles.meta}>
                         {[
                           at,
-                          cnNumber ? `CN ${cnNumber}` : '',
+                          cnNumber ? t('shop.booksInvoiceDrawer.creditNote', { number: cnNumber }) : '',
                           row.tax_total != null && row.tax_total !== ''
-                            ? `GST ${formatMoney(Number(row.tax_total))}`
+                            ? t('shop.booksInvoiceDrawer.gst', { amount: formatMoney(Number(row.tax_total)) })
                             : '',
                         ]
                           .filter(Boolean)
@@ -760,19 +790,20 @@ export function SaleInvoiceDetailModal({
             {!returnMode && returnWindow && voucher.linked_order ? (
               <Text style={detailStyles.meta}>
                 {returnWindow.open
-                  ? `Returns accepted until ${returnWindow.untilLabel || returnWindow.summary}.`
-                  : `${returnWindow.summary}. Returns are closed for this sale.`}
+                  ? t('opsApp.shop.saleDetail.acceptedUntil', {
+                      date: returnWindow.untilLabel || returnWindow.summary,
+                    })
+                  : t('opsApp.shop.saleDetail.closedForSale', { summary: returnWindow.summary })}
               </Text>
             ) : null}
 
             {returnMode ? (
               <View style={detailStyles.returnBox}>
-                <Text style={detailStyles.section}>Return items</Text>
+                <Text style={detailStyles.section}>{t('opsApp.shop.saleDetail.returnItems')}</Text>
                 <Text style={detailStyles.meta}>
-                  Select quantities to return. A GST credit note is posted automatically so tax
-                  reports stay correct.
+                  {t('opsApp.shop.saleDetail.selectQtyHint')}
                   {returnWindow?.untilLabel
-                    ? ` Returns accepted until ${returnWindow.untilLabel}.`
+                    ? ` ${t('opsApp.shop.saleDetail.acceptedUntil', { date: returnWindow.untilLabel })}`
                     : ''}
                 </Text>
                 {returnableLines.map(({ line, remaining, already, unitRefund }) => (
@@ -780,11 +811,17 @@ export function SaleInvoiceDetailModal({
                     <View style={{ flex: 1 }}>
                       <Text style={detailStyles.lineName}>{line.product_name}</Text>
                       <Text style={detailStyles.meta}>
-                        Sold {Number(line.quantity)} · returned {already} · left {remaining}
-                        {Number(line.tax_rate) ? ` · GST ${line.tax_rate}%` : ''}
+                        {t('opsApp.shop.saleDetail.soldReturnedLeft', {
+                          sold: Number(line.quantity),
+                          returned: already,
+                          left: remaining,
+                        })}
+                        {Number(line.tax_rate)
+                          ? ` · ${t('opsApp.shop.booksDocDetail.gstPct', { rate: line.tax_rate })}`
+                          : ''}
                       </Text>
                       <Text style={detailStyles.meta}>
-                        ~{formatMoney(unitRefund)} each
+                        {t('opsApp.shop.saleDetail.approxEach', { amount: formatMoney(unitRefund) })}
                       </Text>
                     </View>
                     <TextInput
@@ -799,15 +836,15 @@ export function SaleInvoiceDetailModal({
                 ))}
                 {pendingReturnTotal > 0 ? (
                   <View style={detailStyles.pendingReturn}>
-                    <Text style={detailStyles.payableLabel}>Return amount</Text>
+                    <Text style={detailStyles.payableLabel}>{t('opsApp.shop.saleDetail.returnAmount')}</Text>
                     <Text style={detailStyles.payableValue}>{formatMoney(pendingReturnTotal)}</Text>
                   </View>
                 ) : null}
                 <Input
-                  label="Reason (optional)"
+                  label={t('opsApp.shop.saleDetail.reasonOptional')}
                   value={reason}
                   onChangeText={setReason}
-                  placeholder="Damaged / customer return / wrong item"
+                  placeholder={t('opsApp.shop.saleDetail.reasonPlaceholder')}
                 />
                 <Pressable
                   style={detailStyles.restockRow}
@@ -818,21 +855,21 @@ export function SaleInvoiceDetailModal({
                     size={18}
                     color={restock ? colors.primary : colors.mutedForeground}
                   />
-                  <Text style={detailStyles.meta}>Restock returned items</Text>
+                  <Text style={detailStyles.meta}>{t('opsApp.shop.saleDetail.restockItems')}</Text>
                 </Pressable>
               </View>
             ) : null}
 
             {localVoucher.notes ? (
               <>
-                <Text style={detailStyles.section}>Notes</Text>
+                <Text style={detailStyles.section}>{t('opsApp.shop.common.notes')}</Text>
                 <Text style={detailStyles.meta}>{localVoucher.notes}</Text>
               </>
             ) : null}
 
             {!voucher.linked_order && !isVoidedVoucher(voucher.status) ? (
               <Text style={detailStyles.meta}>
-                Returns are available for POS counter sales linked to this invoice.
+                {t('opsApp.shop.saleDetail.returnsAvailableHint')}
               </Text>
             ) : null}
           </ScrollView>
@@ -842,7 +879,7 @@ export function SaleInvoiceDetailModal({
               <View style={detailStyles.footerPrimaryRow}>
                 <View style={{ flex: 1 }}>
                   <Button
-                    label="Cancel"
+                    label={t('common.cancel')}
                     variant="outline"
                     fullWidth
                     disabled={busy}
@@ -855,7 +892,11 @@ export function SaleInvoiceDetailModal({
                 </View>
                 <View style={{ flex: 1.4 }}>
                   <Button
-                    label={busy ? 'Processing…' : 'Confirm return'}
+                    label={
+                      busy
+                        ? t('shop.returnsPage.processing')
+                        : t('opsApp.shop.saleDetail.confirmReturn')
+                    }
                     loading={busy}
                     fullWidth
                     onPress={() => void submitReturn()}
@@ -881,7 +922,7 @@ export function SaleInvoiceDetailModal({
                     <View style={[detailStyles.actionIcon, detailStyles.actionIconPrimary]}>
                       <Feather name="share-2" size={18} color={colors.primaryForeground} />
                     </View>
-                    <Text style={detailStyles.actionLabel}>Share</Text>
+                    <Text style={detailStyles.actionLabel}>{t('opsApp.shop.saleDetail.share')}</Text>
                   </Pressable>
                 ) : null}
                 {canReturn ? (
@@ -892,7 +933,7 @@ export function SaleInvoiceDetailModal({
                     <View style={detailStyles.actionIcon}>
                       <Feather name="rotate-ccw" size={18} color={colors.primary} />
                     </View>
-                    <Text style={detailStyles.actionLabel}>Return</Text>
+                    <Text style={detailStyles.actionLabel}>{t('opsApp.shop.saleDetail.return')}</Text>
                   </Pressable>
                 ) : null}
                 {onOpenCompliance ? (
@@ -903,7 +944,7 @@ export function SaleInvoiceDetailModal({
                     <View style={detailStyles.actionIcon}>
                       <Feather name="shield" size={18} color={colors.primary} />
                     </View>
-                    <Text style={detailStyles.actionLabel}>GST</Text>
+                    <Text style={detailStyles.actionLabel}>{t('opsApp.shop.saleDetail.gst')}</Text>
                   </Pressable>
                 ) : null}
                 {onVoid && !isVoidedVoucher(localVoucher.status) ? (
@@ -914,7 +955,9 @@ export function SaleInvoiceDetailModal({
                     <View style={[detailStyles.actionIcon, detailStyles.actionIconDanger]}>
                       <Feather name="slash" size={18} color={colors.destructive} />
                     </View>
-                    <Text style={[detailStyles.actionLabel, { color: colors.destructive }]}>Void</Text>
+                    <Text style={[detailStyles.actionLabel, { color: colors.destructive }]}>
+                      {t('opsApp.shop.purchaseDetail.void')}
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -926,7 +969,11 @@ export function SaleInvoiceDetailModal({
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+        title={
+          docActions
+            ? t('shop.booksInvoiceDrawer.saleTitle', { number: docActions.number || '' })
+            : t('shop.booksInvoiceDrawer.saleInvoice')
+        }
       />
     </Modal>
     {businessId ? (

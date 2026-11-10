@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
@@ -10,14 +11,8 @@ import { MetricTile } from '../bi/components/MetricTile';
 import { TablePagination } from '../bi/components/TablePagination';
 import { BooksInvoiceDrawer } from './BooksInvoiceDrawer';
 
-const LOYALTY_ROW_HELP = {
-  points:
-    'Reward points on this sale or booking. Green (+) means you gave points; amber (−) means the customer used points to pay less.',
-  profit:
-    'What you kept from this shop sale after stock cost and discounts (including reward points used). Not shown for bookings.',
-} as const;
-
 export function ShopLoyaltyReportPage() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const { activeBusiness } = useWorkspace();
   const businessId = activeBusiness?.id || '';
@@ -48,6 +43,10 @@ export function ShopLoyaltyReportPage() {
     },
   });
 
+  const rowHelp = {
+    points: t('shop.loyaltyReport.rowHelpPoints'),
+    profit: t('shop.loyaltyReport.rowHelpProfit'),
+  };
   const summary = report.data?.summary;
   const ledger = report.data?.ledger ?? [];
   const ledgerTotal = report.data?.ledger_total ?? summary?.entry_count ?? 0;
@@ -56,14 +55,14 @@ export function ShopLoyaltyReportPage() {
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Reward points activity</h2>
+          <h2 style={{ margin: 0 }}>{t('shop.loyaltyReport.title')}</h2>
           <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-            Points given and used — click a shop invoice or booking to open it, or a books sale to preview the invoice.
+            {t('shop.loyaltyReport.subtitle')}
           </p>
         </div>
         <Link to="/customers">
           <Button type="button" variant="neutral">
-            Customers
+            {t('nav.customers')}
           </Button>
         </Link>
       </div>
@@ -71,7 +70,7 @@ export function ShopLoyaltyReportPage() {
       <Card>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            From
+            {t('shop.loyaltyReport.from')}
             <input
               type="date"
               value={dateFrom}
@@ -83,7 +82,7 @@ export function ShopLoyaltyReportPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            To
+            {t('shop.loyaltyReport.to')}
             <input
               type="date"
               value={dateTo}
@@ -95,7 +94,7 @@ export function ShopLoyaltyReportPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            Show
+            {t('shop.loyaltyReport.show')}
             <select
               value={direction}
               onChange={(event) => {
@@ -104,17 +103,17 @@ export function ShopLoyaltyReportPage() {
               }}
               style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb' }}
             >
-              <option value="all">All</option>
-              <option value="given">Given only</option>
-              <option value="used">Used only</option>
+              <option value="all">{t('shop.loyaltyReport.showAll')}</option>
+              <option value="given">{t('shop.loyaltyReport.givenOnly')}</option>
+              <option value="used">{t('shop.loyaltyReport.usedOnly')}</option>
             </select>
           </label>
           <label style={{ display: 'grid', gap: 6, fontSize: 13, flex: '1 1 180px' }}>
-            Search
+            {t('shop.loyaltyReport.search')}
             <input
               type="search"
               value={q}
-              placeholder="Customer or reason"
+              placeholder={t('shop.loyaltyReport.searchPlaceholder')}
               onChange={(event) => setQ(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -134,17 +133,17 @@ export function ShopLoyaltyReportPage() {
               void report.refetch();
             }}
           >
-            Apply
+            {t('shop.loyaltyReport.apply')}
           </Button>
         </div>
         {report.data && !report.data.enabled ? (
           <p style={{ margin: '12px 0 0', color: '#b45309', fontSize: 13 }}>
-            Reward points program is off for this business. Turn it on in product settings.
+            {t('shop.loyaltyReport.programOff')}
           </p>
         ) : null}
       </Card>
 
-      {report.isLoading ? <p>Loading…</p> : null}
+      {report.isLoading ? <p>{t('common.loading')}</p> : null}
       {report.error ? <p role="alert">{(report.error as Error).message}</p> : null}
 
       {summary ? (
@@ -156,12 +155,12 @@ export function ShopLoyaltyReportPage() {
           }}
         >
           {[
-            ['Points given', summary.points_earned],
-            ['Points used', summary.points_redeemed],
-            ['Net', summary.net_points],
-            ['Entries', summary.entry_count],
+            [t('shop.loyaltyReport.pointsGiven'), summary.points_earned],
+            [t('shop.loyaltyReport.pointsUsed'), summary.points_redeemed],
+            [t('shop.loyaltyReport.net'), summary.net_points],
+            [t('shop.loyaltyReport.entries'), summary.entry_count],
             [
-              'Money given as rewards',
+              t('shop.loyaltyReport.moneyGiven'),
               formatMoney(Number(summary.redeem_discount_total || 0), currency),
             ],
           ].map(([label, value]) => (
@@ -174,12 +173,18 @@ export function ShopLoyaltyReportPage() {
       ) : null}
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Ledger</h3>
+        <h3 style={{ marginTop: 0 }}>{t('shop.loyaltyReport.ledger')}</h3>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
-                {['When', 'Customer', 'What happened', 'Linked record', 'Points / profit'].map((label) => (
+                {[
+                  t('shop.loyaltyReport.colWhen'),
+                  t('shop.loyaltyReport.colCustomer'),
+                  t('shop.loyaltyReport.colWhatHappened'),
+                  t('shop.loyaltyReport.colLinked'),
+                  t('shop.loyaltyReport.colPointsProfit'),
+                ].map((label) => (
                   <th
                     key={label}
                     style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}
@@ -204,13 +209,13 @@ export function ShopLoyaltyReportPage() {
                     : null;
                 const recordText =
                   row.record_kind === 'order'
-                    ? `${sourceLabel || 'Shop invoice'} ${row.order_number || row.record_label || ''}`.trim()
+                    ? `${sourceLabel || t('shop.loyaltyReport.shopInvoice')} ${row.order_number || row.record_label || ''}`.trim()
                     : row.record_kind === 'booking'
-                      ? `Booking ${row.booking_number || row.record_label || ''}`.trim()
+                      ? `${t('shop.loyaltyReport.booking')} ${row.booking_number || row.record_label || ''}`.trim()
                       : row.record_kind === 'voucher'
                         ? row.voucher_type === 'purchase'
-                          ? `Books purchase ${row.voucher_number || ''}`.trim()
-                          : `${sourceLabel || 'Books sale'} ${row.voucher_number || ''}`.trim()
+                          ? `${t('shop.loyaltyReport.booksPurchase')} ${row.voucher_number || ''}`.trim()
+                          : `${sourceLabel || t('shop.loyaltyReport.booksSale')} ${row.voucher_number || ''}`.trim()
                         : '';
                 const openInvoice = Boolean(invoiceVoucherId) && !(isOnlineOrder && onlineOrderId);
                 const isBooking = row.record_kind === 'booking' || sourceLabel === 'Booking';
@@ -247,16 +252,16 @@ export function ShopLoyaltyReportPage() {
                     </td>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
                       {row.customer_id ? (
-                        <Link to={`/customers/${row.customer_id}`}>{row.customer_name || 'Customer'}</Link>
+                        <Link to={`/customers/${row.customer_id}`}>{row.customer_name || t('shop.loyaltyReport.customer')}</Link>
                       ) : (
                         row.customer_name || '—'
                       )}
                     </td>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
                       {isReversal
-                        ? row.reason || 'Points reversed'
+                        ? row.reason || t('shop.loyaltyReport.pointsReversed')
                         : bothPoints
-                          ? 'Points given and used'
+                          ? t('shop.loyaltyReport.pointsGivenAndUsed')
                           : row.reason || row.entry_type || '—'}
                     </td>
                     <td style={{ padding: '8px 6px', borderBottom: '1px solid #f3f4f6' }}>
@@ -296,11 +301,11 @@ export function ShopLoyaltyReportPage() {
                         }}
                       >
                         <MetricTile
-                          label="Points"
+                          label={t('shop.loyaltyReport.pointsLabel')}
                           icon="gift"
                           tone={pointsTone}
-                          help={LOYALTY_ROW_HELP.points}
-                          title={LOYALTY_ROW_HELP.points}
+                          help={rowHelp.points}
+                          title={rowHelp.points}
                           value={
                             <>
                               {earned > 0 ? <span style={{ color: '#047857' }}>+{earned}</span> : null}
@@ -314,7 +319,7 @@ export function ShopLoyaltyReportPage() {
                                 <span style={{ color: 'var(--muted-foreground)' }}> · </span>
                               ) : null}
                               {reversedPts > 0 ? (
-                                <span style={{ color: '#be123c' }}>−{reversedPts} rev</span>
+                                <span style={{ color: '#be123c' }}>−{reversedPts} {t('shop.loyaltyReport.reversedShort')}</span>
                               ) : null}
                               {!earned && !redeemedPts && !reversedPts ? '—' : null}
                             </>
@@ -322,11 +327,11 @@ export function ShopLoyaltyReportPage() {
                         />
                         {profitAmount != null ? (
                           <MetricTile
-                            label="Profit"
+                            label={t('shop.loyaltyReport.profitLabel')}
                             icon="trending-up"
                             tone={profitPositive ? 'positive' : 'negative'}
-                            help={LOYALTY_ROW_HELP.profit}
-                            title={LOYALTY_ROW_HELP.profit}
+                            help={rowHelp.profit}
+                            title={rowHelp.profit}
                             value={formatMoney(profitAmount, currency)}
                           />
                         ) : null}
@@ -338,7 +343,7 @@ export function ShopLoyaltyReportPage() {
               {!ledger.length ? (
                 <tr>
                   <td colSpan={5} style={{ padding: 12, color: 'var(--muted-foreground)' }}>
-                    No loyalty ledger entries match these filters.
+                    {t('shop.loyaltyReport.emptyLedger')}
                   </td>
                 </tr>
               ) : null}
@@ -349,7 +354,7 @@ export function ShopLoyaltyReportPage() {
           total={ledgerTotal}
           offset={offset}
           pageSize={pageSize}
-          label="entries"
+          label={t('shop.loyaltyReport.entriesLabel')}
           onPageChange={setOffset}
           onPageSizeChange={(size) => {
             setPageSize(size);

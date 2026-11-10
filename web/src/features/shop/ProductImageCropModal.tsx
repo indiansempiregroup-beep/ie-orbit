@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog } from '../../components/Dialog';
 import { Button } from '../../components/Button';
 
@@ -88,6 +89,7 @@ export function ProductImageCropModal({
   onConfirm,
   canRemoveBackground = false,
 }: Props) {
+  const { t } = useTranslation();
   const imgRef = useRef<HTMLImageElement | null>(null);
   const [crop, setCrop] = useState<ProductImageCropResult>({
     left: 0.12,
@@ -162,7 +164,7 @@ export function ProductImageCropModal({
   });
 
   return (
-    <Dialog open={open} onClose={onCancel} title="Adjust edges" labelledBy="product-image-crop">
+    <Dialog open={open} onClose={onCancel} title={t('shop.imageCrop.title')} labelledBy="product-image-crop">
       <div
         style={{
           display: 'flex',
@@ -172,7 +174,7 @@ export function ProductImageCropModal({
         }}
       >
         <p style={{ margin: 0, color: '#6b7280', fontSize: 14, flexShrink: 0 }}>
-          Pull any white corner to resize freely (any shape). Drag inside to move. Then Use crop.
+          {t('shop.imageCrop.lead')}
         </p>
         <div
           style={{
@@ -195,7 +197,7 @@ export function ProductImageCropModal({
           <img
             ref={imgRef}
             src={imageUrl}
-            alt="Crop preview"
+            alt={t('shop.imageCrop.previewAlt')}
             style={{
               display: 'block',
               width: '100%',
@@ -236,12 +238,12 @@ export function ProductImageCropModal({
                 checked={removeBackground}
                 onChange={(event) => setRemoveBackground(event.target.checked)}
               />
-              Remove background
+              {t('shop.imageCrop.removeBackground')}
             </label>
           ) : null}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Button type="button" variant="neutral" onClick={onCancel}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
@@ -249,7 +251,7 @@ export function ProductImageCropModal({
                 onConfirm(crop, { removeBackground: canRemoveBackground && removeBackground })
               }
             >
-              Use crop
+              {t('shop.imageCrop.use')}
             </Button>
           </div>
         </div>

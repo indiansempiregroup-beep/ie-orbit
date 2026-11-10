@@ -1,13 +1,15 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ShopVoucherForm } from './ShopVoucherForm';
 
 export function ShopPurchaseFormPage() {
+  const { t } = useTranslation();
   return (
     <ShopVoucherForm
       voucherType="purchase"
       backTo="/shop/books/purchase"
-      title="New purchase"
-      description="Record a supplier bill. Add lines, pick a supplier if on credit, and record payment made."
+      title={t('shop.voucherForm.purchaseTitle')}
+      description={t('shop.voucherForm.purchaseDescription')}
     />
   );
 }

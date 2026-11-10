@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { colors } from '../../theme/tokens';
 import { openInGoogleMaps } from '../../utils/openInGoogleMaps';
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export function DeliveryTrackingMap({ delivery }: Props) {
+  const { t } = useTranslation();
   const mapRef = useRef<MapView | null>(null);
   const { pickup, drop, rider, trail, points } = useMemo(
     () => deliveryMapGeometry(delivery),
@@ -44,15 +46,20 @@ export function DeliveryTrackingMap({ delivery }: Props) {
   if (!points.length) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Location unavailable</Text>
-        <Text style={styles.fallbackText}>Tracking updates will continue even when GPS is unavailable.</Text>
+        <Text style={styles.fallbackTitle}>{t('shop.deliveryMap.locationUnavailable')}</Text>
+        <Text style={styles.fallbackText}>{t('shop.deliveryMap.trackingContinues')}</Text>
       </View>
     );
   }
 
   const returnPickup = isReturnPickupLive(delivery);
-  const pickupTitle = returnPickup ? 'Customer' : 'Pickup';
-  const dropTitle = returnPickup ? 'Shop' : 'Drop-off';
+  const pickupTitle = returnPickup
+    ? t('opsApp.shop.common.customer')
+    : t('shop.deliveryMap.pickup');
+  const dropTitle = returnPickup
+    ? t('customerApp.returns.detail.shop')
+    : t('shop.deliveryMap.dropoff');
+  const riderName = delivery.rider?.name || t('shop.orders.detail.rider');
 
   const latitudes = points.map((point) => point.latitude);
   const longitudes = points.map((point) => point.longitude);
@@ -107,14 +114,14 @@ export function DeliveryTrackingMap({ delivery }: Props) {
       {rider ? (
         <Marker
           coordinate={rider}
-          title={delivery.rider?.name || 'Rider'}
-          description="Latest reported rider location"
+          title={riderName}
+          description={t('shop.deliveryMap.riderLatest')}
           pinColor={DELIVERY_MAP_COLORS.rider}
           onCalloutPress={() =>
-            void openInGoogleMaps(rider.latitude, rider.longitude, delivery.rider?.name || 'Rider')
+            void openInGoogleMaps(rider.latitude, rider.longitude, riderName)
           }
           onPress={() =>
-            void openInGoogleMaps(rider.latitude, rider.longitude, delivery.rider?.name || 'Rider')
+            void openInGoogleMaps(rider.latitude, rider.longitude, riderName)
           }
         />
       ) : null}

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { CompositeNavigationProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -30,14 +32,14 @@ type BookNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-function friendlyDate(dateKey: string) {
+function friendlyDate(dateKey: string, t: TFunction) {
   const [year, month, day] = dateKey.split('-').map(Number);
   const parsed = new Date(year, month - 1, day);
   if (Number.isNaN(parsed.getTime())) return dateKey;
   const today = formatDateKey(new Date());
   const tomorrow = formatDateKey(new Date(Date.now() + 86400000));
-  if (dateKey === today) return 'Today';
-  if (dateKey === tomorrow) return 'Tomorrow';
+  if (dateKey === today) return t('common.today');
+  if (dateKey === tomorrow) return t('customerApp.booking.tomorrow');
   return parsed.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
@@ -62,6 +64,7 @@ function RecapChip({
 }
 
 export function BookingScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<MainTabParamList, 'Book'>>();
   const navigation = useNavigation<BookNavigation>();
   const { user, refreshProfile } = useAuth();
@@ -102,13 +105,20 @@ export function BookingScreen() {
     () => services.filter((service) => selectedServiceIds.includes(service.id)),
     [services, selectedServiceIds],
   );
-  const steps = [
-    ...(needsLocation ? ['Location'] : []),
-    'Service',
-    'When',
-    'Review',
-    'Done',
+  const stepIds = [
+    ...(needsLocation ? ['location'] : []),
+    'service',
+    'when',
+    'review',
+    'done',
   ];
+  const stepLabels: Record<string, string> = {
+    location: t('customerApp.booking.stepLocation'),
+    service: t('customerApp.booking.stepService'),
+    when: t('customerApp.booking.stepWhen'),
+    review: t('customerApp.booking.stepReview'),
+    done: t('customerApp.booking.stepDone'),
+  };
   const serviceStep = needsLocation ? 1 : 0;
   const scheduleStep = serviceStep + 1;
   const reviewStep = scheduleStep + 1;
@@ -126,8 +136,11 @@ export function BookingScreen() {
   const serviceSummaryLabel = useMemo(() => {
     if (!selectedServices.length) return '';
     if (selectedServices.length === 1) return selectedServices[0].name;
-    return `${selectedServices[0].name} + ${selectedServices.length - 1} more`;
-  }, [selectedServices]);
+    return t('customerApp.booking.servicePlusMore', {
+      first: selectedServices[0].name,
+      n: selectedServices.length - 1,
+    });
+  }, [selectedServices, t]);
   const selectedOffice = useMemo(
     () => offices.find((office) => office.id === selectedBranchId) ?? null,
     [offices, selectedBranchId],
@@ -187,11 +200,11 @@ export function BookingScreen() {
         response.data.message ||
           (openSlots.length
             ? ''
-            : 'No timeslot available for this date. Try another day.'),
+            : t('customerApp.booking.noSlots')),
       );
       setSelectedSlot('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load availability.');
+      setError(err instanceof Error ? err.message : t('customerApp.booking.loadAvailabilityFailed'));
       setSlots([]);
       setAvailabilityMessage('');
     } finally {
@@ -277,15 +290,15 @@ export function BookingScreen() {
   async function confirmBooking() {
     if (!selectedServices.length || !selectedSlot) return;
     if (needsLocation && !selectedBranchId) {
-      setError('Select an office to continue.');
+      setError(t('customerApp.booking.selectOffice'));
       return;
     }
     if (!customerName.trim() || !customerPhone.trim()) {
-      setError('Add your phone number in Profile before booking.');
+      setError(t('customerApp.booking.addPhone'));
       return;
     }
     if (pointsToRedeem > 0 && pointsToRedeem < minRedeemPoints) {
-      setError(`Minimum redeem is ${minRedeemPoints} points.`);
+      setError(t('customerApp.booking.minRedeem', { n: minRedeemPoints }));
       return;
     }
     setLoading(true);
@@ -310,15 +323,15 @@ export function BookingScreen() {
         ...(pointsToRedeem > 0 ? { points_to_redeem: pointsToRedeem } : {}),
       });
       const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Booking is taking too long. Please try again.')), 45000);
+        setTimeout(() => reject(new Error(t('customerApp.booking.takingTooLong'))), 45000);
       });
       const response = await Promise.race([bookingRequest, timeout]);
       setBookingRef(response.data.booking_number || response.data.booking_id);
       setBookingId(response.data.booking_id);
       setStep(confirmedStep);
-      toast.push('Booking requested.', 'success');
+      toast.push(t('customerApp.booking.bookingRequested'), 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to request booking.');
+      setError(err instanceof Error ? err.message : t('customerApp.booking.requestFailed'));
     } finally {
       setLoading(false);
     }
@@ -345,10 +358,10 @@ export function BookingScreen() {
 
   function nextStep() {
     if (!canContinue) {
-      if (needsLocation && step === 0 && !selectedBranchId) setError('Select a location to continue.');
-      else if (step === serviceStep && !selectedServices.length) setError('Select at least one service.');
-      else if (step === scheduleStep && !selectedSlot) setError('Select a time to continue.');
-      else if (step === reviewStep) setError('Add your phone number in Profile before booking.');
+      if (needsLocation && step === 0 && !selectedBranchId) setError(t('customerApp.booking.selectLocation'));
+      else if (step === serviceStep && !selectedServices.length) setError(t('customerApp.booking.selectService'));
+      else if (step === scheduleStep && !selectedSlot) setError(t('customerApp.booking.selectTime'));
+      else if (step === reviewStep) setError(t('customerApp.booking.addPhone'));
       return;
     }
     setError('');
@@ -390,19 +403,22 @@ export function BookingScreen() {
 
   const headerCopy =
     needsLocation && step === 0
-      ? { title: 'Where would you like to visit?', subtitle: 'Choose a location for this appointment.' }
+      ? { title: t('customerApp.booking.whereTitle'), subtitle: t('customerApp.booking.whereSubtitle') }
       : step === serviceStep
-        ? { title: 'What can we help with?', subtitle: 'Tap to add one or more services.' }
+        ? { title: t('customerApp.booking.whatTitle'), subtitle: t('customerApp.booking.whatSubtitle') }
         : step === scheduleStep
-          ? { title: 'When works for you?', subtitle: `${totalDurationMinutes || 0} min visit · pick a day, then a time.` }
-          : { title: 'Does this look right?', subtitle: 'Pay at the venue after your visit.' };
+          ? {
+              title: t('customerApp.booking.whenTitle'),
+              subtitle: t('customerApp.booking.whenSubtitle', { n: totalDurationMinutes || 0 }),
+            }
+          : { title: t('customerApp.booking.reviewTitle'), subtitle: t('customerApp.booking.reviewSubtitle') };
 
   const ctaLabel =
     step === reviewStep
-      ? `Confirm · ${formatMoney(payableTotal, bookingCurrency)}`
+      ? t('customerApp.booking.confirmCta', { amount: formatMoney(payableTotal, bookingCurrency) })
       : step === scheduleStep
-        ? 'Review booking'
-        : 'Continue';
+        ? t('customerApp.booking.reviewCta')
+        : t('customerApp.booking.continue');
 
   if (step === confirmedStep) {
     return (
@@ -410,11 +426,14 @@ export function BookingScreen() {
         <View style={styles.confirmIcon}>
           <Feather name="check" size={36} color={colors.success} />
         </View>
-        <Text style={styles.confirmTitle}>You're booked</Text>
+        <Text style={styles.confirmTitle}>{t('customerApp.booking.youreBooked')}</Text>
         <Text style={styles.confirmSubtitle}>
           {selectedSlot
-            ? `${friendlyDate(formatDateKey(new Date(selectedSlot)))} at ${formatTime(selectedSlot)}`
-            : 'Your appointment is confirmed.'}
+            ? t('customerApp.booking.dateAtTime', {
+                date: friendlyDate(formatDateKey(new Date(selectedSlot)), t),
+                time: formatTime(selectedSlot),
+              })
+            : t('customerApp.booking.appointmentConfirmed')}
         </Text>
         <Card style={styles.summaryCard}>
           <View style={styles.confirmServiceHeader}>
@@ -422,35 +441,40 @@ export function BookingScreen() {
               <Feather name="calendar" size={20} color={primary} />
             </View>
             <View style={styles.confirmServiceCopy}>
-              <Text style={styles.confirmServiceName}>{serviceSummaryLabel || 'Services'}</Text>
+              <Text style={styles.confirmServiceName}>{serviceSummaryLabel || t('customerApp.booking.services')}</Text>
             </View>
           </View>
           {selectedOffice ? (
-            <SummaryRow label="Location" value={selectedOffice.formatted_address || selectedOffice.display_name} />
+            <SummaryRow label={t('customerApp.booking.location')} value={selectedOffice.formatted_address || selectedOffice.display_name} />
           ) : null}
-          <SummaryRow label="Date" value={formatDate(selectedSlot)} />
-          <SummaryRow label="Time" value={formatTime(selectedSlot)} />
-          <SummaryRow label="Reference" value={bookingRef} />
-          <SummaryRow label="Payment" value="Pay at venue" />
+          <SummaryRow label={t('customerApp.booking.date')} value={formatDate(selectedSlot)} />
+          <SummaryRow label={t('customerApp.booking.time')} value={formatTime(selectedSlot)} />
+          <SummaryRow label={t('customerApp.booking.reference')} value={bookingRef} />
+          <SummaryRow
+            label={t('customerApp.booking.payment')}
+            value={t('customerApp.booking.payAtVenue')}
+          />
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalLabel}>{t('customerApp.booking.total')}</Text>
             <Text style={[styles.totalValue, { color: primary }]}>
               {formatMoney(payableTotal, bookingCurrency)}
             </Text>
           </View>
           {bookingEarnPoints > 0 ? (
-            <Text style={styles.earnHint}>You'll earn {bookingEarnPoints} pts after this visit.</Text>
+            <Text style={styles.earnHint}>
+              {t('customerApp.booking.earnHint', { n: bookingEarnPoints })}
+            </Text>
           ) : null}
         </Card>
         {bookingId ? (
           <Button
-            label="View appointment"
+            label={t('customerApp.booking.viewAppointment')}
             fullWidth
             primaryColor={primary}
             onPress={() => navigation.navigate('BookingDetail', { bookingId })}
           />
         ) : null}
-        <Button label="Book another" variant="outline" fullWidth onPress={resetFlow} />
+        <Button label={t('customerApp.booking.bookAnother')} variant="outline" fullWidth onPress={resetFlow} />
       </View>
     );
   }
@@ -466,7 +490,7 @@ export function BookingScreen() {
             <Pressable
               style={styles.backBtn}
               onPress={() => setStep((current) => Math.max(0, current - 1))}
-              accessibilityLabel="Back"
+              accessibilityLabel={t('customerApp.booking.back')}
             >
               <Feather name="arrow-left" size={18} color={colors.foreground} />
             </Pressable>
@@ -475,7 +499,7 @@ export function BookingScreen() {
           )}
           <View style={styles.progressWrap}>
             <View style={[styles.progressRow, { maxWidth: Math.min(56 + progressCount * 72, 280) }]}>
-              {steps.slice(0, progressCount).map((name, index) => {
+              {stepIds.slice(0, progressCount).map((name, index) => {
                 const done = index < step;
                 const active = index === step;
                 return (
@@ -495,7 +519,11 @@ export function BookingScreen() {
               })}
             </View>
             <Text style={styles.stepMeta}>
-              {steps[step]} · {step + 1} of {progressCount}
+              {t('customerApp.booking.stepMeta', {
+                name: stepLabels[stepIds[step]] ?? '',
+                current: step + 1,
+                total: progressCount,
+              })}
             </Text>
           </View>
         </View>
@@ -520,7 +548,7 @@ export function BookingScreen() {
             {step > scheduleStep && selectedSlot ? (
               <RecapChip
                 icon="clock"
-                label={`${friendlyDate(date)} · ${formatTime(selectedSlot)}`}
+                label={`${friendlyDate(date, t)} · ${formatTime(selectedSlot)}`}
                 onPress={() => setStep(scheduleStep)}
               />
             ) : null}
@@ -554,13 +582,15 @@ export function BookingScreen() {
                     <View style={styles.optionTitleRow}>
                       <Text style={styles.optionTitle}>{office.display_name}</Text>
                       {office.is_primary ? (
-                        <Text style={[styles.primaryBadge, { color: primary }]}>Primary</Text>
+                        <Text style={[styles.primaryBadge, { color: primary }]}>
+                          {t('customerApp.booking.primary')}
+                        </Text>
                       ) : null}
                     </View>
                     <Text style={styles.optionMeta}>
                       {office.formatted_address ||
                         [office.address_line1, office.city, office.state].filter(Boolean).join(', ') ||
-                        'Address coming soon'}
+                        t('customerApp.booking.addressSoon')}
                     </Text>
                   </View>
                   <View style={[styles.radio, selected && { borderColor: primary, backgroundColor: primary }]}>
@@ -583,10 +613,12 @@ export function BookingScreen() {
         {step === scheduleStep ? (
           <>
             <View style={styles.scheduleHead}>
-              <Text style={styles.sectionLabel}>Date</Text>
+              <Text style={styles.sectionLabel}>{t('customerApp.booking.date')}</Text>
               <Pressable onPress={() => setShowFullCalendar((value) => !value)} hitSlop={8}>
                 <Text style={[styles.calendarToggle, { color: primary }]}>
-                  {showFullCalendar ? 'Hide calendar' : 'More dates'}
+                  {showFullCalendar
+                    ? t('customerApp.booking.hideCalendar')
+                    : t('customerApp.booking.moreDates')}
                 </Text>
               </Pressable>
             </View>
@@ -600,9 +632,9 @@ export function BookingScreen() {
               onSelect={setSelectedSlot}
               loading={loading}
               emptyMessage={
-                availabilityMessage || 'No timeslot available for this date. Try another day.'
+                availabilityMessage || t('customerApp.booking.noSlots')
               }
-              label="Available times"
+              label={t('customerApp.booking.availableTimes')}
               primaryColor={primary}
             />
           </>
@@ -611,10 +643,11 @@ export function BookingScreen() {
         {step === reviewStep && selectedServices.length ? (
           <>
             <Card>
-              <Text style={styles.ticketKicker}>Appointment</Text>
+              <Text style={styles.ticketKicker}>{t('customerApp.booking.appointment')}</Text>
               <Text style={styles.ticketTitle}>{serviceSummaryLabel}</Text>
               <Text style={styles.ticketWhen}>
-                {friendlyDate(date)} · {formatTime(selectedSlot)} · {totalDurationMinutes} min
+                {friendlyDate(date, t)} · {formatTime(selectedSlot)} ·{' '}
+                {t('bookings.minutesShort', { n: totalDurationMinutes })}
               </Text>
               {selectedServices.map((service, index) => {
                 const offsetMinutes = selectedServices
@@ -634,7 +667,7 @@ export function BookingScreen() {
                       <Text style={styles.optionMeta}>
                         {itemStart && itemEnd
                           ? `${formatTime(itemStart.toISOString())} – ${formatTime(itemEnd.toISOString())}`
-                          : `${service.duration_minutes} min`}
+                          : t('bookings.minutesShort', { n: service.duration_minutes })}
                       </Text>
                     </View>
                     <Text style={styles.timelinePrice}>
@@ -645,7 +678,7 @@ export function BookingScreen() {
               })}
               <View style={styles.divider} />
               <SummaryRow
-                label="Location"
+                label={t('customerApp.booking.location')}
                 value={
                   selectedOffice?.display_name ??
                   bootstrap?.business.display_name ??
@@ -653,21 +686,26 @@ export function BookingScreen() {
                   '—'
                 }
               />
-              <SummaryRow label="Payment" value="Pay at venue" />
+              <SummaryRow
+            label={t('customerApp.booking.payment')}
+            value={t('customerApp.booking.payAtVenue')}
+          />
               {pointsToRedeem > 0 ? (
                 <SummaryRow
-                  label="Points discount"
+                  label={t('customerApp.booking.pointsDiscount')}
                   value={`-${formatMoney(redeemDiscount, bookingCurrency)}`}
                 />
               ) : null}
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Due at venue</Text>
+                <Text style={styles.totalLabel}>{t('customerApp.booking.dueAtVenue')}</Text>
                 <Text style={[styles.totalValue, { color: primary }]}>
                   {formatMoney(payableTotal, bookingCurrency)}
                 </Text>
               </View>
               {bookingEarnPoints > 0 ? (
-                <Text style={styles.earnHint}>You'll earn {bookingEarnPoints} pts after this visit.</Text>
+                <Text style={styles.earnHint}>
+              {t('customerApp.booking.earnHint', { n: bookingEarnPoints })}
+            </Text>
               ) : null}
             </Card>
 
@@ -675,10 +713,13 @@ export function BookingScreen() {
               <Card>
                 <View style={styles.loyaltyHead}>
                   <View>
-                    <Text style={styles.sectionLabel}>Reward points</Text>
+                    <Text style={styles.sectionLabel}>{t('customerApp.booking.rewardPoints')}</Text>
                     <Text style={styles.optionMeta}>
-                      Balance {loyaltyBalance} pts · {pointsPerCurrency} pts ={' '}
-                      {formatMoney(1, bookingCurrency)}
+                      {t('customerApp.booking.balanceRate', {
+                        balance: loyaltyBalance,
+                        rate: pointsPerCurrency,
+                        amount: formatMoney(1, bookingCurrency),
+                      })}
                     </Text>
                   </View>
                   {maxRedeemablePoints >= minRedeemPoints ? (
@@ -692,7 +733,7 @@ export function BookingScreen() {
                       ]}
                     >
                       <Text style={[styles.useMaxText, { color: primary }]}>
-                        {pointsToRedeem > 0 ? 'Remove' : 'Use max'}
+                        {pointsToRedeem > 0 ? t('customerApp.booking.remove') : t('customerApp.booking.useMax')}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -712,7 +753,9 @@ export function BookingScreen() {
                       >
                         <Feather name="minus" size={16} color={colors.foreground} />
                       </Pressable>
-                      <Text style={styles.redeemValue}>{pointsToRedeem} pts</Text>
+                      <Text style={styles.redeemValue}>
+                        {t('customerApp.booking.pointsValue', { n: pointsToRedeem })}
+                      </Text>
                       <Pressable
                         style={styles.redeemBtn}
                         onPress={() =>
@@ -727,12 +770,14 @@ export function BookingScreen() {
                       </Pressable>
                     </View>
                     {pointsToRedeem > 0 ? (
-                      <Text style={styles.optionMeta}>Saves {formatMoney(redeemDiscount, bookingCurrency)}</Text>
+                      <Text style={styles.optionMeta}>
+                        {t('customerApp.booking.saves', { amount: formatMoney(redeemDiscount, bookingCurrency) })}
+                      </Text>
                     ) : null}
                   </>
                 ) : (
                   <Text style={styles.optionMeta}>
-                    Earn points on completed visits. You need at least {minRedeemPoints} pts to redeem.
+                    {t('customerApp.booking.earnPointsHint', { n: minRedeemPoints })}
                   </Text>
                 )}
               </Card>
@@ -740,22 +785,22 @@ export function BookingScreen() {
 
             {bootstrap?.business.cancellation_policy ? (
               <Card>
-                <Text style={styles.sectionLabel}>Cancellation</Text>
+                <Text style={styles.sectionLabel}>{t('customerApp.booking.cancellation')}</Text>
                 <Text style={styles.policyText}>{bootstrap.business.cancellation_policy}</Text>
               </Card>
             ) : null}
 
             <Input
-              label="Notes"
+              label={t('customerApp.booking.notes')}
               optional
               value={notes}
               onChangeText={setNotes}
-              placeholder="Allergies, preferences, parking notes…"
+              placeholder={t('customerApp.booking.notesPlaceholder')}
               multiline
               style={{ minHeight: 72, textAlignVertical: 'top' }}
             />
             {!customerPhone.trim() ? (
-              <Text style={styles.error}>Add your phone number in Profile before booking.</Text>
+              <Text style={styles.error}>{t('customerApp.booking.addPhone')}</Text>
             ) : null}
           </>
         ) : null}
@@ -771,7 +816,7 @@ export function BookingScreen() {
                 {serviceSummaryLabel}
               </Text>
               <Text style={styles.cartSubtitle}>
-                {totalDurationMinutes} min
+                {t('bookings.minutesShort', { n: totalDurationMinutes })}
                 {selectedSlot && step > scheduleStep ? ` · ${formatTime(selectedSlot)}` : ''}
               </Text>
             </View>

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
 import { Download, Eye, Printer, RefreshCw, Share2, SlidersHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { getI18nInstance } from '@ie-orbit/i18n';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Dialog } from '../../components/Dialog';
@@ -19,18 +21,23 @@ import { useShopBooksReport } from './shopHooks';
 
 type SaleSource = 'pos' | 'online' | 'booking';
 
-const SALE_SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'All sources' },
-  { value: 'pos', label: 'POS' },
-  { value: 'online', label: 'Online Orders' },
-  { value: 'booking', label: 'Bookings' },
-];
+/** Module-level helpers translate through the shared i18n instance (components re-render on language change). */
+function rt(key: string, options?: Record<string, unknown>): string {
+  return String(getI18nInstance().t(`shop.reportsPage.${key}`, options));
+}
 
-const SALE_SOURCE_LABELS: Record<SaleSource, string> = {
-  pos: 'POS',
-  online: 'Online',
-  booking: 'Booking',
-};
+function saleSourceOptions(): Array<{ value: string; label: string }> {
+  return [
+    { value: '', label: rt('sourceAll') },
+    { value: 'pos', label: rt('sourceOptions.pos') },
+    { value: 'online', label: rt('sourceOptions.online') },
+    { value: 'booking', label: rt('sourceOptions.booking') },
+  ];
+}
+
+function saleSourceLabel(source: SaleSource): string {
+  return rt(`sourceLabels.${source}`);
+}
 
 const SALE_SOURCE_TONES: Record<SaleSource, { bg: string; text: string }> = {
   pos: { bg: '#e0f2fe', text: '#0369a1' },
@@ -44,13 +51,13 @@ function parseSaleSource(value: unknown): SaleSource | null {
   return null;
 }
 
-const REPORT_TABS: Array<{ slug: ShopBooksReportSlug; label: string; description: string }> = [
-  { slug: 'sales', label: 'Sales', description: 'GST sales summary for the period' },
-  { slug: 'purchase', label: 'Purchase', description: 'GST purchase summary for the period' },
-  { slug: 'daybook', label: 'Daybook', description: 'Every voucher, chronologically' },
-  { slug: 'gstr1', label: 'GSTR-1', description: 'Outward supplies for GST return filing' },
-  { slug: 'gstr3b', label: 'GSTR-3B', description: 'Summary GST return' },
-  { slug: 'pnl', label: 'P&L', description: 'Profit and loss for the period' },
+const REPORT_TABS: Array<{ slug: ShopBooksReportSlug }> = [
+  { slug: 'sales' },
+  { slug: 'purchase' },
+  { slug: 'daybook' },
+  { slug: 'gstr1' },
+  { slug: 'gstr3b' },
+  { slug: 'pnl' },
 ];
 
 /** Voucher types that make up each report's underlying records. Undefined means every type. */
@@ -61,32 +68,36 @@ const RECORD_TYPES: Partial<Record<ShopBooksReportSlug, string[]>> = {
   pnl: ['sale', 'credit_note', 'other_income', 'purchase', 'debit_note', 'expense'],
 };
 
-const METRIC_LABELS: Record<string, string> = {
-  taxable_value: 'Taxable value',
-  cgst: 'CGST',
-  sgst: 'SGST',
-  igst: 'IGST',
-  tax_total: 'Total GST',
-  total: 'Grand total',
-  sales: 'Sales',
-  credit_notes: 'Less: credit notes',
-  other_income: 'Other income',
-  purchases: 'Purchases',
-  debit_notes: 'Less: debit notes',
-  operating_expenses: 'Operating expenses',
-};
+const METRIC_KEYS = [
+  'taxable_value',
+  'cgst',
+  'sgst',
+  'igst',
+  'tax_total',
+  'total',
+  'sales',
+  'credit_notes',
+  'other_income',
+  'purchases',
+  'debit_notes',
+  'operating_expenses',
+];
 
-const VOUCHER_TYPE_LABELS: Record<string, string> = {
-  sale: 'Sale',
-  purchase: 'Purchase',
-  credit_note: 'Credit note',
-  debit_note: 'Debit note',
-  payment_in: 'Payment in',
-  payment_out: 'Payment out',
-  expense: 'Expense',
-  other_income: 'Other income',
-  transfer: 'Transfer',
-};
+const VOUCHER_TYPE_KEYS = [
+  'sale',
+  'purchase',
+  'credit_note',
+  'debit_note',
+  'payment_in',
+  'payment_out',
+  'expense',
+  'other_income',
+  'transfer',
+];
+
+function voucherTypeLabel(kind: string): string | undefined {
+  return VOUCHER_TYPE_KEYS.includes(kind) ? rt(`voucherTypes.${kind}`) : undefined;
+}
 
 /** Invoice-style docs that support HTML view / PDF / share links. */
 const DOCUMENT_KINDS = new Set(['sale', 'credit_note', 'debit_note']);
@@ -97,20 +108,17 @@ function docKindFor(voucherType: string): string | null {
 }
 
 function documentTitle(kind: string, number?: string) {
-  const label = VOUCHER_TYPE_LABELS[kind] ?? 'Document';
+  const label = voucherTypeLabel(kind) ?? rt('document');
   return number ? `${label} ${number}` : label;
 }
 
 type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
-const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
-  { value: 'date_desc', label: 'Newest first' },
-  { value: 'date_asc', label: 'Oldest first' },
-  { value: 'amount_desc', label: 'Highest amount' },
-  { value: 'amount_asc', label: 'Lowest amount' },
-];
+const SORT_KEYS: SortKey[] = ['date_desc', 'date_asc', 'amount_desc', 'amount_asc'];
 
 const PAGE_SIZE = 25;
+
+const STATUS_KEYS = ['confirmed', 'posted', 'void', 'draft'];
 
 const STATUS_TONES: Record<string, { bg: string; text: string }> = {
   confirmed: { bg: '#dcfce7', text: '#166534' },
@@ -195,7 +203,13 @@ function toIsoDate(date: Date) {
 }
 
 function labelFor(key: string) {
-  return METRIC_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return METRIC_KEYS.includes(key)
+    ? rt(`metrics.${key}`)
+    : key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function statusLabel(status: string) {
+  return STATUS_KEYS.includes(status) ? rt(`statuses.${status}`) : labelFor(status);
 }
 
 /** Voucher dates are plain `YYYY-MM-DD`, so they are read as local days to avoid UTC drift. */
@@ -218,9 +232,9 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
     number: String(row.voucher_number ?? '—'),
     date: String(row.voucher_date ?? ''),
     type,
-    typeLabel: VOUCHER_TYPE_LABELS[type] ?? labelFor(type || 'entry'),
+    typeLabel: voucherTypeLabel(type) ?? labelFor(type || 'entry'),
     docKind: docKindFor(type),
-    party: String(row.party ?? row.cash_account ?? 'Cash / walk-in'),
+    party: String(row.party ?? row.cash_account ?? rt('cashWalkIn')),
     status: String(row.status ?? '').toLowerCase(),
     total: num(row.total),
     paid: row.amount_paid == null ? null : num(row.amount_paid),
@@ -250,7 +264,7 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     type: invoiceType,
     typeLabel: invoiceType,
     docKind: docKindFor(voucherType),
-    party: String(row.customer_name ?? 'Walk-in / B2C'),
+    party: String(row.customer_name ?? rt('walkInB2c')),
     status: 'confirmed',
     total: num(row.total),
     paid: null,
@@ -302,7 +316,7 @@ function recordExportRow(record: ReportRecord) {
     date: record.date,
     number: record.number,
     type: record.typeLabel,
-    source: record.saleSource ? SALE_SOURCE_LABELS[record.saleSource] : '',
+    source: record.saleSource ? saleSourceLabel(record.saleSource) : '',
     party: record.party,
     status: record.status,
     total: record.total,
@@ -374,6 +388,9 @@ function buildReportCsv(input: {
 }
 
 export function ShopBooksReportsPage() {
+  const { t } = useTranslation();
+  const tr = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.reportsPage.${key}`, options));
   const workspace = useWorkspace();
   const auth = useAuthContext();
   const client = useApiClient();
@@ -402,7 +419,10 @@ export function ShopBooksReportsPage() {
   const data = report.data;
   const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo);
   const activeReport = REPORT_TABS.find((item) => item.slug === slug);
-  const periodLabel = dateFrom || dateTo ? `${dateFrom || 'Beginning'} – ${dateTo || 'Today'}` : 'All time';
+  const periodLabel =
+    dateFrom || dateTo
+      ? tr('periodRange', { from: dateFrom || tr('beginning'), to: dateTo || tr('today') })
+      : tr('allTime');
 
   const rows = useMemo(() => (Array.isArray(data) ? data.filter(isRecord) : []), [data]);
 
@@ -413,7 +433,7 @@ export function ShopBooksReportsPage() {
     const allowed = RECORD_TYPES[slug];
     const source = ledger.data.filter(isRecord).map(toDaybookRecord);
     return allowed ? source.filter((record) => allowed.includes(record.type)) : source;
-  }, [slug, rows, ledger.data]);
+  }, [slug, rows, ledger.data, t]);
 
   const typeOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -423,8 +443,8 @@ export function ShopBooksReportsPage() {
 
   const statusOptions = useMemo(() => {
     const seen = new Set(records.map((record) => record.status).filter(Boolean));
-    return Array.from(seen, (value) => ({ value, label: labelFor(value) }));
-  }, [records]);
+    return Array.from(seen, (value) => ({ value, label: statusLabel(value) }));
+  }, [records, t]);
 
   const showPaymentFilter = useMemo(() => records.some((record) => paymentState(record) != null), [records]);
   const showSourceFilter = useMemo(() => records.some((record) => record.saleSource != null), [records]);
@@ -552,7 +572,7 @@ export function ShopBooksReportsPage() {
         'a4',
         workspace.tenantId,
       ).catch((error) =>
-        snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+        snackbar.push(error instanceof Error ? error.message : t('shop.vouchers.viewFailed'), 'error'),
       );
     },
     [auth.token, businessId, snackbar, workspace.tenantId],
@@ -581,7 +601,7 @@ export function ShopBooksReportsPage() {
       String(workspace.activeBusiness?.display_name || workspace.activeBusiness?.business_name || '').trim() ||
       'Business';
     const csv = buildReportCsv({
-      report: activeReport?.label ?? slug,
+      report: activeReport ? tr(`tabs.${slug}`) : slug,
       period: periodLabel,
       summary: exportSummary,
       records: filteredRecords,
@@ -633,7 +653,6 @@ export function ShopBooksReportsPage() {
           ...(packSlug === 'gstr1' ? { limit: 500, offset: 0 } : {}),
         });
         const payload = response.data;
-        const tab = REPORT_TABS.find((item) => item.slug === packSlug);
         let summary: Array<{ metric: string; value: string }> = [];
         let records: ReportRecord[] = [];
         if (packSlug === 'gstr1' && Array.isArray(payload)) {
@@ -641,18 +660,19 @@ export function ShopBooksReportsPage() {
           records = gstrRows.map(toGstr1Record);
           const total = gstrRows.reduce((sum, row) => sum + num(row.total), 0);
           summary = [
-            { metric: 'Invoices', value: String(gstrRows.length) },
-            { metric: 'Taxable value', value: formatMoney(gstrRows.reduce((s, r) => s + num(r.taxable_value), 0), currency) },
-            { metric: 'Grand total', value: formatMoney(total, currency) },
+            { metric: tr('stat.invoices'), value: String(gstrRows.length) },
+            { metric: tr('metrics.taxable_value'), value: formatMoney(gstrRows.reduce((s, r) => s + num(r.taxable_value), 0), currency) },
+            { metric: tr('metrics.total'), value: formatMoney(total, currency) },
           ];
         } else if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
           const record = payload as Record<string, unknown>;
-          summary = Object.entries(METRIC_LABELS)
-            .filter(([key]) => key in record)
-            .map(([key, label]) => ({ metric: label, value: formatMoney(num(record[key]), currency) }));
+          summary = METRIC_KEYS.filter((key) => key in record).map((key) => ({
+            metric: tr(`metrics.${key}`),
+            value: formatMoney(num(record[key]), currency),
+          }));
         }
         const csv = buildReportCsv({
-          report: tab?.label ?? packSlug,
+          report: tr(`tabs.${packSlug}`),
           period: periodLabel,
           summary,
           records,
@@ -678,14 +698,14 @@ export function ShopBooksReportsPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ margin: 0 }}>Books reports</h2>
+            <h2 style={{ margin: 0 }}>{tr('title')}</h2>
             <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-              Review performance, verify GST figures, and export filing-ready data.
+              {tr('subtitle')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <Button type="button" variant="neutral" onClick={() => void report.refetch()} disabled={report.isFetching || invalidRange}>
-              <RefreshCw size={15} aria-hidden="true" /> {report.isFetching ? 'Refreshing…' : 'Refresh'}
+              <RefreshCw size={15} aria-hidden="true" /> {report.isFetching ? tr('refreshing') : t('common.refresh')}
             </Button>
             <Button
               type="button"
@@ -696,10 +716,10 @@ export function ShopBooksReportsPage() {
               aria-expanded={filterDialog.open}
             >
               <SlidersHorizontal size={15} aria-hidden="true" />
-              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+              {activeFilterCount ? tr('filtersCount', { count: activeFilterCount }) : tr('filters')}
             </Button>
             <Button type="button" variant="neutral" onClick={downloadCsv} disabled={!data || invalidRange}>
-              <Download size={15} aria-hidden="true" /> CSV for CA
+              <Download size={15} aria-hidden="true" /> {tr('csvForCa')}
             </Button>
             <Button
               type="button"
@@ -707,10 +727,10 @@ export function ShopBooksReportsPage() {
               onClick={() => void downloadCaPack()}
               disabled={caPackBusy || invalidRange || !businessId}
             >
-              <Download size={15} aria-hidden="true" /> {caPackBusy ? 'Preparing…' : 'CA pack (GSTR-1 · 3B · Sales)'}
+              <Download size={15} aria-hidden="true" /> {caPackBusy ? tr('preparing') : tr('caPack')}
             </Button>
             <Button type="button" variant="neutral" onClick={() => window.print()} disabled={!data}>
-              <Printer size={15} aria-hidden="true" /> Print
+              <Printer size={15} aria-hidden="true" /> {tr('print')}
             </Button>
           </div>
         </div>
@@ -727,32 +747,32 @@ export function ShopBooksReportsPage() {
                 resetFilters();
               }}
             >
-              {item.label}
+              {tr(`tabs.${item.slug}`)}
             </TabButton>
           ))}
         </div>
         <p style={{ color: 'var(--muted-foreground)', margin: '0 0 12px' }}>
-          {activeReport?.description}
+          {activeReport ? tr(`tabsDesc.${slug}`) : null}
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          <Button type="button" variant="neutral" onClick={() => setPreset('month')}>This month</Button>
-          <Button type="button" variant="neutral" onClick={() => setPreset('quarter')}>This quarter</Button>
-          <Button type="button" variant="neutral" onClick={() => setPreset('year')}>This financial year</Button>
-          <Button type="button" variant="neutral" onClick={() => setPreset('all')}>All time</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('month')}>{tr('presetMonth')}</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('quarter')}>{tr('presetQuarter')}</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('year')}>{tr('presetYear')}</Button>
+          <Button type="button" variant="neutral" onClick={() => setPreset('all')}>{tr('presetAll')}</Button>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            From
+            {t('common.from')}
             <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }} />
           </label>
           <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-            To
+            {t('common.to')}
             <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }} />
           </label>
         </div>
         {invalidRange ? (
           <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>
-            “From” date must be before or equal to “To” date.
+            {tr('rangeInvalid')}
           </p>
         ) : null}
       </Card>
@@ -760,41 +780,41 @@ export function ShopBooksReportsPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 16 }}>{activeReport?.label}</h3>
+            <h3 style={{ margin: 0, fontSize: 16 }}>{activeReport ? tr(`tabs.${slug}`) : null}</h3>
             <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>{periodLabel}</span>
           </div>
-          {report.isFetching && !report.isLoading ? <span style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>Updating…</span> : null}
+          {report.isFetching && !report.isLoading ? <span style={{ color: 'var(--muted-foreground)', fontSize: 13 }}>{tr('updating')}</span> : null}
         </div>
-        {report.isLoading ? <p role="status">Preparing report…</p> : null}
+        {report.isLoading ? <p role="status">{tr('preparingReport')}</p> : null}
         {report.error ? <p role="alert">{(report.error as Error).message}</p> : null}
 
         {!report.isLoading && data && (slug === 'sales' || slug === 'purchase') && isRecord(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
             <StatTile
-              label="Vouchers"
+              label={tr('stat.vouchers')}
               value={String(headlineFromFilters ? filteredTotals.count : Number(data.count ?? 0))}
             />
             <StatTile
-              label="Taxable value"
+              label={tr('metrics.taxable_value')}
               value={formatMoney(
                 headlineFromFilters ? filteredTotals.taxable : Number(data.taxable_value ?? 0),
                 currency,
               )}
             />
             <StatTile
-              label="CGST"
+              label={tr('metrics.cgst')}
               value={formatMoney(headlineFromFilters ? filteredTotals.cgst : Number(data.cgst ?? 0), currency)}
             />
             <StatTile
-              label="SGST"
+              label={tr('metrics.sgst')}
               value={formatMoney(headlineFromFilters ? filteredTotals.sgst : Number(data.sgst ?? 0), currency)}
             />
             <StatTile
-              label="IGST"
+              label={tr('metrics.igst')}
               value={formatMoney(headlineFromFilters ? filteredTotals.igst : Number(data.igst ?? 0), currency)}
             />
             <StatTile
-              label="Total"
+              label={tr('stat.total')}
               value={formatMoney(headlineFromFilters ? filteredTotals.total : Number(data.total ?? 0), currency)}
             />
           </div>
@@ -802,11 +822,11 @@ export function ShopBooksReportsPage() {
 
         {!report.isLoading && data && slug === 'daybook' && Array.isArray(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-            <StatTile label="Entries" value={String(filteredRecords.length)} />
-            <StatTile label="Gross value" value={formatMoney(filteredTotals.total, currency)} />
-            <StatTile label="Settled amount" value={formatMoney(filteredTotals.settled, currency)} />
+            <StatTile label={tr('stat.entries')} value={String(filteredRecords.length)} />
+            <StatTile label={tr('stat.grossValue')} value={formatMoney(filteredTotals.total, currency)} />
+            <StatTile label={tr('stat.settledAmount')} value={formatMoney(filteredTotals.settled, currency)} />
             <StatTile
-              label="Outstanding"
+              label={tr('stat.outstanding')}
               value={formatMoney(Math.max(filteredTotals.total - filteredTotals.settled, 0), currency)}
             />
           </div>
@@ -814,24 +834,24 @@ export function ShopBooksReportsPage() {
 
         {!report.isLoading && data && slug === 'gstr1' && Array.isArray(data) ? (
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-            <StatTile label="Invoices" value={String(filteredRecords.length)} />
+            <StatTile label={tr('stat.invoices')} value={String(filteredRecords.length)} />
             <StatTile
-              label="B2B invoices"
+              label={tr('stat.b2bInvoices')}
               value={String(filteredRecords.filter((record) => record.type === 'B2B').length)}
             />
-            <StatTile label="Taxable value" value={formatMoney(filteredTotals.taxable, currency)} />
-            <StatTile label="Invoice value" value={formatMoney(filteredTotals.total, currency)} />
+            <StatTile label={tr('metrics.taxable_value')} value={formatMoney(filteredTotals.taxable, currency)} />
+            <StatTile label={tr('stat.invoiceValue')} value={formatMoney(filteredTotals.total, currency)} />
           </div>
         ) : null}
 
         {!report.isLoading && data && slug === 'gstr3b' && isRecord(data) ? (
           <div style={{ display: 'grid', gap: 16 }}>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Outward taxable supplies</h4>
+              <h4 style={{ marginBottom: 8 }}>{tr('gstr3b.outwardTaxable')}</h4>
               <p style={{ margin: 0 }}>{formatMoney(Number(data.outward_taxable_supplies ?? 0), currency)}</p>
             </div>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Output tax</h4>
+              <h4 style={{ marginBottom: 8 }}>{tr('gstr3b.outputTax')}</h4>
               {isRecord(data.output_tax) ? (
                 <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))' }}>
                   {Object.entries(data.output_tax).map(([key, value]) => (
@@ -841,8 +861,8 @@ export function ShopBooksReportsPage() {
               ) : null}
             </div>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Inward supplies &amp; input tax credit</h4>
-              <p style={{ margin: '0 0 8px' }}>Inward: {formatMoney(Number(data.inward_supplies ?? 0), currency)}</p>
+              <h4 style={{ marginBottom: 8 }}>{tr('gstr3b.inwardItc')}</h4>
+              <p style={{ margin: '0 0 8px' }}>{tr('gstr3b.inwardLine', { amount: formatMoney(Number(data.inward_supplies ?? 0), currency) })}</p>
               {isRecord(data.input_tax_credit) ? (
                 <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))' }}>
                   {Object.entries(data.input_tax_credit).map(([key, value]) => (
@@ -852,7 +872,7 @@ export function ShopBooksReportsPage() {
               ) : null}
             </div>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Net tax payable</h4>
+              <h4 style={{ marginBottom: 8 }}>{tr('gstr3b.netTaxPayable')}</h4>
               {isRecord(data.net_tax_payable) ? (
                 <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))' }}>
                   {Object.entries(data.net_tax_payable).map(([key, value]) => (
@@ -867,12 +887,12 @@ export function ShopBooksReportsPage() {
         {!report.isLoading && data && slug === 'pnl' && isRecord(data) ? (
           <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Income</h4>
+              <h4 style={{ marginBottom: 8 }}>{tr('pnl.income')}</h4>
               {isRecord(data.income) ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                   {Object.entries(data.income).map(([key, value]) => (
                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontWeight: key === 'total' ? 700 : 400 }}>
-                      <span style={{ textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      <span style={{ textTransform: 'capitalize' }}>{t(`shop.reportsPage.pnlRows.${key}`, { defaultValue: key.replace(/_/g, ' ') })}</span>
                       <span>{formatMoney(Number(value ?? 0), currency)}</span>
                     </div>
                   ))}
@@ -880,12 +900,12 @@ export function ShopBooksReportsPage() {
               ) : null}
             </div>
             <div>
-              <h4 style={{ marginBottom: 8 }}>Expenses</h4>
+              <h4 style={{ marginBottom: 8 }}>{tr('pnl.expenses')}</h4>
               {isRecord(data.expenses) ? (
                 <div style={{ display: 'grid', gap: 6 }}>
                   {Object.entries(data.expenses).map(([key, value]) => (
                     <div key={key} style={{ display: 'flex', justifyContent: 'space-between', fontWeight: key === 'total' ? 700 : 400 }}>
-                      <span style={{ textTransform: 'capitalize' }}>{key.replace(/_/g, ' ')}</span>
+                      <span style={{ textTransform: 'capitalize' }}>{t(`shop.reportsPage.pnlRows.${key}`, { defaultValue: key.replace(/_/g, ' ') })}</span>
                       <span>{formatMoney(Number(value ?? 0), currency)}</span>
                     </div>
                   ))}
@@ -893,7 +913,7 @@ export function ShopBooksReportsPage() {
               ) : null}
             </div>
             <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #eee', paddingTop: 10, display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 800 }}>
-              <span>Net profit</span>
+              <span>{tr('pnl.netProfit')}</span>
               <span>{formatMoney(Number(data.net_profit ?? 0), currency)}</span>
             </div>
           </div>
@@ -904,13 +924,13 @@ export function ShopBooksReportsPage() {
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 16 }}>All records</h3>
+              <h3 style={{ margin: 0, fontSize: 16 }}>{tr('allRecords')}</h3>
               <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
-                {filteredRecords.length} of {records.length} records
+                {tr('recordsCount', { shown: filteredRecords.length, total: records.length })}
                 {slug === 'gstr3b' || slug === 'pnl'
                   ? ''
                   : ` · ${formatMoney(filteredTotals.total, currency)}`}
-                {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} applied` : ''}
+                {activeFilterCount ? ` · ${tr('filtersApplied', { count: activeFilterCount })}` : ''}
               </span>
             </div>
           </div>
@@ -920,8 +940,8 @@ export function ShopBooksReportsPage() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search voucher number, party or GSTIN…"
-              aria-label="Search voucher number, party or GSTIN"
+              placeholder={tr('searchPlaceholder')}
+              aria-label={tr('searchAria')}
               style={{
                 width: '100%',
                 borderRadius: 12,
@@ -932,11 +952,11 @@ export function ShopBooksReportsPage() {
             />
           </div>
 
-          {needsLedger && ledger.isLoading ? <p role="status">Loading underlying records…</p> : null}
+          {needsLedger && ledger.isLoading ? <p role="status">{tr('loadingLedger')}</p> : null}
           {needsLedger && ledger.error ? <p role="alert">{(ledger.error as Error).message}</p> : null}
           {records.some((record) => record.status === 'void') ? (
             <p style={{ color: 'var(--muted-foreground)', fontSize: 12, margin: '0 0 10px' }}>
-              Void entries are listed here but excluded from report totals.
+              {tr('voidNote')}
             </p>
           ) : null}
 
@@ -953,13 +973,13 @@ export function ShopBooksReportsPage() {
               onShare={(record) => openDocActions(record)}
             />
           ) : (
-            <p>{records.length ? 'No records match the current filters.' : 'No vouchers were posted in this period.'}</p>
+            <p>{records.length ? tr('noMatch') : tr('noVouchers')}</p>
           )}
 
           {filteredRecords.length > visibleCount ? (
             <div style={{ marginTop: 12 }}>
               <Button type="button" variant="neutral" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
-                Show {Math.min(PAGE_SIZE, filteredRecords.length - visibleCount)} more
+                {tr('showMore', { count: Math.min(PAGE_SIZE, filteredRecords.length - visibleCount) })}
               </Button>
             </div>
           ) : null}
@@ -969,14 +989,14 @@ export function ShopBooksReportsPage() {
       <Dialog
         open={filterDialog.open}
         onClose={filterDialog.hide}
-        title="Record filters"
+        title={tr('recordFilters')}
         labelledBy="report-record-filters-dialog"
       >
         <div style={{ marginTop: 12 }}>
           <ShopFilterBar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search voucher number, party or GSTIN…"
+            searchPlaceholder={tr('searchPlaceholder')}
             hideSearch
             onClear={() => {
               resetFilters();
@@ -986,10 +1006,10 @@ export function ShopBooksReportsPage() {
                 ? [
                     {
                       id: 'source',
-                      label: 'Source',
+                      label: tr('filterSource'),
                       value: sourceFilter,
                       onChange: setSourceFilter,
-                      options: SALE_SOURCE_OPTIONS,
+                      options: saleSourceOptions(),
                     },
                   ]
                 : []),
@@ -997,10 +1017,10 @@ export function ShopBooksReportsPage() {
                 ? [
                     {
                       id: 'type',
-                      label: 'Type',
+                      label: tr('filterType'),
                       value: typeFilter,
                       onChange: setTypeFilter,
-                      options: [{ value: '', label: 'All types' }, ...typeOptions],
+                      options: [{ value: '', label: tr('allTypes') }, ...typeOptions],
                     },
                   ]
                 : []),
@@ -1008,10 +1028,10 @@ export function ShopBooksReportsPage() {
                 ? [
                     {
                       id: 'status',
-                      label: 'Status',
+                      label: t('common.status'),
                       value: statusFilter,
                       onChange: setStatusFilter,
-                      options: [{ value: '', label: 'All statuses' }, ...statusOptions],
+                      options: [{ value: '', label: tr('allStatuses') }, ...statusOptions],
                     },
                   ]
                 : []),
@@ -1019,30 +1039,30 @@ export function ShopBooksReportsPage() {
                 ? [
                     {
                       id: 'payment',
-                      label: 'Payment',
+                      label: tr('filterPayment'),
                       value: paymentFilter,
                       onChange: setPaymentFilter,
                       options: [
-                        { value: '', label: 'Any' },
-                        { value: 'paid', label: 'Paid' },
-                        { value: 'partial', label: 'Partly paid' },
-                        { value: 'unpaid', label: 'Unpaid' },
+                        { value: '', label: tr('any') },
+                        { value: 'paid', label: tr('paid') },
+                        { value: 'partial', label: tr('partlyPaid') },
+                        { value: 'unpaid', label: tr('unpaid') },
                       ],
                     },
                   ]
                 : []),
               {
                 id: 'sort',
-                label: 'Sort by',
+                label: tr('sortBy'),
                 value: sort,
                 onChange: (value: string) => setSort(value as SortKey),
-                options: SORT_OPTIONS,
+                options: SORT_KEYS.map((value) => ({ value, label: tr(`sort.${value}`) })),
               },
             ]}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button type="button" variant="ghost" onClick={filterDialog.hide}>
-              Done
+              {t('common.done')}
             </Button>
           </div>
         </div>
@@ -1058,13 +1078,14 @@ export function ShopBooksReportsPage() {
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? documentTitle(String(docActions.kind), docActions.number) : 'Document'}
+        title={docActions ? documentTitle(String(docActions.kind), docActions.number) : tr('document')}
       />
     </div>
   );
 }
 
 function StatusPill({ status }: { status: string }) {
+  useTranslation();
   const tone = STATUS_TONES[status] ?? STATUS_TONES.draft;
   return (
     <span
@@ -1079,12 +1100,13 @@ function StatusPill({ status }: { status: string }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {status || 'posted'}
+      {statusLabel(status || 'posted')}
     </span>
   );
 }
 
 function SourcePill({ source }: { source: SaleSource }) {
+  useTranslation();
   const tone = SALE_SOURCE_TONES[source];
   return (
     <span
@@ -1098,7 +1120,7 @@ function SourcePill({ source }: { source: SaleSource }) {
         whiteSpace: 'nowrap',
       }}
     >
-      {SALE_SOURCE_LABELS[source]}
+      {saleSourceLabel(source)}
     </span>
   );
 }
@@ -1120,6 +1142,9 @@ function RecordTable({
   onView: (record: ReportRecord) => void;
   onShare: (record: ReportRecord) => void;
 }) {
+  const { t } = useTranslation();
+  const tr = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.reportsPage.${key}`, options));
   /** Column visibility is derived from the whole filtered set so paging never shifts columns. */
   const showStatus = records.some((record) => record.status);
   const showSource = records.some((record) => record.saleSource != null);
@@ -1142,20 +1167,20 @@ function RecordTable({
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border, #e5e7eb)' }}>
-            <th style={cell}>Date</th>
-            <th style={cell}>Voucher</th>
-            <th style={cell}>Type</th>
-            {showSource ? <th style={cell}>Source</th> : null}
-            {showInsights ? <th style={cell}>Points / profit</th> : null}
-            <th style={cell}>Party</th>
+            <th style={cell}>{tr('table.date')}</th>
+            <th style={cell}>{tr('table.voucher')}</th>
+            <th style={cell}>{tr('table.type')}</th>
+            {showSource ? <th style={cell}>{tr('table.source')}</th> : null}
+            {showInsights ? <th style={cell}>{tr('table.pointsProfit')}</th> : null}
+            <th style={cell}>{tr('table.party')}</th>
             {showGstin ? <th style={cell}>GSTIN</th> : null}
-            {showPos ? <th style={cell}>Place of supply</th> : null}
-            {showStatus ? <th style={cell}>Status</th> : null}
-            {showGst ? <th style={numeric}>Taxable</th> : null}
+            {showPos ? <th style={cell}>{tr('table.placeOfSupply')}</th> : null}
+            {showStatus ? <th style={cell}>{tr('table.status')}</th> : null}
+            {showGst ? <th style={numeric}>{tr('table.taxable')}</th> : null}
             {showGst ? <th style={numeric}>GST</th> : null}
-            <th style={numeric}>Total</th>
-            {showPayment ? <th style={numeric}>Due</th> : null}
-            {showActions ? <th style={actionCell}>Actions</th> : null}
+            <th style={numeric}>{tr('table.total')}</th>
+            {showPayment ? <th style={numeric}>{tr('table.due')}</th> : null}
+            {showActions ? <th style={actionCell}>{tr('table.actions')}</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -1225,7 +1250,7 @@ function RecordTable({
                 </td>
                 {showPayment ? (
                   <td style={{ ...numeric, color: payment ? PAYMENT_TONES[payment] : undefined }}>
-                    {payment === 'paid' ? 'Paid' : payment ? formatMoney(due, currency) : '—'}
+                    {payment === 'paid' ? tr('paid') : payment ? formatMoney(due, currency) : '—'}
                   </td>
                 ) : null}
                 {showActions ? (
@@ -1234,8 +1259,8 @@ function RecordTable({
                       <div style={{ display: 'inline-flex', gap: 8 }}>
                         <button
                           type="button"
-                          title="View invoice"
-                          aria-label={`View ${record.number}`}
+                          title={tr('table.viewInvoice')}
+                          aria-label={tr('table.viewAria', { number: record.number })}
                           onClick={() => onView(record)}
                           style={{
                             display: 'inline-flex',
@@ -1252,12 +1277,12 @@ function RecordTable({
                           }}
                         >
                           <Eye size={14} aria-hidden="true" />
-                          View
+                          {tr('table.view')}
                         </button>
                         <button
                           type="button"
-                          title="Share invoice"
-                          aria-label={`Share ${record.number}`}
+                          title={tr('table.shareInvoice')}
+                          aria-label={tr('table.shareAria', { number: record.number })}
                           onClick={() => onShare(record)}
                           style={{
                             display: 'inline-flex',
@@ -1274,7 +1299,7 @@ function RecordTable({
                           }}
                         >
                           <Share2 size={14} aria-hidden="true" />
-                          Share
+                          {tr('table.share')}
                         </button>
                       </div>
                     ) : (
@@ -1299,7 +1324,7 @@ function RecordTable({
                 (showStatus ? 1 : 0)
               }
             >
-              Filtered totals · {records.length} record{records.length === 1 ? '' : 's'}
+              {tr('table.filteredTotals', { count: records.length })}
             </td>
             {showGst ? <td style={numeric}>{formatMoney(totals.taxable, currency)}</td> : null}
             {showGst ? <td style={numeric}>{formatMoney(totals.gst, currency)}</td> : null}

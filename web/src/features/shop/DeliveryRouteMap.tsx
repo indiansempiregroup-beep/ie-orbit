@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ShopDeliveryLive } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { loadGoogleMaps, type GoogleMapsWindow } from '../../lib/googleMaps';
@@ -24,6 +25,7 @@ function point(value?: { latitude?: number | null; longitude?: number | null } |
 }
 
 export function DeliveryRouteMap({ delivery, height = 300 }: { delivery: ShopDeliveryLive; height?: number }) {
+  const { t } = useTranslation();
   const mapRef = useRef<HTMLDivElement | null>(null);
   const [failed, setFailed] = useState(false);
   const pickup = point(delivery.pickup);
@@ -63,9 +65,9 @@ export function DeliveryRouteMap({ delivery, height = 300 }: { delivery: ShopDel
             strokeWeight: 4,
           });
         }
-        if (pickup) new maps.Marker({ map, position: pickup, title: 'Pickup', label: 'P' });
-        if (drop) new maps.Marker({ map, position: drop, title: 'Drop-off', label: 'D' });
-        if (rider) new maps.Marker({ map, position: rider, title: 'Latest rider location', label: 'R' });
+        if (pickup) new maps.Marker({ map, position: pickup, title: t('shop.deliveryMap.pickup'), label: 'P' });
+        if (drop) new maps.Marker({ map, position: drop, title: t('shop.deliveryMap.dropoff'), label: 'D' });
+        if (rider) new maps.Marker({ map, position: rider, title: t('shop.deliveryMap.latestRider'), label: 'R' });
         const bounds = new maps.LatLngBounds();
         points.forEach((item) => bounds.extend(item));
         map.fitBounds(bounds, 48);
@@ -74,12 +76,12 @@ export function DeliveryRouteMap({ delivery, height = 300 }: { delivery: ShopDel
     return () => {
       cancelled = true;
     };
-  }, [drop, pickup, points, rider, trail]);
+  }, [drop, pickup, points, rider, trail, t]);
 
   if (!points.length) {
     return (
       <div style={{ minHeight: 120, display: 'grid', placeItems: 'center', border: '1px solid var(--border, #ddd)', borderRadius: 12, color: '#6b7280' }}>
-        No GPS locations are available yet. Status updates will continue.
+        {t('shop.deliveryMap.noGps')}
       </div>
     );
   }
@@ -90,7 +92,7 @@ export function DeliveryRouteMap({ delivery, height = 300 }: { delivery: ShopDel
       <div style={{ display: 'grid', gap: 8 }}>
         <AddressMapPreview latitude={fallback.lat} longitude={fallback.lng} height={height} />
         <small style={{ color: '#6b7280' }}>
-          Interactive route unavailable; showing the latest known location.
+          {t('shop.deliveryMap.interactiveUnavailable')}
         </small>
       </div>
     );

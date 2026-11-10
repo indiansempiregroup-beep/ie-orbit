@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Alert,
   Pressable,
@@ -32,6 +34,14 @@ import type { ShopPet } from '@ie-orbit/sdk';
 
 const FALLBACK_SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit'];
 const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];
+
+function speciesLabel(value: string, t: TFunction): string {
+  return t(`shop.pets.speciesList.${value.toLowerCase()}`, { defaultValue: value });
+}
+
+function sexLabel(value: string, t: TFunction): string {
+  return t(`shop.pets.sexList.${value.toLowerCase()}`, { defaultValue: value });
+}
 
 type FormState = {
   customerId: string;
@@ -74,6 +84,7 @@ function petToForm(pet: ShopPet, masterLabels: string[]): FormState {
 }
 
 export function ShopPetFormScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopPetForm'>>();
   const client = useOpsClient();
@@ -131,7 +142,7 @@ export function ShopPetFormScreen() {
         }
       } catch (err) {
         if (!cancelled) {
-          setMessage(err instanceof Error ? err.message : 'Failed to load pet');
+          setMessage(err instanceof Error ? err.message : t('opsApp.shop.pets.loadPetFailed'));
           setLoaded(true);
         }
       }
@@ -139,7 +150,7 @@ export function ShopPetFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [client, isEdit, petId, speciesOptions]);
+  }, [client, isEdit, petId, speciesOptions, t]);
 
   useEffect(() => {
     const selectId = route.params?.selectCustomerId;
@@ -164,10 +175,10 @@ export function ShopPetFormScreen() {
         customer.id,
     }));
     if (form.customerId && !options.some((option) => option.value === form.customerId)) {
-      options.push({ value: form.customerId, label: 'Selected customer' });
+      options.push({ value: form.customerId, label: t('opsApp.shop.pets.selectedCustomer') });
     }
     return options;
-  }, [customers, form.customerId]);
+  }, [customers, form.customerId, t]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -176,30 +187,30 @@ export function ShopPetFormScreen() {
   async function save() {
     if (!client || !businessId) return;
     if (!form.customerId) {
-      setFieldErrors({ customerId: 'Select a customer (owner).' });
-      setMessage('Select a customer (owner).');
+      setFieldErrors({ customerId: t('opsApp.shop.pets.errSelectOwner') });
+      setMessage(t('opsApp.shop.pets.errSelectOwner'));
       return;
     }
     if (!form.name.trim()) {
-      setFieldErrors({ name: 'Pet name is required.' });
-      setMessage('Pet name is required.');
+      setFieldErrors({ name: t('opsApp.shop.pets.errPetName') });
+      setMessage(t('opsApp.shop.pets.errPetName'));
       return;
     }
     const speciesValue =
       form.speciesChoice === 'Other' ? form.speciesOther.trim() : form.speciesChoice.trim();
     if (form.speciesChoice === 'Other' && !speciesValue) {
-      setFieldErrors({ speciesOther: 'Enter the species.' });
-      setMessage('Enter the species.');
+      setFieldErrors({ speciesOther: t('shop.pets.errEnterSpecies') });
+      setMessage(t('shop.pets.errEnterSpecies'));
       return;
     }
     if (!speciesValue) {
-      setFieldErrors({ speciesChoice: 'Select a species.' });
-      setMessage('Select a species.');
+      setFieldErrors({ speciesChoice: t('shop.pets.errSelectSpecies') });
+      setMessage(t('shop.pets.errSelectSpecies'));
       return;
     }
     setFieldErrors({});
     if (form.birthday && !/^\d{4}-\d{2}-\d{2}$/.test(form.birthday.trim())) {
-      setMessage('Birthday must be YYYY-MM-DD.');
+      setMessage(t('opsApp.shop.pets.errBirthdayFormat'));
       return;
     }
     setSaving(true);
@@ -207,16 +218,16 @@ export function ShopPetFormScreen() {
     try {
       let photoUrl = form.photoUrl.trim();
       if (photoAsset) {
-        if (!token || !tenantId) throw new Error('Workspace is not ready. Please sign in again.');
+        if (!token || !tenantId) throw new Error(t('opsApp.shop.productAdd.workspaceNotReady'));
         const uploaded = await uploadPetImage({
           token,
           tenantId,
           businessId,
           asset: photoAsset,
-          petName: form.name.trim() || 'Pet',
+          petName: form.name.trim() || t('shop.pets.defaultPet'),
         });
         photoUrl = uploaded.public_url || uploaded.private_url || '';
-        if (!photoUrl) throw new Error('Photo uploaded but no URL was returned.');
+        if (!photoUrl) throw new Error(t('opsApp.shop.invoiceScan.noPhotoUrlReturned'));
       }
 
       const payload = {
@@ -232,15 +243,15 @@ export function ShopPetFormScreen() {
       };
       if (isEdit && petId) {
         const response = await client.shop.patchPet(petId, payload);
-        toast.push('Pet details saved.', 'success');
+        toast.push(t('shop.pets.toastSaved'), 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       } else {
         const response = await client.shop.createPet(payload);
-        toast.push('Pet added.', 'success');
+        toast.push(t('shop.pets.toastAdded'), 'success');
         navigation.replace('ShopPetDetail', { petId: response.data.id });
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't save this pet. Try again.");
+      setMessage(err instanceof Error ? err.message : t('shop.pets.errSave'));
     } finally {
       setSaving(false);
     }
@@ -255,7 +266,7 @@ export function ShopPetFormScreen() {
       footer={
         <>
           <Button
-            label={saving ? 'Saving…' : isEdit ? 'Update pet' : 'Save pet'}
+            label={saving ? t('common.saving') : isEdit ? t('shop.pets.updatePet') : t('shop.pets.savePet')}
             icon="save"
             loading={saving}
             fullWidth
@@ -264,14 +275,14 @@ export function ShopPetFormScreen() {
           />
           {isEdit ? (
             <Button
-              label="Delete pet"
+              label={t('shop.pets.deletePet')}
               variant="destructive"
               fullWidth
               onPress={() => {
-                Alert.alert('Delete pet?', 'This removes the pet profile.', [
-                  { text: 'Cancel', style: 'cancel' },
+                Alert.alert(t('opsApp.shop.pets.deleteTitle'), t('opsApp.shop.pets.deleteMessage'), [
+                  { text: t('common.cancel'), style: 'cancel' },
                   {
-                    text: 'Delete',
+                    text: t('opsApp.shop.common.delete'),
                     style: 'destructive',
                     onPress: () => {
                       if (!client || !petId) return;
@@ -280,7 +291,7 @@ export function ShopPetFormScreen() {
                           await client.shop.deletePet(petId);
                           navigation.navigate('ShopPets');
                         } catch (err) {
-                          setMessage(err instanceof Error ? err.message : "Couldn't remove this pet. Try again.");
+                          setMessage(err instanceof Error ? err.message : t('shop.pets.errRemove'));
                         }
                       })();
                     },
@@ -294,15 +305,15 @@ export function ShopPetFormScreen() {
     >
       <FormHero
         icon="heart"
-        title={isEdit ? 'Edit pet' : 'Add pet'}
-        subtitle="Owner details, photo, birthday, and care notes in one profile."
+        title={isEdit ? t('shop.pets.editPet') : t('shop.pets.addPet')}
+        subtitle={t('opsApp.shop.pets.heroSubtitle')}
       />
 
-      <FormSection title="Owner">
+      <FormSection title={t('opsApp.shop.pets.owner')}>
         <View style={styles.customerRow}>
           <View style={styles.customerField}>
             <SelectField
-              label="Customer"
+              label={t('shop.pets.customer')}
               required
               value={form.customerId}
               options={customerOptions}
@@ -311,23 +322,23 @@ export function ShopPetFormScreen() {
                 setFieldErrors((current) => ({ ...current, customerId: '' }));
               }}
               searchable
-              placeholder="Select customer"
+              placeholder={t('shop.pets.selectCustomer')}
               error={fieldErrors.customerId}
             />
           </View>
           <Pressable
             style={styles.sideAddBtn}
             onPress={() => navigation.navigate('CustomerForm', { returnTo: 'pets' })}
-            accessibilityLabel="Add customer"
+            accessibilityLabel={t('opsApp.shop.pets.addCustomer')}
           >
             <Feather name="user-plus" size={20} color="#fff" />
           </Pressable>
         </View>
       </FormSection>
 
-      <FormSection title="Pet photo">
+      <FormSection title={t('opsApp.shop.pets.petPhotoSection')}>
         <ImagePickerButton
-          label="Pet photo"
+          label={t('opsApp.shop.pets.petPhotoSection')}
           optional
           variant="card"
           valueUri={photoPreview || form.photoUrl || null}
@@ -335,13 +346,13 @@ export function ShopPetFormScreen() {
             setPhotoAsset(asset);
             setPhotoPreview(asset.uri);
           }}
-          helperText="Shown on the pet profile. Use camera or gallery."
+          helperText={t('opsApp.shop.pets.photoHelper')}
         />
       </FormSection>
 
-      <FormSection title="Pet details">
+      <FormSection title={t('opsApp.shop.pets.petDetails')}>
         <Input
-          label="Pet name"
+          label={t('shop.pets.petName')}
           required
           value={form.name}
           onChangeText={(value) => {
@@ -350,7 +361,7 @@ export function ShopPetFormScreen() {
           }}
           error={fieldErrors.name}
         />
-        <FieldLabel label="Species" required />
+        <FieldLabel label={t('shop.pets.species')} required />
         <View style={styles.chipWrap}>
           {[...speciesOptions, 'Other'].map((value) => (
             <Pressable
@@ -362,13 +373,13 @@ export function ShopPetFormScreen() {
                 setFieldErrors((current) => ({ ...current, speciesOther: '', speciesChoice: '' }));
               }}
             >
-              <Text style={[styles.chipText, form.speciesChoice === value && styles.chipTextActive]}>{value}</Text>
+              <Text style={[styles.chipText, form.speciesChoice === value && styles.chipTextActive]}>{speciesLabel(value, t)}</Text>
             </Pressable>
           ))}
         </View>
         {form.speciesChoice === 'Other' ? (
           <Input
-            label="Species name"
+            label={t('shop.pets.speciesName')}
             required
             value={form.speciesOther}
             onChangeText={(value) => {
@@ -376,11 +387,11 @@ export function ShopPetFormScreen() {
               setFieldErrors((current) => ({ ...current, speciesOther: '' }));
             }}
             error={fieldErrors.speciesOther}
-            placeholder="e.g. Hamster"
+            placeholder={t('shop.pets.speciesPlaceholder')}
           />
         ) : null}
-        <Input label="Breed" optional value={form.breed} onChangeText={(value) => setField('breed', value)} />
-        <FieldLabel label="Sex" optional />
+        <Input label={t('shop.pets.breed')} optional value={form.breed} onChangeText={(value) => setField('breed', value)} />
+        <FieldLabel label={t('shop.pets.sex')} optional />
         <View style={styles.chipWrap}>
           {SEX_OPTIONS.map((value) => (
             <Pressable
@@ -388,25 +399,25 @@ export function ShopPetFormScreen() {
               style={[styles.chip, form.sex === value && styles.chipActive]}
               onPress={() => setField('sex', value)}
             >
-              <Text style={[styles.chipText, form.sex === value && styles.chipTextActive]}>{value}</Text>
+              <Text style={[styles.chipText, form.sex === value && styles.chipTextActive]}>{sexLabel(value, t)}</Text>
             </Pressable>
           ))}
         </View>
         <DateField
-          label="Birthday"
+          label={t('shop.pets.birthday')}
           optional
           value={form.birthday}
           onChange={(value) => setField('birthday', value)}
           allowPast
           allowFuture={false}
-          helperText="Owners get an in-app + email reminder 5 days before the birthday. Business owners and managers also get an alert so they can open the pet and send an extra message."
+          helperText={t('opsApp.shop.pets.birthdayHelper')}
         />
         <Input
-          label="Care notes"
+          label={t('opsApp.shop.pets.careNotes')}
           optional
           value={form.medicalNotes}
           onChangeText={(value) => setField('medicalNotes', value)}
-          placeholder="Medical notes, allergies, or diet"
+          placeholder={t('opsApp.shop.pets.careNotesPlaceholder')}
           multiline
         />
       </FormSection>

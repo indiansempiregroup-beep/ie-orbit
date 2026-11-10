@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -28,6 +29,7 @@ import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 import { formatMoney } from './posPayment';
+import type { TFunction } from 'i18next';
 
 function formatWallet(paise?: number | null, currency = 'INR') {
   return formatMoney(Number(paise || 0) / 100, currency);
@@ -37,12 +39,14 @@ function photoUri(url?: string | null) {
   return resolveMediaUrl(url) || '';
 }
 
-const PRODUCT_STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'archived', label: 'Archived' },
-];
+function productStatuses(t: TFunction) {
+  return [
+    { value: 'active', label: t('shop.products.statuses.active') },
+    { value: 'draft', label: t('shop.products.statuses.draft') },
+    { value: 'inactive', label: t('shop.products.statuses.inactive') },
+    { value: 'archived', label: t('shop.products.statuses.archived') },
+  ];
+}
 
 function stockAfter(line: ShopInvoiceScanLine) {
   const now = Number(line.stock_on_hand || 0);
@@ -52,6 +56,7 @@ function stockAfter(line: ShopInvoiceScanLine) {
 }
 
 export function ShopInvoiceScanScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopInvoiceScan'>>();
   const client = useOpsClient();
@@ -89,8 +94,8 @@ export function ShopInvoiceScanScreen() {
           : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          'Permission needed',
-          source === 'camera' ? 'Allow camera access to photograph the bill.' : 'Allow photo library access.',
+          t('opsApp.shop.common.permissionNeeded'),
+          source === 'camera' ? t('opsApp.shop.invoiceScan.allowCameraBill') : t('opsApp.shop.common.allowLibrary'),
         );
         return;
       }
@@ -119,20 +124,25 @@ export function ShopInvoiceScanScreen() {
           asset,
           folderType: 'documents',
           tags: ['shop', 'invoice', 'scan'],
-          displayName: 'Vendor invoice',
+          displayName: t('shop.invoiceScan.vendorInvoiceLabel'),
         });
         const url = media.public_url || media.private_url;
         if (url) uploaded.push(url);
       }
-      if (!uploaded.length) throw new Error('Image uploaded but no URL was returned.');
+      if (!uploaded.length) throw new Error(t('opsApp.shop.invoiceScan.noUrlReturned'));
       setImageUrls((current) => [...current, ...uploaded].slice(0, 6));
       setDraft(null);
       setChargedPaise(0);
       setBalanceAfter(null);
       setChargeMessage('');
-      toast.push(`Uploaded ${uploaded.length} photo${uploaded.length === 1 ? '' : 's'}.`, 'success');
+      toast.push(
+        uploaded.length === 1
+          ? t('shop.invoiceScan.uploadedOne')
+          : t('shop.invoiceScan.uploadedMany', { n: uploaded.length }),
+        'success',
+      );
     } catch (error) {
-      toast.push(getApiErrorMessage(error, "Couldn't upload that photo."), 'error');
+      toast.push(getApiErrorMessage(error, t('shop.invoiceScan.errUpload')), 'error');
     } finally {
       setUploading(false);
     }
@@ -143,10 +153,13 @@ export function ShopInvoiceScanScreen() {
       void pickAndUpload('library');
       return;
     }
-    Alert.alert('Invoice photo', 'Photograph the full supplier bill.', [
-      { text: 'Camera', onPress: () => void pickAndUpload('camera') },
-      { text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery', onPress: () => void pickAndUpload('library') },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('opsApp.shop.invoiceScan.invoicePhotoTitle'), t('opsApp.shop.invoiceScan.invoicePhotoMessage'), [
+      { text: t('opsApp.shop.common.camera'), onPress: () => void pickAndUpload('camera') },
+      {
+        text: Platform.OS === 'ios' ? t('opsApp.shop.common.photoLibrary') : t('opsApp.shop.common.gallery'),
+        onPress: () => void pickAndUpload('library'),
+      },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -161,7 +174,7 @@ export function ShopInvoiceScanScreen() {
       const data = response.data;
       if (!data.ok || !data.draft) {
         if (data.source === 'smart_lookup_no_balance') setTopUpOpen(true);
-        toast.push(data.message || "Couldn't read that invoice.", 'error');
+        toast.push(data.message || t('shop.invoiceScan.errRead'), 'error');
         return;
       }
       setDraft({ ...data.draft, usage_id: data.usage_id, image_urls: imageUrls });
@@ -169,9 +182,9 @@ export function ShopInvoiceScanScreen() {
       setBalanceAfter(data.balance_after_paise ?? null);
       setChargeCurrency(data.charge_currency || 'INR');
       setChargeMessage(data.message || '');
-      toast.push(data.message || 'Invoice read. Review the lines.', 'success');
+      toast.push(data.message || t('shop.invoiceScan.toastRead'), 'success');
     } catch (error) {
-      const message = getApiErrorMessage(error, "Couldn't read that invoice.");
+      const message = getApiErrorMessage(error, t('shop.invoiceScan.errRead'));
       if (/wallet|balance|top up/i.test(message)) setTopUpOpen(true);
       toast.push(message, 'error');
     } finally {
@@ -195,7 +208,7 @@ export function ShopInvoiceScanScreen() {
     const code = (overrideCode ?? line.barcode ?? '').trim();
     const query = line.name.trim();
     if (!code && !query) {
-      toast.push('Type or scan a barcode, or keep the product name, then Fetch.', 'error');
+      toast.push(t('shop.invoiceScan.errNeedBarcodeOrName'), 'error');
       return;
     }
     setFetchingIndex(index);
@@ -204,7 +217,7 @@ export function ShopInvoiceScanScreen() {
         try {
           const existing = await client.shop.lookupBarcode({ business_id: businessId, code });
           patchLine(index, applyShopProductToScanLine({ ...line, barcode: code }, existing.data, code));
-          toast.push(`Matched ${existing.data.name} in your catalog.`, 'success');
+          toast.push(t('shop.invoiceScan.toastMatched', { name: existing.data.name }), 'success');
           return;
         } catch {
           // New barcode — fill from the free catalog next.
@@ -216,12 +229,17 @@ export function ShopInvoiceScanScreen() {
       });
       patchLine(index, applyEnrichmentToScanLine({ ...line, barcode: code || line.barcode }, response.data));
       if (response.data.found) {
-        toast.push(response.data.name ? `Fetched ${response.data.name}.` : 'Catalog details added.', 'success');
+        toast.push(
+          response.data.name
+            ? t('shop.invoiceScan.toastFetchedNamed', { name: response.data.name })
+            : t('shop.invoiceScan.toastCatalogAdded'),
+          'success',
+        );
       } else {
-        toast.push(response.data.message || 'No catalog match. Add the barcode or fill the product.', 'info');
+        toast.push(response.data.message || t('shop.invoiceScan.toastNoMatch'), 'info');
       }
     } catch (error) {
-      toast.push(getApiErrorMessage(error, "Couldn't fetch that product."), 'error');
+      toast.push(getApiErrorMessage(error, t('shop.invoiceScan.errFetch')), 'error');
     } finally {
       setFetchingIndex(null);
     }
@@ -235,7 +253,10 @@ export function ShopInvoiceScanScreen() {
           ? await ImagePicker.requestCameraPermissionsAsync()
           : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        toast.push(source === 'camera' ? 'Allow camera access to photograph the product.' : 'Allow photo library access.', 'error');
+        toast.push(
+          source === 'camera' ? t('opsApp.shop.invoiceScan.allowCameraProduct') : t('opsApp.shop.common.allowLibrary'),
+          'error',
+        );
         return;
       }
     }
@@ -252,15 +273,15 @@ export function ShopInvoiceScanScreen() {
         tenantId,
         businessId,
         asset: result.assets[0],
-        productName: draftRef.current?.lines[index]?.name || 'Product',
+        productName: draftRef.current?.lines[index]?.name || t('shop.invoiceScan.defaultProductLabel'),
         prepareProductCanvas: true,
       });
       const url = uploaded.public_url || uploaded.private_url;
-      if (!url) throw new Error('Photo uploaded but no URL was returned.');
+      if (!url) throw new Error(t('opsApp.shop.invoiceScan.noPhotoUrlReturned'));
       patchLine(index, { image_url: url, use_image: true, image_source: 'upload' });
-      toast.push('Product photo updated.', 'success');
+      toast.push(t('shop.invoiceScan.toastPhotoUpdated'), 'success');
     } catch (error) {
-      toast.push(getApiErrorMessage(error, "Couldn't upload that product photo."), 'error');
+      toast.push(getApiErrorMessage(error, t('shop.invoiceScan.errPhoto')), 'error');
     } finally {
       setPhotoBusy(null);
     }
@@ -271,10 +292,13 @@ export function ShopInvoiceScanScreen() {
       void replaceLinePhoto(index, 'library');
       return;
     }
-    Alert.alert('Product photo', 'Replace the pack photo.', [
-      { text: 'Camera', onPress: () => void replaceLinePhoto(index, 'camera') },
-      { text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery', onPress: () => void replaceLinePhoto(index, 'library') },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('opsApp.shop.invoiceScan.productPhotoTitle'), t('opsApp.shop.invoiceScan.replacePackPhoto'), [
+      { text: t('opsApp.shop.common.camera'), onPress: () => void replaceLinePhoto(index, 'camera') },
+      {
+        text: Platform.OS === 'ios' ? t('opsApp.shop.common.photoLibrary') : t('opsApp.shop.common.gallery'),
+        onPress: () => void replaceLinePhoto(index, 'library'),
+      },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -297,10 +321,10 @@ export function ShopInvoiceScanScreen() {
         create_missing: true,
         create_supplier: Boolean(draft.supplier.create),
       });
-      toast.push(`Posted ${response.data.voucher_number}.`, 'success');
+      toast.push(t('shop.invoiceScan.toastPosted', { number: response.data.voucher_number }), 'success');
       navigation.navigate('ShopBooksPurchase', { voucherId: response.data.voucher_id });
     } catch (error) {
-      toast.push(getApiErrorMessage(error, "Couldn't post that purchase."), 'error');
+      toast.push(getApiErrorMessage(error, t('shop.invoiceScan.errPost')), 'error');
     } finally {
       setConfirming(false);
     }
@@ -311,14 +335,20 @@ export function ShopInvoiceScanScreen() {
       footer={
         draft ? (
           <Button
-            label={confirming ? 'Posting…' : `Post purchase · ${readyLines.length} line${readyLines.length === 1 ? '' : 's'}`}
+            label={
+              confirming
+                ? t('shop.invoiceScan.posting')
+                : readyLines.length === 1
+                  ? t('shop.invoiceScan.postPurchaseOne')
+                  : t('shop.invoiceScan.postPurchaseMany', { n: readyLines.length })
+            }
             onPress={() => void confirm()}
             disabled={!readyLines.length || confirming}
             loading={confirming}
           />
         ) : (
           <Button
-            label={analyzing ? 'Reading invoice…' : 'Extract with AI'}
+            label={analyzing ? t('shop.invoiceScan.readingInvoice') : t('shop.invoiceScan.extractWithAi')}
             icon="cpu"
             onPress={() => void analyze()}
             disabled={!imageUrls.length || uploading || analyzing}
@@ -327,17 +357,17 @@ export function ShopInvoiceScanScreen() {
         )
       }
     >
-      <FormHero subtitle="Photograph the supplier bill. Invoice photos use more tokens than a pack photo — the exact AI wallet charge appears after the scan." />
+      <FormHero subtitle={t('shop.invoiceScan.intro')} />
 
       {chargeMessage || chargedPaise > 0 ? (
         <View style={styles.chargeBanner}>
           <Text style={styles.chargeBannerTitle}>
             {chargedPaise > 0
-              ? `AI wallet charge ${formatWallet(chargedPaise, chargeCurrency)}`
-              : 'No AI wallet charge'}
+              ? t('shop.invoiceScan.walletCharge', { amount: formatWallet(chargedPaise, chargeCurrency) })
+              : t('shop.invoiceScan.noWalletCharge')}
           </Text>
           {balanceAfter != null ? (
-            <Text style={styles.chargeBannerMeta}>Wallet balance {formatWallet(balanceAfter, chargeCurrency)}</Text>
+            <Text style={styles.chargeBannerMeta}>{t('shop.invoiceScan.walletBalance', { amount: formatWallet(balanceAfter, chargeCurrency) })}</Text>
           ) : chargeMessage ? (
             <Text style={styles.chargeBannerMeta}>{chargeMessage}</Text>
           ) : null}
@@ -346,7 +376,13 @@ export function ShopInvoiceScanScreen() {
 
       <View style={styles.card}>
         <Button
-          label={uploading ? 'Uploading…' : imageUrls.length ? 'Add another photo' : 'Add invoice photo'}
+          label={
+            uploading
+              ? t('shop.invoiceScan.uploadingSuffix')
+              : imageUrls.length
+                ? t('opsApp.shop.invoiceScan.addAnotherPhoto')
+                : t('opsApp.shop.invoiceScan.addInvoicePhoto')
+          }
           variant="outline"
           icon="camera"
           onPress={choosePhoto}
@@ -354,8 +390,10 @@ export function ShopInvoiceScanScreen() {
         />
         <Text style={styles.meta}>
           {imageUrls.length
-            ? `${imageUrls.length} photo${imageUrls.length === 1 ? '' : 's'} ready. Tap a photo to preview.`
-            : 'Use the camera or gallery. Capture the full bill.'}
+            ? imageUrls.length === 1
+              ? t('shop.invoiceScan.photosReadyOne')
+              : t('shop.invoiceScan.photosReadyMany', { n: imageUrls.length })
+            : t('opsApp.shop.invoiceScan.captureHint')}
         </Text>
         {imageUrls.length ? (
           <View style={styles.billThumbs}>
@@ -365,18 +403,18 @@ export function ShopInvoiceScanScreen() {
                 <View key={`${url}-${index}`} style={styles.billItem}>
                   <Pressable
                     onPress={() => uri && setPreviewUrl(uri)}
-                    accessibilityLabel={`Preview invoice photo ${index + 1}`}
+                    accessibilityLabel={t('shop.invoiceScan.previewPhotoAria', { n: index + 1 })}
                   >
                     <RemoteImage uri={uri} style={styles.billThumb} />
                   </Pressable>
                   <Pressable onPress={() => uri && setPreviewUrl(uri)} hitSlop={8}>
-                    <Text style={styles.skip}>Preview</Text>
+                    <Text style={styles.skip}>{t('shop.invoiceScan.preview')}</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => setImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                     hitSlop={8}
                   >
-                    <Text style={styles.skip}>Remove</Text>
+                    <Text style={styles.skip}>{t('opsApp.shop.common.remove')}</Text>
                   </Pressable>
                 </View>
               );
@@ -390,14 +428,14 @@ export function ShopInvoiceScanScreen() {
         <View style={styles.card}>
           {draft.duplicate?.found ? <Text style={styles.warn}>{draft.duplicate.message}</Text> : null}
           {draft.totals_mismatch ? (
-            <Text style={styles.warn}>Line totals do not match the printed grand total. Check qty and rates.</Text>
+            <Text style={styles.warn}>{t('shop.invoiceScan.warnTotalsMismatch')}</Text>
           ) : null}
           {!draft.lines.length ? (
-            <Text style={styles.warn}>No products were read. Try a flatter, well-lit photo of the full bill.</Text>
+            <Text style={styles.warn}>{t('shop.invoiceScan.warnNoProducts')}</Text>
           ) : null}
 
           <Input
-            label="Supplier"
+            label={t('shop.invoiceScan.supplier')}
             value={draft.supplier.name || ''}
             onChangeText={(value) =>
               setDraft((current) =>
@@ -406,23 +444,23 @@ export function ShopInvoiceScanScreen() {
             }
           />
           <Input
-            label="GSTIN"
+            label={t('shop.invoiceScan.gstin')}
             value={draft.supplier.gstin || draft.header.gstin || ''}
             onChangeText={(value) =>
               setDraft((current) => (current ? { ...current, supplier: { ...current.supplier, gstin: value } } : current))
             }
           />
-          <Input label="Invoice no." value={draft.header.invoice_number || ''} editable={false} />
-          <Input label="Date" value={draft.header.invoice_date || ''} editable={false} />
-          <Input label="Printed total" value={draft.header.grand_total || ''} editable={false} />
+          <Input label={t('shop.invoiceScan.invoiceNo')} value={draft.header.invoice_number || ''} editable={false} />
+          <Input label={t('shop.invoiceScan.date')} value={draft.header.invoice_date || ''} editable={false} />
+          <Input label={t('shop.invoiceScan.printedTotal')} value={draft.header.grand_total || ''} editable={false} />
           {draft.supplier.match ? (
-            <Text style={styles.meta}>Supplier matched by {draft.supplier.match}.</Text>
+            <Text style={styles.meta}>{t('shop.invoiceScan.supplierMatched', { match: draft.supplier.match })}</Text>
           ) : (
             <View style={{ gap: 8 }}>
-              <Text style={styles.meta}>Supplier is optional.</Text>
+              <Text style={styles.meta}>{t('shop.invoiceScan.supplierOptional')}</Text>
               <View style={styles.chips}>
                 <Chip
-                  label="Don't create"
+                  label={t('shop.invoiceScan.dontCreate')}
                   active={!draft.supplier.create}
                   onPress={() =>
                     setDraft((current) =>
@@ -431,7 +469,7 @@ export function ShopInvoiceScanScreen() {
                   }
                 />
                 <Chip
-                  label="Create supplier"
+                  label={t('shop.invoiceScan.createSupplier')}
                   active={Boolean(draft.supplier.create)}
                   onPress={() =>
                     setDraft((current) =>
@@ -444,7 +482,9 @@ export function ShopInvoiceScanScreen() {
           )}
           {draft.lines.length ? (
             <Text style={styles.meta}>
-              {draft.lines.length} product{draft.lines.length === 1 ? '' : 's'} — add a barcode and Fetch on each.
+              {draft.lines.length === 1
+                ? t('shop.invoiceScan.productsOnBillOne')
+                : t('shop.invoiceScan.productsOnBillMany', { n: draft.lines.length })}
             </Text>
           ) : null}
         </View>
@@ -454,20 +494,22 @@ export function ShopInvoiceScanScreen() {
             <View key={`${line.name}-${index}`} style={[styles.productCard, line.skip ? styles.lineSkip : null]}>
               <View style={styles.productKicker}>
                 <Text style={styles.productTitle}>
-                  Product {index + 1} of {draft.lines.length}
+                  {t('shop.invoiceScan.productOfTotal', { index: index + 1, total: draft.lines.length })}
                 </Text>
                 <Text style={styles.meta}>
-                  {line.match || (line.create ? 'Will create' : 'Unmatched')}
-                  {line.skip ? ' · Skipped' : ''}
+                  {line.match || (line.create ? t('shop.invoiceScan.willCreate') : t('shop.invoiceScan.unmatched'))}
+                  {line.skip ? ` · ${t('opsApp.shop.invoiceScan.statusSkippedSuffix')}` : ''}
                 </Text>
                 <Pressable onPress={() => patchLine(index, { skip: !line.skip })} hitSlop={8}>
-                  <Text style={styles.skip}>{line.skip ? 'Include' : 'Skip'}</Text>
+                  <Text style={styles.skip}>{line.skip ? t('shop.invoiceScan.include') : t('shop.invoiceScan.skip')}</Text>
                 </Pressable>
               </View>
               <View style={styles.photoRow}>
                 <Pressable
                   onPress={() => (photoUrl ? setPreviewUrl(photoUrl) : chooseLinePhoto(index))}
-                  accessibilityLabel={photoUrl ? 'Preview product photo' : 'Add product photo'}
+                  accessibilityLabel={
+                    photoUrl ? t('opsApp.shop.invoiceScan.previewProductPhoto') : t('opsApp.shop.invoiceScan.addProductPhoto')
+                  }
                 >
                   {photoUrl ? (
                     <RemoteImage uri={photoUrl} style={styles.photo} />
@@ -480,48 +522,52 @@ export function ShopInvoiceScanScreen() {
                 <View style={{ flex: 1, gap: 4 }}>
                   <Pressable onPress={() => chooseLinePhoto(index)} disabled={photoBusy === index} hitSlop={8}>
                     <Text style={styles.skip}>
-                      {photoBusy === index ? 'Uploading…' : photoUrl ? 'Replace photo' : 'Add photo'}
+                      {photoBusy === index
+                        ? t('shop.invoiceScan.uploadingSuffix')
+                        : photoUrl
+                          ? t('shop.invoiceScan.replacePhoto')
+                          : t('shop.invoiceScan.addPhoto')}
                     </Text>
                   </Pressable>
                   {photoUrl ? (
                     <Pressable onPress={() => setPreviewUrl(photoUrl)} hitSlop={8}>
-                      <Text style={styles.skip}>Preview</Text>
+                      <Text style={styles.skip}>{t('shop.invoiceScan.preview')}</Text>
                     </Pressable>
                   ) : null}
                   {photoUrl ? (
                     <Pressable onPress={() => patchLine(index, { image_url: '', use_image: false })} hitSlop={8}>
-                      <Text style={styles.skip}>Remove</Text>
+                      <Text style={styles.skip}>{t('opsApp.shop.common.remove')}</Text>
                     </Pressable>
                   ) : null}
                 </View>
               </View>
               <Input
-                label="Name"
+                label={t('shop.invoiceScan.name')}
                 value={line.name}
                 onChangeText={(value) => patchLine(index, { name: value, catalog_name: undefined })}
               />
               {line.catalog_name ? (
                 <View style={styles.catalogNameRow}>
                   <Text style={styles.catalogNameHint} numberOfLines={2}>
-                    Catalog: {line.catalog_name}
+                    {t('opsApp.shop.invoiceScan.catalogName', { name: line.catalog_name })}
                   </Text>
                   <Pressable
                     onPress={() =>
                       patchLine(index, { name: line.catalog_name || line.name, catalog_name: undefined })
                     }
                     hitSlop={8}
-                    accessibilityLabel="Use catalog name"
+                    accessibilityLabel={t('opsApp.shop.invoiceScan.useCatalogName')}
                   >
-                    <Text style={styles.skip}>Use catalog name</Text>
+                    <Text style={styles.skip}>{t('opsApp.shop.invoiceScan.useCatalogName')}</Text>
                   </Pressable>
                 </View>
               ) : null}
               <View style={styles.barcodeRow}>
                 <View style={styles.lineField}>
                   <Input
-                    label="Barcode"
+                    label={t('shop.addMany.columns.barcode')}
                     value={line.barcode || ''}
-                    placeholder="Type or scan"
+                    placeholder={t('shop.products.scanOrType')}
                     onChangeText={(value) => patchLine(index, { barcode: value })}
                     onSubmitEditing={() => void fetchLine(index)}
                     returnKeyType="search"
@@ -530,22 +576,28 @@ export function ShopInvoiceScanScreen() {
                 <Pressable
                   style={styles.iconBtn}
                   onPress={() => navigation.navigate('BarcodeScanner', { target: 'invoiceScanLine', rowId: String(index) })}
-                  accessibilityLabel="Scan barcode with camera"
+                  accessibilityLabel={t('shop.invoiceScan.scanBarcodeCameraAria')}
                 >
                   <Feather name="camera" size={16} color={colors.primary} />
                 </Pressable>
               </View>
               <Button
-                label={fetchingIndex === index ? 'Fetching…' : line.barcode ? 'Fetch from barcode' : 'Fetch from name'}
+                label={
+                  fetchingIndex === index
+                    ? t('shop.invoiceScan.fetching')
+                    : line.barcode
+                      ? t('opsApp.shop.invoiceScan.fetchFromBarcode')
+                      : t('opsApp.shop.invoiceScan.fetchFromName')
+                }
                 variant="secondary"
                 size="sm"
                 disabled={fetchingIndex === index}
                 onPress={() => void fetchLine(index)}
               />
               <FieldRow>
-                <Input label="Qty" value={line.qty} keyboardType="decimal-pad" onChangeText={(value) => patchLine(index, { qty: value })} />
+                <Input label={t('shop.invoiceScan.qty')} value={line.qty} keyboardType="decimal-pad" onChangeText={(value) => patchLine(index, { qty: value })} />
                 <Input
-                  label="Purchase price"
+                  label={t('shop.invoiceScan.purchasePrice')}
                   value={line.rate}
                   keyboardType="decimal-pad"
                   onChangeText={(value) => patchLine(index, { rate: value })}
@@ -553,42 +605,42 @@ export function ShopInvoiceScanScreen() {
               </FieldRow>
               <FieldRow>
                 <Input
-                  label="Selling price"
+                  label={t('shop.invoiceScan.sellingPrice')}
                   value={line.price || ''}
-                  placeholder="MRP from bill"
+                  placeholder={t('shop.invoiceScan.mrpPlaceholder')}
                   keyboardType="decimal-pad"
                   onChangeText={(value) => patchLine(index, { price: value })}
                 />
-                <Input label="SKU" value={line.sku || ''} onChangeText={(value) => patchLine(index, { sku: value })} />
+                <Input label={t('shop.invoiceScan.sku')} value={line.sku || ''} onChangeText={(value) => patchLine(index, { sku: value })} />
               </FieldRow>
               <FieldRow>
                 <Input
-                  label="GST"
+                  label={t('shop.invoiceScan.gst')}
                   value={line.gst_rate || ''}
                   keyboardType="decimal-pad"
                   onChangeText={(value) => patchLine(index, { gst_rate: value })}
                 />
-                <Input label="HSN" value={line.hsn_sac || ''} onChangeText={(value) => patchLine(index, { hsn_sac: value })} />
+                <Input label={t('shop.invoiceScan.hsn')} value={line.hsn_sac || ''} onChangeText={(value) => patchLine(index, { hsn_sac: value })} />
               </FieldRow>
               <FieldRow>
-                <Input label="Brand" value={line.brand || ''} onChangeText={(value) => patchLine(index, { brand: value })} />
+                <Input label={t('shop.invoiceScan.brand')} value={line.brand || ''} onChangeText={(value) => patchLine(index, { brand: value })} />
                 <Input
-                  label="Pack size / quantity"
+                  label={t('shop.invoiceScan.packSize')}
                   value={line.pack_size || ''}
-                  placeholder="e.g. 1 kg, 12 pcs"
+                  placeholder={t('shop.invoiceScan.packSizePlaceholder')}
                   onChangeText={(value) => patchLine(index, { pack_size: value })}
                 />
               </FieldRow>
               <FieldRow>
                 <SelectField
-                  label="Status"
+                  label={t('shop.invoiceScan.status')}
                   value={line.status || 'active'}
-                  options={PRODUCT_STATUSES}
+                  options={productStatuses(t)}
                   onChange={(value) => patchLine(index, { status: value })}
                   searchable={false}
                 />
                 <SelectField
-                  label="Category"
+                  label={t('shop.invoiceScan.category')}
                   optional
                   value={line.category || ''}
                   options={[
@@ -603,7 +655,7 @@ export function ShopInvoiceScanScreen() {
               </FieldRow>
               <FieldRow>
                 <SelectField
-                  label="Currency"
+                  label={t('shop.invoiceScan.currency')}
                   value={line.currency || 'INR'}
                   options={
                     line.currency && !CURRENCIES.some((item) => item.value === line.currency)
@@ -614,15 +666,15 @@ export function ShopInvoiceScanScreen() {
                   searchable={false}
                 />
                 <View>
-                  <Text style={styles.meta}>GST on sell price</Text>
+                  <Text style={styles.meta}>{t('shop.invoiceScan.gstOnSellPrice')}</Text>
                   <View style={styles.chips}>
                     <Chip
-                      label="GST excluded"
+                      label={t('shop.invoiceScan.gstExcluded')}
                       active={!line.tax_inclusive}
                       onPress={() => patchLine(index, { tax_inclusive: false })}
                     />
                     <Chip
-                      label="GST included"
+                      label={t('shop.invoiceScan.gstIncluded')}
                       active={Boolean(line.tax_inclusive)}
                       onPress={() => patchLine(index, { tax_inclusive: true })}
                     />
@@ -630,17 +682,17 @@ export function ShopInvoiceScanScreen() {
                 </View>
               </FieldRow>
               <FieldRow>
-                <Input label="On hand" value={line.stock_on_hand || '0'} editable={false} />
-                <Input label="After this bill" value={stockAfter(line)} editable={false} />
+                <Input label={t('shop.invoiceScan.onHand')} value={line.stock_on_hand || '0'} editable={false} />
+                <Input label={t('shop.invoiceScan.afterBill')} value={stockAfter(line)} editable={false} />
               </FieldRow>
               <Input
-                label="Description"
+                label={t('shop.invoiceScan.description')}
                 value={line.description || ''}
                 multiline
                 onChangeText={(value) => patchLine(index, { description: value })}
               />
               <Input
-                label="Product details"
+                label={t('shop.invoiceScan.productDetails')}
                 value={line.details_html || ''}
                 multiline
                 onChangeText={(value) => patchLine(index, { details_html: value })}
@@ -654,7 +706,7 @@ export function ShopInvoiceScanScreen() {
       <ImageLightbox
         uri={previewUrl}
         visible={Boolean(previewUrl)}
-        title="Photo preview"
+        title={t('opsApp.shop.invoiceScan.photoPreviewTitle')}
         onClose={() => setPreviewUrl(null)}
       />
 

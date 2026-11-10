@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { BillingOrder, BillingPlanCatalogItem, BusinessProductSubscription, PlatformTaxInvoice, ProductPlan } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
@@ -15,7 +17,6 @@ import {
   isRecommendedPlanCode,
   paymentActionLabel,
   paymentOrderLabel,
-  planSeatLine,
 } from '../../config/products';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useApiClient } from '../../hooks/useApiClient';
@@ -47,17 +48,13 @@ import {
   daysUntil,
   expandBillingHistoryEntries,
   filterBillingHistoryEntries,
-  nextPaymentCopy,
   ORDER_RANGE_FILTERS,
   ORDER_STATUS_FILTERS,
   orderHistoryCounts,
   planPricePaise,
-  renewCtaLabel,
   subscriptionDueAt,
-  subscriptionStatusLabel,
   subscriptionUxStatus,
   trackerStepIndex,
-  trackerSteps,
   yearlySavingsCopy,
   type BillingInterval,
   type OrderHistoryRange,
@@ -70,7 +67,94 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleDateString();
 }
 
+function subscriptionStatusText(t: TFunction, status: SubscriptionUxStatus, days?: number | null): string {
+  if (status === 'payment_pending') return t('settings.productsPage.statusPaymentReview');
+  if (status === 'locked') return t('settings.productsPage.statusLocked');
+  if (status === 'due_soon') {
+    if (days == null) return t('settings.productsPage.statusDueSoon');
+    if (days <= 0) return t('settings.productsPage.statusDueToday');
+    return t('settings.productsPage.statusDueInDays', { count: days });
+  }
+  if (status === 'trial') {
+    if (days == null) return t('settings.productsPage.statusTrial');
+    return t('settings.productsPage.statusTrialDaysLeft', { count: days });
+  }
+  if (status === 'active') return t('common.active');
+  return t('settings.productsPage.statusNotSubscribed');
+}
+
+function nextPaymentText(t: TFunction, subscription: BusinessProductSubscription, amountLabel?: string | null): string {
+  const due = subscriptionDueAt(subscription);
+  const date = due ? new Date(due).toLocaleDateString() : '—';
+  return amountLabel
+    ? t('settings.productsPage.nextPaymentCopyAmount', { date, amount: amountLabel })
+    : t('settings.productsPage.nextPaymentCopy', { date });
+}
+
+function trackerStepsText(t: TFunction, dueLabel?: string | null): string[] {
+  return [
+    t('settings.productsPage.trackerPay'),
+    t('settings.productsPage.trackerSubmit'),
+    t('settings.productsPage.trackerConfirm'),
+    dueLabel ? t('settings.productsPage.trackerAccessUntil', { date: dueLabel }) : t('settings.productsPage.trackerAccessRestored'),
+  ];
+}
+
+const ORDER_STATUS_LABEL_KEYS: Record<string, string> = {
+  'Payment under review': 'awaiting_confirmation',
+  Confirmed: 'paid',
+  Rejected: 'rejected',
+  Expired: 'expired',
+  Failed: 'failed',
+  'Awaiting payment': 'created',
+  'Refund requested': 'refund_requested',
+  'Refund declined': 'refund_rejected',
+  Refunded: 'refunded',
+  'Partially refunded': 'partially_refunded',
+  Order: 'order',
+};
+
+function orderStatusText(t: TFunction, label: string): string {
+  const key = ORDER_STATUS_LABEL_KEYS[label];
+  return key ? t(`settings.productsPage.orderStatus.${key}`) : label;
+}
+
+function savingsText(t: TFunction, monthlyPaise: number, yearlyPaise: number, yearlyMonthsCharged?: number | null) {
+  const savings = yearlySavingsCopy(monthlyPaise, yearlyPaise, yearlyMonthsCharged);
+  if (!savings) return null;
+  return {
+    label:
+      savings.monthsFree > 0
+        ? t('settings.productsPage.freeMonths', { count: savings.monthsFree })
+        : t('settings.productsPage.savePercent', { percent: savings.savePercent }),
+    detail: t('settings.productsPage.savingsDetail', {
+      equiv: Math.round(yearlyPaise / 12 / 100).toLocaleString('en-IN'),
+      save: Math.round(savings.savePaise / 100).toLocaleString('en-IN'),
+      charged: savings.monthsCharged,
+    }),
+  };
+}
+
+function intervalLabel(t: TFunction, interval?: string | null): string {
+  return interval === 'yearly' ? t('settings.productsPage.intervalYearly') : t('settings.productsPage.intervalMonthly');
+}
+
+function perIntervalLabel(t: TFunction, interval?: string | null): string {
+  return interval === 'yearly' ? t('settings.productsPage.perYear') : t('settings.productsPage.perMonth');
+}
+
+function seatLineText(
+  t: TFunction,
+  plan: { max_staff?: number; max_branches?: number; max_extra_offices?: number | null },
+): string {
+  const staff = plan.max_staff ?? 1;
+  const offices = plan.max_branches ?? 1;
+  if (plan.max_extra_offices === 0) return t('settings.productsPage.seatLineSingle', { staff });
+  return t('settings.productsPage.seatLine', { staff, count: offices });
+}
+
 function TaxInvoicesCaPanel() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -105,9 +189,9 @@ function TaxInvoicesCaPanel() {
           ...(workspace.businessId ? { 'X-Business-ID': workspace.businessId } : {}),
         },
       );
-      snackbar.push('CSV downloaded', 'success');
+      snackbar.push(t('settings.productsPage.csvDownloaded'), 'success');
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Could not download CSV'), 'error');
+      snackbar.push(getApiErrorMessage(err, t('settings.productsPage.csvFailed')), 'error');
     }
   }
 
@@ -122,38 +206,38 @@ function TaxInvoicesCaPanel() {
           ...(workspace.businessId ? { 'X-Business-ID': workspace.businessId } : {}),
         },
       );
-      snackbar.push('PDF downloaded', 'success');
+      snackbar.push(t('settings.productsPage.pdfDownloaded'), 'success');
     } catch (err) {
-      snackbar.push(getApiErrorMessage(err, 'Could not download PDF'), 'error');
+      snackbar.push(getApiErrorMessage(err, t('settings.productsPage.pdfFailed')), 'error');
     }
   }
 
   return (
     <div className="sub-order-history">
       <p className="product-settings-lead">
-        GST tax invoices and credit notes for IE Orbit SaaS charges (GST-inclusive). Share the CSV with your CA.
+        {t('settings.productsPage.taxLead')}
       </p>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-          From
+          {t('common.from')}
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         </label>
         <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-          To
+          {t('common.to')}
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </label>
         <Button type="button" variant="neutral" onClick={() => void downloadCsv('invoices')}>
-          Tax invoices CSV
+          {t('settings.productsPage.taxInvoicesCsv')}
         </Button>
         <Button type="button" variant="primary" onClick={() => void downloadCsv('statement')}>
-          Account statement CSV
+          {t('settings.productsPage.statementCsv')}
         </Button>
       </div>
-      {query.isLoading ? <p className="product-settings-lead">Loading invoices…</p> : null}
+      {query.isLoading ? <p className="product-settings-lead">{t('settings.productsPage.loadingInvoices')}</p> : null}
       {!query.isLoading && !(query.data?.length) ? (
         <div className="product-settings-empty">
-          <p className="product-settings-empty-title">No tax invoices yet</p>
-          <p className="product-settings-lead">Invoices appear after IE confirms a paid subscription or wallet top-up.</p>
+          <p className="product-settings-empty-title">{t('settings.productsPage.noInvoicesTitle')}</p>
+          <p className="product-settings-lead">{t('settings.productsPage.noInvoicesBody')}</p>
         </div>
       ) : (
         <div className="sub-order-list">
@@ -161,25 +245,32 @@ function TaxInvoicesCaPanel() {
             <article key={invoice.id} className="sub-order">
               <OrderMetaBar
                 items={[
-                  { label: 'Date', value: formatDate(invoice.issued_at || invoice.created_at) },
-                  { label: 'Document', value: invoice.invoice_number },
+                  { label: t('settings.productsPage.date'), value: formatDate(invoice.issued_at || invoice.created_at) },
+                  { label: t('settings.productsPage.document'), value: invoice.invoice_number },
                   {
-                    label: 'Type',
-                    value: invoice.document_type === 'credit_note' ? 'Credit note' : 'Tax invoice',
+                    label: t('settings.productsPage.type'),
+                    value: invoice.document_type === 'credit_note' ? t('settings.productsPage.creditNote') : t('settings.productsPage.taxInvoice'),
                   },
-                  { label: 'Total', value: formatInrFromPaise(invoice.amount_paise) ?? '—' },
+                  { label: t('settings.productsPage.total'), value: formatInrFromPaise(invoice.amount_paise) ?? '—' },
                 ]}
               />
               <p className="sub-order__note">
-                Taxable {formatInrFromPaise(invoice.taxable_paise)}
-                {invoice.is_interstate
-                  ? ` · IGST ${formatInrFromPaise(invoice.igst_paise)}`
-                  : ` · CGST ${formatInrFromPaise(invoice.cgst_paise)} · SGST ${formatInrFromPaise(invoice.sgst_paise)}`}
-                {invoice.payment_ref ? ` · Ref ${invoice.payment_ref}` : ''}
+                {[
+                  t('settings.productsPage.taxableLine', { amount: formatInrFromPaise(invoice.taxable_paise) ?? '—' }),
+                  invoice.is_interstate
+                    ? t('settings.productsPage.igstPart', { amount: formatInrFromPaise(invoice.igst_paise) ?? '—' })
+                    : t('settings.productsPage.cgstSgstPart', {
+                        cgst: formatInrFromPaise(invoice.cgst_paise) ?? '—',
+                        sgst: formatInrFromPaise(invoice.sgst_paise) ?? '—',
+                      }),
+                  invoice.payment_ref ? t('settings.productsPage.refPart', { ref: invoice.payment_ref }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </p>
               <div className="product-settings-product-actions">
                 <Button type="button" variant="ghost" onClick={() => void downloadPdf(invoice)}>
-                  Download PDF
+                  {t('settings.productsPage.downloadPdf')}
                 </Button>
               </div>
             </article>
@@ -228,27 +319,28 @@ function BillingCadenceSwitch({
   yearlyPaise: number;
   yearlyMonthsCharged?: number | null;
 }) {
-  const savings = yearlySavingsCopy(monthlyPaise, yearlyPaise, yearlyMonthsCharged);
+  const { t } = useTranslation();
+  const savings = savingsText(t, monthlyPaise, yearlyPaise, yearlyMonthsCharged);
   const yearlyLabel = formatInrFromPaise(yearlyPaise);
   const monthlyLabel = formatInrFromPaise(monthlyPaise);
   return (
     <div className="billing-cadence">
-      <div className="billing-cadence__switch" role="group" aria-label="Billing period">
+      <div className="billing-cadence__switch" role="group" aria-label={t('settings.productsPage.billingPeriodAria')}>
         <button type="button" className={value === 'monthly' ? 'is-on' : undefined} onClick={() => onChange('monthly')}>
-          Monthly
+          {t('settings.productsPage.intervalMonthly')}
         </button>
         <button type="button" className={value === 'yearly' ? 'is-on' : undefined} onClick={() => onChange('yearly')}>
-          Yearly
+          {t('settings.productsPage.intervalYearly')}
           {savings ? <span className="billing-cadence__badge">{savings.label}</span> : null}
         </button>
       </div>
       {value === 'yearly' && yearlyLabel ? (
         <p className="billing-cadence__hint">
-          {yearlyLabel}/year
+          {t('settings.productsPage.yearlyHint', { price: yearlyLabel })}
           {savings ? ` · ${savings.detail}` : ''}
         </p>
       ) : monthlyLabel ? (
-        <p className="billing-cadence__hint">{monthlyLabel}/month · cancel anytime before the next period</p>
+        <p className="billing-cadence__hint">{t('settings.productsPage.monthlyHint', { price: monthlyLabel })}</p>
       ) : null}
     </div>
   );
@@ -268,10 +360,11 @@ function OrderMetaBar({ items }: { items: Array<{ label: string; value: string }
 }
 
 function PaymentTracker({ status, dueLabel }: { status: SubscriptionUxStatus; dueLabel?: string | null }) {
+  const { t } = useTranslation();
   const current = trackerStepIndex(status);
   return (
-    <div className="sub-tracker" aria-label="Payment tracker">
-      {trackerSteps(status, dueLabel).map((label, index) => (
+    <div className="sub-tracker" aria-label={t('settings.productsPage.trackerAria')}>
+      {trackerStepsText(t, dueLabel).map((label, index) => (
         <div
           key={label}
           className={`sub-tracker__step${index < current ? ' is-done' : index === current ? ' is-current' : ''}`}
@@ -288,16 +381,17 @@ function orderProducts(order: BillingOrder) {
   return paymentOrderLabel(order);
 }
 
-function orderIntentChip(order: BillingOrder) {
+function orderIntentChip(order: BillingOrder, t: TFunction) {
   const action = paymentActionLabel(order);
-  if (action) return 'Wallet top-up';
-  if (order.claim_intent === 'renew') return 'Renewal';
-  if (order.claim_intent === 'subscribe') return 'New subscription';
+  if (action) return t('settings.productsPage.chipWalletTopUp');
+  if (order.claim_intent === 'renew') return t('settings.productsPage.chipRenewal');
+  if (order.claim_intent === 'subscribe') return t('settings.productsPage.chipNewSubscription');
   if (!order.claim_intent) return null;
   return order.claim_intent.replace(/[_-]+/g, ' ');
 }
 
 export function ProductSettingsPage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const client = useApiClient();
   const auth = useAuth();
@@ -339,10 +433,10 @@ export function ProductSettingsPage() {
     onSuccess: async () => {
       setRefundDraft(null);
       await billingOrders.refetch();
-      snackbar.push('Refund requested — IE will email you after review.', 'success');
+      snackbar.push(t('settings.productsPage.refundRequested'), 'success');
     },
     onError: (error) => {
-      snackbar.push(getApiErrorMessage(error, "Couldn't request a refund. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.refundRequestFailed')), 'error');
     },
   });
 
@@ -355,10 +449,10 @@ export function ProductSettingsPage() {
     },
     onSuccess: async () => {
       await billingOrders.refetch();
-      snackbar.push('Refund request withdrawn.', 'success');
+      snackbar.push(t('settings.productsPage.refundWithdrawn'), 'success');
     },
     onError: (error) => {
-      snackbar.push(getApiErrorMessage(error, "Couldn't withdraw the refund request. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.refundWithdrawFailed')), 'error');
     },
   });
 
@@ -450,6 +544,10 @@ export function ProductSettingsPage() {
     setSelectedPay((current) => current.filter((id) => subscriptionByProduct.has(id)));
   }, [subscriptionByProduct]);
 
+  function renewLabel(productId: string): string {
+    return t('settings.productsPage.renewCta', { product: getProductName(productId) });
+  }
+
   function intervalFor(productId: string): BillingInterval {
     return intervalByProduct[productId] || 'yearly';
   }
@@ -476,12 +574,12 @@ export function ProductSettingsPage() {
       ];
     });
     if (items.length === 0) {
-      snackbar.push('Choose a plan first.', 'error');
+      snackbar.push(t('settings.productsPage.choosePlanFirst'), 'error');
       return;
     }
     if (isIntlBilling) {
       if (items.length > 1) {
-        snackbar.push('Pay one subscription at a time with Stripe.', 'warning');
+        snackbar.push(t('settings.productsPage.stripeOneAtATime'), 'warning');
       }
       const item = items[0];
       billingCheckout.mutate(
@@ -489,7 +587,7 @@ export function ProductSettingsPage() {
         {
           onSuccess: (session) => {
             if (session.mock_mode) {
-              snackbar.push(`Mock Stripe session ${session.order_id} created.`, 'success');
+              snackbar.push(t('settings.productsPage.mockStripe', { id: session.order_id }), 'success');
               return;
             }
             if (session.checkout_url) {
@@ -497,9 +595,9 @@ export function ProductSettingsPage() {
               if (!opened) window.location.assign(session.checkout_url);
               return;
             }
-            snackbar.push('Stripe checkout could not be opened. Try again.', 'error');
+            snackbar.push(t('settings.productsPage.stripeOpenFailed'), 'error');
           },
-          onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't start Stripe checkout."), 'error'),
+          onError: (error) => snackbar.push(getApiErrorMessage(error, t('settings.productsPage.stripeStartFailed')), 'error'),
         },
       );
       return;
@@ -517,9 +615,9 @@ export function ProductSettingsPage() {
         planCode,
         billingInterval: intervalFor(productId),
       });
-      snackbar.push(`Started ${formatPlanDisplayName(undefined, planCode)} trial for ${getProductName(productId)}.`, 'success');
+      snackbar.push(t('settings.productsPage.trialStarted', { plan: formatPlanDisplayName(undefined, planCode), product: getProductName(productId) }), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't subscribe to this product. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.subscribeFailed')), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -533,10 +631,14 @@ export function ProductSettingsPage() {
     const yearly = subscription?.billing_interval === 'yearly';
     const confirmed = window.confirm(
       paidActive
-        ? `Cancel ${getProductName(productId)} at period end (${formatDate(subscription?.current_period_ends_at)})? You keep access until then.${
-            yearly ? ' Prepaid yearly amount is not refunded automatically — you can request a refund from Order history.' : ''
-          }`
-        : `Unsubscribe ${getProductName(productId)} from ${workspace.activeBusiness?.display_name ?? 'this business'}? Access for this product ends immediately.`,
+        ? `${t('settings.productsPage.confirmCancelPaid', {
+            product: getProductName(productId),
+            date: formatDate(subscription?.current_period_ends_at),
+          })}${yearly ? ` ${t('settings.productsPage.confirmYearlyNote')}` : ''}`
+        : t('settings.productsPage.confirmUnsubscribe', {
+            product: getProductName(productId),
+            business: workspace.activeBusiness?.display_name ?? t('settings.productsPage.thisBusinessLower'),
+          }),
     );
     if (!confirmed) return;
 
@@ -545,15 +647,18 @@ export function ProductSettingsPage() {
       if (paidActive) {
         await scheduleCancel.mutateAsync(productId);
         snackbar.push(
-          `${getProductName(productId)} will end on ${formatDate(subscription?.current_period_ends_at)}.`,
+          t('settings.productsPage.willEndOn', {
+            product: getProductName(productId),
+            date: formatDate(subscription?.current_period_ends_at),
+          }),
           'success',
         );
       } else {
         await unsubscribeProduct.mutateAsync(productId);
-        snackbar.push(`Unsubscribed from ${getProductName(productId)}.`, 'success');
+        snackbar.push(t('settings.productsPage.unsubscribed', { product: getProductName(productId) }), 'success');
       }
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't cancel this product. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.cancelFailed')), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -569,8 +674,11 @@ export function ProductSettingsPage() {
     if (isDowngrade(current, planCode) || (intervalChanged && subscription?.status === 'active')) {
       const accepted = window.confirm(
         intervalChanged && planCode === current
-          ? `Switch to ${nextInterval} billing at the end of your current period (${formatDate(subscription?.current_period_ends_at)})? You keep the current cadence until then.`
-          : 'This plan change takes effect at the end of your current billing period. You keep your current plan until then. Continue?',
+          ? t('settings.productsPage.confirmSwitchInterval', {
+              interval: nextInterval === 'yearly' ? t('settings.productsPage.intervalAdjYearly') : t('settings.productsPage.intervalAdjMonthly'),
+              date: formatDate(subscription?.current_period_ends_at),
+            })
+          : t('settings.productsPage.confirmPlanChange'),
       );
       if (!accepted) return;
     }
@@ -581,12 +689,16 @@ export function ProductSettingsPage() {
       const deferred = isDowngrade(current, planCode) || (intervalChanged && subscription?.status === 'active');
       snackbar.push(
         deferred
-          ? `${getProductName(productId)} will update at period end.`
-          : `${getProductName(productId)} is now on ${formatPlanDisplayName(undefined, planCode)} (${nextInterval}).`,
+          ? t('settings.productsPage.willUpdateAtPeriodEnd', { product: getProductName(productId) })
+          : t('settings.productsPage.nowOnPlan', {
+              product: getProductName(productId),
+              plan: formatPlanDisplayName(undefined, planCode),
+              interval: intervalLabel(t, nextInterval),
+            }),
         'success',
       );
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't change the plan. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.changePlanFailed')), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -600,9 +712,9 @@ export function ProductSettingsPage() {
       if (subscription?.plan_code) {
         setSelectedPlanByProduct((current) => ({ ...current, [productId]: subscription.plan_code ?? current[productId] }));
       }
-      snackbar.push(`Kept your current ${getProductName(productId)} plan.`, 'success');
+      snackbar.push(t('settings.productsPage.keptPlan', { product: getProductName(productId) }), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't cancel the scheduled plan change. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.productsPage.cancelPendingFailed')), 'error');
     } finally {
       setPendingAction(null);
     }
@@ -611,9 +723,9 @@ export function ProductSettingsPage() {
   if (!workspace.businessId) {
     return (
       <Card className="product-settings-card">
-        <p className="product-settings-kicker">Your subscriptions</p>
-        <h2 className="product-settings-title">Select a business first</h2>
-        <p className="product-settings-lead">Create or switch to a business before managing its products.</p>
+        <p className="product-settings-kicker">{t('settings.productsPage.kicker')}</p>
+        <h2 className="product-settings-title">{t('settings.productsPage.selectBusinessTitle')}</h2>
+        <p className="product-settings-lead">{t('settings.productsPage.selectBusinessLead')}</p>
       </Card>
     );
   }
@@ -626,7 +738,7 @@ export function ProductSettingsPage() {
           onClose={() => setUpiRequest(null)}
           onClaimed={async () => {
             await Promise.all([billingSnapshot.refetch(), billingOrders.refetch()]);
-            snackbar.push('Payment received — IE usually confirms the same day.', 'success');
+            snackbar.push(t('settings.productsPage.paymentReceived'), 'success');
             setHubTab('orders');
           }}
           onError={(message) => snackbar.push(message, 'error')}
@@ -634,30 +746,30 @@ export function ProductSettingsPage() {
       ) : null}
 
       <Card className="product-settings-card">
-        <p className="product-settings-kicker">Your subscriptions</p>
+        <p className="product-settings-kicker">{t('settings.productsPage.kicker')}</p>
         <h2 className="product-settings-title">
-          {workspace.activeBusiness?.display_name ?? 'This business'}
+          {workspace.activeBusiness?.display_name ?? t('settings.productsPage.thisBusiness')}
         </h2>
         <p className="product-settings-lead">
-          Manage products like Your orders. Each item has its own due date and price. We never auto-charge, and a late
-          Orbit Mart payment does not lock Orbit Appoint.
+          {t('settings.productsPage.lead')}
         </p>
         {isIntlBilling ? (
           <p className="product-settings-lead">
-            International workspaces bill SaaS subscriptions in USD via Stripe Checkout. UPI payment claims apply to
-            India (INR) only.
+            {t('settings.productsPage.leadIntl')}
           </p>
         ) : null}
 
         <div className="product-settings-hub">
           <button type="button" className={hubTab === 'subscriptions' ? 'is-on' : ''} onClick={() => setHubTab('subscriptions')}>
-            Subscriptions
+            {t('settings.productsPage.tabSubscriptions')}
           </button>
           <button type="button" className={hubTab === 'orders' ? 'is-on' : ''} onClick={() => setHubTab('orders')}>
-            Order history{billingOrders.data?.length ? ` (${billingOrders.data.length})` : ''}
+            {billingOrders.data?.length
+              ? t('settings.productsPage.tabOrdersCount', { count: billingOrders.data.length })
+              : t('settings.productsPage.tabOrders')}
           </button>
           <button type="button" className={hubTab === 'tax' ? 'is-on' : ''} onClick={() => setHubTab('tax')}>
-            Tax invoices
+            {t('settings.productsPage.tabTax')}
           </button>
         </div>
 
@@ -670,11 +782,11 @@ export function ProductSettingsPage() {
                 <input
                   value={orderQuery}
                   onChange={(event) => setOrderQuery(event.target.value)}
-                  placeholder="Search order #, UTR, or product"
+                  placeholder={t('settings.productsPage.searchPlaceholder')}
                 />
                 {orderQuery ? (
                   <button type="button" onClick={() => setOrderQuery('')}>
-                    Clear
+                    {t('common.clear')}
                   </button>
                 ) : null}
               </label>
@@ -686,7 +798,7 @@ export function ProductSettingsPage() {
                     className={orderStatus === item.id ? 'is-on' : ''}
                     onClick={() => setOrderStatus(item.id)}
                   >
-                    {item.label}
+                    {item.id === 'all' ? t('common.all') : item.id === 'created' ? t('settings.productsPage.filterCreated') : t(`settings.productsPage.filter${item.id.charAt(0).toUpperCase()}${item.id.slice(1)}`)}
                     {orderCounts[item.id] ? ` (${orderCounts[item.id]})` : ''}
                   </button>
                 ))}
@@ -699,13 +811,13 @@ export function ProductSettingsPage() {
                     className={orderRange === item.id ? 'is-on' : ''}
                     onClick={() => setOrderRange(item.id)}
                   >
-                    {item.label}
+                    {item.id === 'all' ? t('settings.productsPage.rangeAll') : t(`settings.productsPage.range${item.id}`)}
                   </button>
                 ))}
               </div>
               <div className="product-settings-filter">
                 <button type="button" className={orderProduct === '' ? 'is-on' : ''} onClick={() => setOrderProduct('')}>
-                  All products
+                  {t('settings.productsPage.allProducts')}
                 </button>
                 {PRODUCT_CATALOG.map((product) => (
                   <button
@@ -720,21 +832,25 @@ export function ProductSettingsPage() {
               </div>
               <p className="sub-history-meta">
                 {billingOrders.isLoading
-                  ? 'Loading orders…'
-                  : `Showing ${filteredHistory.length} of ${orderCounts.all} histor${orderCounts.all === 1 ? 'y item' : 'y items'} (${allOrders.length} order${allOrders.length === 1 ? '' : 's'}).`}
+                  ? t('settings.productsPage.loadingOrders')
+                  : t('settings.productsPage.historyMeta', {
+                      shown: filteredHistory.length,
+                      total: orderCounts.all,
+                      orders: allOrders.length,
+                    })}
               </p>
             </div>
             {billingOrders.isLoading ? (
-              <p className="product-settings-lead">Loading orders…</p>
+              <p className="product-settings-lead">{t('settings.productsPage.loadingOrders')}</p>
             ) : allOrders.length === 0 ? (
               <div className="product-settings-empty">
-                <p className="product-settings-empty-title">No orders yet</p>
-                <p className="product-settings-lead">Orders appear here after you submit a payment claim or a payment completes — with UTR, screenshot, and status.</p>
+                <p className="product-settings-empty-title">{t('settings.productsPage.noOrdersTitle')}</p>
+                <p className="product-settings-lead">{t('settings.productsPage.noOrdersBody')}</p>
               </div>
             ) : filteredHistory.length === 0 ? (
               <div className="product-settings-empty">
-                <p className="product-settings-empty-title">No orders match these filters</p>
-                <p className="product-settings-lead">Try another order number, UTR, product, or date range.</p>
+                <p className="product-settings-empty-title">{t('settings.productsPage.noMatchTitle')}</p>
+                <p className="product-settings-lead">{t('settings.productsPage.noMatchBody')}</p>
                 {historyFiltersActive ? (
                   <Button
                     variant="neutral"
@@ -745,7 +861,7 @@ export function ProductSettingsPage() {
                       setOrderProduct('');
                     }}
                   >
-                    Clear filters
+                    {t('settings.productsPage.clearFilters')}
                   </Button>
                 ) : null}
               </div>
@@ -775,12 +891,12 @@ export function ProductSettingsPage() {
                   <OrderMetaBar
                     items={[
                       {
-                        label: isPayment ? 'Order placed' : 'When',
+                        label: isPayment ? t('settings.productsPage.orderPlaced') : t('settings.productsPage.when'),
                         value: formatDate(entry.sortAt),
                       },
-                      { label: 'Amount', value: formatInrFromPaise(entry.amountPaise) ?? '—' },
-                      { label: 'Bill to', value: order.business_name || workspace.activeBusiness?.display_name || '—' },
-                      { label: 'Order #', value: order.order_number || order.id.slice(0, 8).toUpperCase() },
+                      { label: t('settings.productsPage.amount'), value: formatInrFromPaise(entry.amountPaise) ?? '—' },
+                      { label: t('settings.productsPage.billTo'), value: order.business_name || workspace.activeBusiness?.display_name || '—' },
+                      { label: t('settings.productsPage.orderNumber'), value: order.order_number || order.id.slice(0, 8).toUpperCase() },
                     ]}
                   />
                   <div className="sub-order__body">
@@ -790,10 +906,10 @@ export function ProductSettingsPage() {
                           {isPayment
                             ? orderProducts(order)
                             : isRefundRequest
-                              ? `Refund request · ${orderProducts(order)}`
+                              ? t('settings.productsPage.refundRequestTitle', { products: orderProducts(order) })
                               : isRefundPaid
-                                ? `Refund · ${orderProducts(order)}`
-                                : `Refund declined · ${orderProducts(order)}`}
+                                ? t('settings.productsPage.refundTitle', { products: orderProducts(order) })
+                                : t('settings.productsPage.refundDeclinedTitle', { products: orderProducts(order) })}
                         </h3>
                         <div className="product-settings-chips">
                           <span
@@ -805,15 +921,15 @@ export function ProductSettingsPage() {
                                   : ' product-settings-chip--trial'
                             }`}
                           >
-                            {entry.statusLabel}
+                            {orderStatusText(t, entry.statusLabel)}
                           </span>
                           {isPayment
                             ? (() => {
-                                const intent = orderIntentChip(order);
+                                const intent = orderIntentChip(order, t);
                                 return intent ? <span className="product-settings-chip">{intent}</span> : null;
                               })()
                             : (
-                              <span className="product-settings-chip">Refund</span>
+                              <span className="product-settings-chip">{t('settings.productsPage.chipRefund')}</span>
                             )}
                         </div>
                       </div>
@@ -822,14 +938,14 @@ export function ProductSettingsPage() {
                     <p className="sub-order__note">
                       {isPayment ? (
                         <>
-                          UTR {order.upi_utr || 'not provided'}
-                          {order.claimed_at ? ` · submitted ${formatDate(order.claimed_at)}` : ''}
-                          {order.paid_at ? ` · confirmed ${formatDate(order.paid_at)}` : ''}
+                          {t('settings.productsPage.utrLine', { utr: order.upi_utr || t('settings.productsPage.utrNotProvided') })}
+                          {order.claimed_at ? ` · ${t('settings.productsPage.submittedOn', { date: formatDate(order.claimed_at) })}` : ''}
+                          {order.paid_at ? ` · ${t('settings.productsPage.confirmedOn', { date: formatDate(order.paid_at) })}` : ''}
                           {entry.note ? ` · ${entry.note}` : ''}
                         </>
                       ) : (
                         <>
-                          Linked to order #{order.order_number || order.id.slice(0, 8).toUpperCase()}
+                          {t('settings.productsPage.linkedToOrder', { number: order.order_number || order.id.slice(0, 8).toUpperCase() })}
                           {entry.note ? ` · ${entry.note}` : ''}
                         </>
                       )}
@@ -841,7 +957,7 @@ export function ProductSettingsPage() {
                           className="sub-order__proof-link"
                           onClick={() => setProofPreviewUrl(proofUrl)}
                         >
-                          View screenshot
+                          {t('settings.productsPage.viewScreenshot')}
                         </button>
                       </p>
                     ) : null}
@@ -860,11 +976,13 @@ export function ProductSettingsPage() {
                                 ...(workspace.businessId ? { 'X-Business-ID': workspace.businessId } : {}),
                               },
                             )
-                              .then(() => snackbar.push('Invoice downloaded', 'success'))
-                              .catch((err) => snackbar.push(getApiErrorMessage(err, 'Could not download invoice'), 'error'));
+                              .then(() => snackbar.push(t('settings.productsPage.invoiceDownloaded'), 'success'))
+                              .catch((err) => snackbar.push(getApiErrorMessage(err, t('settings.productsPage.invoiceFailed')), 'error'));
                           }}
                         >
-                          Download invoice{order.tax_invoice_number ? ` (${order.tax_invoice_number})` : ''}
+                          {order.tax_invoice_number
+                            ? t('settings.productsPage.downloadInvoiceNumber', { number: order.tax_invoice_number })
+                            : t('settings.productsPage.downloadInvoice')}
                         </Button>
                       </div>
                     ) : null}
@@ -883,18 +1001,20 @@ export function ProductSettingsPage() {
                                 ...(workspace.businessId ? { 'X-Business-ID': workspace.businessId } : {}),
                               },
                             )
-                              .then(() => snackbar.push('Credit note downloaded', 'success'))
+                              .then(() => snackbar.push(t('settings.productsPage.creditNoteDownloaded'), 'success'))
                               .catch((err) =>
-                                snackbar.push(getApiErrorMessage(err, 'Could not download credit note'), 'error'),
+                                snackbar.push(getApiErrorMessage(err, t('settings.productsPage.creditNoteFailed')), 'error'),
                               );
                           }}
                         >
-                          Download credit note{entry.creditNoteNumber ? ` (${entry.creditNoteNumber})` : ''}
+                          {entry.creditNoteNumber
+                            ? t('settings.productsPage.downloadCreditNoteNumber', { number: entry.creditNoteNumber })
+                            : t('settings.productsPage.downloadCreditNote')}
                         </Button>
                       </div>
                     ) : null}
                     {isPayment && order.payment_status === 'awaiting_confirmation' ? (
-                      <p className="sub-order__note">Payment received — IE usually confirms the same day.</p>
+                      <p className="sub-order__note">{t('settings.productsPage.paymentReceived')}</p>
                     ) : null}
                     {isPayment && order.payment_status === 'rejected' ? (
                       <div className="product-settings-product-actions">
@@ -903,11 +1023,11 @@ export function ProductSettingsPage() {
                           onClick={() =>
                             openPay(
                               (order.product_codes ?? [order.product_code]).filter((code): code is string => Boolean(code)),
-                              'Pay again',
+                              t('settings.productsPage.payAgain'),
                             )
                           }
                         >
-                          Pay again
+                          {t('settings.productsPage.payAgain')}
                         </Button>
                       </div>
                     ) : null}
@@ -920,15 +1040,15 @@ export function ProductSettingsPage() {
                         {refundDraft?.orderId === order.id ? (
                           <div className="billing-refund-form">
                             <label>
-                              Reason
+                              {t('settings.productsPage.refundReason')}
                               <input
                                 value={refundDraft.reason}
                                 onChange={(e) => setRefundDraft({ ...refundDraft, reason: e.target.value })}
-                                placeholder="Why do you need a refund?"
+                                placeholder={t('settings.productsPage.refundReasonPlaceholder')}
                               />
                             </label>
                             <label>
-                              Amount (₹)
+                              {t('settings.productsPage.refundAmount')}
                               <input
                                 type="number"
                                 min={1}
@@ -946,20 +1066,24 @@ export function ProductSettingsPage() {
                             </label>
                             {order.is_wallet_top_up ? (
                               <p className="sub-order__note">
-                                Only unused {order.refund_kind === 'assistant_top_up' ? 'Assistant' : 'Smart Lookup'}{' '}
-                                wallet balance can be refunded
                                 {order.available_refund_paise != null
-                                  ? ` (available ${formatInrFromPaise(order.available_refund_paise)})`
-                                  : ''}
-                                . Spent balance stays with usage.
+                                  ? t('settings.productsPage.walletRefundNoteAvail', {
+                                      wallet: order.refund_kind === 'assistant_top_up' ? t('settings.productsPage.walletAssistant') : t('settings.productsPage.walletSmartLookup'),
+                                      amount: formatInrFromPaise(order.available_refund_paise),
+                                    })
+                                  : t('settings.productsPage.walletRefundNote', {
+                                      wallet: order.refund_kind === 'assistant_top_up' ? t('settings.productsPage.walletAssistant') : t('settings.productsPage.walletSmartLookup'),
+                                    })}
                               </p>
                             ) : order.available_refund_paise != null ? (
                               <p className="sub-order__note">
-                                Max refundable {formatInrFromPaise(order.available_refund_paise)}
                                 {order.suggested_refund_paise != null &&
                                 order.suggested_refund_paise !== order.available_refund_paise
-                                  ? ` · suggested ${formatInrFromPaise(order.suggested_refund_paise)}`
-                                  : ''}
+                                  ? t('settings.productsPage.maxRefundableSuggested', {
+                                      amount: formatInrFromPaise(order.available_refund_paise),
+                                      suggested: formatInrFromPaise(order.suggested_refund_paise),
+                                    })
+                                  : t('settings.productsPage.maxRefundable', { amount: formatInrFromPaise(order.available_refund_paise) })}
                               </p>
                             ) : null}
                             <div className="product-settings-product-actions">
@@ -974,10 +1098,10 @@ export function ProductSettingsPage() {
                                   })
                                 }
                               >
-                                Submit refund request
+                                {t('settings.productsPage.submitRefund')}
                               </Button>
                               <Button variant="ghost" onClick={() => setRefundDraft(null)}>
-                                Close
+                                {t('common.close')}
                               </Button>
                             </div>
                           </div>
@@ -998,7 +1122,7 @@ export function ProductSettingsPage() {
                               })
                             }
                           >
-                            Request refund
+                            {t('settings.productsPage.requestRefund')}
                           </Button>
                         )}
                       </div>
@@ -1010,7 +1134,7 @@ export function ProductSettingsPage() {
                           loading={withdrawRefund.isPending}
                           onClick={() => void withdrawRefund.mutateAsync(order.id)}
                         >
-                          Withdraw refund request
+                          {t('settings.productsPage.withdrawRefund')}
                         </Button>
                       </div>
                     ) : null}
@@ -1025,10 +1149,10 @@ export function ProductSettingsPage() {
             <div className="product-settings-filter">
               {(
                 [
-                  ['all', 'All'],
-                  ['due', 'Due soon'],
-                  ['review', 'Under review'],
-                  ['locked', 'Locked'],
+                  ['all', t('common.all')],
+                  ['due', t('settings.productsPage.filterDue')],
+                  ['review', t('settings.productsPage.filterReview')],
+                  ['locked', t('settings.productsPage.filterLocked')],
                 ] as const
               ).map(([id, label]) => (
                 <button key={id} type="button" className={hubFilter === id ? 'is-on' : ''} onClick={() => setHubFilter(id)}>
@@ -1069,7 +1193,7 @@ export function ProductSettingsPage() {
                     addonPrices,
                     selectedInterval,
                   ),
-                ) ?? '—'}/${selectedInterval === 'yearly' ? 'year' : 'month'}`;
+                ) ?? '—'}${perIntervalLabel(t, selectedInterval)}`;
                 const dueDays = daysUntil(subscriptionDueAt(subscription));
                 const dueLabel = formatDate(subscriptionDueAt(subscription));
                 const latestOrder = (billingOrders.data ?? []).find((order) =>
@@ -1088,12 +1212,12 @@ export function ProductSettingsPage() {
                   >
                     <OrderMetaBar
                       items={[
-                        { label: 'Started', value: formatDate(subscription.subscribed_at) },
-                        { label: 'Next payment', value: `${dueLabel} · ${amountLabel}` },
-                        { label: 'Bill to', value: workspace.activeBusiness?.display_name ?? '—' },
+                        { label: t('settings.productsPage.started'), value: formatDate(subscription.subscribed_at) },
+                        { label: t('settings.productsPage.nextPayment'), value: `${dueLabel} · ${amountLabel}` },
+                        { label: t('settings.productsPage.billTo'), value: workspace.activeBusiness?.display_name ?? '—' },
                         {
-                          label: latestOrder ? 'Last order #' : 'Status',
-                          value: latestOrder?.order_number || subscriptionStatusLabel(uxStatus, dueDays),
+                          label: latestOrder ? t('settings.productsPage.lastOrderNumber') : t('common.status'),
+                          value: latestOrder?.order_number || subscriptionStatusText(t, uxStatus, dueDays),
                         },
                       ]}
                     />
@@ -1109,18 +1233,18 @@ export function ProductSettingsPage() {
                                   : ' product-settings-chip--subscribed'
                               }`}
                             >
-                              {subscriptionStatusLabel(uxStatus, dueDays)}
+                              {subscriptionStatusText(t, uxStatus, dueDays)}
                             </span>
                             <span className="product-settings-chip product-settings-chip--active">
                               {formatPlanDisplayName(subscription.plan_name, subscription.plan_code)}
                             </span>
                             <span className="product-settings-chip">
-                              {subscription.billing_interval === 'yearly' ? 'Yearly' : 'Monthly'}
+                              {intervalLabel(t, subscription.billing_interval)}
                             </span>
                           </div>
                         </div>
                       </div>
-                      <p className="sub-order__note">{nextPaymentCopy(subscription, amountLabel)}</p>
+                      <p className="sub-order__note">{nextPaymentText(t, subscription, amountLabel)}</p>
                       <PaymentTracker status={uxStatus} dueLabel={dueLabel} />
 
                       <BillingCadenceSwitch
@@ -1133,8 +1257,8 @@ export function ProductSettingsPage() {
 
                       {paymentPending ? (
                         <div className="product-settings-pending">
-                          <strong>Payment received — IE usually confirms the same day.</strong>
-                          <p>IE emails you when this product is active until the next due date.</p>
+                          <strong>{t('settings.productsPage.paymentReceived')}</strong>
+                          <p>{t('settings.productsPage.reviewBody')}</p>
                         </div>
                       ) : null}
 
@@ -1142,10 +1266,12 @@ export function ProductSettingsPage() {
                         <div className="product-settings-pending">
                           <strong>
                             {pendingPlanCode === 'canceled'
-                              ? `Ends ${formatDate(subscription.current_period_ends_at)} — you keep access until then`
-                              : `${formatPlanDisplayName(subscription.plan_name, currentPlanCode)} until ${formatDate(
-                                  subscription.current_period_ends_at,
-                                )}, then ${formatPlanDisplayName(subscription.pending_plan_name, pendingPlanCode)}`}
+                              ? t('settings.productsPage.endsOn', { date: formatDate(subscription.current_period_ends_at) })
+                              : t('settings.productsPage.planUntilThen', {
+                                  current: formatPlanDisplayName(subscription.plan_name, currentPlanCode),
+                                  date: formatDate(subscription.current_period_ends_at),
+                                  next: formatPlanDisplayName(subscription.pending_plan_name, pendingPlanCode),
+                                })}
                           </strong>
                           <Button
                             variant="ghost"
@@ -1153,18 +1279,18 @@ export function ProductSettingsPage() {
                             disabled={pendingAction !== null}
                           >
                             {action === 'cancel'
-                              ? 'Keeping…'
+                              ? t('settings.productsPage.keeping')
                               : pendingPlanCode === 'canceled'
-                                ? 'Keep subscription'
-                                : 'Keep current plan'}
+                                ? t('settings.productsPage.keepSubscription')
+                                : t('settings.productsPage.keepCurrentPlan')}
                           </Button>
                         </div>
                       ) : null}
 
                       {isSoftLocked && !paymentPending ? (
                         <div className="product-settings-pending product-settings-pending--lock">
-                          <strong>{renewCtaLabel(product.id)} — pay this period to keep bookings unlocked.</strong>
-                          <p>Viewing stays open. New bookings, staff, and offices stay locked until payment is confirmed.</p>
+                          <strong>{t('settings.productsPage.lockTitle', { renew: renewLabel(product.id) })}</strong>
+                          <p>{t('settings.productsPage.lockBody')}</p>
                         </div>
                       ) : null}
 
@@ -1181,7 +1307,8 @@ export function ProductSettingsPage() {
                             const monthly = planPricePaise(catalog, 'monthly');
                             const savings =
                               selectedInterval === 'yearly'
-                                ? yearlySavingsCopy(
+                                ? savingsText(
+                                    t,
                                     monthly,
                                     planPricePaise(catalog, 'yearly'),
                                     catalog?.yearly_months_charged,
@@ -1198,23 +1325,23 @@ export function ProductSettingsPage() {
                                 aria-pressed={selected}
                               >
                                 <div className="product-settings-plan-card-top">
-                                  {recommended ? <span className="product-settings-recommended">Recommended</span> : <span>Starter</span>}
-                                  {isCurrent ? <span className="product-settings-current">Current</span> : null}
+                                  {recommended ? <span className="product-settings-recommended">{t('settings.productsPage.recommended')}</span> : <span>{t('settings.productsPage.starter')}</span>}
+                                  {isCurrent ? <span className="product-settings-current">{t('settings.productsPage.current')}</span> : null}
                                 </div>
                                 <strong>{formatPlanDisplayName(catalog?.name ?? plan.name, code)}</strong>
                                 <p className="product-settings-plan-price">
                                   {price ? (
                                     <>
                                       {price}
-                                      <span>/{selectedInterval === 'yearly' ? 'year' : 'month'}</span>
+                                      <span>{perIntervalLabel(t, selectedInterval)}</span>
                                     </>
                                   ) : (
-                                    'Price on request'
+                                    t('settings.productsPage.priceOnRequest')
                                   )}
                                 </p>
                                 {savings ? <p className="billing-cadence__save">{savings.detail}</p> : null}
                                 <p className="product-settings-plan-limits">
-                                  {planSeatLine({
+                                  {seatLineText(t, {
                                     max_staff: catalog?.max_staff ?? plan.max_staff,
                                     max_branches: catalog?.max_branches ?? plan.max_branches,
                                     max_extra_offices: catalog?.max_extra_offices ?? plan.max_extra_offices,
@@ -1229,10 +1356,10 @@ export function ProductSettingsPage() {
                       <div className="product-settings-product-actions">
                         <Button
                           variant="primary"
-                          onClick={() => openPay([product.id], renewCtaLabel(product.id))}
+                          onClick={() => openPay([product.id], renewLabel(product.id))}
                           disabled={pendingAction !== null || paymentPending}
                         >
-                          {paymentPending ? 'Payment under review' : renewCtaLabel(product.id)}
+                          {paymentPending ? t('settings.productsPage.payUnderReview') : renewLabel(product.id)}
                         </Button>
                         {isSoftLocked ? null : (
                           <Button
@@ -1250,12 +1377,12 @@ export function ProductSettingsPage() {
                             }
                           >
                             {action === 'plan'
-                              ? 'Updating…'
+                              ? t('settings.productsPage.updating')
                               : !showPlans
-                                ? 'Change plan or billing'
+                                ? t('settings.productsPage.changePlanOrBilling')
                                 : selectedIsCurrent
-                                  ? 'Current plan'
-                                  : `Change to ${selectedTitle}`}
+                                  ? t('settings.productsPage.currentPlan')
+                                  : t('settings.productsPage.changeTo', { plan: selectedTitle })}
                           </Button>
                         )}
                         <Button
@@ -1265,11 +1392,11 @@ export function ProductSettingsPage() {
                         >
                           {action === 'unsubscribe'
                             ? paidThrough
-                              ? 'Scheduling…'
-                              : 'Unsubscribing…'
+                              ? t('settings.productsPage.scheduling')
+                              : t('settings.productsPage.unsubscribing')
                             : paidThrough
-                              ? 'Cancel at period end'
-                              : 'Cancel'}
+                              ? t('settings.productsPage.cancelAtPeriodEnd')
+                              : t('common.cancel')}
                         </Button>
                       </div>
                     </div>
@@ -1280,8 +1407,8 @@ export function ProductSettingsPage() {
 
             {subscribedCount > 1 ? (
               <div className="product-settings-split-bill">
-                <strong>Your items</strong>
-                <p>Select items to pay now, like a cart. Each product keeps its own due date.</p>
+                <strong>{t('settings.productsPage.yourItems')}</strong>
+                <p>{t('settings.productsPage.yourItemsHelp')}</p>
                 <ul>
                   {[...subscriptionByProduct.values()].map((item) => (
                     <li key={item.product_code}>
@@ -1297,25 +1424,29 @@ export function ProductSettingsPage() {
                             );
                           }}
                         />{' '}
-                        {getProductName(item.product_code)} · next payment due {formatDate(subscriptionDueAt(item))} ·{' '}
-                        {formatInrFromPaise(
-                          estimateProductTotalPaise(item, catalogByCode.get(item.plan_code ?? ''), addonPrices),
-                        ) ?? '—'}
-                        /{item.billing_interval === 'yearly' ? 'year' : 'month'}
+                        {t('settings.productsPage.itemLine', {
+                          product: getProductName(item.product_code),
+                          date: formatDate(subscriptionDueAt(item)),
+                          amount: `${
+                            formatInrFromPaise(
+                              estimateProductTotalPaise(item, catalogByCode.get(item.plan_code ?? ''), addonPrices),
+                            ) ?? '—'
+                          }${perIntervalLabel(t, item.billing_interval)}`,
+                        })}
                       </label>
                     </li>
                   ))}
                 </ul>
-                <Button variant="primary" disabled={selectedPay.length === 0} onClick={() => openPay(selectedPay, 'Pay selected with UPI')}>
-                  Pay selected with UPI
+                <Button variant="primary" disabled={selectedPay.length === 0} onClick={() => openPay(selectedPay, t('settings.productsPage.paySelectedUpi'))}>
+                  {t('settings.productsPage.paySelectedUpi')}
                 </Button>
               </div>
             ) : null}
 
             {PRODUCT_CATALOG.some((product) => !subscriptionByProduct.has(product.id)) ? (
               <div className="product-settings-available">
-                <h3>Add a product</h3>
-                <p className="product-settings-lead">Start a trial or pay now. After that it appears above as its own subscription.</p>
+                <h3>{t('settings.productsPage.addProductTitle')}</h3>
+                <p className="product-settings-lead">{t('settings.productsPage.addProductLead')}</p>
                 <div className="product-settings-catalog">
                   {PRODUCT_CATALOG.filter((product) => !subscriptionByProduct.has(product.id)).map((product) => {
                     const plans = plansByProduct.get(product.id) ?? [];
@@ -1349,7 +1480,8 @@ export function ProductSettingsPage() {
                               const price = formatInrFromPaise(planPricePaise(catalog, selectedInterval));
                               const savings =
                                 selectedInterval === 'yearly'
-                                  ? yearlySavingsCopy(
+                                  ? savingsText(
+                                      t,
                                       planPricePaise(catalog, 'monthly'),
                                       planPricePaise(catalog, 'yearly'),
                                       catalog?.yearly_months_charged,
@@ -1366,17 +1498,17 @@ export function ProductSettingsPage() {
                                   aria-pressed={selected}
                                 >
                                   <div className="product-settings-plan-card-top">
-                                    {recommended ? <span className="product-settings-recommended">Recommended</span> : <span>Starter</span>}
+                                    {recommended ? <span className="product-settings-recommended">{t('settings.productsPage.recommended')}</span> : <span>{t('settings.productsPage.starter')}</span>}
                                   </div>
                                   <strong>{formatPlanDisplayName(catalog?.name ?? plan.name, code)}</strong>
                                   <p className="product-settings-plan-price">
                                     {price ? (
                                       <>
                                         {price}
-                                        <span>/{selectedInterval === 'yearly' ? 'year' : 'month'}</span>
+                                        <span>{perIntervalLabel(t, selectedInterval)}</span>
                                       </>
                                     ) : (
-                                      'Price on request'
+                                      t('settings.productsPage.priceOnRequest')
                                     )}
                                   </p>
                                   {savings ? <p className="billing-cadence__save">{savings.detail}</p> : null}
@@ -1391,14 +1523,14 @@ export function ProductSettingsPage() {
                             onClick={() => void handleSubscribe(product.id)}
                             disabled={pendingAction !== null || !selectedPlanCode}
                           >
-                            {action === 'subscribe' ? 'Starting trial…' : `Start ${selectedTitle} trial`}
+                            {action === 'subscribe' ? t('settings.productsPage.startingTrial') : t('settings.productsPage.startTrial', { plan: selectedTitle })}
                           </Button>
                           <Button
                             variant="neutral"
-                            onClick={() => openPay([product.id], `Pay to start ${product.name}`)}
+                            onClick={() => openPay([product.id], t('settings.productsPage.payToStartProduct', { product: product.name }))}
                             disabled={pendingAction !== null || !selectedPlanCode}
                           >
-                            Pay to start
+                            {t('settings.productsPage.payToStart')}
                           </Button>
                         </div>
                       </article>
@@ -1414,7 +1546,7 @@ export function ProductSettingsPage() {
       {hubTab === 'subscriptions' ? (
         <SeatsAddonsPanel
           subscribedProductIds={[...subscriptionByProduct.keys()]}
-          onPayProduct={(productId) => openPay([productId], renewCtaLabel(productId))}
+          onPayProduct={(productId) => openPay([productId], renewLabel(productId))}
         />
       ) : null}
 
@@ -1425,7 +1557,7 @@ export function ProductSettingsPage() {
       <Dialog
         open={Boolean(proofPreviewUrl)}
         onClose={() => setProofPreviewUrl(null)}
-        title="Payment screenshot"
+        title={t('settings.productsPage.proofTitle')}
         labelledBy="billing-proof-title"
       >
         {proofPreviewUrl ? <ProofImage src={proofPreviewUrl} /> : null}

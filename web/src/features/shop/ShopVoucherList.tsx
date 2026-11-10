@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Eye, Plus, Share2, SlidersHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ShopBooksVoucher, ShopEWayGenerateInput } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -41,14 +42,7 @@ type VoucherLineItem = {
   product_id?: string | null;
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-  cash: 'Cash',
-  upi: 'UPI',
-  card: 'Card',
-  borrow: 'Credit',
-  razorpay: 'Online (Razorpay)',
-  cashfree: 'Online (Cashfree)',
-};
+const PAYMENT_METHODS = ['cash', 'upi', 'card', 'borrow', 'razorpay', 'cashfree'];
 
 function moneyNum(value: unknown): number {
   const n = Number(value);
@@ -124,7 +118,6 @@ function voucherBillSummaryRows(voucher: ShopBooksVoucher) {
   const sgst = moneyNum(voucher.sgst_total);
   const isInterstate = Boolean(voucher.is_interstate || igst > 0);
   const method = String(payment.method || '').trim().toLowerCase();
-  const paymentLabel = PAYMENT_LABELS[method] || (method ? method.toUpperCase() : '');
   const total = moneyNum(voucher.total);
   const paid = moneyNum(voucher.amount_paid) || moneyNum(payment.amount_paid);
   const due = Math.max(0, moneyNum(payment.amount_due) || total - paid);
@@ -153,7 +146,7 @@ function voucherBillSummaryRows(voucher: ShopBooksVoucher) {
     cgst,
     sgst,
     isInterstate,
-    paymentLabel,
+    paymentMethod: method,
     total,
     paid,
     due,
@@ -171,7 +164,13 @@ function VoucherBillSummary({
   loyaltyEnabled: boolean;
   pointsBalance?: number | null;
 }) {
+  const { t } = useTranslation();
+  const ts = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.vouchers.summary.${key}`, options));
   const bill = voucherBillSummaryRows(voucher);
+  const paymentLabel = PAYMENT_METHODS.includes(bill.paymentMethod)
+    ? t(`shop.vouchers.payment.${bill.paymentMethod}`)
+    : bill.paymentMethod.toUpperCase();
   const highlight = loyaltyBillHighlight({
     enabled: loyaltyEnabled,
     pointsEarned: bill.pointsEarned,
@@ -195,20 +194,20 @@ function VoucherBillSummary({
   );
   return (
     <div style={{ display: 'grid', gap: 4, borderTop: '1px solid #eee', paddingTop: 10, fontSize: 13 }}>
-      {row('Items', formatMoney(bill.merchandiseGross, currency))}
+      {row(ts('items'), formatMoney(bill.merchandiseGross, currency))}
       {row(
-        'Product discount',
+        ts('productDiscount'),
         bill.lineDiscount > 0
           ? `-${formatMoney(bill.lineDiscount, currency)}`
           : formatMoney(0, currency),
       )}
-      {row('Subtotal', formatMoney(bill.afterLine, currency))}
+      {row(ts('subtotal'), formatMoney(bill.afterLine, currency))}
       {bill.billDiscount > 0
-        ? row('Bill discount', `-${formatMoney(bill.billDiscount, currency)}`)
+        ? row(ts('billDiscount'), `-${formatMoney(bill.billDiscount, currency)}`)
         : null}
       {bill.couponDiscount > 0
         ? row(
-            bill.couponCode ? `Coupon ${bill.couponCode}` : 'Coupon',
+            bill.couponCode ? ts('couponNamed', { code: bill.couponCode }) : ts('coupon'),
             `-${formatMoney(bill.couponDiscount, currency)}`,
           )
         : null}
@@ -216,24 +215,24 @@ function VoucherBillSummary({
         ? row(
             loyaltyEnabled
               ? bill.rewardPoints > 0
-                ? `Points used (${bill.rewardPoints})`
-                : 'Points used'
-              : 'Discount',
+                ? ts('pointsUsedCount', { count: bill.rewardPoints })
+                : ts('pointsUsed')
+              : ts('discount'),
             `-${formatMoney(bill.rewardDiscount, currency)}`,
           )
         : null}
-      {row('Taxable', formatMoney(bill.taxable, currency))}
+      {row(ts('taxable'), formatMoney(bill.taxable, currency))}
       {bill.taxTotal > 0
         ? bill.isInterstate || bill.igst > 0
-          ? row('IGST', formatMoney(bill.igst || bill.taxTotal, currency))
+          ? row(ts('igst'), formatMoney(bill.igst || bill.taxTotal, currency))
           : (
             <>
-              {row('CGST', formatMoney(bill.cgst, currency))}
-              {row('SGST', formatMoney(bill.sgst, currency))}
+              {row(ts('cgst'), formatMoney(bill.cgst, currency))}
+              {row(ts('sgst'), formatMoney(bill.sgst, currency))}
             </>
           )
-        : row('Tax', formatMoney(bill.taxTotal, currency))}
-      {row('Total', formatMoney(bill.total, currency), true)}
+        : row(ts('tax'), formatMoney(bill.taxTotal, currency))}
+      {row(ts('total'), formatMoney(bill.total, currency), true)}
       {highlight ? (
         <div
           key="loyalty-highlight"
@@ -257,18 +256,18 @@ function VoucherBillSummary({
           {highlight}
         </div>
       ) : null}
-      {bill.paymentLabel ? row('Payment', bill.paymentLabel) : null}
-      {row('Received', formatMoney(bill.paid, currency))}
-      {row('Balance due', formatMoney(bill.due, currency), bill.due > 0)}
+      {paymentLabel ? row(ts('payment'), paymentLabel) : null}
+      {row(ts('received'), formatMoney(bill.paid, currency))}
+      {row(ts('balanceDue'), formatMoney(bill.due, currency), bill.due > 0)}
     </div>
   );
 }
 
 const EWAY_TRANSPORT_MODES = [
-  { value: '1', label: 'Road' },
-  { value: '2', label: 'Rail' },
-  { value: '3', label: 'Air' },
-  { value: '4', label: 'Ship' },
+  { value: '1', key: 'road' },
+  { value: '2', key: 'rail' },
+  { value: '3', key: 'air' },
+  { value: '4', key: 'ship' },
 ];
 
 const STATUS_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -280,6 +279,7 @@ const STATUS_BADGE_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 function StatusBadge({ status }: { status?: string }) {
+  const { t } = useTranslation();
   const tone = STATUS_BADGE_COLORS[(status || '').toLowerCase()] ?? STATUS_BADGE_COLORS.draft;
   return (
     <span
@@ -293,12 +293,15 @@ function StatusBadge({ status }: { status?: string }) {
         textTransform: 'capitalize',
       }}
     >
-      {status || 'draft'}
+      {t(`shop.vouchers.badge.${(status || 'draft').toLowerCase()}`, { defaultValue: status || 'draft' })}
     </span>
   );
 }
 
 function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
+  const { t } = useTranslation();
+  const tg = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.vouchers.gst.${key}`, options));
   const snackbar = useSnackbar();
   const einvoice = useShopEInvoice(voucher.id);
   const ewayList = useShopEWayList(voucher.id);
@@ -315,20 +318,20 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
   async function handleGenerateEInvoice() {
     try {
       const result = await generateEInvoice.mutateAsync({ voucherId: voucher.id });
-      snackbar.push(`E-invoice generated${result.irn ? ` · IRN ${result.irn}` : ''}.`, 'success');
+      snackbar.push(result.irn ? tg('einvoiceGeneratedIrn', { irn: result.irn }) : tg('einvoiceGenerated'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't generate e-invoice. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tg('einvoiceFailed')), 'error');
     }
   }
 
   async function handleCancelEInvoice() {
-    const reason = window.prompt('Reason for cancelling this e-invoice:');
+    const reason = window.prompt(tg('einvoiceCancelPrompt'));
     if (!reason) return;
     try {
       await cancelEInvoice.mutateAsync({ voucherId: voucher.id, reason });
-      snackbar.push('E-invoice cancelled.', 'success');
+      snackbar.push(tg('einvoiceCancelled'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't cancel e-invoice. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tg('einvoiceCancelFailed')), 'error');
     }
   }
 
@@ -344,25 +347,25 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
           transporter_name: transporterName || undefined,
         },
       });
-      snackbar.push(`E-way bill generated${result.ewb_no ? ` · EWB ${result.ewb_no}` : ''}.`, 'success');
+      snackbar.push(result.ewb_no ? tg('ewayGeneratedNo', { ewb: result.ewb_no }) : tg('ewayGenerated'), 'success');
       setShowEwayForm(false);
       setVehicleNo('');
       setDistanceKm('');
       setTransporterName('');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't generate e-way bill. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tg('ewayFailed')), 'error');
     }
   }
 
   async function handleCancelEway() {
     if (!activeEway) return;
-    const reason = window.prompt('Reason for cancelling this e-way bill:');
+    const reason = window.prompt(tg('ewayCancelPrompt'));
     if (!reason) return;
     try {
       await cancelEWay.mutateAsync({ ewayId: activeEway.id, reason });
-      snackbar.push('E-way bill cancelled.', 'success');
+      snackbar.push(tg('ewayCancelled'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't cancel e-way bill. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tg('ewayCancelFailed')), 'error');
     }
   }
 
@@ -371,19 +374,19 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
 
   return (
     <div style={{ borderTop: '1px solid #eee', paddingTop: 12, display: 'grid', gap: 14 }}>
-      <h4 style={{ margin: 0, fontSize: 14 }}>GST compliance</h4>
+      <h4 style={{ margin: 0, fontSize: 14 }}>{tg('title')}</h4>
 
       <div style={{ display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>E-invoice (IRN)</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{tg('einvoiceIrn')}</span>
           {einvoice.data ? <StatusBadge status={einvoice.data.status} /> : null}
         </div>
         {einvoiceGenerated && einvoice.data ? (
           <div style={{ fontSize: 12.5, color: 'var(--muted-foreground)', display: 'grid', gap: 2 }}>
-            {einvoice.data.irn ? <span>IRN: {einvoice.data.irn}</span> : null}
-            {einvoice.data.ack_no ? <span>Ack no: {einvoice.data.ack_no}</span> : null}
-            {einvoice.data.ack_date ? <span>Ack date: {einvoice.data.ack_date}</span> : null}
-            {einvoice.data.signed_qr ? <span>QR payload available</span> : null}
+            {einvoice.data.irn ? <span>{tg('irn', { value: einvoice.data.irn })}</span> : null}
+            {einvoice.data.ack_no ? <span>{tg('ackNo', { value: einvoice.data.ack_no })}</span> : null}
+            {einvoice.data.ack_date ? <span>{tg('ackDate', { value: einvoice.data.ack_date })}</span> : null}
+            {einvoice.data.signed_qr ? <span>{tg('qrAvailable')}</span> : null}
           </div>
         ) : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -394,7 +397,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
               onClick={() => void handleGenerateEInvoice()}
               disabled={generateEInvoice.isPending || voucher.status === 'void'}
             >
-              {generateEInvoice.isPending ? 'Generating…' : 'Generate e-invoice'}
+              {generateEInvoice.isPending ? tg('generating') : tg('generateEinvoice')}
             </Button>
           ) : (
             <Button
@@ -403,7 +406,7 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
               onClick={() => void handleCancelEInvoice()}
               disabled={cancelEInvoice.isPending}
             >
-              {cancelEInvoice.isPending ? 'Cancelling…' : 'Cancel e-invoice'}
+              {cancelEInvoice.isPending ? tg('cancelling') : tg('cancelEinvoice')}
             </Button>
           )}
         </div>
@@ -411,49 +414,52 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
 
       <div style={{ display: 'grid', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>E-way bill</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{tg('ewayBill')}</span>
           {activeEway ? <StatusBadge status={activeEway.status} /> : null}
         </div>
         {ewayGenerated && activeEway ? (
           <div style={{ fontSize: 12.5, color: 'var(--muted-foreground)', display: 'grid', gap: 2 }}>
-            {activeEway.ewb_no ? <span>EWB no: {activeEway.ewb_no}</span> : null}
-            {activeEway.valid_upto ? <span>Valid upto: {activeEway.valid_upto}</span> : null}
-            {activeEway.vehicle_no ? <span>Vehicle: {activeEway.vehicle_no}</span> : null}
+            {activeEway.ewb_no ? <span>{tg('ewbNo', { value: activeEway.ewb_no })}</span> : null}
+            {activeEway.valid_upto ? <span>{tg('validUpto', { value: activeEway.valid_upto })}</span> : null}
+            {activeEway.vehicle_no ? <span>{tg('vehicle', { value: activeEway.vehicle_no })}</span> : null}
           </div>
         ) : null}
 
         {!ewayGenerated && showEwayForm ? (
           <form onSubmit={handleGenerateEway} style={{ display: 'grid', gap: 8 }}>
             <Input
-              label="Vehicle number"
+              label={tg('vehicleNumber')}
               value={vehicleNo}
               onChange={(event) => setVehicleNo(event.target.value)}
               placeholder="MH12AB1234"
             />
             <Select
-              label="Transport mode"
+              label={tg('transportMode')}
               value={transportMode}
               onChange={(event) => setTransportMode(event.target.value as ShopEWayGenerateInput['transport_mode'])}
-              options={EWAY_TRANSPORT_MODES}
+              options={EWAY_TRANSPORT_MODES.map((mode) => ({
+                value: mode.value,
+                label: t(`shop.vouchers.transport.${mode.key}`),
+              }))}
             />
             <Input
-              label="Distance (km)"
+              label={tg('distanceKm')}
               type="number"
               min={0}
               value={distanceKm}
               onChange={(event) => setDistanceKm(event.target.value)}
             />
             <Input
-              label="Transporter name"
+              label={tg('transporterName')}
               value={transporterName}
               onChange={(event) => setTransporterName(event.target.value)}
             />
             <div style={{ display: 'flex', gap: 8 }}>
               <Button type="submit" variant="neutral" disabled={generateEWay.isPending}>
-                {generateEWay.isPending ? 'Generating…' : 'Generate e-way bill'}
+                {generateEWay.isPending ? tg('generating') : tg('generateEway')}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setShowEwayForm(false)}>
-                Cancel
+                {tg('cancel')}
               </Button>
             </div>
           </form>
@@ -467,12 +473,12 @@ function GstComplianceSection({ voucher }: { voucher: ShopBooksVoucher }) {
               onClick={() => setShowEwayForm(true)}
               disabled={voucher.status === 'void'}
             >
-              Generate e-way bill
+              {tg('generateEway')}
             </Button>
           ) : null}
           {ewayGenerated ? (
             <Button type="button" variant="ghost" onClick={() => void handleCancelEway()} disabled={cancelEWay.isPending}>
-              {cancelEWay.isPending ? 'Cancelling…' : 'Cancel e-way bill'}
+              {cancelEWay.isPending ? tg('cancelling') : tg('cancelEway')}
             </Button>
           ) : null}
         </div>
@@ -501,6 +507,13 @@ export function ShopVoucherList({
   scanPath?: string;
   scanLabel?: string;
 }) {
+  const { t } = useTranslation();
+  const tv = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.vouchers.${key}`, options));
+  const statusText = (value?: string) =>
+    ['draft', 'confirmed', 'void'].includes(String(value))
+      ? tv(`status.${value}`)
+      : (value ?? '');
   const workspace = useWorkspace();
   const auth = useAuthContext();
   const currency = workspace.activeBusiness?.currency;
@@ -524,7 +537,7 @@ export function ShopVoucherList({
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const deepLinkHandled = useRef<string | null>(null);
   const isSale = voucherType === 'sale';
-  const pageTitle = heading ?? (isSale ? 'Sale invoices' : 'Purchases');
+  const pageTitle = heading ?? (isSale ? tv('saleInvoices') : tv('purchases'));
 
   const vouchers = useShopVouchers({
     type: voucherType,
@@ -564,7 +577,7 @@ export function ShopVoucherList({
     if (deepLinkHandled.current === openVoucherId) return;
     if (deepLinkedVoucher.isError) {
       deepLinkHandled.current = openVoucherId;
-      snackbar.push("Couldn't open that books invoice.", 'error');
+      snackbar.push(tv('openFailed'), 'error');
       return;
     }
     const voucher = deepLinkedVoucher.data;
@@ -636,13 +649,13 @@ export function ShopVoucherList({
   }
 
   async function handleVoid(voucher: ShopBooksVoucher) {
-    if (!window.confirm(`Void ${voucher.voucher_number}? This cannot be undone.`)) return;
+    if (!window.confirm(tv('confirmVoid', { number: voucher.voucher_number }))) return;
     try {
       await voidVoucher.mutateAsync(voucher.id);
-      snackbar.push(`${voucher.voucher_number} voided.`, 'success');
+      snackbar.push(tv('voided', { number: voucher.voucher_number }), 'success');
       closeDetail();
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't void this voucher. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, tv('voidFailed')), 'error');
     }
   }
 
@@ -654,7 +667,7 @@ export function ShopVoucherList({
           {scanPath ? (
             <Link to={scanPath}>
               <Button type="button" variant="neutral">
-                {scanLabel || 'Scan invoice'}
+                {scanLabel || tv('scanInvoice')}
               </Button>
             </Link>
           ) : null}
@@ -671,17 +684,17 @@ export function ShopVoucherList({
 
       {createdNumber ? (
         <p className="invoice-banner" role="status">
-          {decodeURIComponent(createdNumber)} saved.
+          {tv('saved', { number: decodeURIComponent(createdNumber) })}
         </p>
       ) : null}
 
       <div className="invoice-strip">
         <button type="button" className="invoice-strip__cell" onClick={() => setPayment('')}>
-          <span>Total</span>
+          <span>{tv('stripTotal')}</span>
           <strong>{formatMoney(summary.total, currency)}</strong>
         </button>
         <button type="button" className="invoice-strip__cell is-paid" onClick={() => setPayment(payment === 'paid' ? '' : 'paid')}>
-          <span>Paid</span>
+          <span>{tv('stripPaid')}</span>
           <strong>{formatMoney(summary.paidAmount, currency)}</strong>
         </button>
         <button
@@ -689,7 +702,7 @@ export function ShopVoucherList({
           className="invoice-strip__cell is-due"
           onClick={() => setPayment(payment === 'unpaid' ? '' : 'unpaid')}
         >
-          <span>{isSale ? 'Due' : 'To pay'}</span>
+          <span>{isSale ? tv('stripDue') : tv('stripToPay')}</span>
           <strong>{formatMoney(summary.unpaidAmount, currency)}</strong>
         </button>
       </div>
@@ -700,8 +713,8 @@ export function ShopVoucherList({
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={isSale ? 'Search invoices' : 'Search bills'}
-            aria-label="Search"
+            placeholder={isSale ? tv('searchInvoices') : tv('searchBills')}
+            aria-label={t('common.search')}
             className="invoice-search"
           />
           <button
@@ -709,7 +722,7 @@ export function ShopVoucherList({
             className={`invoice-filter-btn${extraFilterCount ? ' is-on' : ''}`}
             onClick={() => setShowFilters((open) => !open)}
             aria-expanded={showFilters}
-            aria-label="Filters"
+            aria-label={tv('filters')}
           >
             <SlidersHorizontal size={16} />
             {extraFilterCount ? <span className="invoice-filter-count">{extraFilterCount}</span> : null}
@@ -720,7 +733,7 @@ export function ShopVoucherList({
             hideSearch
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder={isSale ? 'Search invoices' : 'Search bills'}
+            searchPlaceholder={isSale ? tv('searchInvoices') : tv('searchBills')}
             dateFrom={dateFrom}
             dateTo={dateTo}
             onDateFromChange={setDateFrom}
@@ -729,41 +742,41 @@ export function ShopVoucherList({
             filters={[
               {
                 id: 'status',
-                label: 'Status',
+                label: t('common.status'),
                 value: status,
                 onChange: setStatus,
                 options: [
-                  { value: '', label: 'All statuses' },
-                  { value: 'draft', label: 'Draft' },
-                  { value: 'confirmed', label: 'Confirmed' },
-                  { value: 'void', label: 'Void' },
+                  { value: '', label: tv('allStatuses') },
+                  { value: 'draft', label: tv('status.draft') },
+                  { value: 'confirmed', label: tv('status.confirmed') },
+                  { value: 'void', label: tv('status.void') },
                 ],
               },
               {
                 id: 'payment',
-                label: 'Payment',
+                label: tv('paymentFilter'),
                 value: payment,
                 onChange: setPayment,
                 options: [
-                  { value: '', label: 'All' },
-                  { value: 'paid', label: 'Paid' },
-                  { value: 'unpaid', label: isSale ? 'Due' : 'Unpaid' },
+                  { value: '', label: t('common.all') },
+                  { value: 'paid', label: tv('stripPaid') },
+                  { value: 'unpaid', label: isSale ? tv('stripDue') : tv('unpaid') },
                 ],
               },
             ]}
           />
         ) : extraFilterCount || search ? (
           <button type="button" className="invoice-clear" onClick={clearFilters}>
-            Clear search & filters
+            {tv('clearFilters')}
           </button>
         ) : null}
 
-        {vouchers.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+        {vouchers.isLoading ? <p className="invoice-muted">{t('common.loading')}</p> : null}
         {vouchers.error ? <p role="alert">{(vouchers.error as Error).message}</p> : null}
 
         <div className="invoice-list">
           {filtered.map((voucher) => {
-            const party = voucher.customer_name || voucher.supplier_name || (isSale ? 'Walk-in' : 'Supplier');
+            const party = voucher.customer_name || voucher.supplier_name || (isSale ? tv('walkIn') : tv('supplier'));
             const total = Number(voucher.total ?? 0);
             const due = Math.max(0, total - Number(voucher.amount_paid ?? 0));
             const isVoid = voucher.status === 'void';
@@ -799,7 +812,7 @@ export function ShopVoucherList({
                 <div className="invoice-row__side">
                   <strong>{formatMoney(total, currency)}</strong>
                   <span className={`invoice-pill ${isVoid ? 'is-void' : paid ? 'is-paid' : 'is-due'}`}>
-                    {isVoid ? 'Void' : paid ? 'Paid' : `Due ${formatMoney(due, currency)}`}
+                    {isVoid ? tv('status.void') : paid ? tv('stripPaid') : tv('dueAmount', { amount: formatMoney(due, currency) })}
                   </span>
                 </div>
                 {isSale && workspace.businessId ? (
@@ -807,8 +820,8 @@ export function ShopVoucherList({
                     <button
                       type="button"
                       className="invoice-row__action"
-                      title="View invoice"
-                      aria-label={`View ${voucher.voucher_number}`}
+                      title={tv('viewInvoice')}
+                      aria-label={tv('viewAria', { number: voucher.voucher_number })}
                       onClick={() => {
                         const target = {
                           kind: 'sale' as const,
@@ -819,18 +832,18 @@ export function ShopVoucherList({
                           email: voucher.customer_email || '',
                         };
                         void openShopDocumentView(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
-                          snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+                          snackbar.push(error instanceof Error ? error.message : tv('viewFailed'), 'error'),
                         );
                       }}
                     >
                       <Eye size={15} aria-hidden="true" />
-                      <span>View</span>
+                      <span>{tv('view')}</span>
                     </button>
                     <button
                       type="button"
                       className="invoice-row__action"
-                      title="Share invoice"
-                      aria-label={`Share ${voucher.voucher_number}`}
+                      title={tv('shareInvoice')}
+                      aria-label={tv('shareAria', { number: voucher.voucher_number })}
                       onClick={() =>
                         setDocActions({
                           kind: 'sale',
@@ -843,7 +856,7 @@ export function ShopVoucherList({
                       }
                     >
                       <Share2 size={15} aria-hidden="true" />
-                      <span>Share</span>
+                      <span>{tv('share')}</span>
                     </button>
                   </div>
                 ) : (
@@ -868,21 +881,21 @@ export function ShopVoucherList({
       <Dialog
         open={detailOpen}
         onClose={closeDetail}
-        title={selected ? selected.voucher_number : 'Voucher'}
+        title={selected ? selected.voucher_number : tv('voucher')}
         labelledBy="voucher-detail-dialog"
         busy={voidVoucher.isPending}
       >
         {selected ? (
           <div style={{ display: 'grid', gap: 14, marginTop: 12, minWidth: 320 }}>
             <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
-              {formatVoucherWhen(selected.voucher_date, selected.created_at) || selected.voucher_date} · {selected.customer_name || selected.supplier_name || 'Cash'} · {selected.status}
+              {formatVoucherWhen(selected.voucher_date, selected.created_at) || selected.voucher_date} · {selected.customer_name || selected.supplier_name || tv('cashParty')} · {statusText(selected.status)}
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
               {(selected.line_items as VoucherLineItem[] | undefined ?? []).map((line, index) => {
                 const productId = String(line.product_id || '').trim();
                 const label = (
                   <>
-                    {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
+                    {line.name} {line.hsn_sac ? tv('hsnLine', { hsn: line.hsn_sac }) : ''} × {line.qty}
                   </>
                 );
                 return (
@@ -898,7 +911,7 @@ export function ShopVoucherList({
                   </div>
                 );
               })}
-              {!selected.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
+              {!selected.line_items?.length ? <p style={{ margin: 0 }}>{tv('noLineItems')}</p> : null}
             </div>
             <VoucherBillSummary
               voucher={selected}
@@ -909,7 +922,7 @@ export function ShopVoucherList({
             {voucherType === 'sale' ? (
               <SaleInsightChips source={selected} currency={currency} />
             ) : null}
-            {selected.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {selected.notes}</p> : null}
+            {selected.notes ? <p style={{ margin: 0, fontSize: 13 }}>{tv('notes', { notes: selected.notes })}</p> : null}
 
             {voucherType === 'purchase' ? (
               <PurchasePayForm voucher={selected} onPaid={(updated) => setSelected(updated)} />
@@ -932,16 +945,16 @@ export function ShopVoucherList({
                     })
                   }
                 >
-                  View / Print / Share
+                  {tv('viewPrintShare')}
                 </Button>
               ) : null}
               {selected.status !== 'void' ? (
                 <Button type="button" variant="neutral" onClick={() => void handleVoid(selected)} disabled={voidVoucher.isPending}>
-                  {voidVoucher.isPending ? 'Voiding…' : 'Void voucher'}
+                  {voidVoucher.isPending ? tv('voiding') : tv('voidVoucher')}
                 </Button>
               ) : null}
               <Button type="button" variant="ghost" onClick={closeDetail}>
-                Close
+                {tv('close')}
               </Button>
             </div>
           </div>
@@ -951,7 +964,7 @@ export function ShopVoucherList({
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+        title={docActions ? tv('saleDoc', { number: docActions.number || '' }) : tv('saleInvoice')}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { ShopProductProfitInsights } from '@ie-orbit/sdk';
@@ -13,6 +14,7 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatMoney } from './shopBooksHelpers';
 
 export function ShopProductProfitScreen() {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const { businessId, activeBusiness } = useWorkspace();
   const currency = activeBusiness?.currency || 'INR';
@@ -35,11 +37,11 @@ export function ShopProductProfitScreen() {
       });
       setData(response.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profit insights');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.profit.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, dateFrom, dateTo]);
+  }, [businessId, client, dateFrom, dateTo, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,12 +77,12 @@ export function ShopProductProfitScreen() {
   return (
     <FormScreen refreshing={refreshing} onRefresh={onRefresh}>
       <Text style={styles.help}>
-        Owner-only view using purchase price. Customers never see cost.
+        {t('opsApp.shop.profit.help')}
         {activeBusiness?.display_name ? ` · ${activeBusiness.display_name}` : ''}
       </Text>
 
       <Input
-        label="Sales from (YYYY-MM-DD)"
+        label={t('opsApp.shop.profit.salesFrom')}
         optional
         value={dateFrom}
         onChangeText={setDateFrom}
@@ -88,26 +90,26 @@ export function ShopProductProfitScreen() {
         autoCapitalize="none"
       />
       <Input
-        label="Sales to (YYYY-MM-DD)"
+        label={t('opsApp.shop.profit.salesTo')}
         optional
         value={dateTo}
         onChangeText={setDateTo}
         placeholder="2026-12-31"
         autoCapitalize="none"
       />
-      <Button label="Apply dates" variant="secondary" onPress={() => void load()} />
+      <Button label={t('opsApp.shop.profit.applyDates')} variant="secondary" onPress={() => void load()} />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {summary ? (
         <View style={styles.summaryGrid}>
           {[
-            ['Products', String(summary.product_count)],
-            ['Inventory at cost', formatMoney(summary.inventory_at_cost, currency)],
-            ['Potential profit', formatMoney(summary.potential_profit, currency)],
-            ['Sales revenue', formatMoney(summary.sales_revenue, currency)],
-            ['Sales COGS', formatMoney(summary.sales_cogs, currency)],
-            ['Gross profit', formatMoney(summary.gross_profit, currency)],
+            [t('shop.productProfit.sumProducts'), String(summary.product_count)],
+            [t('shop.productProfit.sumInventoryAtCost'), formatMoney(summary.inventory_at_cost, currency)],
+            [t('shop.productProfit.sumPotentialProfit'), formatMoney(summary.potential_profit, currency)],
+            [t('shop.productProfit.sumSalesRevenue'), formatMoney(summary.sales_revenue, currency)],
+            [t('shop.productProfit.sumSalesCogs'), formatMoney(summary.sales_cogs, currency)],
+            [t('shop.productProfit.sumGrossProfit'), formatMoney(summary.gross_profit, currency)],
           ].map(([label, value]) => (
             <View key={label} style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>{label}</Text>
@@ -117,35 +119,35 @@ export function ShopProductProfitScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.section}>Catalog margins</Text>
+      <Text style={styles.section}>{t('shop.productProfit.catalogMargins')}</Text>
       {(topMargins.length ? topMargins : catalog.slice(0, 12)).map((row) => (
         <View key={row.product_id} style={styles.rowCard}>
           <Text style={styles.rowTitle}>{row.name}</Text>
           <Text style={styles.meta}>
-            Sell {formatMoney(row.price, currency)} · Cost {formatMoney(row.purchase_price, currency)}
+            {t('opsApp.shop.profit.sellCost', { sell: formatMoney(row.price, currency), cost: formatMoney(row.purchase_price, currency) })}
           </Text>
           <Text style={styles.meta}>
-            Margin {formatMoney(row.margin, currency)} ({row.margin_percent}%) · Stock {row.stock_on_hand}
+            {t('opsApp.shop.profit.marginLine', { margin: formatMoney(row.margin, currency), percent: row.margin_percent, stock: row.stock_on_hand })}
           </Text>
         </View>
       ))}
       {!catalog.length ? (
-        <Text style={styles.meta}>Add purchase price on products to see margins.</Text>
+        <Text style={styles.meta}>{t('shop.productProfit.emptyCatalog')}</Text>
       ) : null}
 
-      <Text style={styles.section}>Sold profit</Text>
+      <Text style={styles.section}>{t('shop.productProfit.soldProfit')}</Text>
       {sales.slice(0, 20).map((row) => (
         <View key={row.product_id} style={styles.rowCard}>
           <Text style={styles.rowTitle}>{row.name}</Text>
           <Text style={styles.meta}>
-            Sold {row.units_sold} · Revenue {formatMoney(row.revenue, currency)}
+            {t('opsApp.shop.profit.soldRevenue', { units: row.units_sold, revenue: formatMoney(row.revenue, currency) })}
           </Text>
           <Text style={styles.meta}>
-            COGS {formatMoney(row.cogs, currency)} · Profit {formatMoney(row.gross_profit, currency)}
+            {t('opsApp.shop.profit.cogsProfit', { cogs: formatMoney(row.cogs, currency), profit: formatMoney(row.gross_profit, currency) })}
           </Text>
         </View>
       ))}
-      {!sales.length ? <Text style={styles.meta}>No sales in this period yet.</Text> : null}
+      {!sales.length ? <Text style={styles.meta}>{t('shop.productProfit.emptySales')}</Text> : null}
     </FormScreen>
   );
 }

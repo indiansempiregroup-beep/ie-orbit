@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { colors, radius, typography } from '../../theme/tokens';
 
@@ -20,6 +21,7 @@ export function QtyStepper({
   primaryColor = colors.primary,
   size = 'md',
 }: Props) {
+  const { t } = useTranslation();
   const compact = size === 'sm';
   const dim = compact ? 28 : 36;
   const canDec = value > min;
@@ -29,7 +31,7 @@ export function QtyStepper({
     <View style={[styles.wrap, compact && styles.wrapSm, { borderColor: primaryColor }]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Decrease quantity"
+        accessibilityLabel={t('customerApp.qtyStepper.decrease')}
         hitSlop={6}
         disabled={!canDec}
         onPress={() => canDec && onChange(value - 1)}
@@ -40,7 +42,7 @@ export function QtyStepper({
       <Text style={[styles.value, compact && styles.valueSm]}>{value}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Increase quantity"
+        accessibilityLabel={t('customerApp.qtyStepper.increase')}
         hitSlop={6}
         disabled={!canInc}
         onPress={() => canInc && onChange(value + 1)}

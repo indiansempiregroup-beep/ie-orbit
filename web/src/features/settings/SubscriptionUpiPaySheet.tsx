@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { getProductName } from '../../config/products';
 import { getApiErrorMessage } from '../../lib/apiClient';
@@ -6,8 +7,6 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { useAuth } from '../../hooks/useAuth';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 
-const PROOF_REQUIRED_MESSAGE = 'Enter a UTR / UPI reference or upload a payment screenshot.';
-const SCREENSHOT_REQUIRED_MESSAGE = 'Upload a payment screenshot or enter a UTR / UPI reference.';
 
 export type SubscriptionUpiPayItem = {
   productCode: string;
@@ -50,6 +49,7 @@ function qrImageSrc(upiPayUrl: string) {
 }
 
 export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }: Props) {
+  const { t } = useTranslation();
   const client = useApiClient();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -72,9 +72,9 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
   const title = useMemo(() => {
     if (request.title) return request.title;
     const names = request.items.map((item) => getProductName(item.productCode));
-    if (names.length > 1) return `Pay selected · ${names.join(' + ')}`;
-    return `Renew ${names[0] || 'subscription'}`;
-  }, [request.title, request.items]);
+    if (names.length > 1) return t('settings.upiPay.subscription.titleMulti', { names: names.join(' + ') });
+    return t('settings.upiPay.subscription.titleRenew', { name: names[0] || t('settings.upiPay.subscription.fallbackName') });
+  }, [request.title, request.items, t]);
 
   async function startCheckout() {
     setLoading(true);
@@ -106,7 +106,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       setSession(res.data);
       setStatus('ready');
     } catch (err) {
-      const message = getApiErrorMessage(err, "Couldn't start UPI checkout. Try again.");
+      const message = getApiErrorMessage(err, t('settings.upiPay.subscription.startFailed'));
       setFormError(message);
       onError(message);
     } finally {
@@ -123,7 +123,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
 
   async function uploadProof(file: File) {
     if (!auth.token || !workspace.tenantId || !workspace.businessId) {
-      const message = 'Sign in to a business before uploading a screenshot.';
+      const message = t('settings.upiPay.signInFirst');
       setFormError(message);
       setFieldErrors((current) => ({ ...current, proof: message }));
       onError(message);
@@ -149,19 +149,19 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
         body: form,
       });
       if (!response.ok) {
-        throw new Error('Unable to upload screenshot.');
+        throw new Error(t('settings.upiPay.uploadFailed'));
       }
       const payload = (await response.json()) as {
         data?: { id?: string; public_url?: string; private_url?: string };
       };
       const id = String(payload.data?.id || '');
       const url = payload.data?.public_url || payload.data?.private_url || '';
-      if (!id) throw new Error('Upload did not return a media id.');
+      if (!id) throw new Error(t('settings.upiPay.noMediaId'));
       setProofMediaId(id);
       setProofUrl(url.startsWith('http') ? url : url);
       clearProofErrors();
     } catch (err) {
-      const message = getApiErrorMessage(err, 'Unable to upload screenshot.');
+      const message = getApiErrorMessage(err, t('settings.upiPay.uploadFailed'));
       setFormError(message);
       setFieldErrors((current) => ({ ...current, proof: message }));
       onError(message);
@@ -174,10 +174,10 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
     if (!session) return;
     if (utr.trim().length < 6 && !proofMediaId && !proofUrl) {
       setFieldErrors({
-        utr: PROOF_REQUIRED_MESSAGE,
-        proof: SCREENSHOT_REQUIRED_MESSAGE,
+        utr: t('settings.upiPay.proofRequired'),
+        proof: t('settings.upiPay.screenshotRequired'),
       });
-      setFormError(PROOF_REQUIRED_MESSAGE);
+      setFormError(t('settings.upiPay.proofRequired'));
       return;
     }
     setClaiming(true);
@@ -192,7 +192,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       setStatus('awaiting');
       await onClaimed();
     } catch (err) {
-      const message = getApiErrorMessage(err, "Couldn't submit the payment claim. Try again.");
+      const message = getApiErrorMessage(err, t('settings.upiPay.claimFailed'));
       setFormError(message);
       onError(message);
     } finally {
@@ -209,19 +209,19 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
       onClick={onClose}
     >
       <div className="admin-drawer admin-drawer--sheet" style={{ maxWidth: 480 }} onClick={(event) => event.stopPropagation()}>
-        <p className="product-settings-kicker">Pay with UPI</p>
+        <p className="product-settings-kicker">{t('settings.upiPay.subscription.kicker')}</p>
         <h2 id="upi-pay-title" className="product-settings-title">
           {title}
         </h2>
         <ol className="product-settings-lead" style={{ paddingLeft: 18 }}>
-          <li>Scan the QR or open your UPI app and pay the exact amount shown</li>
-          <li>After payment succeeds, take a screenshot of the confirmation in your UPI app</li>
-          <li>Upload that screenshot below (UTR optional), then submit for confirmation</li>
-          <li>IE confirms — access restores until the next due date</li>
+          <li>{t('settings.upiPay.step1')}</li>
+          <li>{t('settings.upiPay.step2')}</li>
+          <li>{t('settings.upiPay.step3')}</li>
+          <li>{t('settings.upiPay.subscription.step4')}</li>
         </ol>
 
         {status === 'idle' ? (
-          <p className="product-settings-lead">Generate a QR for this period. We do not charge automatically.</p>
+          <p className="product-settings-lead">{t('settings.upiPay.subscription.idleHint')}</p>
         ) : null}
 
         {session && (status === 'ready' || status === 'awaiting') ? (
@@ -229,11 +229,11 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
             <div className="product-settings-cycle">
               <div className="product-settings-cycle-grid">
                 <div>
-                  <span>Amount due</span>
+                  <span>{t('settings.upiPay.amountDue')}</span>
                   <strong>{paiseToInr(session.amount)}</strong>
                 </div>
                 <div>
-                  <span>UPI ID</span>
+                  <span>{t('settings.upiPay.upiId')}</span>
                   <strong>{session.upi_vpa}</strong>
                 </div>
               </div>
@@ -242,14 +242,14 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
               <div style={{ textAlign: 'center' }}>
                 <img
                   src={session.payment_qr_url || qrImageSrc(session.upi_pay_url)}
-                  alt="UPI payment QR"
+                  alt={t('settings.upiPay.qrAlt')}
                   width={188}
                   height={188}
                   style={{ borderRadius: 12, background: '#fff' }}
                 />
-                <p className="product-settings-lead">Scan with any UPI app — amount is locked.</p>
+                <p className="product-settings-lead">{t('settings.upiPay.scanLocked')}</p>
                 <p>
-                  <a href={session.upi_pay_url}>Open UPI app</a>
+                  <a href={session.upi_pay_url}>{t('settings.upiPay.openUpi')}</a>
                 </p>
               </div>
             ) : null}
@@ -257,10 +257,10 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
             {status === 'ready' ? (
               <>
                 <p className="product-settings-lead" style={{ margin: 0 }}>
-                  After you pay, upload the UPI confirmation screenshot below so we can verify it.
+                  {t('settings.upiPay.afterPay')}
                 </p>
                 <label className="product-settings-lead" style={{ display: 'grid', gap: 6 }}>
-                  UTR / UPI reference (optional if you upload a screenshot)
+                  {t('settings.upiPay.utrLabel')}
                   <input
                     value={utr}
                     onChange={(event) => {
@@ -268,7 +268,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
                       if (fieldErrors.utr || formError) clearProofErrors();
                     }}
                     autoCapitalize="characters"
-                    placeholder="From your UPI app"
+                    placeholder={t('settings.upiPay.utrPlaceholder')}
                     aria-invalid={Boolean(fieldErrors.utr)}
                     style={fieldErrors.utr ? { borderColor: '#dc2626' } : undefined}
                   />
@@ -287,7 +287,7 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
                       borderColor: fieldErrors.proof ? '#dc2626' : undefined,
                     }}
                   >
-                    {uploading ? 'Uploading…' : proofUrl || proofMediaId ? 'Change payment screenshot' : 'Upload payment screenshot'}
+                    {uploading ? t('settings.upiPay.uploading') : proofUrl || proofMediaId ? t('settings.upiPay.changeShot') : t('settings.upiPay.uploadShot')}
                     <input
                       type="file"
                       accept="image/*"
@@ -307,14 +307,14 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
                   ) : null}
                 </div>
                 {proofUrl ? (
-                  <img src={proofUrl} alt="Payment screenshot" style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 12 }} />
+                  <img src={proofUrl} alt={t('settings.upiPay.shotAlt')} style={{ width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 12 }} />
                 ) : null}
               </>
             ) : (
               <div className="product-settings-pending">
-                <strong>Payment received — IE usually confirms the same day.</strong>
+                <strong>{t('settings.upiPay.received')}</strong>
                 <p>
-                  Your claim was submitted{utr ? ` · UTR ${utr}` : ''}. The product stays as-is until we confirm.
+                  {utr ? t('settings.upiPay.subscription.claimedUtr', { utr }) : t('settings.upiPay.subscription.claimed')}
                 </p>
               </div>
             )}
@@ -330,26 +330,26 @@ export function SubscriptionUpiPaySheet({ request, onClose, onClaimed, onError }
           {status === 'idle' ? (
             <>
               <Button variant="primary" loading={loading} onClick={() => void startCheckout()}>
-                Generate payment QR
+                {t('settings.upiPay.generate')}
               </Button>
               <Button variant="neutral" onClick={onClose}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </>
           ) : null}
           {status === 'ready' ? (
             <>
               <Button variant="primary" loading={claiming} onClick={() => void submitClaim()}>
-                I’ve paid — submit for confirmation
+                {t('settings.upiPay.claimSubmit')}
               </Button>
               <Button variant="neutral" onClick={onClose}>
-                Close
+                {t('common.close')}
               </Button>
             </>
           ) : null}
           {status === 'awaiting' ? (
             <Button variant="primary" onClick={onClose}>
-              Done
+              {t('common.done')}
             </Button>
           ) : null}
         </div>

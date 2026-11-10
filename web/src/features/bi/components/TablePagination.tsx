@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   total: number;
@@ -65,9 +66,11 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [10, 25, 50, 100],
-  label = 'entries',
+  label,
   singleLine = false,
 }: Props) {
+  const { t } = useTranslation();
+  const unitLabel = label ?? t('bi.pagination.entries');
   const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize)));
   const currentPage = Math.min(totalPages, Math.floor(Math.max(0, offset) / Math.max(1, pageSize)) + 1);
   const from = total === 0 ? 0 : offset + 1;
@@ -93,7 +96,7 @@ export function TablePagination({
     >
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: singleLine ? 'nowrap' : 'wrap', minWidth: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-          {from}–{to} of {total} {label}
+          {t('bi.pagination.range', { from, to, total, label: unitLabel })}
         </span>
         <label
           style={{
@@ -104,11 +107,11 @@ export function TablePagination({
             color: 'var(--muted-foreground)',
           }}
         >
-          Rows
+          {t('bi.pagination.rows')}
           <select
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            aria-label="Rows per page"
+            aria-label={t('bi.pagination.rowsPerPage')}
             style={{
               height: 32,
               padding: '0 8px',
@@ -129,11 +132,11 @@ export function TablePagination({
       </div>
 
       {totalPages > 1 ? (
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} role="navigation" aria-label="Pagination">
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} role="navigation" aria-label={t('bi.pagination.navigation')}>
           <button
             type="button"
-            aria-label="First page"
-            title="First"
+            aria-label={t('bi.pagination.firstPage')}
+            title={t('bi.pagination.first')}
             disabled={currentPage <= 1}
             onClick={() => go(1)}
             style={currentPage <= 1 ? pagerBtnDisabled : pagerBtn}
@@ -142,8 +145,8 @@ export function TablePagination({
           </button>
           <button
             type="button"
-            aria-label="Previous page"
-            title="Previous"
+            aria-label={t('bi.pagination.previousPage')}
+            title={t('bi.pagination.previous')}
             disabled={currentPage <= 1}
             onClick={() => go(currentPage - 1)}
             style={currentPage <= 1 ? pagerBtnDisabled : pagerBtn}
@@ -162,7 +165,7 @@ export function TablePagination({
               <button
                 key={page}
                 type="button"
-                aria-label={`Page ${page}`}
+                aria-label={t('bi.pagination.page', { page })}
                 aria-current={page === currentPage ? 'page' : undefined}
                 onClick={() => go(page)}
                 style={page === currentPage ? pagerBtnActive : pagerBtn}
@@ -173,8 +176,8 @@ export function TablePagination({
           )}
           <button
             type="button"
-            aria-label="Next page"
-            title="Next"
+            aria-label={t('bi.pagination.nextPage')}
+            title={t('bi.pagination.next')}
             disabled={currentPage >= totalPages}
             onClick={() => go(currentPage + 1)}
             style={currentPage >= totalPages ? pagerBtnDisabled : pagerBtn}
@@ -183,8 +186,8 @@ export function TablePagination({
           </button>
           <button
             type="button"
-            aria-label="Last page"
-            title="Last"
+            aria-label={t('bi.pagination.lastPage')}
+            title={t('bi.pagination.last')}
             disabled={currentPage >= totalPages}
             onClick={() => go(totalPages)}
             style={currentPage >= totalPages ? pagerBtnDisabled : pagerBtn}

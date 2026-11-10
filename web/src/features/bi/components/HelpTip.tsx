@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 type TipButtonProps = {
   label: string;
@@ -10,14 +11,15 @@ type TipButtonProps = {
 
 /** ? button that toggles help. */
 export function HelpTip({ label, open, onToggle, size = 'sm' }: TipButtonProps) {
+  const { t } = useTranslation();
   const dim = size === 'md' ? 22 : 16;
 
   return (
     <button
       type="button"
-      aria-label={`About ${label}`}
+      aria-label={t('bi.helpTip.about', { label })}
       aria-expanded={open}
-      title="What does this mean?"
+      title={t('bi.helpTip.whatMeans')}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -57,6 +59,7 @@ export function HelpPanel({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -115,7 +118,7 @@ export function HelpPanel({
             cursor: 'pointer',
           }}
         >
-          Got it
+          {t('bi.helpTip.gotIt')}
         </button>
       </div>
     </div>,

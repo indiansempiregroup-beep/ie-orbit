@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -12,13 +13,14 @@ import { FormAlert } from '../../components/ui/FormAlert';
 import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
-import { addressLines, addressTypeMeta, hasMapPin } from './addressUtils';
+import { addressLines, addressTypeLabel, addressTypeMeta, hasMapPin } from './addressUtils';
 import type { CustomerAddress } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type AddressBookRoute = RouteProp<RootStackParamList, 'AddressBook'>;
 
 export function AddressBookScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AddressBookRoute>();
@@ -44,11 +46,11 @@ export function AddressBookScreen() {
       setAddresses(res.data);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load your addresses.');
+      setError(err instanceof Error ? err.message : t('customerApp.addresses.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessCode, tenantSlug]);
+  }, [businessCode, tenantSlug, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -72,9 +74,9 @@ export function AddressBookScreen() {
         { tenant_slug: tenantSlug, business_code: businessCode },
       );
       await load();
-      toast.push('Default address updated.', 'success');
+      toast.push(t('customerApp.addresses.defaultUpdated'), 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't update this address. Try again.");
+      setError(err instanceof Error ? err.message : t('customerApp.addresses.updateFailed'));
     } finally {
       setBusyId(null);
     }
@@ -90,16 +92,16 @@ export function AddressBookScreen() {
       });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't remove this address. Try again.");
+      setError(err instanceof Error ? err.message : t('customerApp.addresses.removeFailed'));
     } finally {
       setBusyId(null);
     }
   }
 
   function confirmRemove(address: CustomerAddress) {
-    Alert.alert('Remove address?', 'This address will no longer be available at checkout.', [
-      { text: 'Keep', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => void remove(address) },
+    Alert.alert(t('customerApp.addresses.removeTitle'), t('customerApp.addresses.removeBody'), [
+      { text: t('customerApp.addresses.keep'), style: 'cancel' },
+      { text: t('customerApp.addresses.remove'), style: 'destructive', onPress: () => void remove(address) },
     ]);
   }
 
@@ -136,7 +138,11 @@ export function AddressBookScreen() {
   return (
     <View style={styles.screen}>
       <ScreenHeader
-        title={selectMode ? 'Select address' : 'Your addresses'}
+        title={
+          selectMode
+            ? t('customerApp.addresses.selectTitle')
+            : t('customerApp.addresses.yourAddresses')
+        }
         onBack={() => navigation.goBack()}
       />
       <RefreshableScrollView
@@ -159,8 +165,8 @@ export function AddressBookScreen() {
             <Feather name="plus" size={18} color={primary} />
           </View>
           <View style={styles.addCopy}>
-            <Text style={styles.addTitle}>Add a new address</Text>
-            <Text style={styles.addSubtitle}>Drop a map pin for faster, accurate delivery</Text>
+            <Text style={styles.addTitle}>{t('customerApp.addresses.addNew')}</Text>
+            <Text style={styles.addSubtitle}>{t('customerApp.addresses.addNewSubtitle')}</Text>
           </View>
           <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
         </Pressable>
@@ -172,21 +178,23 @@ export function AddressBookScreen() {
         ) : addresses.length === 0 ? (
           <EmptyState
             icon="map-pin"
-            title="No saved addresses"
-            description="Save an address once and reuse it for every order."
+            title={t('customerApp.addresses.noneTitle')}
+            description={t('customerApp.addresses.noneDesc')}
           />
         ) : (
           <>
             {defaultAddress ? (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Default address</Text>
+                <Text style={styles.sectionLabel}>{t('customerApp.addresses.defaultAddress')}</Text>
                 <GroupedList>{renderCard(defaultAddress)}</GroupedList>
               </View>
             ) : null}
             {otherAddresses.length ? (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>
-                  {defaultAddress ? 'Other addresses' : 'Saved addresses'}
+                  {defaultAddress
+                    ? t('customerApp.addresses.otherAddresses')
+                    : t('customerApp.addresses.savedAddresses')}
                 </Text>
                 <GroupedList>{otherAddresses.map(renderCard)}</GroupedList>
               </View>
@@ -223,6 +231,7 @@ function AddressCard({
   onMakeDefault,
   onRemove,
 }: CardProps) {
+  const { t } = useTranslation();
   const meta = addressTypeMeta(address.address_type);
   const lines = addressLines(address);
   const pinned = hasMapPin(address);
@@ -237,7 +246,10 @@ function AddressCard({
       ]}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${meta.label} address, ${lines.join(', ')}`}
+      accessibilityLabel={t('customerApp.addresses.a11y', {
+        type: addressTypeLabel(address.address_type, t),
+        lines: lines.join(', '),
+      })}
     >
       <View style={styles.cardHead}>
         {selectMode ? (
@@ -249,10 +261,10 @@ function AddressCard({
             <Feather name={meta.icon} size={16} color={primaryColor} />
           </View>
         )}
-        <Text style={styles.typeLabel}>{meta.label}</Text>
+        <Text style={styles.typeLabel}>{addressTypeLabel(address.address_type, t)}</Text>
         {address.is_default ? (
           <View style={styles.defaultBadge}>
-            <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+            <Text style={styles.defaultBadgeText}>{t('customerApp.addresses.defaultBadge')}</Text>
           </View>
         ) : null}
         {busy ? <ActivityIndicator size="small" color={primaryColor} /> : null}
@@ -265,30 +277,30 @@ function AddressCard({
           </Text>
         ))}
         {address.phone_number ? (
-          <Text style={styles.line}>Phone: {address.phone_number}</Text>
+          <Text style={styles.line}>{t('customerApp.addresses.phoneLine', { phone: address.phone_number })}</Text>
         ) : null}
       </View>
 
       {!address.phone_number ? (
         <View style={styles.warnRow}>
           <Feather name="alert-triangle" size={12} color={colors.warning} />
-          <Text style={styles.warnText}>Add a phone number before using this address for delivery</Text>
+          <Text style={styles.warnText}>{t('customerApp.addresses.warnPhone')}</Text>
         </View>
       ) : null}
 
       {!pinned ? (
         <View style={styles.warnRow}>
           <Feather name="alert-triangle" size={12} color={colors.warning} />
-          <Text style={styles.warnText}>No map pin saved — instant delivery may be unavailable</Text>
+          <Text style={styles.warnText}>{t('customerApp.addresses.warnPin')}</Text>
         </View>
       ) : null}
 
       <View style={styles.actions}>
-        <CardAction icon="edit-2" label="Edit" onPress={onEdit} disabled={busy} />
+        <CardAction icon="edit-2" label={t('customerApp.addresses.edit')} onPress={onEdit} disabled={busy} />
         {!address.is_default ? (
-          <CardAction icon="check-circle" label="Set as default" onPress={onMakeDefault} disabled={busy} />
+          <CardAction icon="check-circle" label={t('customerApp.addresses.setDefault')} onPress={onMakeDefault} disabled={busy} />
         ) : null}
-        <CardAction icon="trash-2" label="Remove" tone="danger" onPress={onRemove} disabled={busy} />
+        <CardAction icon="trash-2" label={t('customerApp.addresses.remove')} tone="danger" onPress={onRemove} disabled={busy} />
       </View>
     </Pressable>
   );

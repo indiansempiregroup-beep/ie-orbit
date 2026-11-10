@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Image,
@@ -24,6 +25,7 @@ import { Input } from '../../components/ui/Input';
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopPetDetail'>;
 
 export function ShopPetDetailScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
@@ -45,13 +47,13 @@ export function ShopPetDetailScreen() {
     try {
       const response = await client.shop.getPet(petId);
       setPet(response.data);
-      setSubject((current) => current || `Happy birthday reminder for ${response.data.name}`);
+      setSubject((current) => current || t('shop.pets.birthdayReminderSubject', { name: response.data.name }));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load pet');
+      setMessage(err instanceof Error ? err.message : t('opsApp.shop.pets.loadPetFailed'));
     } finally {
       setLoading(false);
     }
-  }, [client, petId]);
+  }, [client, petId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -65,7 +67,7 @@ export function ShopPetDetailScreen() {
   async function sendNotify() {
     if (!client || !pet) return;
     if (!subject.trim() || !body.trim()) {
-      setMessage('Subject and message are required.');
+      setMessage(t('shop.pets.errNotifyRequired'));
       return;
     }
     setSending(true);
@@ -76,12 +78,12 @@ export function ShopPetDetailScreen() {
         body: body.trim(),
         channels: ['in_app', 'email'],
       });
-      const channels = (response.data.sent_channels || []).join(', ') || 'none';
-      setMessage(`Notification sent (${channels}).`);
+      const channels = (response.data.sent_channels || []).join(', ') || t('shop.pets.none');
+      setMessage(t('opsApp.shop.pets.notificationSent', { channels }));
       setShowNotify(false);
       setBody('');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't notify the owner. Try again.");
+      setMessage(err instanceof Error ? err.message : t('shop.pets.errNotify'));
     } finally {
       setSending(false);
     }
@@ -101,7 +103,7 @@ export function ShopPetDetailScreen() {
     return (
       <DesktopPage>
         <View style={[styles.screen, styles.centered]}>
-          <Text style={styles.meta}>{message || 'Pet not found.'}</Text>
+          <Text style={styles.meta}>{message || t('opsApp.shop.pets.petNotFound')}</Text>
         </View>
       </DesktopPage>
     );
@@ -128,23 +130,23 @@ export function ShopPetDetailScreen() {
           )}
           <Text style={styles.title}>{pet.name}</Text>
           <Text style={styles.meta}>
-            {[pet.species, pet.breed, pet.sex].filter(Boolean).join(' · ') || 'Pet profile'}
+            {[pet.species, pet.breed, pet.sex].filter(Boolean).join(' · ') || t('opsApp.shop.pets.petProfile')}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Owner</Text>
+          <Text style={styles.label}>{t('opsApp.shop.pets.owner')}</Text>
           <Text style={styles.value}>{ownerLabel}</Text>
-          <Text style={styles.label}>Birthday</Text>
-          <Text style={styles.value}>{pet.birthday || 'Not set'}</Text>
+          <Text style={styles.label}>{t('shop.pets.birthday')}</Text>
+          <Text style={styles.value}>{pet.birthday || t('shop.pets.notSet')}</Text>
           {pet.birthday ? (
             <Text style={styles.hint}>
-              Automatic reminder: customer + business owner/manager get alerts 5 days before birthday.
+              {t('opsApp.shop.pets.autoReminder')}
             </Text>
           ) : (
-            <Text style={styles.hint}>Add a birthday to enable automatic owner reminders.</Text>
+            <Text style={styles.hint}>{t('opsApp.shop.pets.addBirthdayHint')}</Text>
           )}
-          <Text style={styles.label}>Medical notes</Text>
+          <Text style={styles.label}>{t('shop.pets.medicalNotes')}</Text>
           <Text style={styles.value}>{pet.medical_notes?.trim() || '—'}</Text>
         </View>
 
@@ -154,7 +156,7 @@ export function ShopPetDetailScreen() {
           style={styles.button}
           onPress={() => navigation.navigate('ShopPetForm', { petId: pet.id })}
         >
-          <Text style={styles.buttonText}>Edit pet</Text>
+          <Text style={styles.buttonText}>{t('shop.pets.editPet')}</Text>
         </Pressable>
 
         <Pressable
@@ -163,34 +165,34 @@ export function ShopPetDetailScreen() {
         >
           <Feather name="bell" size={16} color={colors.primary} />
           <Text style={styles.secondaryText}>
-            {showNotify ? 'Hide notification' : 'Notify owner'}
+            {showNotify ? t('opsApp.shop.pets.hideNotification') : t('shop.pets.notifyOwner')}
           </Text>
         </Pressable>
 
         {showNotify ? (
           <View style={styles.notifyCard}>
             <Input
-              label="Subject"
+              label={t('shop.pets.subject')}
               required
               value={subject}
               onChangeText={setSubject}
-              placeholder="Subject"
+              placeholder={t('shop.pets.subject')}
             />
             <Input
-              label="Message"
+              label={t('shop.pets.message')}
               required
               value={body}
               onChangeText={setBody}
-              placeholder="Write a custom message for the pet owner…"
+              placeholder={t('shop.pets.messagePlaceholder')}
               multiline
             />
-            <Text style={styles.hint}>Sends in-app (if they have an account) and email.</Text>
+            <Text style={styles.hint}>{t('shop.pets.notifyHint')}</Text>
             <Pressable
               style={[styles.button, sending && styles.buttonDisabled]}
               onPress={() => void sendNotify()}
               disabled={sending}
             >
-              <Text style={styles.buttonText}>{sending ? 'Sending…' : 'Send notification'}</Text>
+              <Text style={styles.buttonText}>{sending ? t('shop.pets.sending') : t('shop.pets.sendNotification')}</Text>
             </Pressable>
           </View>
         ) : null}

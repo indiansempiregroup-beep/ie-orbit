@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -20,19 +21,20 @@ import {
   shopReturnMethodLabel,
   shopReturnStatusLabel,
 } from './shopHelpers';
+import type { TFunction } from 'i18next';
 import type { ShopReturn, ShopReturnPickupLive } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ReturnDetail'>;
 type ReturnLine = { name?: string; quantity?: string | number; line_total?: string | number };
 
-function returnHeadline(item: ShopReturn) {
+function returnHeadline(item: ShopReturn, t: TFunction) {
   const status = String(item.status || '').toLowerCase();
   const method = String(item.return_method || '').toLowerCase();
   if (status === 'completed') {
     return {
-      title: 'Return complete',
-      subtitle: 'The shop received your items. Collect cash at the shop or wait for the original payment to reverse.',
+      title: t('customerApp.returns.detail.completeTitle'),
+      subtitle: t('customerApp.returns.detail.completeSubtitle'),
       icon: 'check-circle' as const,
       bg: '#ECFDF5',
       text: '#047857',
@@ -41,8 +43,8 @@ function returnHeadline(item: ShopReturn) {
   }
   if (status === 'rejected') {
     return {
-      title: 'Return declined',
-      subtitle: 'The shop did not accept this return. Contact them if you need help.',
+      title: t('customerApp.returns.detail.declinedTitle'),
+      subtitle: t('customerApp.returns.detail.declinedSubtitle'),
       icon: 'x-circle' as const,
       bg: '#FEF2F2',
       text: '#B91C1C',
@@ -60,10 +62,16 @@ function returnHeadline(item: ShopReturn) {
     const net = meta.pickup_charge?.net_refund;
     const instant = String(meta.pickup_charge?.pending_mode || '') === 'instant';
     return {
-      title: 'Accept pickup fee?',
+      title: t('customerApp.returns.detail.acceptFeeTitle'),
       subtitle: fee
-        ? `The shop wants ${instant ? 'an instant rider' : 'a courier'} pickup. Fee ${formatShopMoney(fee, item.currency)} would leave a net refund of ${formatShopMoney(net ?? item.refund_total, item.currency)}. Accept to continue, or cancel the return.`
-        : 'The shop proposed a pickup fee. Accept to continue, or cancel the return.',
+        ? t(
+            instant ? 'customerApp.returns.detail.feeInstant' : 'customerApp.returns.detail.feeCourier',
+            {
+              fee: formatShopMoney(fee, item.currency),
+              net: formatShopMoney(net ?? item.refund_total, item.currency),
+            },
+          )
+        : t('customerApp.returns.detail.feeNoAmount'),
       icon: 'alert-circle' as const,
       bg: '#FFF7ED',
       text: '#C2410C',
@@ -77,10 +85,13 @@ function returnHeadline(item: ShopReturn) {
         : undefined;
     const trackingUrl = String(delivery?.tracking_url || '').trim();
     return {
-      title: method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged',
+      title:
+        method === 'instant_pickup'
+          ? t('customerApp.returns.status.riderDispatched')
+          : t('customerApp.returns.status.pickupArranged'),
       subtitle: trackingUrl
-        ? `Keep the items ready. Track: ${trackingUrl}. Refund is issued after the shop receives them.`
-        : 'Keep the items ready. Refund is issued after the shop receives them.',
+        ? t('customerApp.returns.detail.keepReadyTrack', { url: trackingUrl })
+        : t('customerApp.returns.detail.keepReady'),
       icon: 'truck' as const,
       bg: '#EFF6FF',
       text: '#1D4ED8',
@@ -89,8 +100,8 @@ function returnHeadline(item: ShopReturn) {
   }
   if (method === 'dropoff') {
     return {
-      title: 'Awaiting drop-off',
-      subtitle: 'Bring the items to the shop. Refund is issued after they confirm receipt.',
+      title: t('customerApp.returns.status.awaitingDropoff'),
+      subtitle: t('customerApp.returns.detail.dropoffSubtitle'),
       icon: 'map-pin' as const,
       bg: '#FFFBEB',
       text: '#B45309',
@@ -99,8 +110,8 @@ function returnHeadline(item: ShopReturn) {
   }
   if (method === 'instant_pickup') {
     return {
-      title: 'Awaiting instant pickup',
-      subtitle: 'The shop will dispatch a rider soon. Refund is issued after they receive the items.',
+      title: t('customerApp.returns.status.awaitingInstant'),
+      subtitle: t('customerApp.returns.detail.instantSubtitle'),
       icon: 'zap' as const,
       bg: '#FFFBEB',
       text: '#B45309',
@@ -109,8 +120,8 @@ function returnHeadline(item: ShopReturn) {
   }
   if (method === 'reverse_pickup') {
     return {
-      title: 'Awaiting pickup',
-      subtitle: 'The shop will arrange a pickup. Refund is issued after they receive the items.',
+      title: t('customerApp.returns.status.awaitingPickup'),
+      subtitle: t('customerApp.returns.detail.pickupSubtitle'),
       icon: 'clock' as const,
       bg: '#FFFBEB',
       text: '#B45309',
@@ -118,8 +129,8 @@ function returnHeadline(item: ShopReturn) {
     };
   }
   return {
-    title: 'Return in progress',
-    subtitle: 'Refund is issued after the shop receives your items.',
+    title: t('customerApp.returns.detail.inProgressTitle'),
+    subtitle: t('customerApp.returns.detail.inProgressSubtitle'),
     icon: 'clock' as const,
     bg: '#FFFBEB',
     text: '#B45309',
@@ -128,6 +139,7 @@ function returnHeadline(item: ShopReturn) {
 }
 
 export function ReturnDetailScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
@@ -179,13 +191,13 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
         setItem(res.data);
         await loadPickupLive(res.data);
       } catch (err) {
-        setError(getApiErrorMessage(err, 'Unable to load this return.'));
+        setError(getApiErrorMessage(err, t('customerApp.returns.detail.loadFailed')));
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [businessCode, loadPickupLive, route.params.returnId, tenantSlug],
+    [businessCode, loadPickupLive, route.params.returnId, tenantSlug, t],
   );
 
   async function decidePickupFee(action: 'accept' | 'decline') {
@@ -203,7 +215,9 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
       setError(
         getApiErrorMessage(
           err,
-          action === 'accept' ? "Couldn't accept the pickup fee." : "Couldn't cancel the return.",
+          action === 'accept'
+            ? t('customerApp.returns.detail.acceptFeeFailed')
+            : t('customerApp.returns.detail.cancelFailed'),
         ),
       );
     } finally {
@@ -245,7 +259,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
   if (loading && !item) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Return" onBack={() => navigation.goBack()} />
+        <ScreenHeader title={t('customerApp.returns.detail.title')} onBack={() => navigation.goBack()} />
         <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
       </View>
     );
@@ -254,22 +268,22 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
   if (!item) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Return" onBack={() => navigation.goBack()} />
+        <ScreenHeader title={t('customerApp.returns.detail.title')} onBack={() => navigation.goBack()} />
         <EmptyState
           icon="rotate-ccw"
-          title="Return not found"
-          description={error || 'This return is no longer available.'}
+          title={t('customerApp.returns.detail.notFound')}
+          description={error || t('customerApp.returns.detail.noLongerAvailable')}
         />
       </View>
     );
   }
 
-  const hero = returnHeadline(item);
+  const hero = returnHeadline(item, t);
   const lines = (Array.isArray(item.line_items) ? item.line_items : []).flatMap((raw) =>
     raw && typeof raw === 'object' ? [raw as ReturnLine] : [],
   );
   const completed = String(item.status || '').toLowerCase() === 'completed';
-  const methodLabel = shopReturnMethodLabel(item.return_method);
+  const methodLabel = shopReturnMethodLabel(item.return_method, t);
   const meta = item.metadata && typeof item.metadata === 'object' ? (item.metadata as Record<string, unknown>) : {};
   const pickupCharge =
     meta.pickup_charge && typeof meta.pickup_charge === 'object'
@@ -307,7 +321,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Return details" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('customerApp.returns.detail.screenTitle')} onBack={() => navigation.goBack()} />
       <RefreshableScrollView
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 40, gap: spacing.md }}
         refreshing={refreshing}
@@ -324,13 +338,13 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <Text style={[styles.heroTitle, { color: hero.text }]}>{hero.title}</Text>
             <Text style={styles.heroSubtitle}>{hero.subtitle}</Text>
             <Text style={styles.heroMeta}>
-              #{item.return_number} · {shopReturnStatusLabel(item)} · {formatShopDateTime(item.created_at)}
+              #{item.return_number} · {shopReturnStatusLabel(item, t)} · {formatShopDateTime(item.created_at)}
             </Text>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.kicker}>Refund</Text>
+          <Text style={styles.kicker}>{t('customerApp.returns.detail.refund')}</Text>
           <Text style={styles.refundAmount}>
             {formatShopMoney(
               awaitingFeeDecision && pickupCharge?.net_refund
@@ -341,21 +355,26 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
           </Text>
           {customerPaysPickup && pickupCharge?.fee && feeProposed ? (
             <Text style={styles.meta}>
-              If you accept, pickup fee {formatShopMoney(pickupCharge.fee, item.currency)} is
-              deducted
               {pickupCharge.original_refund
-                ? ` from ${formatShopMoney(pickupCharge.original_refund, item.currency)}`
-                : ''}
-              .
+                ? t('customerApp.returns.detail.ifAcceptFeeFrom', {
+                    fee: formatShopMoney(pickupCharge.fee, item.currency),
+                    from: formatShopMoney(pickupCharge.original_refund, item.currency),
+                  })
+                : t('customerApp.returns.detail.ifAcceptFee', {
+                    fee: formatShopMoney(pickupCharge.fee, item.currency),
+                  })}
             </Text>
           ) : null}
           {customerPaysPickup && pickupCharge?.fee && feeAccepted ? (
             <Text style={styles.meta}>
-              Pickup fee {formatShopMoney(pickupCharge.fee, item.currency)} deducted
               {pickupCharge.original_refund
-                ? ` from ${formatShopMoney(pickupCharge.original_refund, item.currency)}`
-                : ''}
-              .
+                ? t('customerApp.returns.detail.feeDeductedFrom', {
+                    fee: formatShopMoney(pickupCharge.fee, item.currency),
+                    from: formatShopMoney(pickupCharge.original_refund, item.currency),
+                  })
+                : t('customerApp.returns.detail.feeDeducted', {
+                    fee: formatShopMoney(pickupCharge.fee, item.currency),
+                  })}
             </Text>
           ) : null}
           {completed && item.refund_instruction ? (
@@ -363,10 +382,10 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
           ) : null}
           <Text style={styles.meta}>
             {completed
-              ? 'This amount is on the shop books. Collect cash in person or wait for the original payment to reverse, depending on how you paid.'
+              ? t('customerApp.returns.detail.completedNote')
               : awaitingFeeDecision
-                ? 'Accept the pickup fee to continue, or cancel the return.'
-                : 'Refund is issued only after the shop receives your items.'}
+                ? t('customerApp.returns.detail.awaitingNote')
+                : t('customerApp.returns.detail.defaultNote')}
           </Text>
         </View>
 
@@ -374,7 +393,11 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
           <View style={styles.actions}>
             <View style={{ flex: 1 }}>
               <Button
-                label={decisionBusy === 'decline' ? 'Cancelling…' : 'Cancel return'}
+                label={
+                  decisionBusy === 'decline'
+                    ? t('customerApp.returns.detail.cancelling')
+                    : t('customerApp.returns.detail.cancelReturn')
+                }
                 variant="outline"
                 icon="x"
                 fullWidth
@@ -385,7 +408,11 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             </View>
             <View style={{ flex: 1.2 }}>
               <Button
-                label={decisionBusy === 'accept' ? 'Accepting…' : 'Accept fee'}
+                label={
+                  decisionBusy === 'accept'
+                    ? t('customerApp.returns.detail.accepting')
+                    : t('customerApp.returns.detail.acceptFee')
+                }
                 icon="check"
                 fullWidth
                 primaryColor={primary}
@@ -408,10 +435,12 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
               />
               <View style={{ flex: 1 }}>
                 <Text style={styles.liveEyebrow}>
-                  {pickupLive.terminal ? 'PICKUP STATUS' : 'LIVE PICKUP'}
+                  {pickupLive.terminal
+                    ? t('customerApp.returns.detail.pickupStatus')
+                    : t('customerApp.returns.detail.livePickup')}
                 </Text>
                 <Text style={styles.factValue}>
-                  {String(pickupLive.headline || 'Pickup update').replace(
+                  {String(pickupLive.headline || t('customerApp.returns.detail.pickupUpdate')).replace(
                     /\s*·\s*\d+\s*min(?:utes?)?$/i,
                     '',
                   )}
@@ -419,14 +448,16 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                 {pickupLive.subtitle ? <Text style={styles.meta}>{pickupLive.subtitle}</Text> : null}
                 <Text style={[styles.meta, pickupLive.stale ? styles.staleText : null]}>
                   {pickupLive.stale
-                    ? `Location may be outdated${
-                        pickupLive.last_updated
-                          ? ` · Updated ${formatDateTime(pickupLive.last_updated)}`
-                          : ''
-                      }`
+                    ? pickupLive.last_updated
+                      ? t('customerApp.returns.detail.outdatedUpdated', {
+                          date: formatDateTime(pickupLive.last_updated),
+                        })
+                      : t('customerApp.returns.detail.outdated')
                     : pickupLive.last_updated
-                      ? `Updated ${formatDateTime(pickupLive.last_updated)}`
-                      : 'Waiting for an update'}
+                      ? t('customerApp.returns.detail.updatedAt', {
+                          date: formatDateTime(pickupLive.last_updated),
+                        })
+                      : t('customerApp.returns.detail.waiting')}
                 </Text>
               </View>
             </View>
@@ -434,9 +465,11 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
               <View style={[styles.etaBox, { backgroundColor: `${primary}12` }]}>
                 <Feather name="clock" size={20} color={primary} />
                 <View>
-                  <Text style={styles.etaLabel}>ESTIMATED ARRIVAL</Text>
+                  <Text style={styles.etaLabel}>{t('customerApp.returns.detail.estimatedArrival')}</Text>
                   <Text style={[styles.etaValue, { color: primary }]}>
-                    {pickupLive.eta_minutes != null ? `${pickupLive.eta_minutes} min` : 'Updating'}
+                    {pickupLive.eta_minutes != null
+                      ? t('customerApp.returns.detail.minutes', { n: pickupLive.eta_minutes })
+                      : t('customerApp.returns.detail.updating')}
                   </Text>
                 </View>
               </View>
@@ -447,7 +480,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                 <View style={styles.legendRow}>
                   <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.legendLabel}>Collect from you</Text>
+                    <Text style={styles.legendLabel}>{t('customerApp.returns.detail.collectFromYou')}</Text>
                     <Text style={styles.meta}>
                       {[
                         pickupLive.pickup?.contact?.name,
@@ -455,7 +488,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                         pickupLive.pickup?.city,
                       ]
                         .filter(Boolean)
-                        .join(' · ') || 'Your address'}
+                        .join(' · ') || t('customerApp.returns.detail.yourAddress')}
                     </Text>
                   </View>
                 </View>
@@ -464,9 +497,9 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                   <View style={styles.legendRow}>
                     <View style={[styles.legendDot, { backgroundColor: primary }]} />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.legendLabel}>Rider</Text>
+                      <Text style={styles.legendLabel}>{t('customerApp.returns.detail.rider')}</Text>
                       <Text style={styles.meta}>
-                        {liveRiderName || 'Assigned rider'}
+                        {liveRiderName || t('customerApp.returns.detail.assignedRider')}
                         {pickupLive.rider_location.latitude != null
                           ? ` · ${Number(pickupLive.rider_location.latitude).toFixed(5)}, ${Number(pickupLive.rider_location.longitude).toFixed(5)}`
                           : ''}
@@ -477,7 +510,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                 <View style={styles.legendRow}>
                   <View style={[styles.legendDot, { backgroundColor: colors.warning }]} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.legendLabel}>Return to shop</Text>
+                    <Text style={styles.legendLabel}>{t('customerApp.returns.detail.returnToShop')}</Text>
                     <Text style={styles.meta}>
                       {[
                         pickupLive.drop?.contact?.name,
@@ -485,7 +518,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                         pickupLive.drop?.city,
                       ]
                         .filter(Boolean)
-                        .join(' · ') || 'Shop'}
+                        .join(' · ') || t('customerApp.returns.detail.shop')}
                     </Text>
                   </View>
                 </View>
@@ -504,8 +537,8 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                   </View>
                 )}
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.riderName}>{liveRiderName || 'Pickup rider'}</Text>
-                  <Text style={styles.meta}>{String(liveRider?.vehicle || 'Your pickup partner')}</Text>
+                  <Text style={styles.riderName}>{liveRiderName || t('customerApp.returns.detail.pickupRider')}</Text>
+                  <Text style={styles.meta}>{String(liveRider?.vehicle || t('customerApp.returns.detail.yourPickupPartner'))}</Text>
                   {liveRiderPhone ? <Text style={styles.riderPhone}>{liveRiderPhone}</Text> : null}
                 </View>
                 {pickupLive.can_call_rider && liveRiderPhone ? (
@@ -514,7 +547,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                     onPress={() => Linking.openURL(`tel:${liveRiderPhone}`)}
                   >
                     <Feather name="phone" size={16} color={primary} />
-                    <Text style={{ color: primary, fontWeight: '700' }}>Call</Text>
+                    <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.returns.detail.call')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -522,14 +555,14 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             {liveTrackingUrl ? (
               <Pressable style={styles.trackingLink} onPress={() => Linking.openURL(liveTrackingUrl)}>
                 <Feather name="external-link" size={16} color={primary} />
-                <Text style={[styles.trackingLinkText, { color: primary }]}>Open carrier tracking</Text>
+                <Text style={[styles.trackingLinkText, { color: primary }]}>{t('customerApp.returns.detail.openCarrierTracking')}</Text>
               </Pressable>
             ) : null}
           </View>
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.section}>Items</Text>
+          <Text style={styles.section}>{t('customerApp.returns.detail.items')}</Text>
           {lines.length ? (
             lines.map((row, index) => (
               <View key={`${row.name}-${index}`}>
@@ -539,9 +572,9 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
                     <Feather name="package" size={16} color={colors.mutedForeground} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{row.name || `Item ${index + 1}`}</Text>
+                    <Text style={styles.name}>{row.name || t('customerApp.returns.detail.itemN', { n: index + 1 })}</Text>
                     <Text style={styles.meta}>
-                      Qty {formatShopQty(row.quantity)}
+                      {t('customerApp.returns.detail.qty', { qty: formatShopQty(row.quantity) })}
                       {item.created_at ? ` · ${formatShopDateTime(item.created_at)}` : ''}
                     </Text>
                   </View>
@@ -550,17 +583,17 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
               </View>
             ))
           ) : (
-            <Text style={styles.meta}>No line items on this return.</Text>
+            <Text style={styles.meta}>{t('customerApp.returns.detail.noLineItems')}</Text>
           )}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.section}>Details</Text>
+          <Text style={styles.section}>{t('customerApp.returns.detail.details')}</Text>
           {item.created_at ? (
             <View style={styles.factRow}>
               <Feather name="clock" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Requested at</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.detail.requestedAt')}</Text>
                 <Text style={styles.factValue}>{formatShopDateTime(item.created_at)}</Text>
               </View>
             </View>
@@ -569,7 +602,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <View style={styles.factRow}>
               <Feather name="map-pin" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Return method</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.detail.returnMethod')}</Text>
                 <Text style={styles.factValue}>{methodLabel}</Text>
               </View>
             </View>
@@ -578,10 +611,12 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <View style={styles.factRow}>
               <Feather name="truck" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Pickup arranged</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.status.pickupArranged')}</Text>
                 <Text style={styles.factValue}>{formatShopDateTime(item.pickup_arranged_at)}</Text>
                 {item.pickup_tracking_number ? (
-                  <Text style={styles.meta}>Tracking {item.pickup_tracking_number}</Text>
+                  <Text style={styles.meta}>
+                    {t('customerApp.returns.detail.tracking', { number: item.pickup_tracking_number })}
+                  </Text>
                 ) : null}
                 {item.pickup_notes ? <Text style={styles.meta}>{item.pickup_notes}</Text> : null}
               </View>
@@ -591,7 +626,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <View style={styles.factRow}>
               <Feather name="package" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Received by shop</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.detail.receivedByShop')}</Text>
                 <Text style={styles.factValue}>{formatShopDateTime(item.received_at)}</Text>
               </View>
             </View>
@@ -600,7 +635,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <View style={styles.factRow}>
               <Feather name="message-circle" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Reason</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.detail.reason')}</Text>
                 <Text style={styles.factValue}>{item.reason}</Text>
               </View>
             </View>
@@ -608,13 +643,13 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
           <View style={styles.factRow}>
             <Feather name={item.restock ? 'archive' : 'slash'} size={16} color={colors.mutedForeground} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.factLabel}>Inventory</Text>
+              <Text style={styles.factLabel}>{t('customerApp.returns.detail.inventory')}</Text>
               <Text style={styles.factValue}>
                 {completed
                   ? item.restock
-                    ? 'Sellable items were added back to stock.'
-                    : 'These items were not restocked.'
-                  : 'Stock is updated after the shop receives the items.'}
+                    ? t('customerApp.returns.detail.restocked')
+                    : t('customerApp.returns.detail.notRestocked')
+                  : t('customerApp.returns.detail.stockAfterReceipt')}
               </Text>
             </View>
           </View>
@@ -622,7 +657,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             <View style={styles.factRow}>
               <Feather name="credit-card" size={16} color={colors.mutedForeground} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.factLabel}>Refund method</Text>
+                <Text style={styles.factLabel}>{t('customerApp.returns.detail.refundMethod')}</Text>
                 <Text style={styles.factValue}>{item.refund_mode.replace(/_/g, ' ')}</Text>
               </View>
             </View>
@@ -634,7 +669,7 @@ export function ReturnDetailScreen({ navigation, route }: Props) {
             style={[styles.linkBtn, { borderColor: primary }]}
             onPress={() => navigation.navigate('ShopOrderDetail', { orderId: String(item.order) })}
           >
-            <Text style={{ color: primary, fontWeight: '700' }}>View original order</Text>
+            <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.returns.detail.viewOrder')}</Text>
           </Pressable>
         ) : null}
       </RefreshableScrollView>

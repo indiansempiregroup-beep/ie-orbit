@@ -1,15 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { colors, fonts } from '../../theme/tokens';
 import { LoyaltyMetricTile } from '../bi/LoyaltyMetricTile';
 import { formatMoney } from './posPayment';
-
-export const SALE_INSIGHT_HELP = {
-  points:
-    'Reward points on this sale or booking. Green (+) means you gave points; amber (−) means the customer used points to pay less; rose means points were reversed after a cancel, return, or refund.',
-  profit:
-    'What you kept from this shop sale after stock cost and discounts (including reward points used). Not shown for bookings.',
-} as const;
 
 type SaleInsightSource = {
   points_earned?: number | null;
@@ -92,6 +86,7 @@ type Props = {
 
 /** Growth Intelligence–style points + profit chips for orders and sale invoices. */
 export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Props) {
+  const { t } = useTranslation();
   const { pointsEarned, pointsRedeemed, pointsReversed, reversalReason, grossProfit } =
     readSaleInsights(source);
   const hasPoints = pointsEarned > 0 || pointsRedeemed > 0 || pointsReversed > 0;
@@ -119,11 +114,15 @@ export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Pr
   return (
     <View style={styles.row}>
       <LoyaltyMetricTile
-        label="Points"
+        label={t('shop.saleInsights.points')}
         icon="gift"
         iconTone={iconTone}
         tone={tone}
-        help={reversalReason ? `${SALE_INSIGHT_HELP.points} ${reversalReason}` : SALE_INSIGHT_HELP.points}
+        help={
+          reversalReason
+            ? `${t('shop.saleInsights.pointsHelp')} ${reversalReason}`
+            : t('shop.saleInsights.pointsHelp')
+        }
         value={
           <Text style={styles.pointsValue}>
             {pointsEarned > 0 ? <Text style={{ color: colors.success }}>+{pointsEarned}</Text> : null}
@@ -137,7 +136,7 @@ export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Pr
               <Text style={{ color: colors.mutedForeground }}> · </Text>
             ) : null}
             {pointsReversed > 0 ? (
-              <Text style={{ color: colors.destructive }}>−{pointsReversed} rev</Text>
+              <Text style={{ color: colors.destructive }}>−{pointsReversed} {t('shop.saleInsights.reversedShort')}</Text>
             ) : null}
             {!hasPoints ? <Text style={{ color: colors.mutedForeground }}>—</Text> : null}
           </Text>
@@ -145,11 +144,11 @@ export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Pr
       />
       {hasProfit ? (
         <LoyaltyMetricTile
-          label="Profit"
+          label={t('shop.saleInsights.profit')}
           icon="trending-up"
           iconTone={profitPositive ? 'green' : 'rose'}
           tone={profitPositive ? 'positive' : 'negative'}
-          help={SALE_INSIGHT_HELP.profit}
+          help={t('shop.saleInsights.profitHelp')}
           value={
             <Text
               style={[

@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { ShopProduct } from '@ie-orbit/sdk';
 
 export const MAX_PRODUCT_IMAGES = 5;
@@ -79,8 +80,8 @@ export function buildProductImageMetadata(gallery: string[]) {
   };
 }
 
-export function productImageSlotLabel(index: number): string {
-  if (index === 0) return 'Primary image';
-  if (index === 1) return 'Photo 2 (back)';
-  return `Photo ${index + 1}`;
+export function productImageSlotLabel(index: number, t: TFunction): string {
+  if (index === 0) return t('shop.products.slotPrimary');
+  if (index === 1) return t('shop.products.slotBack');
+  return t('shop.products.slotN', { n: index + 1 });
 }

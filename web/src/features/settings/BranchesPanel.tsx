@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { MapPin } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Branch } from '@ie-orbit/sdk';
 import { AddressMapPreview } from '../../components/AddressMapPreview';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
@@ -21,11 +22,18 @@ const INPUT_STYLE = {
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 
+const STATUS_FILTER_KEYS: Record<StatusFilter, string> = {
+  active: 'settings.branches.filterActive',
+  inactive: 'settings.branches.filterInactive',
+  all: 'settings.branches.filterAll',
+};
+
 function isActive(branch: Branch) {
   return (branch.status ?? 'active') === 'active';
 }
 
 export function BranchesPanel() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const branchesQuery = useBranchesQuery();
   const createBranch = useCreateBranch();
@@ -124,15 +132,15 @@ export function BranchesPanel() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!branchName.trim()) {
-      snackbar.push('Office name is required.', 'warning');
+      snackbar.push(t('settings.branches.nameRequired'), 'warning');
       return;
     }
     if (!addressLine1.trim() || !city.trim() || !country.trim()) {
-      snackbar.push('Select a full office address from Google Places.', 'warning');
+      snackbar.push(t('settings.branches.addressRequired'), 'warning');
       return;
     }
     if (latitude == null || longitude == null) {
-      snackbar.push('Google Map location is required.', 'warning');
+      snackbar.push(t('settings.branches.mapRequired'), 'warning');
       return;
     }
 
@@ -153,30 +161,30 @@ export function BranchesPanel() {
     try {
       if (editingId) {
         await updateBranch.mutateAsync({ branchId: editingId, branch: payload });
-        snackbar.push('Office details saved.', 'success');
+        snackbar.push(t('settings.branches.saved'), 'success');
       } else {
         await createBranch.mutateAsync({ ...payload, is_primary: branches.length === 0 });
-        snackbar.push('Office added.', 'success');
+        snackbar.push(t('settings.branches.added'), 'success');
       }
       closeForm();
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't save this office. Check the details and try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('settings.branches.saveFailed'), 'error');
     }
   }
 
   async function handleSetPrimary(branchId: string) {
     try {
       await updateBranch.mutateAsync({ branchId, branch: { is_primary: true } });
-      snackbar.push('Primary office updated.', 'success');
+      snackbar.push(t('settings.branches.primaryUpdated'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't update this office. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('settings.branches.updateFailed'), 'error');
     }
   }
 
   async function handleToggleStatus(branch: Branch) {
     const deactivating = isActive(branch);
     if (deactivating && activeCount <= 1) {
-      snackbar.push('At least one active office is required.', 'warning');
+      snackbar.push(t('settings.branches.minOneActive'), 'warning');
       return;
     }
     try {
@@ -184,9 +192,9 @@ export function BranchesPanel() {
         branchId: branch.id,
         branch: { status: deactivating ? 'inactive' : 'active' },
       });
-      snackbar.push(deactivating ? 'Office deactivated.' : 'Office is active again.', 'success');
+      snackbar.push(deactivating ? t('settings.branches.deactivated') : t('settings.branches.reactivated'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't update this office. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('settings.branches.updateFailed'), 'error');
     }
   }
 
@@ -206,16 +214,15 @@ export function BranchesPanel() {
               fontSize: 12,
             }}
           >
-            Locations
+            {t('settings.branches.kicker')}
           </p>
-          <h2 style={{ margin: '8px 0 0', fontSize: 20 }}>Offices</h2>
+          <h2 style={{ margin: '8px 0 0', fontSize: 20 }}>{t('settings.branches.title')}</h2>
           <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            At least one office is required. Each office needs a full address and Google Map pin — it is used for
-            customer directions, stock availability, and instant delivery pickup.
+            {t('settings.branches.lead')}
           </p>
         </div>
         <Button variant="primary" onClick={openCreate}>
-          Add office
+          {t('settings.branches.addOffice')}
         </Button>
       </div>
 
@@ -231,7 +238,7 @@ export function BranchesPanel() {
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name, city or postal code"
+          placeholder={t('settings.branches.searchPlaceholder')}
           style={{ ...INPUT_STYLE, flex: '1 1 240px' }}
         />
         <div style={{ display: 'flex', gap: 6 }}>
@@ -252,20 +259,20 @@ export function BranchesPanel() {
                 textTransform: 'capitalize',
               }}
             >
-              {option}
+              {t(STATUS_FILTER_KEYS[option])}
             </button>
           ))}
         </div>
       </div>
 
       <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-        {branchesQuery.isLoading ? <p>Loading offices…</p> : null}
+        {branchesQuery.isLoading ? <p>{t('settings.branches.loading')}</p> : null}
         {branchesQuery.error ? <p style={{ color: '#dc2626' }}>{branchesQuery.error.message}</p> : null}
         {!branchesQuery.isLoading && !branchesQuery.error && branches.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No offices yet. Add your first office with address and map pin.</p>
+          <p style={{ color: '#6b7280' }}>{t('settings.branches.empty')}</p>
         ) : null}
         {!branchesQuery.isLoading && branches.length > 0 && visibleBranches.length === 0 ? (
-          <p style={{ color: '#6b7280' }}>No offices match this search.</p>
+          <p style={{ color: '#6b7280' }}>{t('settings.branches.noMatch')}</p>
         ) : null}
         {visibleBranches.map((branch) => {
           const lat = branch.latitude != null ? Number(branch.latitude) : null;
@@ -313,30 +320,30 @@ export function BranchesPanel() {
                           fontWeight: 600,
                         }}
                       >
-                        Inactive
+                        {t('settings.branches.inactiveBadge')}
                       </span>
                     ) : null}
                     <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>
                       {[branch.address_line1, branch.city, branch.state, branch.country].filter(Boolean).join(', ') ||
-                        'No address set'}
-                      {branch.is_primary ? ' · Primary' : ''}
+                        t('settings.branches.noAddress')}
+                      {branch.is_primary ? ` · ${t('settings.branches.primary')}` : ''}
                     </p>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Button variant="ghost" onClick={() => openEdit(branch)}>
-                    Edit
+                    {t('settings.branches.edit')}
                   </Button>
                   {!branch.is_primary && active ? (
                     <Button variant="ghost" onClick={() => handleSetPrimary(branch.id)} disabled={updateBranch.isPending}>
-                      Set as primary
+                      {t('settings.branches.setPrimary')}
                     </Button>
                   ) : null}
                   {branch.is_primary ? (
-                    <span style={{ color: '#1a56db', fontWeight: 600, fontSize: 13 }}>Primary</span>
+                    <span style={{ color: '#1a56db', fontWeight: 600, fontSize: 13 }}>{t('settings.branches.primary')}</span>
                   ) : (
                     <Button variant="ghost" onClick={() => handleToggleStatus(branch)} disabled={updateBranch.isPending}>
-                      {active ? 'Deactivate' : 'Reactivate'}
+                      {active ? t('settings.branches.deactivate') : t('settings.branches.reactivate')}
                     </Button>
                   )}
                 </div>
@@ -350,28 +357,27 @@ export function BranchesPanel() {
       <Dialog
         open={dialog.open}
         onClose={closeForm}
-        title={editingId ? 'Edit office' : 'Add office'}
+        title={editingId ? t('settings.branches.editTitle') : t('settings.branches.addOffice')}
         labelledBy="office-dialog"
         busy={saving}
       >
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Each office needs a full address and a Google Map pin. The pin drives customer
-            directions, per-office stock, and instant delivery pickup.
+            {t('settings.branches.dialogLead')}
           </p>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Office name</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('settings.branches.nameLabel')}</span>
             <input
               value={branchName}
               onChange={(event) => setBranchName(event.target.value)}
-              placeholder="Downtown clinic"
+              placeholder={t('settings.branches.namePlaceholder')}
               style={INPUT_STYLE}
             />
           </label>
 
           <AddressLocationPicker
-            label="Office address (Google Maps)"
+            label={t('settings.branches.addressLabel')}
             value={address}
             latitude={latitude}
             longitude={longitude}
@@ -397,12 +403,12 @@ export function BranchesPanel() {
 
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
-              Flat, floor, building or landmark
+              {t('settings.branches.line2Label')}
             </span>
             <input
               value={addressLine2}
               onChange={(event) => setAddressLine2(event.target.value)}
-              placeholder="Shop 12, Ground floor, near City Mall"
+              placeholder={t('settings.branches.line2Placeholder')}
               style={INPUT_STYLE}
             />
           </label>
@@ -410,16 +416,16 @@ export function BranchesPanel() {
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             {(
               [
-                ['City', city, setCity],
-                ['State', state, setState],
-                ['Country', country, setCountry],
-                ['Postal code', postalCode, setPostalCode],
-                ['Phone (rider contact)', phoneNumber, setPhoneNumber],
+                ['city', t('settings.businessEdit.city'), city, setCity],
+                ['state', t('settings.businessEdit.state'), state, setState],
+                ['country', t('settings.businessEdit.country'), country, setCountry],
+                ['postalCode', t('settings.businessEdit.postalCode'), postalCode, setPostalCode],
+                ['phone', t('settings.branches.phoneRider'), phoneNumber, setPhoneNumber],
               ] as const
-            ).map(([label, value, setValue]) => {
-              const locked = label !== 'Phone (rider contact)' && latitude != null && longitude != null;
+            ).map(([fieldId, label, value, setValue]) => {
+              const locked = fieldId !== 'phone' && latitude != null && longitude != null;
               return (
-              <label key={label} style={{ display: 'grid', gap: 6 }}>
+              <label key={fieldId} style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</span>
                 <input
                   value={value}
@@ -434,20 +440,20 @@ export function BranchesPanel() {
 
           {latitude != null && longitude != null ? (
             <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-              Map pin: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+              {t('settings.branches.mapPin', { lat: latitude.toFixed(6), lng: longitude.toFixed(6) })}
             </p>
           ) : (
             <p style={{ margin: 0, color: '#b45309', fontSize: 13 }}>
-              Select an address from Google Places so a map pin is saved.
+              {t('settings.branches.selectAddressHint')}
             </p>
           )}
 
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Update office' : 'Save office'}
+              {saving ? t('common.saving') : editingId ? t('settings.branches.updateOffice') : t('settings.branches.saveOffice')}
             </Button>
             <Button type="button" variant="neutral" onClick={closeForm} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>

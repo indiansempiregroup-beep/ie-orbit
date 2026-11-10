@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ShopBooksVoucher } from '@ie-orbit/sdk';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useToast } from '../../contexts/ToastContext';
@@ -13,6 +14,7 @@ type Props = {
 
 /** Loads a books sale invoice and opens the same detail popup used on Sale invoices. */
 export function BooksInvoiceDrawer({ voucherId, visible, onClose }: Props) {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
   const [voucher, setVoucher] = useState<ShopBooksVoucher | null>(null);
@@ -30,7 +32,7 @@ export function BooksInvoiceDrawer({ voucherId, visible, onClose }: Props) {
       } catch (err) {
         if (!cancelled) {
           setVoucher(null);
-          toast.push(getApiErrorMessage(err, "Couldn't open that books invoice."), 'error');
+          toast.push(getApiErrorMessage(err, t('opsApp.shop.booksDrawer.openFailed')), 'error');
           onClose();
         }
       }

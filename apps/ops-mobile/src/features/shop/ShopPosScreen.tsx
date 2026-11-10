@@ -17,6 +17,8 @@ import {
   KeyboardStickyView,
 } from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
@@ -109,15 +111,23 @@ function resolvePosMode(value?: string | null): PosMode {
   return 'sale';
 }
 
-function modeTitle(mode: PosMode, editing = false) {
-  if (mode === 'purchase') return editing ? 'Edit purchase' : 'Purchase';
-  if (mode === 'quotation') return editing ? 'Edit quotation' : 'New quotation';
-  if (mode === 'credit_note') return 'Credit note';
-  if (mode === 'debit_note') return 'Debit note';
-  if (mode === 'sale_order') return editing ? 'Edit sale order' : 'New sale order';
-  if (mode === 'purchase_order') return editing ? 'Edit purchase order' : 'New purchase order';
-  if (mode === 'delivery_challan') return editing ? 'Edit delivery challan' : 'New delivery challan';
-  return 'Sale';
+function modeTitle(t: TFunction, mode: PosMode, editing = false) {
+  if (mode === 'purchase') return t(editing ? 'shop.pos.modeTitle.editPurchase' : 'shop.pos.modeTitle.purchase');
+  if (mode === 'quotation') {
+    return t(editing ? 'shop.pos.modeTitle.editQuotation' : 'shop.pos.modeTitle.newQuotation');
+  }
+  if (mode === 'credit_note') return t('shop.pos.modeTitle.creditNote');
+  if (mode === 'debit_note') return t('shop.pos.modeTitle.debitNote');
+  if (mode === 'sale_order') {
+    return t(editing ? 'shop.pos.modeTitle.editSaleOrder' : 'shop.pos.modeTitle.newSaleOrder');
+  }
+  if (mode === 'purchase_order') {
+    return t(editing ? 'shop.pos.modeTitle.editPurchaseOrder' : 'shop.pos.modeTitle.newPurchaseOrder');
+  }
+  if (mode === 'delivery_challan') {
+    return t(editing ? 'shop.pos.modeTitle.editChallan' : 'shop.pos.modeTitle.newChallan');
+  }
+  return t('shop.pos.modeTitle.sale');
 }
 
 function basketFromLines(rawLines: unknown, catalog: ShopProduct[]): BasketLine[] {
@@ -217,6 +227,7 @@ function DualDiscountFields({
   discountValue: number;
   onChange: (type: DiscountType, value: number) => void;
 }) {
+  const { t } = useTranslation();
   const discAmount = applyDiscount(lineGross, discountType, discountValue);
   const discPercent =
     discountType === 'percent'
@@ -264,7 +275,7 @@ function DualDiscountFields({
         keyboardType="decimal-pad"
         placeholder="0"
         placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel="Discount percent"
+        accessibilityLabel={t('shop.pos.a11yDiscountPercent')}
       />
       <Text style={styles.dualDiscSuffix}>%</Text>
     </View>
@@ -296,7 +307,7 @@ function DualDiscountFields({
         keyboardType="decimal-pad"
         placeholder="0"
         placeholderTextColor={colors.mutedForeground}
-        accessibilityLabel="Discount amount"
+        accessibilityLabel={t('shop.pos.a11yDiscountAmount')}
       />
     </View>
   );
@@ -337,6 +348,7 @@ function ProductThumb({ product, size = 36 }: { product: ShopProduct; size?: num
 }
 
 export function ShopPosScreen() {
+  const { t } = useTranslation();
   const { isDesktop, width: viewportWidth } = useBreakpoint();
   /** Side-by-side Payment | Bill summary on OPS web / wide desktop. */
   const checkoutSideBySide = isDesktop || viewportWidth >= 720;
@@ -424,7 +436,12 @@ export function ShopPosScreen() {
   const [documentNotes, setDocumentNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessageState] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<'success' | 'error'>('error');
+  const setMessage = useCallback((text: string | null, tone: 'success' | 'error' = 'error') => {
+    setMessageState(text);
+    setMessageTone(tone);
+  }, []);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [awardLoyaltyPoints, setAwardLoyaltyPoints] = useState(true);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
@@ -434,9 +451,9 @@ export function ShopPosScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: modeTitle(mode, isEditing),
+      title: modeTitle(t, mode, isEditing),
     });
-  }, [navigation, mode, isEditing]);
+  }, [navigation, mode, isEditing, t]);
 
   const loadCatalog = useCallback(async () => {
     if (!businessId || !client) return;
@@ -483,11 +500,11 @@ export function ShopPosScreen() {
       setCashAccountId((current) => current || accounts[0]?.id || '');
       catalogLoadedRef.current = true;
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load catalog');
+      setMessage(err instanceof Error ? err.message : t('shop.pos.loadCatalogFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, isPurchase, isNote, skipSaleSession, usesSupplier]);
+  }, [businessId, client, isPurchase, isNote, setMessage, skipSaleSession, t, usesSupplier]);
 
   useEffect(() => {
     const targetId = editQuotationId || editDocumentId;
@@ -518,7 +535,7 @@ export function ShopPosScreen() {
         setBasket(basketFromLines(document.line_items, products));
       } catch (err) {
         if (cancelled) return;
-        const text = getApiErrorMessage(err, "Couldn't open this record on the counter.");
+        const text = getApiErrorMessage(err, t('shop.pos.couldntOpenRecord'));
         setMessage(text);
         toast.push(text, 'error');
       }
@@ -526,7 +543,7 @@ export function ShopPosScreen() {
     return () => {
       cancelled = true;
     };
-  }, [client, editDocumentId, editQuotationId, loading, products, toast]);
+  }, [client, editDocumentId, editQuotationId, loading, products, setMessage, t, toast]);
 
   useEffect(() => {
     if (editQuotationId || editDocumentId || !hydratedEditRef.current) return;
@@ -712,7 +729,7 @@ export function ShopPosScreen() {
           ];
         });
         setScan('');
-        setMessage(`Added ${product.name}`);
+        setMessage(t('shop.pos.addedProduct', { name: product.name }), 'success');
         return;
       }
       if (!client || !businessId) return;
@@ -748,19 +765,19 @@ export function ShopPosScreen() {
           ];
         });
         setScan('');
-        setMessage(`Added ${response.data.name}`);
+        setMessage(t('shop.pos.addedProduct', { name: response.data.name }), 'success');
       } catch (err) {
         const localMatches = products.filter((product) => scanMatchRank(product, trimmed) != null);
         if (localMatches.length) {
-          setMessage('Select a matching product below.');
+          setMessage(t('shop.pos.selectMatching'));
         } else {
-          setMessage(err instanceof Error ? err.message : 'Barcode not found');
+          setMessage(err instanceof Error ? err.message : t('shop.pos.barcodeNotFound'));
         }
       } finally {
         setBusy(false);
       }
     },
-    [businessId, client, products, syncBasket],
+    [businessId, client, products, setMessage, syncBasket, t],
   );
 
   useFocusEffect(
@@ -814,10 +831,10 @@ export function ShopPosScreen() {
                 },
               ];
             });
-            setMessage(`Added ${response.data.name}`);
+            setMessage(t('shop.pos.addedProduct', { name: response.data.name }), 'success');
             await loadCatalog();
           } catch (err) {
-            setMessage(err instanceof Error ? err.message : 'Unable to load new product');
+            setMessage(err instanceof Error ? err.message : t('shop.pos.unableLoadNewProduct'));
           } finally {
             if (route.params?.addProductId) {
               navigation.setParams({ addProductId: undefined });
@@ -851,7 +868,7 @@ export function ShopPosScreen() {
 
   const customerOptions = useMemo(() => {
     const options = [
-      { value: '', label: isCreditNote ? 'Select customer' : 'Walk-in customer' },
+      { value: '', label: isCreditNote ? t('shop.pos.selectCustomer') : t('shop.pos.walkIn') },
       ...customers.map((customer) => ({
         value: customer.id,
         label:
@@ -864,20 +881,20 @@ export function ShopPosScreen() {
       })),
     ];
     if (customerId && !options.some((option) => option.value === customerId)) {
-      options.push({ value: customerId, label: 'Selected customer' });
+      options.push({ value: customerId, label: t('shop.pos.selectedCustomer') });
     }
     return options;
-  }, [customerId, customers, isCreditNote]);
+  }, [customerId, customers, isCreditNote, t]);
 
   const supplierOptions = useMemo(
     () => [
-      { value: '', label: isPurchase ? 'No supplier' : 'Select supplier' },
+      { value: '', label: isPurchase ? t('shop.pos.noSupplier') : t('shop.pos.selectSupplier') },
       ...suppliers.map((supplier) => ({
         value: supplier.id,
         label: supplier.name || supplier.phone || supplier.gstin || supplier.id,
       })),
     ],
-    [isPurchase, suppliers],
+    [isPurchase, suppliers, t],
   );
 
   const cashAccountOptions = useMemo(
@@ -895,10 +912,10 @@ export function ShopPosScreen() {
     );
     const labels = new Map(SHOP_PRODUCT_CATEGORIES.map((item) => [item.value, item.label]));
     return [
-      { value: '', label: 'All' },
+      { value: '', label: t('common.all') },
       ...present.map((value) => ({ value, label: labels.get(value) || value })),
     ];
-  }, [products]);
+  }, [products, t]);
 
   const scanSuggestions = useMemo(() => {
     const term = scan.trim();
@@ -1091,39 +1108,39 @@ export function ShopPosScreen() {
     }
     const dueNow = Math.max(0, Math.round((payableNow - paidNow + Number.EPSILON) * 100) / 100);
     if (mode === 'sale' && tillSale && dueNow > 0 && !customerId) {
-      const text = 'Select a customer when the bill is not fully paid (partial or credit).';
+      const text = t('shop.pos.selectCustomerPartial');
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
     if (isCreditNote && !customerId) {
-      const text = 'Select a customer for the credit note.';
+      const text = t('shop.pos.selectCustomerCredit');
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
     if (isDebitNote && !supplierId) {
-      const text = 'Select a supplier for the debit note.';
+      const text = t('shop.pos.selectSupplierDebit');
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
     if (isNote && noteSettlement === 'cash' && !cashAccountId) {
       const text = isCreditNote
-        ? 'Select a cash/bank account for the refund.'
-        : 'Select a cash/bank account to record the receipt.';
+        ? t('shop.pos.selectAccountRefund')
+        : t('shop.pos.selectAccountReceipt');
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
     if (isPurchaseOrder && !supplierId) {
-      const text = 'Select a supplier for the purchase order.';
+      const text = t('shop.pos.selectSupplierPo');
       setMessage(text);
       toast.push(text, 'error');
       return;
     }
     if (isPurchase && paymentMethod !== 'borrow' && !cashAccountId) {
-      const text = 'Select a cash/bank account for the payment.';
+      const text = t('shop.pos.selectAccountPayment');
       setMessage(text);
       toast.push(text, 'error');
       return;
@@ -1155,7 +1172,7 @@ export function ShopPosScreen() {
 
       if (isOrder || isChallan) {
         if (isChallan && !canCreateChallan) {
-          const text = 'Delivery challan is not on your plan.';
+          const text = t('shop.pos.challanNotOnPlan');
           setMessage(text);
           toast.push(text, 'error');
           return;
@@ -1203,9 +1220,17 @@ export function ShopPosScreen() {
         setBillDiscountValue('');
         setSupplierId('');
         setDocumentNotes('');
-        const label = isPurchaseOrder ? 'Purchase order' : isChallan ? 'Delivery challan' : 'Sale order';
+        const label = isPurchaseOrder
+          ? t('shop.pos.labelPurchaseOrder')
+          : isChallan
+            ? t('shop.pos.labelChallan')
+            : t('shop.pos.labelSaleOrder');
         toast.push(
-          `${label} ${response.data.document_number} ${editDocumentId ? 'updated' : 'created'} · ${formatMoney(totals.payable)}`,
+          t(editDocumentId ? 'shop.pos.docUpdatedTotal' : 'shop.pos.docCreatedTotal', {
+            label,
+            number: response.data.document_number,
+            total: formatMoney(totals.payable),
+          }),
           'success',
         );
         if (editDocumentId) {
@@ -1256,7 +1281,10 @@ export function ShopPosScreen() {
         setValidUntil('');
         setDocumentNotes('');
         toast.push(
-          `Quotation ${response.data.quotation_number} ${editQuotationId ? 'updated' : 'created'} · ${formatMoney(totals.payable)}`,
+          t(editQuotationId ? 'shop.pos.quotationUpdated' : 'shop.pos.quotationCreated', {
+            number: response.data.quotation_number,
+            total: formatMoney(totals.payable),
+          }),
           'success',
         );
         if (editQuotationId) {
@@ -1299,7 +1327,10 @@ export function ShopPosScreen() {
         setNoteSettlement('adjust');
         if (isDebitNote) setPartyGstin('');
         toast.push(
-          `${isCreditNote ? 'Credit' : 'Debit'} note ${response.data.voucher_number} recorded · ${formatMoney(totals.payable)}`,
+          t(isCreditNote ? 'shop.pos.creditNoteRecorded' : 'shop.pos.debitNoteRecorded', {
+            number: response.data.voucher_number,
+            total: formatMoney(totals.payable),
+          }),
           'success',
         );
         const selectedCustomer = customers.find((row) => row.id === customerId);
@@ -1339,7 +1370,10 @@ export function ShopPosScreen() {
         setSupplierId('');
         setPartyGstin('');
         toast.push(
-          `Purchase ${response.data.voucher_number} recorded${paidNow ? '' : ' · Due'} · ${formatMoney(totals.payable)}`,
+          t(paidNow ? 'shop.pos.purchaseRecorded' : 'shop.pos.purchaseRecordedDue', {
+            number: response.data.voucher_number,
+            total: formatMoney(totals.payable),
+          }),
           'success',
         );
         navigation.navigate('ShopBooksPurchase', { voucherId: response.data.id });
@@ -1396,16 +1430,14 @@ export function ShopPosScreen() {
         partyGstin: resolvedGstin,
         paymentMethod,
       });
-      const dueLabel =
-        dueNow > 0
-          ? ` · Paid ${formatMoney(paidNow)} · Due ${formatMoney(dueNow)}`
-          : '';
-      const gstLabel = resolvedGstin ? ' · B2B' : '';
-      toast.push(
-        `Sale invoice ${response.data.order_number} posted to Books${dueLabel}${gstLabel} · ${formatMoney(totals.payable)}`,
-        'success',
-      );
-      setMessage(`Sale invoice ${response.data.order_number} posted to Books`);
+      const toastParts = [t('shop.pos.saleInvoicePosted', { number: response.data.order_number })];
+      if (dueNow > 0) {
+        toastParts.push(t('shop.pos.paidDue', { paid: formatMoney(paidNow), due: formatMoney(dueNow) }));
+      }
+      if (resolvedGstin) toastParts.push('B2B');
+      toastParts.push(formatMoney(totals.payable));
+      toast.push(toastParts.join(' · '), 'success');
+      setMessage(t('shop.pos.saleInvoicePosted', { number: response.data.order_number }), 'success');
       if (response.data.books_voucher_id) {
         setDocActions({
           kind: 'sale',
@@ -1420,17 +1452,17 @@ export function ShopPosScreen() {
       const fallback =
         isOrder || isChallan
           ? isPurchaseOrder
-            ? "Couldn't create this purchase order. Try again."
+            ? t('shop.pos.couldntCreatePurchaseOrder')
             : isChallan
-              ? "Couldn't create this delivery challan. Try again."
-              : "Couldn't create this sale order. Try again."
+              ? t('shop.pos.couldntCreateChallan')
+              : t('shop.pos.couldntCreateSaleOrder')
           : isQuotation
-            ? "Couldn't create this quotation. Try again."
+            ? t('shop.pos.couldntCreateQuotation')
             : isNote
-              ? "Couldn't record this note. Try again."
+              ? t('shop.pos.couldntRecordNote')
               : isPurchase
-                ? "Couldn't record this purchase. Try again."
-                : "Couldn't create this bill. Try again.";
+                ? t('shop.pos.couldntRecordPurchase')
+                : t('shop.pos.couldntCreateBill');
       const text = getApiErrorMessage(err, fallback);
       setMessage(text);
       toast.push(text, 'error');
@@ -1480,39 +1512,43 @@ export function ShopPosScreen() {
     if (!loyaltyProgramOn || !customerId) return 0;
     return earnPointsForSpend(payableShown, loyaltyPrefs);
   }, [loyaltyProgramOn, customerId, payableShown, loyaltyPrefs]);
+  const amountText = formatMoney(totals.payable);
   const checkoutLabel = busy
     ? isSaleOrder
-      ? 'Saving sale order…'
+      ? t('shop.pos.savingSaleOrder')
       : isPurchaseOrder
-        ? 'Saving purchase order…'
+        ? t('shop.pos.savingPurchaseOrder')
         : isChallan
-          ? 'Saving challan…'
+          ? t('shop.pos.savingChallan')
           : isQuotation
-            ? 'Saving quotation…'
+            ? t('shop.pos.savingQuotation')
             : isNote
-              ? 'Saving note…'
+              ? t('shop.pos.savingNote')
               : isPurchase
-                ? 'Recording purchase…'
-                : 'Creating bill…'
+                ? t('shop.pos.recordingPurchase')
+                : t('shop.pos.creatingBill')
     : isSaleOrder
-      ? `${isEditing ? 'Update' : 'Save'} sale order · ${formatMoney(totals.payable)}`
+      ? t(isEditing ? 'shop.pos.updateSaleOrder' : 'shop.pos.saveSaleOrder', { amount: amountText })
       : isPurchaseOrder
-        ? `${isEditing ? 'Update' : 'Save'} purchase order · ${formatMoney(totals.payable)}`
+        ? t(isEditing ? 'shop.pos.updatePurchaseOrder' : 'shop.pos.savePurchaseOrder', { amount: amountText })
         : isChallan
-          ? `${isEditing ? 'Update' : 'Save'} challan · ${formatMoney(totals.payable)}`
+          ? t(isEditing ? 'shop.pos.updateChallan' : 'shop.pos.saveChallan', { amount: amountText })
           : isQuotation
-            ? `${isEditing ? 'Update' : 'Save'} quotation · ${formatMoney(totals.payable)}`
+            ? t(isEditing ? 'shop.pos.updateQuotation' : 'shop.pos.saveQuotation', { amount: amountText })
             : isCreditNote
-              ? `Save credit note · ${formatMoney(totals.payable)}`
+              ? t('shop.pos.saveCreditNote', { amount: amountText })
               : isDebitNote
-                ? `Save debit note · ${formatMoney(totals.payable)}`
+                ? t('shop.pos.saveDebitNote', { amount: amountText })
                 : isPurchase
                   ? paymentMethod === 'borrow'
-                    ? `Record purchase · Due ${formatMoney(totals.payable)}`
-                    : `Record purchase · ${formatMoney(totals.payable)}`
+                    ? t('shop.pos.recordPurchaseDue', { amount: amountText })
+                    : t('shop.pos.recordPurchase', { amount: amountText })
                   : balanceDue > 0
-                    ? `Save · Pay ${formatMoney(receivedAmount)} · Due ${formatMoney(balanceDue)}`
-                    : `Charge ${formatMoney(payableShown)}`;
+                    ? t('shop.pos.savePayDue', {
+                        paid: formatMoney(receivedAmount),
+                        due: formatMoney(balanceDue),
+                      })
+                    : t('shop.pos.charge', { amount: formatMoney(payableShown) });
 
   return (
     <DesktopPage maxWidth={1100}>
@@ -1540,14 +1576,14 @@ export function ShopPosScreen() {
       target={docActions}
       title={
         docActions?.kind === 'quotation'
-          ? 'Quotation created'
+          ? t('shop.pos.titleQuotationCreated')
           : docActions?.kind === 'delivery_challan'
-            ? 'Challan created'
+            ? t('shop.pos.titleChallanCreated')
             : docActions?.kind === 'credit_note'
-              ? 'Credit note created'
+              ? t('shop.pos.titleCreditNoteCreated')
               : docActions?.kind === 'debit_note'
-                ? 'Debit note created'
-                : 'Bill created'
+                ? t('shop.pos.titleDebitNoteCreated')
+                : t('shop.pos.billCreatedTitle')
       }
       allowNewBill={docActions?.kind === 'sale'}
       onNewBill={() => setDocActions(null)}
@@ -1568,13 +1604,13 @@ export function ShopPosScreen() {
             <View style={styles.customerRow}>
               <View style={styles.customerField}>
                 <SelectField
-                  label="Supplier"
+                  label={t('shop.pos.supplier')}
                   required
                   value={supplierId}
                   options={supplierOptions}
                   onChange={updateSupplierId}
                   searchable
-                  placeholder={isPurchase ? 'No supplier' : 'Select supplier'}
+                  placeholder={isPurchase ? t('shop.pos.noSupplier') : t('shop.pos.selectSupplier')}
                 />
               </View>
             </View>
@@ -1582,7 +1618,7 @@ export function ShopPosScreen() {
             <View style={styles.customerRow}>
               <View style={styles.customerField}>
                 <SelectField
-                  label="Customer"
+                  label={t('shop.pos.customer')}
                   required={isCreditNote || (!isSaleOrder && !isChallan && !isQuotation)}
                   value={customerId}
                   options={customerOptions}
@@ -1590,10 +1626,10 @@ export function ShopPosScreen() {
                   searchable
                   placeholder={
                     isCreditNote
-                      ? 'Select customer'
+                      ? t('shop.pos.selectCustomer')
                       : isSaleOrder || isChallan
-                        ? 'Customer (optional)'
-                        : 'Walk-in / Cash sale'
+                        ? t('shop.pos.customerOptional')
+                        : t('shop.pos.walkInCash')
                   }
                 />
               </View>
@@ -1601,7 +1637,7 @@ export function ShopPosScreen() {
                 <Pressable
                   style={styles.sideAddBtn}
                   onPress={openAddCustomer}
-                  accessibilityLabel="Add customer"
+                  accessibilityLabel={t('shop.pos.a11yAddCustomer')}
                 >
                   <Feather name="plus" size={18} color="#fff" />
                 </Pressable>
@@ -1613,7 +1649,7 @@ export function ShopPosScreen() {
         {message ? (
           <FormAlert
             message={message}
-            tone={message.toLowerCase().includes('posted') || message.toLowerCase().includes('saved') ? 'success' : 'error'}
+            tone={messageTone}
           />
         ) : null}
 
@@ -1621,7 +1657,7 @@ export function ShopPosScreen() {
           <Pressable
             style={styles.scanIconBtn}
             onPress={() => navigation.navigate('BarcodeScanner', { target: 'pos' })}
-            accessibilityLabel="Scan barcode"
+            accessibilityLabel={t('shop.pos.a11yScanBarcode')}
           >
             <Feather name="maximize" size={18} color={colors.primary} />
           </Pressable>
@@ -1636,7 +1672,7 @@ export function ShopPosScreen() {
                 if (value.trim()) setMessage(null);
               }}
               onSubmitEditing={() => void resolveCode(scan)}
-              placeholder="Item name or barcode"
+              placeholder={t('shop.pos.itemSearchPlaceholder')}
               placeholderTextColor={colors.mutedForeground}
               autoCapitalize="none"
               autoCorrect={false}
@@ -1689,10 +1725,10 @@ export function ShopPosScreen() {
               })
             ) : (
               <View style={styles.suggestEmpty}>
-                <Text style={styles.meta}>No match found.</Text>
+                <Text style={styles.meta}>{t('shop.pos.noMatchFound')}</Text>
                 <View style={styles.suggestEmptyActions}>
-                  <Button label="Browse" variant="soft" icon="grid" onPress={() => setProductPickerOpen(true)} />
-                  <Button label="Add product" icon="plus" onPress={openAddProduct} />
+                  <Button label={t('shop.pos.browse')} variant="soft" icon="grid" onPress={() => setProductPickerOpen(true)} />
+                  <Button label={t('shop.pos.addProduct')} icon="plus" onPress={openAddProduct} />
                 </View>
               </View>
             )}
@@ -1702,21 +1738,21 @@ export function ShopPosScreen() {
         <View style={[styles.table, !isDesktop && styles.tableMobile]}>
           {isDesktop ? (
             <View style={styles.tableHead}>
-              <Text style={[styles.th, styles.colItem]}>#  ITEM</Text>
-              <Text style={[styles.th, styles.colQty, styles.thCenter]}>QTY</Text>
-              <Text style={[styles.th, styles.colPrice, styles.thRight]}>PRICE</Text>
+              <Text style={[styles.th, styles.colItem]}>#  {t('shop.pos.thItem').toLocaleUpperCase()}</Text>
+              <Text style={[styles.th, styles.colQty, styles.thCenter]}>{t('shop.pos.thQty').toLocaleUpperCase()}</Text>
+              <Text style={[styles.th, styles.colPrice, styles.thRight]}>{t('shop.pos.thPrice').toLocaleUpperCase()}</Text>
               <View style={styles.colDiscPair}>
-                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>DISC %</Text>
-                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>DISC ₹</Text>
+                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>{t('shop.pos.thDiscPct').toLocaleUpperCase()}</Text>
+                <Text style={[styles.th, styles.thCenter, { flex: 1 }]}>{t('shop.pos.thDiscAmt').toLocaleUpperCase()}</Text>
               </View>
-              <Text style={[styles.th, styles.colAmt, styles.thRight]}>AMOUNT</Text>
+              <Text style={[styles.th, styles.colAmt, styles.thRight]}>{t('shop.pos.thAmount').toLocaleUpperCase()}</Text>
               <View style={styles.colAction} />
             </View>
           ) : null}
 
           {basket.length === 0 ? (
             <View style={styles.tableEmpty}>
-              <Text style={styles.meta}>No items yet. Search or add a row.</Text>
+              <Text style={styles.meta}>{t('shop.pos.noItemsYet')}</Text>
             </View>
           ) : (
             basket.map((line, index) => {
@@ -1737,7 +1773,7 @@ export function ShopPosScreen() {
                       <Pressable
                         onPress={() => openProduct(line.product.id)}
                         accessibilityRole="link"
-                        accessibilityLabel={`Open ${line.product.name}`}
+                        accessibilityLabel={t('shop.pos.a11yOpenProduct', { name: line.product.name })}
                         hitSlop={4}
                       >
                         <ProductThumb product={line.product} size={48} />
@@ -1746,17 +1782,17 @@ export function ShopPosScreen() {
                         style={styles.mobileLineCopy}
                         onPress={() => openProduct(line.product.id)}
                         accessibilityRole="link"
-                        accessibilityLabel={`Open ${line.product.name}`}
+                        accessibilityLabel={t('shop.pos.a11yOpenProduct', { name: line.product.name })}
                       >
                         <Text style={styles.rowItemNameLink} numberOfLines={2}>
                           {line.product.name}
                         </Text>
-                        <Text style={styles.meta}>{formatMoney(line.product.price)} each</Text>
+                        <Text style={styles.meta}>{t('shop.pos.priceEach', { price: formatMoney(line.product.price) })}</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => updateLine(line.product.id, { quantity: 0 })}
                         hitSlop={8}
-                        accessibilityLabel="Remove item"
+                        accessibilityLabel={t('shop.pos.a11yRemoveItem')}
                       >
                         <Feather name="x" size={18} color={colors.mutedForeground} />
                       </Pressable>
@@ -1764,7 +1800,7 @@ export function ShopPosScreen() {
 
                     <View style={styles.mobileFieldRow}>
                       <View style={styles.mobileColQty}>
-                        <Text style={styles.mobileFieldLabel}>QTY</Text>
+                        <Text style={styles.mobileFieldLabel}>{t('shop.pos.thQty').toLocaleUpperCase()}</Text>
                         <View style={styles.qtyCluster}>
                           <Pressable
                             style={styles.qtyBtnMobile}
@@ -1783,7 +1819,7 @@ export function ShopPosScreen() {
                       </View>
 
                       <View style={styles.mobileColDisc}>
-                        <Text style={styles.mobileFieldLabel}>DISC</Text>
+                        <Text style={styles.mobileFieldLabel}>{t('shop.pos.thDisc').toLocaleUpperCase()}</Text>
                         <DualDiscountFields
                           lineGross={lineGross}
                           discountType={line.discountType}
@@ -1793,7 +1829,7 @@ export function ShopPosScreen() {
                       </View>
 
                       <View style={styles.mobileColAmt}>
-                        <Text style={styles.mobileFieldLabel}>AMOUNT</Text>
+                        <Text style={styles.mobileFieldLabel}>{t('shop.pos.thAmount').toLocaleUpperCase()}</Text>
                         <Text style={styles.mobileAmountValue} numberOfLines={1}>
                           {formatMoney(priced?.amount ?? lineGross)}
                         </Text>
@@ -1810,7 +1846,7 @@ export function ShopPosScreen() {
                     <Pressable
                       onPress={() => openProduct(line.product.id)}
                       accessibilityRole="link"
-                      accessibilityLabel={`Open ${line.product.name}`}
+                      accessibilityLabel={t('shop.pos.a11yOpenProduct', { name: line.product.name })}
                       hitSlop={4}
                     >
                       <ProductThumb product={line.product} size={40} />
@@ -1819,7 +1855,7 @@ export function ShopPosScreen() {
                       style={styles.rowItemCopy}
                       onPress={() => openProduct(line.product.id)}
                       accessibilityRole="link"
-                      accessibilityLabel={`Open ${line.product.name}`}
+                      accessibilityLabel={t('shop.pos.a11yOpenProduct', { name: line.product.name })}
                     >
                       <Text style={styles.rowItemNameLink} numberOfLines={2}>
                         {line.product.name}
@@ -1863,7 +1899,7 @@ export function ShopPosScreen() {
                     style={styles.colAction}
                     onPress={() => updateLine(line.product.id, { quantity: 0 })}
                     hitSlop={6}
-                    accessibilityLabel="Remove item"
+                    accessibilityLabel={t('shop.pos.a11yRemoveItem')}
                   >
                     <Feather name="x" size={14} color={colors.mutedForeground} />
                   </Pressable>
@@ -1875,13 +1911,17 @@ export function ShopPosScreen() {
           <View style={styles.addRowBar}>
             <Pressable style={styles.addRowBtn} onPress={() => setProductPickerOpen(true)}>
               <Feather name="plus" size={14} color={colors.primary} />
-              <Text style={styles.addRowText}>ADD ROW</Text>
+              <Text style={styles.addRowText}>{t('shop.pos.addRow').toLocaleUpperCase()}</Text>
             </Pressable>
             {basket.length > 0 ? (
               <View style={styles.tableFoot}>
-                <Text style={styles.tableFootLabel}>Qty {basket.reduce((n, l) => n + l.quantity, 0)}</Text>
+                <Text style={styles.tableFootLabel}>
+                  {t('shop.pos.footQty', { n: basket.reduce((n, l) => n + l.quantity, 0) })}
+                </Text>
                 {lineLevelTotals.lineDiscountTotal > 0 ? (
-                  <Text style={styles.tableFootLabel}>Disc {formatMoney(lineLevelTotals.lineDiscountTotal)}</Text>
+                  <Text style={styles.tableFootLabel}>
+                    {t('shop.pos.footDisc', { amount: formatMoney(lineLevelTotals.lineDiscountTotal) })}
+                  </Text>
                 ) : null}
                 <Text style={styles.tableFootAmt}>
                   {formatMoney(lineLevelTotals.merchandiseAfterLineDiscount)}
@@ -1894,19 +1934,26 @@ export function ShopPosScreen() {
         <View style={[styles.checkoutSplit, checkoutSideBySide && styles.checkoutSplitDesktop]}>
           <View style={[styles.paymentPane, checkoutSideBySide && styles.paymentPaneDesktop]}>
             <Text style={styles.summaryHeading}>
-              {!isDocument && !isNote ? 'Payment' : isNote ? 'Settlement' : 'Details'}
+              {!isDocument && !isNote
+                ? t('shop.pos.payment')
+                : isNote
+                  ? t('shop.pos.settlement')
+                  : t('shop.pos.details')}
             </Text>
 
             {!isDocument && !isNote ? (
               <View style={styles.summaryPaymentBlock}>
-                <Text style={styles.fieldLabel}>Payment type</Text>
+                <Text style={styles.fieldLabel}>{t('shop.pos.paymentType')}</Text>
                 <View style={styles.discountRow}>
                   {(
                     [
-                      { value: 'cash', label: 'Cash' },
-                      { value: 'upi', label: 'UPI' },
-                      { value: 'card', label: 'Card' },
-                      { value: 'borrow', label: isPurchase ? 'Unpaid' : 'Credit' },
+                      { value: 'cash', label: t('shop.pos.methodCash') },
+                      { value: 'upi', label: t('shop.pos.methodUpi') },
+                      { value: 'card', label: t('shop.pos.methodCard') },
+                      {
+                        value: 'borrow',
+                        label: isPurchase ? t('shop.pos.methodUnpaid') : t('shop.pos.methodCredit'),
+                      },
                     ] as const
                   ).map((method) => (
                     <Chip
@@ -1923,18 +1970,18 @@ export function ShopPosScreen() {
                 </View>
                 {isPurchase && paymentMethod !== 'borrow' ? (
                   <SelectField
-                    label="Paid from"
+                    label={t('shop.pos.paidFrom')}
                     required
                     value={cashAccountId}
                     options={cashAccountOptions}
                     onChange={setCashAccountId}
-                    placeholder="Select account"
+                    placeholder={t('shop.pos.selectAccount')}
                   />
                 ) : null}
                 {tillPayment ? (
                   <View style={{ gap: 6 }}>
                     <Text style={styles.fieldLabel}>
-                      {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                      {paymentMethod === 'borrow' ? t('shop.pos.amountPaidNow') : t('shop.pos.amountReceived')}
                     </Text>
                     <TextInput
                       style={styles.billDiscInput}
@@ -1957,13 +2004,13 @@ export function ShopPosScreen() {
                     />
                     <Text style={styles.hint}>
                       {balanceDue > 0
-                        ? `Balance due ${formatMoney(balanceDue)} goes to the customer’s credit.`
-                        : 'Bill will be marked fully paid.'}
+                        ? t('shop.pos.balanceDueCredit', { amount: formatMoney(balanceDue) })
+                        : t('shop.pos.fullyPaid')}
                     </Text>
                   </View>
                 ) : null}
                 {(paymentMethod === 'borrow' || balanceDue > 0) && !isPurchase ? (
-                  <Text style={styles.hint}>Customer required when any amount is due (not Walk-in).</Text>
+                  <Text style={styles.hint}>{t('shop.pos.customerRequiredDue')}</Text>
                 ) : null}
               </View>
             ) : null}
@@ -1972,32 +2019,32 @@ export function ShopPosScreen() {
               <View style={styles.summaryPaymentBlock}>
                 <View style={styles.discountRow}>
                   <Chip
-                    label={isCreditNote ? 'Adjust balance' : 'Adjust payable'}
+                    label={isCreditNote ? t('shop.pos.adjustBalance') : t('shop.pos.adjustPayable')}
                     active={noteSettlement === 'adjust'}
                     onPress={() => setNoteSettlement('adjust')}
                   />
                   <Chip
-                    label={isCreditNote ? 'Refund cash' : 'Receive cash'}
+                    label={isCreditNote ? t('shop.pos.refundCash') : t('shop.pos.receiveCash')}
                     active={noteSettlement === 'cash'}
                     onPress={() => setNoteSettlement('cash')}
                   />
                 </View>
                 {noteSettlement === 'cash' ? (
                   <SelectField
-                    label={isCreditNote ? 'Refund from' : 'Receive into'}
+                    label={isCreditNote ? t('shop.pos.refundFrom') : t('shop.pos.receiveInto')}
                     required
                     value={cashAccountId}
                     options={cashAccountOptions}
                     onChange={setCashAccountId}
-                    placeholder="Select account"
+                    placeholder={t('shop.pos.selectAccount')}
                   />
                 ) : null}
                 <Input
-                  label="Notes"
+                  label={t('shop.pos.notes')}
                   optional
                   value={documentNotes}
                   onChangeText={setDocumentNotes}
-                  placeholder={isCreditNote ? 'e.g. Return of damaged goods' : 'e.g. Rate difference'}
+                  placeholder={isCreditNote ? t('shop.pos.notePlaceholderCredit') : t('shop.pos.notePlaceholderDebit')}
                   multiline
                 />
               </View>
@@ -2005,21 +2052,21 @@ export function ShopPosScreen() {
 
             {isQuotation ? (
               <DateField
-                label="Valid until"
+                label={t('shop.pos.validUntil')}
                 optional
                 value={validUntil}
                 onChange={setValidUntil}
-                helperText="Optional expiry date for this quotation."
+                helperText={t('shop.pos.validUntilHelp')}
               />
             ) : null}
 
             {isQuotation || isOrder || isChallan ? (
               <Input
-                label="Notes"
+                label={t('shop.pos.notes')}
                 optional
                 value={documentNotes}
                 onChangeText={setDocumentNotes}
-                placeholder="Optional note on this record"
+                placeholder={t('shop.pos.notesPlaceholder')}
                 multiline
               />
             ) : null}
@@ -2027,23 +2074,23 @@ export function ShopPosScreen() {
             {(isOrder || isChallan) && !isNote ? (
               <Text style={styles.hint}>
                 {isPurchaseOrder
-                  ? 'No payment and no stock change yet. Convert to a purchase bill when goods arrive.'
+                  ? t('shop.pos.noPaymentPurchaseOrder')
                   : isChallan
-                    ? 'No invoice and no payment. Stock is deducted when dispatched.'
-                    : 'No payment and no stock change yet. Convert to a sale invoice when you deliver.'}
+                    ? t('shop.pos.noPaymentChallan')
+                    : t('shop.pos.noPaymentSaleOrder')}
               </Text>
             ) : null}
 
             {showGstFields ? (
               <Input
-                label="GSTIN"
+                label={t('shop.pos.gstin')}
                 optional
                 value={partyGstin}
                 onChangeText={updatePartyGstin}
                 autoCapitalize="characters"
                 autoCorrect={false}
                 maxLength={15}
-                placeholder="Optional for B2C"
+                placeholder={t('shop.pos.gstinOptionalB2c')}
                 error={partyGstin.length > 0 && !billGstinCheck.ok ? billGstinCheck.message : undefined}
               />
             ) : null}
@@ -2056,18 +2103,18 @@ export function ShopPosScreen() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.offerPanelEyebrow}>
-                      {customerId ? 'Special for this customer' : 'Available at counter'}
+                      {customerId ? t('shop.pos.specialForCustomer') : t('shop.pos.availableAtCounter')}
                     </Text>
                     <Text style={styles.offerPanelTitle}>
                       {automationOffers.length && couponOffers.length
-                        ? 'Offers & coupons'
+                        ? t('shop.pos.offersAndCoupons')
                         : couponOffers.length
                           ? couponOffers.length === 1
-                            ? 'Coupon'
-                            : 'Coupons'
+                            ? t('shop.pos.coupon')
+                            : t('shop.pos.coupons')
                           : automationOffers.length === 1
-                            ? 'Automation offer'
-                            : 'Automation offers'}
+                            ? t('shop.pos.automationOffer')
+                            : t('shop.pos.automationOffers')}
                     </Text>
                   </View>
                 </View>
@@ -2081,8 +2128,8 @@ export function ShopPosScreen() {
                         String(Number(offer.discount_value) || 0);
                     const badge =
                       dtype === 'amount'
-                        ? `${formatMoney(Number(offer.discount_value) || 0)} off`
-                        : `${Number(offer.discount_value) || 0}% off`;
+                        ? t('shop.pos.badgeAmountOff', { value: formatMoney(Number(offer.discount_value) || 0) })
+                        : t('shop.pos.badgePercentOff', { value: Number(offer.discount_value) || 0 });
                     return (
                       <Pressable
                         key={`auto:${offer.label}-${offer.discount_value}`}
@@ -2106,12 +2153,12 @@ export function ShopPosScreen() {
                           </Text>
                         </View>
                         <View style={styles.offerCardBody}>
-                          <Text style={styles.offerKind}>SPECIAL</Text>
+                          <Text style={styles.offerKind}>{t('shop.pos.offerKindSpecial').toLocaleUpperCase()}</Text>
                           <Text style={styles.offerCardLabel} numberOfLines={2}>
-                            {offer.label || 'Special offer'}
+                            {offer.label || t('shop.pos.specialOffer')}
                           </Text>
                           <Text style={[styles.offerCardHint, active && styles.offerCardHintOn]}>
-                            {active ? 'Applied to bill · tap to remove' : 'Tap to apply on this bill'}
+                            {active ? t('shop.pos.appliedTapRemove') : t('shop.pos.tapToApplyOnBill')}
                           </Text>
                         </View>
                         <Feather
@@ -2129,8 +2176,8 @@ export function ShopPosScreen() {
                     const remaining = Number(offer.remaining_to_unlock || 0);
                     const badge =
                       String(offer.discount_type) === 'amount'
-                        ? `${formatMoney(Number(offer.discount_value) || 0)} off`
-                        : `${Number(offer.discount_value) || 0}% off`;
+                        ? t('shop.pos.badgeAmountOff', { value: formatMoney(Number(offer.discount_value) || 0) })
+                        : t('shop.pos.badgePercentOff', { value: Number(offer.discount_value) || 0 });
                     const savings = Number(offer.discount_amount || 0);
                     return (
                       <Pressable
@@ -2169,7 +2216,7 @@ export function ShopPosScreen() {
                         <View style={styles.offerCardBody}>
                           <Text style={styles.offerKind}>{code}</Text>
                           <Text style={styles.offerCardLabel} numberOfLines={2}>
-                            {offer.name || 'Coupon'}
+                            {offer.name || t('shop.pos.coupon')}
                           </Text>
                           <Text
                             style={[
@@ -2179,14 +2226,14 @@ export function ShopPosScreen() {
                             ]}
                           >
                             {active
-                              ? `Applied · save ${formatMoney(savings)} · tap to remove`
+                              ? t('shop.pos.couponAppliedSave', { amount: formatMoney(savings) })
                               : locked
                                 ? remaining > 0
-                                  ? `Add ${formatMoney(remaining)} more to unlock`
-                                  : offer.reason || 'Not available on this bill'
+                                  ? t('shop.pos.couponAddMore', { amount: formatMoney(remaining) })
+                                  : offer.reason || t('shop.pos.couponNotAvailable')
                                 : savings > 0
-                                  ? `Tap to save ${formatMoney(savings)}`
-                                  : 'Tap to apply on this bill'}
+                                  ? t('shop.pos.couponTapSave', { amount: formatMoney(savings) })
+                                  : t('shop.pos.tapToApplyOnBill')}
                           </Text>
                         </View>
                         <Feather
@@ -2209,14 +2256,14 @@ export function ShopPosScreen() {
           </View>
 
           <View style={[styles.summaryPane, checkoutSideBySide && styles.summaryPaneDesktop]}>
-            <Text style={styles.summaryHeading}>Bill summary</Text>
+            <Text style={styles.summaryHeading}>{t('shop.pos.billSummary')}</Text>
 
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>Items</Text>
+              <Text style={styles.meta}>{t('shop.pos.items')}</Text>
               <Text style={styles.summaryMoney}>{formatMoney(lineLevelTotals.merchandiseGross)}</Text>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>Product discount</Text>
+              <Text style={styles.meta}>{t('shop.pos.productDiscount')}</Text>
               <Text
                 style={[
                   styles.summaryMoney,
@@ -2229,7 +2276,7 @@ export function ShopPosScreen() {
               </Text>
             </View>
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>Subtotal</Text>
+              <Text style={styles.meta}>{t('shop.pos.subtotal')}</Text>
               <Text style={styles.summaryMoney}>
                 {formatMoney(lineLevelTotals.merchandiseAfterLineDiscount)}
               </Text>
@@ -2237,12 +2284,14 @@ export function ShopPosScreen() {
             {!isChallan ? (
               <View style={styles.totalRow}>
                 <Text style={styles.meta}>
-                  {appliedCouponCode ? `Coupon ${appliedCouponCode}` : 'Bill discount'}
+                  {appliedCouponCode
+                    ? t('shop.pos.couponCode', { code: appliedCouponCode })
+                    : t('shop.pos.billDiscount')}
                 </Text>
                 <View style={styles.billDiscRight}>
                   {appliedCouponCode ? (
                     <Pressable onPress={clearAppliedCoupon} hitSlop={8}>
-                      <Text style={styles.offerRemove}>Remove</Text>
+                      <Text style={styles.offerRemove}>{t('shop.pos.remove')}</Text>
                     </Pressable>
                   ) : (
                     <View style={styles.billDiscTypeTrack}>
@@ -2331,7 +2380,7 @@ export function ShopPosScreen() {
             {loyaltyProgramOn && customerId && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
               <View style={styles.loyaltyInline}>
                 <Text style={styles.fieldLabel}>
-                  Redeem points · balance {selectedPosCustomer?.loyalty_points ?? 0}
+                  {t('shop.pos.redeemPointsBalance', { balance: selectedPosCustomer?.loyalty_points ?? 0 })}
                 </Text>
                 <View style={styles.redeemRow}>
                   <Pressable
@@ -2360,7 +2409,7 @@ export function ShopPosScreen() {
                     <Text style={styles.qtyBtnText}>+</Text>
                   </Pressable>
                   <Pressable onPress={() => setPointsToRedeem(loyaltyMaxPoints)}>
-                    <Text style={styles.addRowText}>Max</Text>
+                    <Text style={styles.addRowText}>{t('shop.pos.max')}</Text>
                   </Pressable>
                   {pointsToRedeem > 0 ? (
                     <Text style={styles.meta}>−{formatMoney(loyaltyDiscount)}</Text>
@@ -2372,7 +2421,9 @@ export function ShopPosScreen() {
             {totals.loyaltyDiscountAmount > 0 ? (
               <View style={styles.totalRow}>
                 <Text style={styles.meta}>
-                  Points redeemed{pointsToRedeem > 0 ? ` (${pointsToRedeem})` : ''}
+                  {pointsToRedeem > 0
+                    ? t('shop.pos.pointsRedeemedCount', { n: pointsToRedeem })
+                    : t('shop.pos.pointsRedeemed')}
                 </Text>
                 <Text style={[styles.summaryMoney, styles.summaryDisc]}>
                   -{formatMoney(totals.loyaltyDiscountAmount)}
@@ -2391,12 +2442,14 @@ export function ShopPosScreen() {
                     thumbColor={awardLoyaltyPoints && pointsToEarn > 0 ? colors.primary : '#f4f3f4'}
                   />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.meta}>Give loyalty points</Text>
+                    <Text style={styles.meta}>{t('shop.pos.giveLoyaltyPoints')}</Text>
                     <Text style={styles.loyaltyAwardHint}>
                       {pointsToEarn > 0
-                        ? `${loyaltyPrefs.earn_points_per_100} pt per ₹100 · based on bill total`
-                        : 'No points on this bill amount'}
-                      {paymentMethod === 'borrow' && pointsToEarn > 0 ? ' · credited when paid' : ''}
+                        ? t('shop.pos.earnRateHint', { rate: loyaltyPrefs.earn_points_per_100 })
+                        : t('shop.pos.noPointsAmount')}
+                      {paymentMethod === 'borrow' && pointsToEarn > 0
+                        ? ` · ${t('shop.pos.creditedWhenPaid')}`
+                        : ''}
                     </Text>
                   </View>
                 </View>
@@ -2412,47 +2465,47 @@ export function ShopPosScreen() {
             ) : null}
 
             <View style={styles.totalRow}>
-              <Text style={styles.meta}>Taxable</Text>
+              <Text style={styles.meta}>{t('shop.pos.taxable')}</Text>
               <Text style={styles.summaryMoney}>{formatMoney(totals.subtotal)}</Text>
             </View>
             {totals.taxTotal > 0 ? (
               billIsInterstate ? (
                 <View style={styles.totalRow}>
-                  <Text style={styles.meta}>IGST</Text>
+                  <Text style={styles.meta}>{t('shop.pos.igst')}</Text>
                   <Text style={styles.summaryMoney}>{formatMoney(totals.taxTotal)}</Text>
                 </View>
               ) : (
                 <>
                   <View style={styles.totalRow}>
-                    <Text style={styles.meta}>CGST</Text>
+                    <Text style={styles.meta}>{t('shop.pos.cgst')}</Text>
                     <Text style={styles.summaryMoney}>{formatMoney(billCgst)}</Text>
                   </View>
                   <View style={styles.totalRow}>
-                    <Text style={styles.meta}>SGST</Text>
+                    <Text style={styles.meta}>{t('shop.pos.sgst')}</Text>
                     <Text style={styles.summaryMoney}>{formatMoney(billSgst)}</Text>
                   </View>
                 </>
               )
             ) : (
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Tax</Text>
+                <Text style={styles.meta}>{t('shop.pos.tax')}</Text>
                 <Text style={styles.summaryMoney}>{formatMoney(totals.taxTotal)}</Text>
               </View>
             )}
 
             <View style={[styles.totalRow, styles.totalRowStrong]}>
-              <Text style={styles.payableLabel}>Total</Text>
+              <Text style={styles.payableLabel}>{t('shop.pos.total')}</Text>
               <Text style={styles.payableValue}>{formatMoney(payableShown)}</Text>
             </View>
             {tillPayment ? (
               <>
                 <View style={styles.totalRow}>
-                  <Text style={styles.meta}>Received</Text>
+                  <Text style={styles.meta}>{t('shop.pos.received')}</Text>
                   <Text style={styles.summaryMoney}>{formatMoney(receivedAmount)}</Text>
                 </View>
                 <View style={styles.totalRow}>
                   <Text style={[styles.meta, balanceDue > 0 && { color: colors.warning }]}>
-                    Balance due
+                    {t('shop.pos.balanceDue')}
                   </Text>
                   <Text
                     style={[
@@ -2477,20 +2530,22 @@ export function ShopPosScreen() {
                 ? checkoutLabel
                 : paymentMethod === 'borrow'
                   ? isPurchase
-                    ? 'Unpaid'
-                    : 'Credit'
+                    ? t('shop.pos.methodUnpaid')
+                    : t('shop.pos.methodCredit')
                   : paymentMethod === 'upi'
-                    ? 'UPI'
+                    ? t('shop.pos.methodUpi')
                     : paymentMethod === 'card'
-                      ? 'Card'
-                      : 'Cash'}
+                      ? t('shop.pos.methodCard')
+                      : t('shop.pos.methodCash')}
               {' · '}
-              {basket.length} item{basket.length === 1 ? '' : 's'}
+              {basket.length === 1
+                ? t('shop.pos.itemsCountOne')
+                : t('shop.pos.itemsCountLine', { n: basket.length })}
             </Text>
             <Text style={styles.chargeAmount}>{formatMoney(payableShown)}</Text>
           </View>
           <Button
-            label={busy ? 'Saving…' : isDocument || isNote || isPurchase ? checkoutLabel : 'Save'}
+            label={busy ? t('shop.pos.saving') : isDocument || isNote || isPurchase ? checkoutLabel : t('common.save')}
             icon="save"
             size="lg"
             fullWidth
@@ -2518,7 +2573,7 @@ export function ShopPosScreen() {
               setProductFiltersOpen(false);
               setProductPickerOpen(false);
             }}
-            accessibilityLabel="Close"
+            accessibilityLabel={t('shop.pos.a11yClose')}
           />
           <ExpandableSheetView
             onLayout={isDesktop ? undefined : onSheetLayout}
@@ -2536,7 +2591,7 @@ export function ShopPosScreen() {
             <View style={[styles.pickerHero, keyboardOpen && styles.pickerHeroCompact]}>
               {!isDesktop ? <SheetHandle {...handleProps} /> : null}
               <View style={styles.pickerHeroTop}>
-                <Text style={styles.pickerKicker}>Catalog</Text>
+                <Text style={styles.pickerKicker}>{t('shop.pos.catalog')}</Text>
                 <Pressable
                   style={styles.pickerClose}
                   onPress={() => {
@@ -2548,9 +2603,13 @@ export function ShopPosScreen() {
                   <Feather name="x" size={18} color={colors.primaryForeground} />
                 </Pressable>
               </View>
-              <Text style={[styles.pickerTitle, keyboardOpen && styles.pickerTitleCompact]}>Find product</Text>
+              <Text style={[styles.pickerTitle, keyboardOpen && styles.pickerTitleCompact]}>
+                {t('shop.pos.findProduct')}
+              </Text>
               <Text style={styles.pickerSubtitle}>
-                {filteredProducts.length} match{filteredProducts.length === 1 ? '' : 'es'}
+                {filteredProducts.length === 1
+                  ? t('shop.pos.matchOne')
+                  : t('shop.pos.matchesCount', { n: filteredProducts.length })}
               </Text>
             </View>
 
@@ -2560,7 +2619,7 @@ export function ShopPosScreen() {
                 <TextInput
                   value={productQuery}
                   onChangeText={setProductQuery}
-                  placeholder="Search name, brand, SKU, barcode"
+                  placeholder={t('shop.pos.searchProductsFull')}
                   placeholderTextColor={colors.mutedForeground}
                   autoFocus
                   autoCorrect={false}
@@ -2605,7 +2664,7 @@ export function ShopPosScreen() {
                         {item.name}
                       </Text>
                       <Text style={styles.meta}>
-                        {formatMoney(item.price)} · stock {item.stock_on_hand}
+                        {t('shop.pos.productMetaStock', { price: formatMoney(item.price), stock: item.stock_on_hand })}
                       </Text>
                     </View>
                   </Pressable>
@@ -2614,7 +2673,7 @@ export function ShopPosScreen() {
                     onPress={() => openProduct(item.id)}
                     hitSlop={8}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${item.name}`}
+                    accessibilityLabel={t('shop.pos.a11yOpenProduct', { name: item.name })}
                   >
                     <Feather name="external-link" size={16} color={colors.primary} />
                   </Pressable>
@@ -2622,20 +2681,20 @@ export function ShopPosScreen() {
               )}
               ListEmptyComponent={
                 <View style={styles.emptySearch}>
-                  <Text style={styles.meta}>No matching products.</Text>
+                  <Text style={styles.meta}>{t('shop.pos.noMatching')}</Text>
                 </View>
               }
             />
 
             <Pressable style={styles.createProductBtn} onPress={openAddProduct}>
               <Feather name="plus" size={18} color="#fff" />
-              <Text style={styles.createProductText}>Add new product</Text>
+              <Text style={styles.createProductText}>{t('shop.pos.addNewProduct')}</Text>
             </Pressable>
 
             <FilterSheet
               embedded
               visible={productFiltersOpen}
-              title="Product filters"
+              title={t('shop.pos.productFilters')}
               onClose={() => setProductFiltersOpen(false)}
               onReset={() => {
                 setProductCategory('');
@@ -2644,28 +2703,28 @@ export function ShopPosScreen() {
               }}
             >
               <FilterChoiceGroup
-                label="Category"
+                label={t('shop.pos.filterCategory')}
                 value={productCategory}
                 options={productCategoryOptions}
                 onChange={setProductCategory}
               />
               <FilterChoiceGroup
-                label="Stock"
+                label={t('shop.pos.filterStock')}
                 value={productStock}
                 options={[
-                  { value: '', label: 'Any' },
-                  { value: 'in_stock', label: 'In stock' },
-                  { value: 'low', label: 'Low stock' },
+                  { value: '', label: t('shop.pos.filterAny') },
+                  { value: 'in_stock', label: t('shop.pos.filterInStock') },
+                  { value: 'low', label: t('shop.pos.filterLowStock') },
                 ]}
                 onChange={setProductStock}
               />
               <FilterChoiceGroup
-                label="Sort"
+                label={t('shop.pos.filterSort')}
                 value={productSort}
                 options={[
-                  { value: 'name_asc', label: 'Name' },
-                  { value: 'price_desc', label: 'Price' },
-                  { value: 'stock_desc', label: 'Stock' },
+                  { value: 'name_asc', label: t('shop.pos.sortName') },
+                  { value: 'price_desc', label: t('shop.pos.sortPrice') },
+                  { value: 'stock_desc', label: t('shop.pos.sortStock') },
                 ]}
                 onChange={setProductSort}
               />

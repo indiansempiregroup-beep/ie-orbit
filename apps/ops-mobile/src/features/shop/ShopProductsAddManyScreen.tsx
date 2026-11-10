@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   Image,
   Platform,
@@ -53,40 +55,53 @@ import { resetBulkScanSession, takeBulkScanSession } from './bulkScanSession';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopProductsAddMany'>;
 
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'archived', label: 'Archived' },
-];
+function statusOptions(t: TFunction) {
+  return [
+    { value: 'active', label: t('shop.products.statuses.active') },
+    { value: 'draft', label: t('shop.products.statuses.draft') },
+    { value: 'inactive', label: t('shop.products.statuses.inactive') },
+    { value: 'archived', label: t('shop.products.statuses.archived') },
+  ];
+}
 
-const CATEGORY_OPTIONS = [
-  { value: '', label: 'None' },
-  ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
-];
+function categoryOptions(t: TFunction) {
+  return [
+    { value: '', label: t('shop.addMany.none') },
+    ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
+  ];
+}
 
 const DESKTOP_COLUMNS = [
-  { key: 'name', label: 'Name *', width: 200 },
-  { key: 'barcode', label: 'Barcode', width: 236 },
-  { key: 'sku', label: 'SKU', width: 104 },
-  { key: 'brand', label: 'Brand', width: 120 },
-  { key: 'pack_size', label: 'Pack', width: 88 },
-  { key: 'category', label: 'Category', width: 148 },
-  { key: 'price', label: 'Price', width: 88 },
-  { key: 'purchase_price', label: 'Cost', width: 88 },
-  { key: 'gst_rate', label: 'GST %', width: 72 },
-  { key: 'hsn_sac', label: 'HSN', width: 84 },
-  { key: 'stock_on_hand', label: 'Stock', width: 72 },
-  { key: 'status', label: 'Status', width: 112 },
+  { key: 'name', width: 200 },
+  { key: 'barcode', width: 236 },
+  { key: 'sku', width: 104 },
+  { key: 'brand', width: 120 },
+  { key: 'pack_size', width: 88 },
+  { key: 'category', width: 148 },
+  { key: 'price', width: 88 },
+  { key: 'purchase_price', width: 88 },
+  { key: 'gst_rate', width: 72 },
+  { key: 'hsn_sac', width: 84 },
+  { key: 'stock_on_hand', width: 72 },
+  { key: 'status', width: 112 },
 ] as const;
 
 type RowTone = 'empty' | 'ready' | 'warn' | 'error';
 
-function rowStatusMeta(row: BulkProductRow): { label: string; tone: RowTone } {
-  if (row.error) return { label: row.error, tone: 'error' };
-  if (rowIsReady(row)) return { label: 'Ready', tone: 'ready' };
-  if (rowHasContent(row)) return { label: 'Needs name', tone: 'warn' };
-  return { label: 'Empty', tone: 'empty' };
+function rowErrorLabel(error: string, t: TFunction): string {
+  if (error === 'Name is required.') return t('shop.addMany.errNameRequired');
+  if (error === 'Duplicate in this list.') return t('opsApp.shop.addMany.dupInList');
+  if (error.startsWith('Already in catalog: ')) {
+    return t('shop.products.alreadyInCatalog', { name: error.slice('Already in catalog: '.length) });
+  }
+  return error;
+}
+
+function rowStatusMeta(row: BulkProductRow, t: TFunction): { label: string; tone: RowTone } {
+  if (row.error) return { label: rowErrorLabel(row.error, t), tone: 'error' };
+  if (rowIsReady(row)) return { label: t('shop.addMany.rowReady'), tone: 'ready' };
+  if (rowHasContent(row)) return { label: t('shop.addMany.rowNeedsName'), tone: 'warn' };
+  return { label: t('shop.addMany.rowEmpty'), tone: 'empty' };
 }
 
 function nextRowId(seed: number) {
@@ -151,7 +166,15 @@ function MiniSelect({
   );
 }
 
+function columnLabel(key: (typeof DESKTOP_COLUMNS)[number]['key'], t: TFunction): string {
+  const label = t(`shop.addMany.columns.${key}`);
+  return key === 'name' ? `${label} *` : label;
+}
+
 export function ShopProductsAddManyScreen() {
+  const { t } = useTranslation();
+  const STATUS_OPTIONS = useMemo(() => statusOptions(t), [t]);
+  const CATEGORY_OPTIONS = useMemo(() => categoryOptions(t), [t]);
   const insets = useSafeAreaInsets();
   const { isDesktop } = useBreakpoint();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -238,9 +261,9 @@ export function ShopProductsAddManyScreen() {
         ),
       );
       if (added) {
-        toast.push(`Added ${added} scanned product${added === 1 ? '' : 's'}.`, 'success');
+        toast.push(t('opsApp.shop.addMany.scannedAdded', { n: added }), 'success');
       }
-    }, [defaults, toast]),
+    }, [defaults, toast, t]),
   );
 
   useEffect(() => {
@@ -261,22 +284,32 @@ export function ShopProductsAddManyScreen() {
               row.id === rowId ? applyEnrichmentToRow({ ...row, barcode: code }, response.data, defaults) : row,
             ),
           );
-          toast.push(response.data.name ? `Filled ${response.data.name}.` : 'Barcode captured. Fill the name if needed.', 'success');
+          toast.push(
+            response.data.name
+              ? t('shop.addMany.toastFilled', { name: response.data.name })
+              : t('opsApp.shop.addMany.barcodeCaptured'),
+            'success',
+          );
         } else {
           appendPartials([enriched]);
-          toast.push(response.data.name ? `Added ${response.data.name}.` : 'Added barcode. Fill the name if needed.', 'success');
+          toast.push(
+            response.data.name
+              ? t('shop.addMany.toastAddedNamed', { name: response.data.name })
+              : t('shop.addMany.toastAddedBarcode'),
+            'success',
+          );
         }
       } catch (error) {
         if (rowId) {
           updateRow(rowId, { barcode: code });
         }
-        toast.push(error instanceof Error ? error.message : 'Lookup failed.', 'error');
+        toast.push(error instanceof Error ? error.message : t('shop.addMany.errLookup'), 'error');
       } finally {
         navigation.setParams({ enrichCode: undefined, enrichRowId: undefined });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, businessId, route.params?.enrichCode, route.params?.enrichRowId]);
+  }, [client, businessId, route.params?.enrichCode, route.params?.enrichRowId, t]);
 
   function withSpareRow(current: BulkProductRow[]): BulkProductRow[] {
     if (!current.length || rowHasContent(current[current.length - 1])) {
@@ -309,7 +342,7 @@ export function ShopProductsAddManyScreen() {
   function copyLastRow() {
     const source = lastFilledRow(rows);
     if (!source) {
-      toast.push('Fill a row first, then copy it.', 'info');
+      toast.push(t('opsApp.shop.addMany.copyFirst'), 'info');
       return;
     }
     duplicateRow(source.id);
@@ -347,20 +380,23 @@ export function ShopProductsAddManyScreen() {
   function applyPaste() {
     const added = appendPartials(tableToPartialRows(parseDelimitedTable(pasteText)));
     if (!added) {
-      toast.push('No product rows found in that paste.', 'error');
+      toast.push(t('opsApp.shop.addMany.noRowsPaste'), 'error');
       return;
     }
     setPasteText('');
-    toast.push(`Loaded ${added} row${added === 1 ? '' : 's'}.`, 'success');
+    toast.push(t('opsApp.shop.addMany.rowsLoaded', { n: added }), 'success');
   }
 
   async function importCsv() {
     try {
       const text = await pickCsvFile();
       const added = appendPartials(tableToPartialRows(parseDelimitedTable(text)));
-      toast.push(added ? `Loaded ${added} row${added === 1 ? '' : 's'} from CSV.` : 'No product rows found.', added ? 'success' : 'error');
+      toast.push(
+        added ? t('opsApp.shop.addMany.rowsLoadedCsv', { n: added }) : t('opsApp.shop.addMany.noRowsFound'),
+        added ? 'success' : 'error',
+      );
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : "Couldn't import that CSV. Try again.", 'error');
+      toast.push(error instanceof Error ? error.message : t('shop.addMany.errImport'), 'error');
     }
   }
 
@@ -376,10 +412,10 @@ export function ShopProductsAddManyScreen() {
         ),
       );
       if (!response.data.found && !response.data.name) {
-        toast.push(response.data.message || 'No catalog match. Fill the name and save.', 'info');
+        toast.push(response.data.message || t('shop.addMany.toastNoCatalogMatch'), 'info');
       }
     } catch (error) {
-      updateRow(id, { lookingUp: false, error: error instanceof Error ? error.message : 'Lookup failed.' });
+      updateRow(id, { lookingUp: false, error: error instanceof Error ? error.message : t('shop.addMany.errLookup') });
     }
   }
 
@@ -387,7 +423,7 @@ export function ShopProductsAddManyScreen() {
     const code = scanCode.trim();
     if (!code || !client || !businessId) return;
     if (rows.some((row) => row.barcode.trim() === code)) {
-      toast.push('That barcode is already in the list.', 'info');
+      toast.push(t('shop.addMany.toastBarcodeDuplicate'), 'info');
       setScanCode('');
       return;
     }
@@ -399,13 +435,13 @@ export function ShopProductsAddManyScreen() {
       ]);
       toast.push(
         response.data.name
-          ? `Added ${response.data.name}.`
-          : response.data.message || 'Added barcode. Fill the name if needed.',
+          ? t('shop.addMany.toastAddedNamed', { name: response.data.name })
+          : response.data.message || t('shop.addMany.toastAddedBarcode'),
         response.data.found ? 'success' : 'info',
       );
       setScanCode('');
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : 'Lookup failed.', 'error');
+      toast.push(error instanceof Error ? error.message : t('shop.addMany.errLookup'), 'error');
     } finally {
       setScanning(false);
     }
@@ -413,7 +449,7 @@ export function ShopProductsAddManyScreen() {
 
   async function handleSave() {
     if (!canWrite) {
-      toast.push('You do not have permission to add products.', 'error');
+      toast.push(t('opsApp.shop.addMany.noPermission'), 'error');
       return;
     }
     if (!client || !businessId) return;
@@ -422,13 +458,13 @@ export function ShopProductsAddManyScreen() {
       setRows((current) =>
         current.map((row) => (rowHasContent(row) && !rowIsReady(row) ? { ...row, error: 'Name is required.' } : row)),
       );
-      toast.push('Add a name to every filled row, or clear unused cells.', 'error');
+      toast.push(t('shop.addMany.errNameEveryRow'), 'error');
       return;
     }
     let working = markInGridDuplicateBarcodes(rows);
     if (working.some((row) => row.error === 'Duplicate in this list.')) {
       setRows(working);
-      toast.push('Fix duplicate barcodes in this list, or delete those rows.', 'error');
+      toast.push(t('opsApp.shop.addMany.dupBarcodes'), 'error');
       return;
     }
 
@@ -457,8 +493,8 @@ export function ShopProductsAddManyScreen() {
     if (!ready.length) {
       toast.push(
         working.some(rowIsReady)
-          ? 'Nothing new to save. Clear catalog duplicates or delete those rows.'
-          : 'Add at least one product name.',
+          ? t('opsApp.shop.addMany.nothingNew')
+          : t('shop.addMany.errAddOne'),
         'error',
       );
       return;
@@ -490,22 +526,27 @@ export function ShopProductsAddManyScreen() {
         });
       }
       if (createdCount && !errorTotal) {
-        toast.push(`Added ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
+        toast.push(
+          createdCount === 1
+            ? t('shop.addMany.toastAddedProductsOne')
+            : t('shop.addMany.toastAddedProductsMany', { n: createdCount }),
+          'success',
+        );
       } else if (createdCount) {
-        toast.push(`Added ${createdCount}; ${errorTotal} still need a fix.`, 'info');
+        toast.push(t('shop.addMany.toastPartial', { created: createdCount, errors: errorTotal }), 'info');
       } else {
-        toast.push('Nothing was saved. Fix the row errors and try again.', 'error');
+        toast.push(t('shop.addMany.toastNothingSaved'), 'error');
       }
     } catch (error) {
-      toast.push(error instanceof Error ? error.message : "Couldn't save these products. Try again.", 'error');
+      toast.push(error instanceof Error ? error.message : t('shop.addMany.errSave'), 'error');
     } finally {
       setSaving(false);
     }
   }
 
   const defaultsSummary = [
-    defaults.gst_rate ? `GST ${defaults.gst_rate}%` : null,
-    defaults.hsn_sac ? `HSN ${defaults.hsn_sac}` : null,
+    defaults.gst_rate ? t('shop.addMany.summaryGst', { rate: defaults.gst_rate }) : null,
+    defaults.hsn_sac ? t('shop.addMany.summaryHsn', { code: defaults.hsn_sac }) : null,
     CATEGORY_OPTIONS.find((item) => item.value === defaults.category)?.label,
     STATUS_OPTIONS.find((item) => item.value === defaults.status)?.label,
     godowns.find((item) => item.id === defaults.godown_id)?.name,
@@ -514,7 +555,7 @@ export function ShopProductsAddManyScreen() {
     .join(' · ');
 
   function statusPill(row: BulkProductRow) {
-    const status = rowStatusMeta(row);
+    const status = rowStatusMeta(row, t);
     return (
       <View
         style={[
@@ -542,7 +583,7 @@ export function ShopProductsAddManyScreen() {
   }
 
   function renderRowCard(row: BulkProductRow, index: number) {
-    const status = rowStatusMeta(row);
+    const status = rowStatusMeta(row, t);
     return (
       <View
         key={row.id}
@@ -559,11 +600,11 @@ export function ShopProductsAddManyScreen() {
           </View>
           {statusPill(row)}
           {rowHasContent(row) ? (
-            <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel="Duplicate row">
+            <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel={t('shop.addMany.duplicateRowAria')}>
               <Feather name="copy" size={16} color={colors.primary} />
             </Pressable>
           ) : null}
-          <Pressable onPress={() => removeRow(row.id)} hitSlop={8} accessibilityLabel="Delete row">
+          <Pressable onPress={() => removeRow(row.id)} hitSlop={8} accessibilityLabel={t('shop.addMany.deleteRowAria')}>
             <Feather name="trash-2" size={16} color={colors.mutedForeground} />
           </Pressable>
         </View>
@@ -577,11 +618,11 @@ export function ShopProductsAddManyScreen() {
           )}
           <View style={{ flex: 1 }}>
             <Input
-              label="Product name"
+              label={t('shop.products.fields.name')}
               required
               value={row.name}
               onChangeText={(value) => updateRow(row.id, { name: value })}
-              placeholder="What are you adding?"
+              placeholder={t('opsApp.shop.addMany.namePlaceholder')}
               onSubmitEditing={addEmptyRow}
             />
           </View>
@@ -590,7 +631,7 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.barcode}
             onChangeText={(value) => updateRow(row.id, { barcode: value })}
-            placeholder="Barcode"
+            placeholder={t('shop.addMany.columns.barcode')}
             style={[styles.input, { flex: 1 }]}
             placeholderTextColor={colors.mutedForeground}
             onSubmitEditing={() => void lookupRow(row.id, row.barcode)}
@@ -598,12 +639,12 @@ export function ShopProductsAddManyScreen() {
           <Pressable
             onPress={() => navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })}
             style={styles.iconBtn}
-            accessibilityLabel="Scan barcode with camera"
+            accessibilityLabel={t('shop.addMany.scanBarcodeCameraAria')}
           >
             <Feather name="camera" size={16} color={colors.primary} />
           </Pressable>
           <Button
-            label={row.lookingUp ? '…' : 'Lookup'}
+            label={row.lookingUp ? '…' : t('shop.addMany.lookup')}
             variant="secondary"
             size="sm"
             disabled={!row.barcode.trim() || row.lookingUp}
@@ -614,7 +655,7 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.price}
             onChangeText={(value) => updateRow(row.id, { price: value })}
-            placeholder="Price"
+            placeholder={t('shop.addMany.columns.price')}
             keyboardType="decimal-pad"
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
@@ -622,7 +663,7 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.purchase_price}
             onChangeText={(value) => updateRow(row.id, { purchase_price: value })}
-            placeholder="Cost"
+            placeholder={t('shop.addMany.columns.purchase_price')}
             keyboardType="decimal-pad"
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
@@ -630,7 +671,7 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.gst_rate}
             onChangeText={(value) => updateRow(row.id, { gst_rate: value })}
-            placeholder="GST %"
+            placeholder={t('shop.addMany.columns.gst_rate')}
             keyboardType="decimal-pad"
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
@@ -638,7 +679,7 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.stock_on_hand}
             onChangeText={(value) => updateRow(row.id, { stock_on_hand: value })}
-            placeholder="Stock"
+            placeholder={t('shop.addMany.columns.stock_on_hand')}
             keyboardType="decimal-pad"
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
@@ -646,28 +687,28 @@ export function ShopProductsAddManyScreen() {
           <TextInput
             value={row.sku}
             onChangeText={(value) => updateRow(row.id, { sku: value })}
-            placeholder="SKU"
+            placeholder={t('shop.addMany.columns.sku')}
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.brand}
             onChangeText={(value) => updateRow(row.id, { brand: value })}
-            placeholder="Brand"
+            placeholder={t('shop.addMany.columns.brand')}
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.pack_size}
             onChangeText={(value) => updateRow(row.id, { pack_size: value })}
-            placeholder="Pack"
+            placeholder={t('shop.addMany.columns.pack_size')}
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
           <TextInput
             value={row.hsn_sac}
             onChangeText={(value) => updateRow(row.id, { hsn_sac: value })}
-            placeholder="HSN"
+            placeholder={t('shop.addMany.columns.hsn_sac')}
             style={[styles.input, styles.fieldCell]}
             placeholderTextColor={colors.mutedForeground}
           />
@@ -675,7 +716,7 @@ export function ShopProductsAddManyScreen() {
         <View style={styles.row2}>
           <View style={{ flex: 1 }}>
             <SelectField
-              label="Category"
+              label={t('shop.addMany.categoryAria')}
               optional
               value={row.category}
               options={CATEGORY_OPTIONS}
@@ -685,7 +726,7 @@ export function ShopProductsAddManyScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <SelectField
-              label="Status"
+              label={t('shop.addMany.columns.status')}
               required
               value={row.status}
               options={STATUS_OPTIONS}
@@ -706,19 +747,19 @@ export function ShopProductsAddManyScreen() {
             value={row.barcode}
             onChangeText={(value) => updateRow(row.id, { barcode: value })}
             style={[styles.gridInput, { flex: 1, width: undefined }]}
-            placeholder="Scan or type"
+            placeholder={t('shop.products.scanOrType')}
             placeholderTextColor={colors.mutedForeground}
             onSubmitEditing={() => void lookupRow(row.id, row.barcode)}
           />
           <Pressable
             onPress={() => navigation.navigate('BarcodeScanner', { target: 'addManyRow', rowId: row.id })}
             hitSlop={8}
-            accessibilityLabel="Scan barcode with camera"
+            accessibilityLabel={t('shop.addMany.scanBarcodeCameraAria')}
           >
             <Feather name="camera" size={15} color={colors.primary} />
           </Pressable>
           <Pressable onPress={() => void lookupRow(row.id, row.barcode)} disabled={!row.barcode.trim()}>
-            <Text style={styles.lookupText}>{row.lookingUp ? '…' : 'Go'}</Text>
+            <Text style={styles.lookupText}>{row.lookingUp ? '…' : t('opsApp.shop.addMany.go')}</Text>
           </Pressable>
         </View>
       );
@@ -730,7 +771,7 @@ export function ShopProductsAddManyScreen() {
             value={row.category}
             options={CATEGORY_OPTIONS}
             onChange={(value) => updateRow(row.id, { category: value })}
-            accessibilityLabel="Category"
+            accessibilityLabel={t('shop.addMany.categoryAria')}
           />
         </View>
       );
@@ -742,7 +783,7 @@ export function ShopProductsAddManyScreen() {
             value={row.status}
             options={STATUS_OPTIONS}
             onChange={(value) => updateRow(row.id, { status: value })}
-            accessibilityLabel="Status"
+            accessibilityLabel={t('shop.addMany.columns.status')}
           />
         </View>
       );
@@ -753,7 +794,7 @@ export function ShopProductsAddManyScreen() {
         value={row[key]}
         onChangeText={(value) => updateRow(row.id, { [key]: value })}
         style={[styles.gridInput, { width }]}
-        placeholder={key === 'name' ? 'Product name' : ''}
+        placeholder={key === 'name' ? t('shop.products.fields.name') : ''}
         placeholderTextColor={colors.mutedForeground}
         keyboardType={numeric ? 'decimal-pad' : 'default'}
         onSubmitEditing={key === 'name' ? addEmptyRow : undefined}
@@ -762,7 +803,7 @@ export function ShopProductsAddManyScreen() {
   }
 
   function renderDesktopRow(row: BulkProductRow, index: number) {
-    const status = rowStatusMeta(row);
+    const status = rowStatusMeta(row, t);
     return (
       <View
         key={row.id}
@@ -780,13 +821,13 @@ export function ShopProductsAddManyScreen() {
         ))}
         <View style={styles.gridStatusWrap}>{statusPill(row)}</View>
         {rowHasContent(row) ? (
-          <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel="Duplicate row">
+          <Pressable onPress={() => duplicateRow(row.id)} hitSlop={8} accessibilityLabel={t('shop.addMany.duplicateRowAria')}>
             <Feather name="copy" size={16} color={colors.primary} />
           </Pressable>
         ) : (
           <View style={{ width: 16 }} />
         )}
-        <Pressable onPress={() => removeRow(row.id)} hitSlop={8} accessibilityLabel="Delete row">
+        <Pressable onPress={() => removeRow(row.id)} hitSlop={8} accessibilityLabel={t('shop.addMany.deleteRowAria')}>
           <Feather name="trash-2" size={16} color={colors.mutedForeground} />
         </Pressable>
       </View>
@@ -802,24 +843,24 @@ export function ShopProductsAddManyScreen() {
         <View style={styles.hero}>
           <View style={{ flex: 1 }}>
             <Text style={styles.lede}>
-              Type a name, scan a barcode, paste Excel, or import a CSV. A new blank row appears as you go.
+              {t('shop.addMany.intro')}
             </Text>
           </View>
           <View style={styles.statRow}>
             <View style={[styles.statChip, readyRows.length ? styles.statChipReady : null]}>
               <Text style={styles.statValue}>{readyRows.length}</Text>
-              <Text style={styles.statLabel}>ready</Text>
+              <Text style={styles.statLabel}>{t('shop.addMany.statReady')}</Text>
             </View>
             {incompleteCount ? (
               <View style={[styles.statChip, styles.statChipWarn]}>
                 <Text style={styles.statValue}>{incompleteCount}</Text>
-                <Text style={styles.statLabel}>need name</Text>
+                <Text style={styles.statLabel}>{t('shop.addMany.statNeedName')}</Text>
               </View>
             ) : null}
             {errorCount ? (
               <View style={[styles.statChip, styles.statChipError]}>
                 <Text style={styles.statValue}>{errorCount}</Text>
-                <Text style={styles.statLabel}>errors</Text>
+                <Text style={styles.statLabel}>{t('shop.addMany.statErrors')}</Text>
               </View>
             ) : null}
           </View>
@@ -829,9 +870,9 @@ export function ShopProductsAddManyScreen() {
           <Pressable style={styles.row2} onPress={() => setDefaultsOpen((open) => !open)}>
             <Feather name="sliders" size={16} color={colors.primary} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Shared defaults</Text>
+              <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>{t('shop.addMany.sharedDefaults')}</Text>
               <Text style={styles.hint} numberOfLines={1}>
-                {defaultsSummary || 'GST, category, status, and godown for new rows'}
+                {defaultsSummary || t('shop.addMany.sharedDefaultsHint')}
               </Text>
             </View>
             <Feather name={defaultsOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.mutedForeground} />
@@ -842,7 +883,7 @@ export function ShopProductsAddManyScreen() {
                 <TextInput
                   value={defaults.gst_rate}
                   onChangeText={(value) => setDefaults((current) => ({ ...current, gst_rate: value }))}
-                  placeholder="GST %"
+                  placeholder={t('shop.addMany.columns.gst_rate')}
                   keyboardType="decimal-pad"
                   style={[styles.input, { flex: 1 }]}
                   placeholderTextColor={colors.mutedForeground}
@@ -850,13 +891,13 @@ export function ShopProductsAddManyScreen() {
                 <TextInput
                   value={defaults.hsn_sac}
                   onChangeText={(value) => setDefaults((current) => ({ ...current, hsn_sac: value }))}
-                  placeholder="HSN"
+                  placeholder={t('shop.addMany.columns.hsn_sac')}
                   style={[styles.input, { flex: 1 }]}
                   placeholderTextColor={colors.mutedForeground}
                 />
               </View>
               <SelectField
-                label="Default category"
+                label={t('shop.addMany.defaultCategory')}
                 optional
                 value={defaults.category}
                 options={CATEGORY_OPTIONS}
@@ -864,7 +905,7 @@ export function ShopProductsAddManyScreen() {
                 searchable
               />
               <SelectField
-                label="Default status"
+                label={t('shop.addMany.defaultStatus')}
                 required
                 value={defaults.status}
                 options={STATUS_OPTIONS}
@@ -872,10 +913,10 @@ export function ShopProductsAddManyScreen() {
               />
               {godowns.length ? (
                 <SelectField
-                  label="Stock godown"
+                  label={t('shop.addMany.stockGodown')}
                   optional
                   value={defaults.godown_id}
-                  options={[{ value: '', label: 'Default' }, ...godowns.map((item) => ({ value: item.id, label: item.name }))]}
+                  options={[{ value: '', label: t('shop.addMany.godownDefault') }, ...godowns.map((item) => ({ value: item.id, label: item.name }))]}
                   onChange={(value) => setDefaults((current) => ({ ...current, godown_id: value }))}
                 />
               ) : null}
@@ -889,16 +930,16 @@ export function ShopProductsAddManyScreen() {
             <TextInput
               value={scanCode}
               onChangeText={setScanCode}
-              placeholder="Scan or paste a barcode, then Enter"
+              placeholder={t('shop.addMany.scanPlaceholder')}
               style={[styles.input, { flex: 1 }]}
               placeholderTextColor={colors.mutedForeground}
               onSubmitEditing={() => void handleScan()}
             />
-            <Button label="Add" variant="secondary" size="sm" loading={scanning} disabled={!scanCode.trim()} onPress={() => void handleScan()} />
+            <Button label={t('opsApp.shop.common.add')} variant="secondary" size="sm" loading={scanning} disabled={!scanCode.trim()} onPress={() => void handleScan()} />
           </View>
           <View style={styles.intakeActions}>
             <Button
-              label="Camera"
+              label={t('shop.addMany.camera')}
               variant="outline"
               size="sm"
               icon="camera"
@@ -909,25 +950,25 @@ export function ShopProductsAddManyScreen() {
             />
             {Platform.OS === 'web' ? (
               <>
-                <Button label="Import CSV" variant="outline" size="sm" icon="upload" onPress={() => void importCsv()} />
+                <Button label={t('shop.addMany.importCsv')} variant="outline" size="sm" icon="upload" onPress={() => void importCsv()} />
                 <Button
-                  label="Template"
+                  label={t('shop.addMany.downloadTemplate')}
                   variant="ghost"
                   size="sm"
                   icon="download"
                   onPress={() => {
                     try {
                       downloadCsvTemplate();
-                      toast.push('Template downloaded.', 'success');
+                      toast.push(t('opsApp.shop.addMany.templateDownloaded'), 'success');
                     } catch (error) {
-                      toast.push(error instanceof Error ? error.message : 'Unable to download.', 'error');
+                      toast.push(error instanceof Error ? error.message : t('opsApp.shop.addMany.unableDownload'), 'error');
                     }
                   }}
                 />
               </>
             ) : null}
             <Button
-              label={pasteOpen ? 'Hide paste' : 'Paste Excel'}
+              label={pasteOpen ? t('opsApp.shop.addMany.hidePaste') : t('opsApp.shop.addMany.pasteExcel')}
               variant="ghost"
               size="sm"
               icon="clipboard"
@@ -936,8 +977,7 @@ export function ShopProductsAddManyScreen() {
           </View>
           {Platform.OS === 'web' ? (
             <Text style={styles.hint}>
-              Template columns match this grid. Fill in Excel, then File → Save As → CSV UTF-8. Workbooks
-              (.xlsx) are not imported.
+              {t('shop.addMany.templateNote')}
             </Text>
           ) : null}
           {pasteOpen ? (
@@ -945,12 +985,12 @@ export function ShopProductsAddManyScreen() {
               <TextInput
                 value={pasteText}
                 onChangeText={setPasteText}
-                placeholder="Paste rows from Excel or Google Sheets"
+                placeholder={t('opsApp.shop.addMany.pastePlaceholder')}
                 multiline
                 style={[styles.input, styles.paste]}
                 placeholderTextColor={colors.mutedForeground}
               />
-              <Button label="Load pasted rows" variant="secondary" disabled={!pasteText.trim()} onPress={applyPaste} />
+              <Button label={t('opsApp.shop.addMany.loadPasted')} variant="secondary" disabled={!pasteText.trim()} onPress={applyPaste} />
             </>
           ) : null}
         </View>
@@ -963,10 +1003,10 @@ export function ShopProductsAddManyScreen() {
                   <Text style={styles.gridIndex}>#</Text>
                   {DESKTOP_COLUMNS.map((column) => (
                     <Text key={column.key} style={[styles.gridHead, { width: column.width }]}>
-                      {column.label}
+                      {columnLabel(column.key, t)}
                     </Text>
                   ))}
-                  <Text style={[styles.gridHead, { width: 120 }]}>Status</Text>
+                  <Text style={[styles.gridHead, { width: 120 }]}>{t('shop.addMany.columns.status')}</Text>
                   <Text style={{ width: 48 }} />
                 </View>
                 {rows.map(renderDesktopRow)}
@@ -978,20 +1018,26 @@ export function ShopProductsAddManyScreen() {
         )}
 
         <View style={[styles.row2, { marginTop: spacing.md }]}>
-          <Button label="Add row" variant="outline" icon="plus" onPress={addEmptyRow} />
-          <Button label="Copy last row" variant="secondary" icon="copy" onPress={copyLastRow} />
+          <Button label={t('shop.addMany.addRow')} variant="outline" icon="plus" onPress={addEmptyRow} />
+          <Button label={t('opsApp.shop.addMany.copyLastRow')} variant="secondary" icon="copy" onPress={copyLastRow} />
         </View>
       </KeyboardAwareScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Text style={styles.footerMeta}>
-          {readyRows.length} ready to save
-          {catalogDupeCount ? ` · ${catalogDupeCount} already in catalog` : ''}
-          {incompleteCount ? ` · ${incompleteCount} need a name` : ''}
-          {errorCount ? ` · ${errorCount} errors` : ''}
+          {t('opsApp.shop.addMany.readySave', { n: readyRows.length })}
+          {catalogDupeCount ? ` · ${t('opsApp.shop.addMany.inCatalog', { n: catalogDupeCount })}` : ''}
+          {incompleteCount ? ` · ${t('shop.addMany.footerNeedName', { n: incompleteCount })}` : ''}
+          {errorCount ? ` · ${t('shop.addMany.footerErrors', { n: errorCount })}` : ''}
         </Text>
         <Button
-          label={readyRows.length ? `Save ${readyRows.length} product${readyRows.length === 1 ? '' : 's'}` : 'Save all'}
+          label={
+            readyRows.length
+              ? readyRows.length === 1
+                ? t('shop.addMany.saveProductsOne')
+                : t('shop.addMany.saveProductsMany', { n: readyRows.length })
+              : t('shop.addMany.saveAll')
+          }
           loading={saving}
           disabled={!canWrite || !businessId || !readyRows.length}
           onPress={() => void handleSave()}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Camera, Pencil, Plus, Rows3 } from 'lucide-react';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct, ShopProductCategoryItem } from '@ie-orbit/sdk';
@@ -30,7 +31,6 @@ import {
   galleryFromProduct,
   normalizeProductGallery,
   primaryProductImageUrl,
-  productImageSlotLabel,
   toStoredProductImageUrl,
 } from './productImages';
 import { enrichSuccessMessage } from './enrichMessages';
@@ -226,6 +226,11 @@ function officeStockFor(godowns: ShopGodown[], productId: string) {
 }
 
 export function ShopProductsPage() {
+  const { t } = useTranslation();
+  const tp = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.products.${key}`, options));
+  const slotLabel = (index: number) =>
+    index === 0 ? tp('slotPrimary') : index === 1 ? tp('slotBack') : tp('slotN', { n: index + 1 });
   const [searchParams, setSearchParams] = useSearchParams();
   const deepProductId = searchParams.get('product');
   const openedDeepProduct = useRef<string | null>(null);
@@ -359,14 +364,14 @@ export function ShopProductsPage() {
     if (bulkPrice.trim()) updates.price = { set: bulkPrice.trim() };
     else if (bulkPercent.trim()) updates.price = { percent: bulkPercent.trim() };
     if (!Object.keys(updates).length) {
-      snackbar.push('Choose a status, category, GST, or price change.', 'error');
+      snackbar.push(tp('chooseChange'), 'error');
       return;
     }
     try {
       const result = await patchBulk.mutateAsync({ ids, updates });
       const failed = result.errors.length;
       if (result.updated.length && !failed) {
-        snackbar.push(`Updated ${result.updated.length} product${result.updated.length === 1 ? '' : 's'}.`, 'success');
+        snackbar.push(tp('updatedCount', { count: result.updated.length }), 'success');
         setSelectedIds([]);
         setBulkOpen(false);
         setBulkStatus('');
@@ -375,12 +380,12 @@ export function ShopProductsPage() {
         setBulkPrice('');
         setBulkPercent('');
       } else if (result.updated.length) {
-        snackbar.push(`Updated ${result.updated.length}; ${failed} didn't update.`, 'info');
+        snackbar.push(tp('partialUpdate', { updated: result.updated.length, failed }), 'info');
       } else {
-        snackbar.push(result.errors[0]?.message || "Couldn't update the selected products. Try again.", 'error');
+        snackbar.push(result.errors[0]?.message || tp('bulkFailed'), 'error');
       }
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't update the selected products. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : tp('bulkFailed'), 'error');
     }
   }
 
@@ -430,7 +435,7 @@ export function ShopProductsPage() {
         openedDeepProduct.current = deepProductId;
         openEditDialog(response.data);
       } catch {
-        snackbar.push("Couldn't open that product.", 'error');
+        snackbar.push(tp('openFailed'), 'error');
       }
     })();
     return () => {
@@ -482,8 +487,10 @@ export function ShopProductsPage() {
       );
 
       if (data.existing_product_id && data.existing_product_id !== editingId) {
-        setMessage(data.message || `Already in catalog as ${data.existing_product_name}.`);
-        snackbar.push(data.message || `Already in catalog as ${data.existing_product_name}.`, 'info');
+        const alreadyText =
+          data.message || tp('alreadyInCatalog', { name: data.existing_product_name });
+        setMessage(alreadyText);
+        snackbar.push(alreadyText, 'info');
         if (!editingId) {
           const existing = (products.data ?? []).find((row) => row.id === data.existing_product_id);
           if (existing) openEditDialog(existing);
@@ -497,11 +504,11 @@ export function ShopProductsPage() {
           setMessage(
             data.message ||
               (data.needs_pack_photo
-                ? 'No online match — take a pack photo to auto-fill, or enter the name.'
-                : 'No online match for this barcode — fill details manually and save.'),
+                ? tp('noMatchPhoto')
+                : tp('noMatchBarcode')),
           );
         } else {
-          setMessage(data.message || 'No online match — try another name or scan the barcode.');
+          setMessage(data.message || tp('noMatchName'));
         }
         return;
       }
@@ -527,7 +534,7 @@ export function ShopProductsPage() {
       });
       setBarcodeLookup(data.code || code || '');
       void queryClient.invalidateQueries({ queryKey: ['shop-product-categories'] });
-      const filled = data.name || 'Product';
+      const filled = data.name || tp('defaultName');
       const successText = enrichSuccessMessage(data, {
         editing: Boolean(editingId),
         filledName: filled,
@@ -535,7 +542,7 @@ export function ShopProductsPage() {
       snackbar.push(successText, 'success');
       setMessage(successText);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Lookup failed.');
+      setMessage(error instanceof Error ? error.message : tp('lookupFailed'));
     } finally {
       setLookingUp(false);
     }
@@ -544,14 +551,14 @@ export function ShopProductsPage() {
   async function runSmartPackPhoto(file: File | null) {
     if (!file || !auth.token || !workspace.tenantId || !businessId) return;
     setLookingUp(true);
-    setMessage('Reading pack photo…');
+    setMessage(tp('readingPhoto'));
     try {
       const url = await uploadProductImage({
         accessToken: auth.token,
         tenantId: workspace.tenantId,
         businessId,
         imageFile: file,
-        label: 'Pack photo',
+        label: tp('packPhotoLabel'),
       });
       const stored = toStoredProductImageUrl(url) || url;
       await runEnrich({
@@ -560,7 +567,7 @@ export function ShopProductsPage() {
         use_smart_lookup: true,
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Unable to read pack photo.');
+      setMessage(error instanceof Error ? error.message : tp('readPhotoFailed'));
       setLookingUp(false);
     }
   }
@@ -588,7 +595,7 @@ export function ShopProductsPage() {
         tenantId: workspace.tenantId,
         businessId,
         imageFile: file,
-        label: productImageSlotLabel(index),
+        label: slotLabel(index),
         prepareProductCanvas: true,
         removeBackground: Boolean(options?.removeBackground),
         crop,
@@ -601,11 +608,11 @@ export function ShopProductsPage() {
       });
       setMessage(
         index === 0
-          ? 'Primary photo uploaded. Use Smart fill when you want to read the pack.'
-          : `${productImageSlotLabel(index)} uploaded.`,
+          ? tp('primaryUploaded')
+          : tp('slotUploaded', { label: slotLabel(index) }),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Image upload failed.');
+      setMessage(error instanceof Error ? error.message : tp('uploadFailed'));
     } finally {
       setUploadingIndex(null);
     }
@@ -628,11 +635,11 @@ export function ShopProductsPage() {
     const front = form.images[0] || '';
     const back = form.images[1] || '';
     if (!front && !back) {
-      setMessage('Upload photo 1 (front) and/or photo 2 (back) first.');
+      setMessage(tp('uploadPhotoFirst'));
       return;
     }
     setAnalyzing(true);
-    setMessage('Analysing packaging in the background…');
+    setMessage(tp('analysingBg'));
     try {
       const job = await analyzePackaging.mutateAsync({
         front_image_url: front || undefined,
@@ -642,7 +649,7 @@ export function ShopProductsPage() {
       });
       if (job.status === 'done' && job.result) {
         setForm((current) => applyEnrichment(current, job.result!));
-        setMessage(job.result.message || 'Fields updated from packaging photos.');
+        setMessage(job.result.message || tp('fieldsUpdated'));
         return;
       }
 
@@ -652,11 +659,11 @@ export function ShopProductsPage() {
         const latest = await getPackagingAnalysis.mutateAsync(job.job_id);
         if (latest.status === 'done' && latest.result) {
           setForm((current) => applyEnrichment(current, latest.result!));
-          setMessage(latest.result.message || 'Fields updated from packaging photos.');
+          setMessage(latest.result.message || tp('fieldsUpdated'));
           return;
         }
         if (latest.status === 'failed') {
-          setMessage(latest.error || 'Packaging analysis failed.');
+          setMessage(latest.error || tp('analysisFailed'));
           return;
         }
       }
@@ -668,12 +675,12 @@ export function ShopProductsPage() {
       });
       if (syncJob.result) {
         setForm((current) => applyEnrichment(current, syncJob.result!));
-        setMessage(syncJob.result.message || 'Fields updated from packaging photos.');
+        setMessage(syncJob.result.message || tp('fieldsUpdated'));
       } else {
-        setMessage(syncJob.error || 'Analysis timed out. Try again or use barcode lookup.');
+        setMessage(syncJob.error || tp('analysisTimeout'));
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Couldn't analyse packaging. Try again.");
+      setMessage(error instanceof Error ? error.message : tp('analyseFailed'));
     } finally {
       setAnalyzing(false);
     }
@@ -683,7 +690,7 @@ export function ShopProductsPage() {
     event.preventDefault();
     if (!businessId || !form.name.trim()) return;
     if (form.category === 'other' && !form.category_other.trim()) {
-      setMessage('Enter a category name for Other.');
+      setMessage(tp('enterOtherCategory'));
       return;
     }
     setMessage(null);
@@ -697,7 +704,7 @@ export function ShopProductsPage() {
         categorySlug = created.data.slug;
         void queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Couldn't create this category. Try again.");
+        setMessage(error instanceof Error ? error.message : tp('categoryCreateFailed'));
         return;
       }
     }
@@ -732,11 +739,11 @@ export function ShopProductsPage() {
       if (editingId) {
         await update.mutateAsync({ productId: editingId, body: payload });
         closeProductDialog();
-        window.setTimeout(() => snackbar.push('Product details saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(tp('saved'), 'success'), 0);
       } else {
         await create.mutateAsync(payload);
         closeProductDialog();
-        window.setTimeout(() => snackbar.push('Product added.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(tp('added'), 'success'), 0);
       }
       setForm({ ...emptyForm, images: emptyProductImageSlots() });
       setEditingId(null);
@@ -744,7 +751,7 @@ export function ShopProductsPage() {
       setNameLookup('');
       setNeedsPackPhoto(false);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't save this product. Check the details and try again.";
+      const text = error instanceof Error ? error.message : tp('saveFailed');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -758,7 +765,7 @@ export function ShopProductsPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search name, brand, barcode…"
+          searchPlaceholder={tp('searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setStatus('');
@@ -768,24 +775,24 @@ export function ShopProductsPage() {
           filters={[
             {
               id: 'status',
-              label: 'Status',
+              label: tp('status'),
               value: status,
               onChange: setStatus,
               options: [
-                { value: '', label: 'All statuses' },
-                { value: 'active', label: 'Active' },
-                { value: 'draft', label: 'Draft' },
-                { value: 'inactive', label: 'Inactive' },
-                { value: 'archived', label: 'Archived' },
+                { value: '', label: tp('allStatuses') },
+                { value: 'active', label: tp('statuses.active') },
+                { value: 'draft', label: tp('statuses.draft') },
+                { value: 'inactive', label: tp('statuses.inactive') },
+                { value: 'archived', label: tp('statuses.archived') },
               ],
             },
             {
               id: 'category',
-              label: 'Category',
+              label: tp('category'),
               value: category,
               onChange: setCategory,
               options: [
-                { value: '', label: 'All categories' },
+                { value: '', label: tp('allCategories') },
                 ...categoryOptions.map((item) => ({
                   value: item.slug,
                   label: item.label,
@@ -794,14 +801,14 @@ export function ShopProductsPage() {
             },
             {
               id: 'stock',
-              label: 'Stock',
+              label: tp('stock'),
               value: stockFilter,
               onChange: setStockFilter,
               options: [
-                { value: '', label: 'All stock' },
-                { value: 'in_stock', label: 'In stock' },
-                { value: 'low', label: 'Low stock' },
-                { value: 'out', label: 'Out of stock' },
+                { value: '', label: tp('allStock') },
+                { value: 'in_stock', label: tp('inStock') },
+                { value: 'low', label: tp('lowStock') },
+                { value: 'out', label: tp('outOfStock') },
               ],
             },
           ]}
@@ -810,7 +817,7 @@ export function ShopProductsPage() {
               {canSeeProfit ? (
                 <Link to="/bi/profit">
                   <Button type="button" variant="neutral">
-                    BI Profit
+                    {tp('biProfit')}
                   </Button>
                 </Link>
               ) : null}
@@ -819,7 +826,7 @@ export function ShopProductsPage() {
                   <Button type="button" variant="neutral">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <Camera size={16} aria-hidden="true" />
-                      Scan invoice
+                      {tp('scanInvoice')}
                     </span>
                   </Button>
                 </Link>
@@ -828,14 +835,14 @@ export function ShopProductsPage() {
                 <Button type="button" variant="neutral">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Rows3 size={16} aria-hidden="true" />
-                    Add many
+                    {tp('addMany')}
                   </span>
                 </Button>
               </Link>
               <Button type="button" variant="primary" onClick={openAddDialog}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Add product
+                  {tp('addProduct')}
                 </span>
               </Button>
             </div>
@@ -857,7 +864,7 @@ export function ShopProductsPage() {
               fontSize: 13,
             }}
           >
-            <span>Need a catalog? Add many lets you paste Excel or scan barcodes.</span>
+            <span>{tp('bulkHint')}</span>
             <button
               type="button"
               onClick={() => {
@@ -868,7 +875,7 @@ export function ShopProductsPage() {
                   /* ignore */
                 }
               }}
-              aria-label="Dismiss hint"
+              aria-label={tp('dismissHint')}
               style={{
                 border: 0,
                 background: 'transparent',
@@ -882,17 +889,17 @@ export function ShopProductsPage() {
           </p>
         ) : null}
 
-        {products.isLoading ? <p>Loading…</p> : null}
+        {products.isLoading ? <p>{t('common.loading')}</p> : null}
         {products.error ? <p role="alert">{(products.error as Error).message}</p> : null}
         {filtered.length ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
               <input type="checkbox" checked={allPageSelected} onChange={toggleSelectPage} />
-              Select page ({pageRows.length})
+              {tp('selectPage', { count: pageRows.length })}
             </label>
             {selectedIds.length ? (
               <Button type="button" variant="neutral" onClick={() => setBulkOpen(true)}>
-                {selectedIds.length} selected · Edit
+                {tp('selectedEdit', { count: selectedIds.length })}
               </Button>
             ) : null}
           </div>
@@ -903,7 +910,7 @@ export function ShopProductsPage() {
           pageSize={pageSize}
           pageSizeOptions={[10, 25, 50, 100]}
           singleLine
-          label="products"
+          label={tp('paginationLabel')}
           onPageChange={setOffset}
           onPageSizeChange={setPageSize}
         />
@@ -925,7 +932,7 @@ export function ShopProductsPage() {
                   type="checkbox"
                   checked={selectedIds.includes(product.id)}
                   onChange={() => toggleSelected(product.id)}
-                  aria-label={`Select ${product.name}`}
+                  aria-label={tp('selectProductAria', { name: product.name })}
                   style={{ marginTop: 20 }}
                 />
                 {(() => {
@@ -964,25 +971,33 @@ export function ShopProductsPage() {
                     {product.category
                       ? ` · ${product.category_label || categoryOptions.find((item) => item.slug === product.category)?.label || product.category}`
                       : ''}{' '}
-                    · {product.brand || 'No brand'} · Stock {product.stock_on_hand} ·{' '}
+                    · {product.brand || tp('noBrand')} · {tp('stockCount', { count: product.stock_on_hand })} ·{' '}
                     {formatMoney(Number(product.price ?? 0), product.currency)}
                     {Number(product.avg_cost ?? product.purchase_price ?? 0) > 0
-                      ? ` · margin ${formatMoney(
-                          Number(product.price ?? 0) -
-                            Number(product.avg_cost ?? product.purchase_price ?? 0),
-                          product.currency,
-                        )}`
+                      ? ` · ${tp('margin', {
+                          amount: formatMoney(
+                            Number(product.price ?? 0) -
+                              Number(product.avg_cost ?? product.purchase_price ?? 0),
+                            product.currency,
+                          ),
+                        })}`
                       : ''}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    SKU {product.sku || '—'} · HSN {product.hsn_sac || '—'} · GST{' '}
-                    {product.gst_rate ?? product.tax_rate ?? 0}% ·{' '}
+                    {tp('codesLine', {
+                      sku: product.sku || '—',
+                      hsn: product.hsn_sac || '—',
+                      rate: product.gst_rate ?? product.tax_rate ?? 0,
+                    })}{' '}
+                    ·{' '}
                     {(product.barcodes ?? [])
                       .map((row) => `${row.code} (${row.barcode_type})`)
-                      .join(' · ') || 'No barcodes'}
+                      .join(' · ') || tp('noBarcodes')}
                     {(() => {
                       const count = normalizeProductGallery(galleryFromProduct(product)).length;
-                      return count ? ` · ${count}/${MAX_PRODUCT_IMAGES} photos` : '';
+                      return count
+                        ? ` · ${tp('photosCount', { count, max: MAX_PRODUCT_IMAGES })}`
+                        : '';
                     })()}
                   </div>
                   {(() => {
@@ -1013,26 +1028,26 @@ export function ShopProductsPage() {
               <Button type="button" variant="neutral" onClick={() => openEditDialog(product)}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Pencil size={14} aria-hidden="true" />
-                  Edit
+                  {tp('edit')}
                 </span>
               </Button>
             </div>
           ))}
           {!products.isLoading && !filtered.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
-              <p>No products match these filters.</p>
+              <p>{tp('empty')}</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <Button type="button" variant="primary" onClick={openAddDialog}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
-                    Add your first product
+                    {tp('addFirst')}
                   </span>
                 </Button>
                 <Link to="/shop/products/add-many">
                   <Button type="button" variant="neutral">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <Rows3 size={16} aria-hidden="true" />
-                      Add many
+                      {tp('addMany')}
                     </span>
                   </Button>
                 </Link>
@@ -1041,7 +1056,7 @@ export function ShopProductsPage() {
                     <Button type="button" variant="neutral">
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Camera size={16} aria-hidden="true" />
-                        Scan invoice
+                        {tp('scanInvoice')}
                       </span>
                     </Button>
                   </Link>
@@ -1056,7 +1071,7 @@ export function ShopProductsPage() {
           pageSize={pageSize}
           pageSizeOptions={[10, 25, 50, 100]}
           singleLine
-          label="products"
+          label={tp('paginationLabel')}
           onPageChange={setOffset}
           onPageSizeChange={setPageSize}
         />
@@ -1065,34 +1080,34 @@ export function ShopProductsPage() {
       <Dialog
         open={bulkOpen && selectedIds.length > 0}
         onClose={() => setBulkOpen(false)}
-        title={`Edit ${selectedIds.length} product${selectedIds.length === 1 ? '' : 's'}${selectedIds.length > 200 ? ' (first 200)' : ''}`}
+        title={`${tp('bulkTitle', { count: selectedIds.length })}${selectedIds.length > 200 ? tp('bulkFirst200') : ''}`}
         labelledBy="bulk-edit-dialog"
         busy={patchBulk.isPending}
-        busyMessage="Updating products…"
+        busyMessage={tp('bulkBusy')}
       >
         <div style={{ display: 'grid', gap: 12, minWidth: 280, maxWidth: 420 }}>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Status</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{tp('status')}</span>
             <select
               value={bulkStatus}
               onChange={(event) => setBulkStatus(event.target.value)}
               style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
-              <option value="">Keep</option>
-              <option value="active">Active</option>
-              <option value="draft">Draft</option>
-              <option value="inactive">Inactive</option>
-              <option value="archived">Archived</option>
+              <option value="">{tp('keep')}</option>
+              <option value="active">{tp('statuses.active')}</option>
+              <option value="draft">{tp('statuses.draft')}</option>
+              <option value="inactive">{tp('statuses.inactive')}</option>
+              <option value="archived">{tp('statuses.archived')}</option>
             </select>
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Category</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{tp('category')}</span>
             <select
               value={bulkCategory}
               onChange={(event) => setBulkCategory(event.target.value)}
               style={{ padding: '10px 12px', borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
-              <option value="">Keep</option>
+              <option value="">{tp('keep')}</option>
               {categoryOptions.map((item) => (
                 <option key={item.slug} value={item.slug}>
                   {item.label}
@@ -1102,7 +1117,7 @@ export function ShopProductsPage() {
           </label>
           <div style={{ display: 'flex', gap: 8 }}>
             <label style={{ display: 'grid', gap: 4, flex: 1 }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>GST %</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{tp('gstPercent')}</span>
               <input
                 value={bulkGst}
                 onChange={(event) => setBulkGst(event.target.value)}
@@ -1110,7 +1125,7 @@ export function ShopProductsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 4, flex: 1 }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>Set price</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{tp('setPrice')}</span>
               <input
                 value={bulkPrice}
                 onChange={(event) => {
@@ -1121,7 +1136,7 @@ export function ShopProductsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 4, flex: 1 }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>Price %</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{tp('pricePercent')}</span>
               <input
                 value={bulkPercent}
                 onChange={(event) => {
@@ -1141,10 +1156,10 @@ export function ShopProductsPage() {
                 setBulkOpen(false);
               }}
             >
-              Clear selection
+              {tp('clearSelection')}
             </Button>
             <Button type="button" variant="primary" onClick={() => void applyBulkEdit()} loading={patchBulk.isPending}>
-              Apply
+              {tp('apply')}
             </Button>
           </div>
         </div>
@@ -1180,7 +1195,7 @@ export function ShopProductsPage() {
           <button
             type="button"
             onClick={() => setLightboxUrl(null)}
-            aria-label="Close"
+            aria-label={tp('close')}
             style={{
               position: 'absolute',
               top: 16,
@@ -1199,7 +1214,7 @@ export function ShopProductsPage() {
           </button>
           <img
             src={lightboxUrl}
-            alt="Product photo"
+            alt={tp('productPhotoAlt')}
             onClick={(event) => event.stopPropagation()}
             style={{
               maxWidth: 'min(96vw, 960px)',
@@ -1215,21 +1230,20 @@ export function ShopProductsPage() {
       <Dialog
         open={dialog.open}
         onClose={closeProductDialog}
-        title={editingId ? 'Edit product' : 'Add product'}
+        title={editingId ? tp('editTitle') : tp('addTitle')}
         labelledBy="product-dialog"
         busy={saving || lookingUp || enrich.isPending || analyzing || uploadingIndex !== null}
       >
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Upload up to {MAX_PRODUCT_IMAGES} product photos. The first photo is the primary image shown
-            on product cards. Photo 2 can be used with photo 1 for packaging analysis.
+            {tp('photosIntro', { max: MAX_PRODUCT_IMAGES })}
           </p>
 
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))' }}>
             {imageSlots.map((url, index) => (
               <label key={index} style={{ display: 'grid', gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
-                  {productImageSlotLabel(index)}
+                  {slotLabel(index)}
                 </span>
                 <input
                   type="file"
@@ -1248,7 +1262,7 @@ export function ShopProductsPage() {
                         cursor: 'zoom-in',
                         borderRadius: 12,
                       }}
-                      aria-label={`View ${productImageSlotLabel(index)} full size`}
+                      aria-label={tp('viewFullSize', { label: slotLabel(index) })}
                     >
                       <img
                         src={resolveMediaAssetUrl(url) || url}
@@ -1274,10 +1288,10 @@ export function ShopProductsPage() {
                           input?.click();
                         }}
                       >
-                        Restart
+                        {tp('restart')}
                       </Button>
                       <Button type="button" variant="neutral" onClick={() => removeImageAt(index)}>
-                        Remove
+                        {tp('remove')}
                       </Button>
                     </div>
                     <input
@@ -1292,7 +1306,7 @@ export function ShopProductsPage() {
                     />
                   </div>
                 ) : null}
-                {uploadingIndex === index ? <span style={{ fontSize: 12 }}>Uploading…</span> : null}
+                {uploadingIndex === index ? <span style={{ fontSize: 12 }}>{tp('uploading')}</span> : null}
               </label>
             ))}
           </div>
@@ -1303,14 +1317,14 @@ export function ShopProductsPage() {
             disabled={analyzing || (!form.images[0] && !form.images[1])}
           >
             {analyzing
-              ? 'Analysing packaging…'
+              ? tp('analysing')
               : uploadingIndex !== null
-                ? `Uploading photo ${uploadingIndex + 1}…`
-                : 'Analyse packaging photos'}
+                ? tp('uploadingPhoto', { n: uploadingIndex + 1 })
+                : tp('analysePhotos')}
           </Button>
 
           <label style={{ display: 'grid', gap: 8 }}>
-            Barcode scanner
+            {tp('barcodeScanner')}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 ref={scanInputRef}
@@ -1322,7 +1336,7 @@ export function ShopProductsPage() {
                     void runEnrich({ code: barcodeLookup.trim() });
                   }
                 }}
-                placeholder="Scan barcode / RFID with scanner gun…"
+                placeholder={tp('scanPlaceholder')}
                 autoComplete="off"
                 style={{
                   flex: 1,
@@ -1340,12 +1354,12 @@ export function ShopProductsPage() {
                 onClick={() => void runEnrich({ code: barcodeLookup.trim() })}
                 disabled={lookingUp || enrich.isPending || !barcodeLookup.trim()}
               >
-                {lookingUp || enrich.isPending ? 'Looking up…' : 'Lookup barcode'}
+                {lookingUp || enrich.isPending ? tp('lookingUp') : tp('lookupBarcode')}
               </Button>
               <Button type="button" variant="neutral" onClick={() => setCameraOpen((open) => !open)}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Camera size={16} aria-hidden="true" />
-                  {cameraOpen ? 'Hide camera' : 'Camera'}
+                  {cameraOpen ? tp('hideCamera') : tp('camera')}
                 </span>
               </Button>
             </div>
@@ -1374,7 +1388,7 @@ export function ShopProductsPage() {
                     animation: 'pulse 1s ease-in-out infinite',
                   }}
                 />
-                Looking up barcode… form stays editable.
+                {tp('lookingUpStatus')}
               </div>
             ) : null}
             {needsPackPhoto ? (
@@ -1389,7 +1403,7 @@ export function ShopProductsPage() {
                 }}
               >
                 <div style={{ fontSize: 13, color: '#9a3412', lineHeight: 1.4 }}>
-                  No catalog match. Take a clear pack photo for Smart lookup, or type the name below.
+                  {tp('noCatalogMatch')}
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <input
@@ -1404,9 +1418,9 @@ export function ShopProductsPage() {
                     }}
                   />
                   <Button type="button" variant="primary" onClick={() => packPhotoRef.current?.click()} disabled={lookingUp}>
-                    Take pack photo
+                    {tp('takePackPhoto')}
                   </Button>
-                  <span style={{ fontSize: 12, color: '#b45309' }}>Uses prepaid Smart lookup wallet when enabled</span>
+                  <span style={{ fontSize: 12, color: '#b45309' }}>{tp('smartWalletNote')}</span>
                 </div>
               </div>
             ) : null}
@@ -1422,7 +1436,7 @@ export function ShopProductsPage() {
           </label>
 
           <label style={{ display: 'grid', gap: 8 }}>
-            Or search by product name
+            {tp('orSearchByName')}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 value={nameLookup}
@@ -1433,7 +1447,7 @@ export function ShopProductsPage() {
                     void runEnrich({ query: nameLookup.trim() });
                   }
                 }}
-                placeholder="e.g. Amul Taaza 1L"
+                placeholder={tp('namePlaceholder')}
                 style={{ flex: 1, minWidth: 220, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               />
               <Button
@@ -1442,7 +1456,7 @@ export function ShopProductsPage() {
                 onClick={() => void runEnrich({ query: nameLookup.trim() })}
                 disabled={enrich.isPending || !nameLookup.trim()}
               >
-                Search online
+                {tp('searchOnline')}
               </Button>
             </div>
           </label>
@@ -1450,21 +1464,21 @@ export function ShopProductsPage() {
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             {(
               [
-                ['name', 'Product name', true],
-                ['brand', 'Brand', false],
-                ['sku', 'SKU', false],
-                ['price', 'Selling price', false],
-                ['purchase_price', 'Purchase price', false],
-                ['tax_rate', 'Tax %', false],
-                ['gst_rate', 'GST % (Books)', false],
-                ['hsn_sac', 'HSN/SAC code', false],
-                ['stock_on_hand', 'Stock on hand', false],
-                ['low_stock_threshold', 'Low stock alert', false],
-                ['pack_size', 'Pack size / quantity', false],
+                ['name', true],
+                ['brand', false],
+                ['sku', false],
+                ['price', false],
+                ['purchase_price', false],
+                ['tax_rate', false],
+                ['gst_rate', false],
+                ['hsn_sac', false],
+                ['stock_on_hand', false],
+                ['low_stock_threshold', false],
+                ['pack_size', false],
               ] as const
-            ).map(([key, label, required]) => (
+            ).map(([key, required]) => (
               <label key={key} style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp(`fields.${key}`)}</span>
                 <input
                   value={form[key]}
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })}
@@ -1475,7 +1489,7 @@ export function ShopProductsPage() {
                 Number(form.price) > 0 &&
                 Number(form.purchase_price) >= 0 ? (
                   <span style={{ fontSize: 12, color: '#6b7280' }}>
-                    Est. margin{' '}
+                    {tp('estMargin')}{' '}
                     {formatMoney(Number(form.price) - Number(form.purchase_price), form.currency)}
                     {Number(form.price) > 0
                       ? ` (${(
@@ -1488,15 +1502,15 @@ export function ShopProductsPage() {
               </label>
             ))}
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Barcode / RFID EPC</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('barcodeRfid')}</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   value={form.barcode}
                   onChange={(e) => setForm({ ...form, barcode: e.target.value })}
-                  placeholder="Scan or type barcode"
+                  placeholder={tp('scanOrType')}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
                 />
-                <Button type="button" variant="neutral" onClick={() => setCameraOpen(true)} aria-label="Scan barcode with camera">
+                <Button type="button" variant="neutral" onClick={() => setCameraOpen(true)} aria-label={tp('scanWithCamera')}>
                   <Camera size={16} aria-hidden="true" />
                 </Button>
               </div>
@@ -1504,7 +1518,7 @@ export function ShopProductsPage() {
             {godowns.length ? (
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
-                  {editingId ? 'Godown for stock changes' : 'Stock godown'}
+                  {editingId ? tp('godownForChanges') : tp('stockGodown')}
                 </span>
                 <select
                   value={form.godown_id}
@@ -1513,14 +1527,14 @@ export function ShopProductsPage() {
                 >
                   {godowns.map((godown) => (
                     <option key={godown.id} value={godown.id}>
-                      {godown.is_default ? `${godown.name} (default)` : godown.name}
+                      {godown.is_default ? tp('godownDefault', { name: godown.name }) : godown.name}
                     </option>
                   ))}
                 </select>
               </label>
             ) : null}
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Currency</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('currency')}</span>
               <select
                 value={form.currency}
                 onChange={(e) => setForm({ ...form, currency: e.target.value })}
@@ -1534,55 +1548,55 @@ export function ShopProductsPage() {
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Barcode type</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('barcodeType')}</span>
               <select
                 value={form.barcode_type}
                 onChange={(e) => setForm({ ...form, barcode_type: e.target.value })}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               >
-                <option value="manufacturer">Manufacturer barcode</option>
-                <option value="internal">Internal barcode</option>
-                <option value="rfid_epc">RFID EPC</option>
+                <option value="manufacturer">{tp('barcodeTypes.manufacturer')}</option>
+                <option value="internal">{tp('barcodeTypes.internal')}</option>
+                <option value="rfid_epc">{tp('barcodeTypes.rfid_epc')}</option>
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Status</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('status')}</span>
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               >
-                <option value="active">Active</option>
-                <option value="draft">Draft</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">{tp('statuses.active')}</option>
+                <option value="draft">{tp('statuses.draft')}</option>
+                <option value="inactive">{tp('statuses.inactive')}</option>
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Category</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('category')}</span>
               <select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value, category_other: e.target.value === 'other' ? form.category_other : '' })}
                 style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
               >
-                <option value="">Select category</option>
+                <option value="">{tp('selectCategory')}</option>
                 {categoryOptions.map((item) => (
                   <option key={item.slug} value={item.slug}>
                     {item.label}
                   </option>
                 ))}
                 {!categoryOptions.some((item) => item.slug === 'other') ? (
-                  <option value="other">Other</option>
+                  <option value="other">{tp('other')}</option>
                 ) : null}
               </select>
             </label>
             {form.category === 'other' ? (
               <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>New category name</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('newCategoryName')}</span>
                 <input
                   value={form.category_other}
                   onChange={(e) => setForm({ ...form, category_other: e.target.value })}
                   required
-                  placeholder="e.g. Dry dog food"
+                  placeholder={tp('categoryPlaceholder')}
                   autoFocus
                   style={{
                     padding: 12,
@@ -1592,12 +1606,12 @@ export function ShopProductsPage() {
                   }}
                 />
                 <span style={{ fontSize: 12, color: '#6b7280' }}>
-                  Saved to Master Files for this shop and available next time you add a product.
+                  {tp('categoryHint')}
                 </span>
               </label>
             ) : null}
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Description / ingredients</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{tp('descriptionLabel')}</span>
               <textarea
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -1613,10 +1627,10 @@ export function ShopProductsPage() {
 
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Update product' : 'Save product'}
+              {saving ? tp('saving') : editingId ? tp('updateProduct') : tp('saveProduct')}
             </Button>
             <Button type="button" variant="neutral" onClick={closeProductDialog} disabled={saving}>
-              Cancel
+              {tp('cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}

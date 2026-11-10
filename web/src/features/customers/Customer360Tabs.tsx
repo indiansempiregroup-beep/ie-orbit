@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 
 type Customer360TabsProps = {
@@ -8,16 +9,17 @@ type Customer360TabsProps = {
 };
 
 const tabs = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'appointments', label: 'Appointments', product: 'appointie' },
-  { id: 'notes', label: 'Notes' },
-  { id: 'activity', label: 'Activity' },
+  { id: 'overview', labelKey: 'common.overview' },
+  { id: 'appointments', labelKey: 'customers.tabAppointments', product: 'appointie' },
+  { id: 'notes', labelKey: 'customers.tabNotes' },
+  { id: 'activity', labelKey: 'customers.tabActivity' },
 ] as const;
 
 export function Customer360Tabs({ customerId, activeTab, onTabChange }: Customer360TabsProps) {
+  const { t } = useTranslation();
   return (
     <Card style={{ padding: 12 }}>
-      <nav aria-label="Customer profile sections" className="customer-360-tabs">
+      <nav aria-label={t('customers.tabsAria')} className="customer-360-tabs">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -26,18 +28,18 @@ export function Customer360Tabs({ customerId, activeTab, onTabChange }: Customer
             aria-current={activeTab === tab.id ? 'page' : undefined}
             onClick={() => onTabChange(tab.id)}
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </nav>
       {activeTab === 'appointments' ? (
         <p style={{ margin: '12px 0 0', color: 'var(--muted-foreground)' }}>
-          <Link to={`/bookings?customer=${customerId}`}>View bookings for this customer</Link>
+          <Link to={`/bookings?customer=${customerId}`}>{t('customers.viewBookings')}</Link>
         </p>
       ) : null}
       {activeTab === 'activity' ? (
         <p style={{ margin: '12px 0 0', color: 'var(--muted-foreground)' }}>
-          Unified activity timeline requires the platform event bus (future milestone).
+          {t('customers.activityNote')}
         </p>
       ) : null}
     </Card>

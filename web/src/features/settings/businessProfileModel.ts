@@ -1,4 +1,5 @@
 import type { Business, BusinessUpdateInput } from '@ie-orbit/sdk';
+import type { TFunction } from 'i18next';
 import { getProductName } from '../../config/products';
 import {
   createDefaultWeeklyHours,
@@ -226,7 +227,10 @@ export type BusinessProfileSection = {
   items: Array<{ label: string; value: string }>;
 };
 
-export function buildBusinessProfileSections(formState: BusinessProfileFormState): BusinessProfileSection[] {
+export function buildBusinessProfileSections(
+  formState: BusinessProfileFormState,
+  t: TFunction,
+): BusinessProfileSection[] {
   const address = [
     formState.address_line2,
     formState.address_line1,
@@ -237,62 +241,67 @@ export function buildBusinessProfileSections(formState: BusinessProfileFormState
   ]
     .filter(Boolean)
     .join(', ');
+  const notProvided = t('settings.businessView.notProvided');
+  const minutes = (value: number) => t('settings.businessEdit.minutesValue', { value });
 
   return [
     {
-      title: 'Business details',
+      title: t('settings.businessEdit.sectionDetails'),
       items: [
-        { label: 'Business name', value: formState.business_name || 'Not provided' },
-        { label: 'Display name', value: formState.display_name || 'Not provided' },
-        { label: 'Business category', value: formState.business_type || 'Not provided' },
-        { label: 'Industry', value: formState.industry_category || 'Not provided' },
-        { label: 'Business email', value: formState.email || 'Not provided' },
-        { label: 'Business phone', value: formState.primary_contact || 'Not provided' },
-        { label: 'Website', value: formState.website || 'Not provided' },
+        { label: t('settings.businessView.businessName'), value: formState.business_name || notProvided },
+        { label: t('settings.businessEdit.displayName'), value: formState.display_name || notProvided },
+        { label: t('settings.businessView.category'), value: formState.business_type || notProvided },
+        { label: t('settings.businessView.industry'), value: formState.industry_category || notProvided },
+        { label: t('settings.businessView.email'), value: formState.email || notProvided },
+        { label: t('settings.businessView.phone'), value: formState.primary_contact || notProvided },
+        { label: t('settings.businessView.website'), value: formState.website || notProvided },
       ],
     },
     {
-      title: 'Location',
+      title: t('settings.businessView.sectionLocation'),
       items: [
-        { label: 'Address', value: address || 'Not provided' },
+        { label: t('settings.businessView.address'), value: address || notProvided },
       ],
     },
     {
-      title: 'Regional preferences',
+      title: t('settings.businessEdit.sectionRegional'),
       items: [
-        { label: 'Currency', value: formState.currency || 'Not provided' },
-        { label: 'Timezone', value: formState.timezone || 'Not provided' },
-        { label: 'Language', value: formState.language || 'Not provided' },
-        { label: 'Date format', value: formState.date_format || 'Not provided' },
-        { label: 'Time format', value: formState.time_format || 'Not provided' },
+        { label: t('common.currency'), value: formState.currency || notProvided },
+        { label: t('common.timezone'), value: formState.timezone || notProvided },
+        { label: t('common.language'), value: formState.language || notProvided },
+        { label: t('settings.businessView.dateFormat'), value: formState.date_format || notProvided },
+        { label: t('settings.businessView.timeFormat'), value: formState.time_format || notProvided },
       ],
     },
     {
-      title: 'Operations',
+      title: t('settings.businessEdit.sectionOperations'),
       items: [
-        { label: 'Week starts on', value: formState.week_start_day || 'Not provided' },
-        { label: 'Business hours', value: summarizeWeeklyHours(formState.business_hours) },
+        { label: t('settings.businessView.weekStart'), value: formState.week_start_day || notProvided },
+        { label: t('settings.businessView.businessHours'), value: summarizeWeeklyHours(formState.business_hours) },
         ...(formState.selected_product === 'appointie'
           ? [
-              { label: 'Appointment interval', value: `${formState.appointment_interval} minutes` },
-              { label: 'Default duration', value: `${formState.default_duration} minutes` },
-              { label: 'Buffer time', value: `${formState.buffer_time} minutes` },
+              { label: t('settings.businessView.appointmentInterval'), value: minutes(formState.appointment_interval) },
+              { label: t('settings.businessView.defaultDuration'), value: minutes(formState.default_duration) },
+              { label: t('settings.businessView.bufferTime'), value: minutes(formState.buffer_time) },
             ]
           : []),
       ],
     },
     {
-      title: 'Product',
+      title: t('settings.businessEdit.sectionProduct'),
       items: [
-        { label: 'Selected product', value: getProductName(formState.selected_product) },
+        { label: t('settings.businessView.selectedProduct'), value: getProductName(formState.selected_product) },
       ],
     },
     {
-      title: 'Branding',
+      title: t('settings.businessEdit.sectionBranding'),
       items: [
-        { label: 'Primary color', value: formState.primary_color || 'Not provided' },
-        { label: 'Secondary color', value: formState.secondary_color || 'Not provided' },
-        { label: 'Logo', value: formState.logo ? 'Uploaded' : 'Not uploaded' },
+        { label: t('settings.businessView.primaryColor'), value: formState.primary_color || notProvided },
+        { label: t('settings.businessView.secondaryColor'), value: formState.secondary_color || notProvided },
+        {
+          label: t('settings.businessView.logo'),
+          value: formState.logo ? t('settings.businessView.uploaded') : t('settings.businessView.notUploaded'),
+        },
       ],
     },
   ];

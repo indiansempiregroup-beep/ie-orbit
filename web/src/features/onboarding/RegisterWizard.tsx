@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
@@ -125,9 +126,10 @@ function planTitle(plan: Pick<BillingPlanCatalogItem, 'name'> | string) {
 }
 
 export function RegisterWizard() {
+  const { t } = useTranslation();
   usePageMeta({
-    title: 'Create account — IE Orbit',
-    description: 'Create a white-label workspace for Orbit Appoint, Orbit Mart, or both. 45-day full-Pro trial.',
+    title: t('register.metaTitle'),
+    description: t('register.metaDescription'),
   });
 
   const navigate = useNavigate();
@@ -189,7 +191,7 @@ export function RegisterWizard() {
       });
       setOwnerOtpSent(true);
     } catch (err) {
-      setProvisionError(getApiErrorMessage(err, 'Unable to send verification code.'));
+      setProvisionError(getApiErrorMessage(err, t('register.otpFailed')));
     } finally {
       setOwnerOtpSending(false);
     }
@@ -430,7 +432,7 @@ export function RegisterWizard() {
       clearDraft();
       navigate(VERIFY_EMAIL_PATH, { replace: true, state: { fromOnboarding: true } });
     } catch (err) {
-      setProvisionError(getApiErrorMessage(err, 'Provisioning failed.'));
+      setProvisionError(getApiErrorMessage(err, t('register.provisionFailed')));
       setStepIndex(REGISTER_WIZARD_STEPS.findIndex((step) => step.id === 'review'));
     } finally {
       setProvisioning(false);
@@ -445,12 +447,12 @@ export function RegisterWizard() {
       <div className="wizard-form">
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Business profile</h2>
-            <p>Tell customers who you are. You can edit this later in Settings.</p>
+            <h2>{t('register.businessProfile')}</h2>
+            <p>{t('register.businessProfileHint')}</p>
           </div>
           <div className="wizard-form-grid">
             <Input
-              label="Business name"
+              label={t('register.businessName')}
               required
               autoComplete="organization"
               {...register('businessName')}
@@ -458,37 +460,37 @@ export function RegisterWizard() {
               aria-invalid={Boolean(errors.businessName)}
             />
             <Select
-              label="Business category"
+              label={t('register.businessCategory')}
               required
-              options={[{ value: '', label: 'Select category' }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))]}
+              options={[{ value: '', label: t('register.selectCategory') }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))]}
               {...register('businessCategory')}
               error={errors.businessCategory?.message}
             />
             {values.businessCategory === 'Other' ? (
               <Input
-                label="Describe your category"
+                label={t('register.describeCategory')}
                 required
                 {...register('businessCategoryOther')}
                 error={errors.businessCategoryOther?.message}
               />
             ) : null}
             <Select
-              label="Industry"
+              label={t('register.industry')}
               required
-              options={[{ value: '', label: 'Select industry' }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))]}
+              options={[{ value: '', label: t('register.selectIndustry') }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))]}
               {...register('industry')}
               error={errors.industry?.message}
             />
             {values.industry === 'Other' ? (
               <Input
-                label="Describe your industry"
+                label={t('register.describeIndustry')}
                 required
                 {...register('industryOther')}
                 error={errors.industryOther?.message}
               />
             ) : null}
             <Input
-              label="Business email"
+              label={t('register.businessEmail')}
               required
               type="email"
               autoComplete="off"
@@ -496,7 +498,7 @@ export function RegisterWizard() {
               error={errors.businessEmail?.message}
             />
             <Input
-              label="Business phone"
+              label={t('register.businessPhone')}
               required
               type="tel"
               inputMode="numeric"
@@ -504,19 +506,19 @@ export function RegisterWizard() {
               {...register('businessPhone')}
               error={errors.businessPhone?.message}
             />
-            <Input label="Website (optional)" {...register('website')} error={errors.website?.message} />
+            <Input label={t('register.websiteOptional')} {...register('website')} error={errors.website?.message} />
           </div>
         </section>
 
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Location</h2>
-            <p>Search or pin your address so customers and staff share the same place.</p>
+            <h2>{t('register.location')}</h2>
+            <p>{t('register.locationHint')}</p>
           </div>
           <div className="wizard-form-grid">
             <div className="wizard-form-span">
               <AddressLocationPicker
-                label="Business address"
+                label={t('register.businessAddress')}
                 value={values.address}
                 latitude={values.latitude}
                 longitude={values.longitude}
@@ -527,14 +529,14 @@ export function RegisterWizard() {
               {errors.address ? <span className="field-error">{errors.address.message}</span> : null}
             </div>
             <Input
-              label="Flat, floor, building or landmark"
+              label={t('register.line2Label')}
               required
-              placeholder="Shop 12, Ground floor, near City Mall"
+              placeholder={t('register.line2Placeholder')}
               {...register('addressLine2')}
               error={errors.addressLine2?.message}
             />
             <Input
-              label="Country"
+              label={t('customers.country')}
               required
               readOnly={addressLocked}
               style={readOnlyFieldStyle}
@@ -542,7 +544,7 @@ export function RegisterWizard() {
               error={errors.country?.message}
             />
             <Input
-              label="State"
+              label={t('customers.state')}
               required
               readOnly={addressLocked}
               style={readOnlyFieldStyle}
@@ -550,7 +552,7 @@ export function RegisterWizard() {
               error={errors.state?.message}
             />
             <Input
-              label="City"
+              label={t('customers.city')}
               required
               readOnly={addressLocked}
               style={readOnlyFieldStyle}
@@ -558,7 +560,7 @@ export function RegisterWizard() {
               error={errors.city?.message}
             />
             <Input
-              label="Postal code"
+              label={t('customers.postalCode')}
               required
               readOnly={addressLocked}
               style={readOnlyFieldStyle}
@@ -576,26 +578,26 @@ export function RegisterWizard() {
       <div className="wizard-form">
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Owner account</h2>
-            <p>This person will manage the workspace and receive billing emails.</p>
+            <h2>{t('register.ownerAccount')}</h2>
+            <p>{t('register.ownerHint')}</p>
           </div>
           <div className="wizard-form-grid">
             <Input
-              label="First name"
+              label={t('common.firstName')}
               required
               {...register('firstName')}
               autoComplete="given-name"
               error={errors.firstName?.message}
             />
             <Input
-              label="Last name"
+              label={t('common.lastName')}
               required
               {...register('lastName')}
               autoComplete="family-name"
               error={errors.lastName?.message}
             />
             <Input
-              label="Display name"
+              label={t('customers.displayName')}
               required
               {...register('displayName')}
               autoComplete="nickname"
@@ -603,7 +605,7 @@ export function RegisterWizard() {
             />
             <label className="ui-field" htmlFor="email">
               <span className="ui-field-label">
-                Email
+                {t('common.email')}
                 <span className="ui-field-required" aria-hidden="true">
                   {' '}
                   *
@@ -633,7 +635,7 @@ export function RegisterWizard() {
                   readOnly={Boolean(values.googleIdToken)}
                 />
                 {values.googleIdToken ? (
-                  <span className="wizard-input-group-note">Verified</span>
+                  <span className="wizard-input-group-note">{t('register.verified')}</span>
                 ) : (
                   <button
                     type="button"
@@ -641,7 +643,7 @@ export function RegisterWizard() {
                     disabled={!values.email || ownerOtpSending}
                     onClick={() => void sendOwnerOtp()}
                   >
-                    {ownerOtpSending ? '…' : ownerOtpSent ? 'Resend' : 'Send'}
+                    {ownerOtpSending ? '…' : ownerOtpSent ? t('register.resend') : t('register.send')}
                   </button>
                 )}
               </div>
@@ -650,22 +652,22 @@ export function RegisterWizard() {
                   {errors.email.message}
                 </span>
               ) : ownerOtpSent && !values.googleIdToken ? (
-                <span className="wizard-otp-sent">Code sent</span>
+                <span className="wizard-otp-sent">{t('register.codeSent')}</span>
               ) : null}
             </label>
             {!values.googleIdToken ? (
               <Input
-                label="Verification code"
+                label={t('register.verificationCode')}
                 required
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 {...register('ownerOtpCode')}
                 error={errors.ownerOtpCode?.message}
-                placeholder="6-digit code"
+                placeholder={t('register.codePlaceholder')}
               />
             ) : null}
             <Input
-              label="Mobile"
+              label={t('register.mobile')}
               required
               type="tel"
               inputMode="numeric"
@@ -714,21 +716,27 @@ export function RegisterWizard() {
 
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Agreements</h2>
-            <p>Optional partner code can be added if someone referred you.</p>
+            <h2>{t('register.agreements')}</h2>
+            <p>{t('register.agreementsHint')}</p>
           </div>
           <div className="wizard-form-grid">
             <label className="auth-checkbox wizard-form-span">
               <input type="checkbox" {...register('acceptTerms')} />
               <span>
-                I accept the <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>
+                <Trans
+                  i18nKey="register.acceptTerms"
+                  components={{ link: <Link to="/terms" target="_blank" rel="noreferrer" /> }}
+                />
               </span>
             </label>
             {errors.acceptTerms ? <span className="field-error wizard-form-span">{errors.acceptTerms.message}</span> : null}
             <label className="auth-checkbox wizard-form-span">
               <input type="checkbox" {...register('acceptPrivacy')} />
               <span>
-                I accept the <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>
+                <Trans
+                  i18nKey="register.acceptPrivacy"
+                  components={{ link: <Link to="/privacy" target="_blank" rel="noreferrer" /> }}
+                />
               </span>
             </label>
             {errors.acceptPrivacy ? (
@@ -736,7 +744,7 @@ export function RegisterWizard() {
             ) : null}
             <div className="wizard-form-span">
               <Input
-                label="Affiliate code (optional)"
+                label={t('register.affiliateCode')}
                 value={affiliateCode}
                 onChange={(event) => {
                   const next = event.target.value.toUpperCase();
@@ -745,7 +753,7 @@ export function RegisterWizard() {
                 }}
                 autoComplete="off"
               />
-              <p className="wizard-hint">If a partner referred you, enter their code. You can leave this blank.</p>
+              <p className="wizard-hint">{t('register.affiliateHint')}</p>
             </div>
           </div>
         </section>
@@ -767,40 +775,40 @@ export function RegisterWizard() {
       <div className="wizard-form">
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Workspace preferences</h2>
-            <p>Currency, time, and language for invoices and schedules.</p>
+            <h2>{t('register.preferencesTitle')}</h2>
+            <p>{t('register.preferencesHint')}</p>
           </div>
           <div className="wizard-form-grid">
             <Select
-              label="Currency"
+              label={t('common.currency')}
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               {...register('currency')}
               error={errors.currency?.message}
             />
             <Select
-              label="Timezone"
+              label={t('common.timezone')}
               options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
               {...register('timezone')}
               error={errors.timezone?.message}
             />
             <Select
-              label="Language"
+              label={t('common.language')}
               options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
               {...register('language')}
               error={errors.language?.message}
             />
             <Select
-              label="Week starts on"
+              label={t('register.weekStartsOn')}
               options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))}
               {...register('weekStartDay')}
             />
             <Select
-              label="Date format"
+              label={t('register.dateFormat')}
               options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
               {...register('dateFormat')}
             />
             <Select
-              label="Time format"
+              label={t('register.timeFormat')}
               options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))}
               {...register('timeFormat')}
             />
@@ -809,16 +817,16 @@ export function RegisterWizard() {
 
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Business hours</h2>
-            <p>Set hours for each day now, or skip and finish this in Settings later.</p>
+            <h2>{t('register.businessHours')}</h2>
+            <p>{t('register.businessHoursHint')}</p>
           </div>
           <div className="wizard-hours">
             <label className="auth-checkbox">
               <input type="checkbox" {...register('skipHours')} />
-              <span>Skip business hours for now</span>
+              <span>{t('register.skipHours')}</span>
             </label>
             {values.skipHours ? (
-              <p className="wizard-hours-hint">You can add weekly hours after your account is created.</p>
+              <p className="wizard-hours-hint">{t('register.skipHoursNote')}</p>
             ) : (
               <>
                 <BusinessHoursEditor
@@ -835,8 +843,8 @@ export function RegisterWizard() {
 
         <section className="wizard-form-section">
           <div className="wizard-form-section-head">
-            <h2>Products</h2>
-            <p>Select one or both. Packages for that product stay in the same card.</p>
+            <h2>{t('common.products')}</h2>
+            <p>{t('register.productsHint')}</p>
           </div>
           <div className="wizard-choice-block">
             <div className="wizard-product-stack">
@@ -875,7 +883,7 @@ export function RegisterWizard() {
                       </ul>
                     ) : null}
                     <div className="wizard-product-card-packages">
-                      <p className="wizard-package-label">Choose a package</p>
+                      <p className="wizard-package-label">{t('register.choosePackage')}</p>
                       <div className="wizard-package-grid">
                         {plansForProduct(productId).map((plan) => {
                           const price = formatInr(plan.amount_paise);
@@ -899,7 +907,7 @@ export function RegisterWizard() {
                               aria-pressed={isSelected}
                             >
                               <div className="wizard-choice-card-top">
-                                <span className="wizard-recommended">{isRecommendedPlanCode(plan.plan_code) ? 'Recommended' : 'Starter'}</span>
+                                <span className="wizard-recommended">{isRecommendedPlanCode(plan.plan_code) ? t('register.recommended') : t('public.starter')}</span>
                                 <span className={`wizard-choice-check${isSelected ? ' is-on' : ''}`} aria-hidden="true">
                                   <Check size={14} strokeWidth={3} />
                                 </span>
@@ -908,10 +916,10 @@ export function RegisterWizard() {
                               {price ? (
                                 <p className="wizard-package-price">
                                   {price}
-                                  <span>/month</span>
+                                  <span>{t('register.perMonth')}</span>
                                 </p>
                               ) : (
-                                <p className="wizard-package-price">Trial first</p>
+                                <p className="wizard-package-price">{t('register.trialFirst')}</p>
                               )}
                               <p>{plan.description}</p>
                               <div className="wizard-package-meta">
@@ -942,12 +950,12 @@ export function RegisterWizard() {
     return (
       <div className="wizard-form-grid">
         <ColorInput
-          label="Primary color"
+          label={t('register.primaryColor')}
           value={values.primaryColor}
           onChange={(color) => setValue('primaryColor', color, { shouldValidate: true, shouldDirty: true })}
         />
         <ColorInput
-          label="Secondary color"
+          label={t('register.secondaryColor')}
           value={values.secondaryColor}
           onChange={(color) => setValue('secondaryColor', color, { shouldValidate: true, shouldDirty: true })}
         />
@@ -966,8 +974,8 @@ export function RegisterWizard() {
         {provisionError ? <div role="alert" className="auth-error">{provisionError}</div> : null}
         <section>
           <div className="wizard-review-header">
-            <h2>Business</h2>
-            <Button type="button" variant="ghost" onClick={() => jumpToStep('business')}>Edit</Button>
+            <h2>{t('common.business')}</h2>
+            <Button type="button" variant="ghost" onClick={() => jumpToStep('business')}>{t('register.edit')}</Button>
           </div>
           <p>
             {values.businessName} · {values.businessCategory}
@@ -985,39 +993,43 @@ export function RegisterWizard() {
         </section>
         <section>
           <div className="wizard-review-header">
-            <h2>Owner</h2>
-            <Button type="button" variant="ghost" onClick={() => jumpToStep('owner')}>Edit</Button>
+            <h2>{t('register.steps.owner')}</h2>
+            <Button type="button" variant="ghost" onClick={() => jumpToStep('owner')}>{t('register.edit')}</Button>
           </div>
           <p>{values.firstName} {values.lastName} ({values.displayName})</p>
           <p>{values.email} · {values.mobile}</p>
-          {values.googleIdToken ? <p>Continuing with Google</p> : null}
-          {affiliateCode ? <p>Affiliate code: {affiliateCode}</p> : null}
+          {values.googleIdToken ? <p>{t('register.continuingGoogle')}</p> : null}
+          {affiliateCode ? <p>{t('register.affiliateLine', { code: affiliateCode })}</p> : null}
         </section>
         <section>
           <div className="wizard-review-header">
-            <h2>Preferences</h2>
-            <Button type="button" variant="ghost" onClick={() => jumpToStep('preferences')}>Edit</Button>
+            <h2>{t('register.steps.preferences')}</h2>
+            <Button type="button" variant="ghost" onClick={() => jumpToStep('preferences')}>{t('register.edit')}</Button>
           </div>
           <p>{values.currency} · {values.timezone} · {values.language}</p>
           {values.selectedProducts.map((productId) => {
             const plan = plansForProduct(productId).find((item) => item.plan_code === values.planCodes[productId]);
             return (
               <p key={productId}>
-                {getProductName(productId)} · {planTitle(plan ?? values.planCodes[productId] ?? 'Package')}
+                {getProductName(productId)} · {planTitle(plan ?? values.planCodes[productId] ?? t('register.packageFallback'))}
               </p>
             );
           })}
-          <p>Hours: {values.skipHours ? 'Skipped for now' : summarizeWeeklyHours(values.businessHours)}</p>
+          <p>
+            {t('register.hoursLine', {
+              value: values.skipHours ? t('register.hoursSkipped') : summarizeWeeklyHours(values.businessHours),
+            })}
+          </p>
         </section>
         <section>
           <div className="wizard-review-header">
-            <h2>Branding</h2>
-            <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>Edit</Button>
+            <h2>{t('register.steps.branding')}</h2>
+            <Button type="button" variant="ghost" onClick={() => jumpToStep('branding')}>{t('register.edit')}</Button>
           </div>
           <p>{values.primaryColor} / {values.secondaryColor}</p>
           {brandingLogoFile && logoPreviewUrl ? (
             <div className="wizard-review-logo">
-              <img src={logoPreviewUrl} alt={`${brandingLogoFile.name} preview`} />
+              <img src={logoPreviewUrl} alt={t('register.logoPreviewAlt', { name: brandingLogoFile.name })} />
               <span>{brandingLogoFile.name}</span>
             </div>
           ) : null}
@@ -1030,8 +1042,8 @@ export function RegisterWizard() {
     return (
       <div className="wizard-provision" role="status" aria-live="polite">
         <div className="wizard-provision-spinner" aria-hidden="true" />
-        <h2>{provisioning ? 'Creating your account…' : 'Ready to create your account'}</h2>
-        <p>Setting up tenant, business, owner roles, and default settings.</p>
+        <h2>{provisioning ? t('register.creatingAccountTitle') : t('register.readyToCreate')}</h2>
+        <p>{t('register.provisionHint')}</p>
       </div>
     );
   }
@@ -1047,8 +1059,8 @@ export function RegisterWizard() {
 
   return (
     <WizardShell
-      title="Create your workspace"
-      subtitle="A few steps to put your brand in customers' pockets."
+      title={t('register.title')}
+      subtitle={t('register.subtitle')}
       currentStep={currentStep}
     >
       {stepContent[currentStep]()}
@@ -1057,21 +1069,25 @@ export function RegisterWizard() {
           <div className="wizard-actions-start">
             {stepIndex > 0 ? (
               <Button type="button" variant="neutral" onClick={goBack}>
-                Back
+                {t('common.back')}
               </Button>
             ) : (
               <Button type="button" variant="ghost" onClick={handleCancel}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
             {currentStep !== 'review' ? (
               <Button type="button" variant="ghost" onClick={clearCurrentStep}>
-                Clear this step
+                {t('register.clearStep')}
               </Button>
             ) : null}
           </div>
           <Button type="button" variant="primary" onClick={goNext} disabled={provisioning}>
-            {currentStep === 'review' ? (provisioning ? 'Creating account…' : 'Create account') : 'Continue'}
+            {currentStep === 'review'
+              ? provisioning
+                ? t('register.creatingAccountBtn')
+                : t('register.createAccount')
+              : t('register.continue')}
           </Button>
         </div>
       ) : null}

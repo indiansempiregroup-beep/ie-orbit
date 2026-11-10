@@ -1,5 +1,6 @@
 import React, { createElement, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { ShopDeliveryLive, ShopReturnPickupLive } from '@ie-orbit/sdk';
 import { colors, typography } from '../../theme/tokens';
 import {
@@ -17,6 +18,7 @@ type Props = { live: ShopDeliveryLive | ShopReturnPickupLive; primary: string };
 const asLatLng = (point: DeliveryPoint): LatLngLiteral => ({ lat: point.latitude, lng: point.longitude });
 
 export function DeliveryTrackerMap({ live, primary }: Props) {
+  const { t } = useTranslation();
   const { pickup, rider, drop, trail, points, center } = deliveryMapPoints(live);
   const [mapError, setMapError] = useState<string | null>(MAPS_API_KEY ? null : MISSING_KEY_MESSAGE);
   const [mapReady, setMapReady] = useState(false);
@@ -25,11 +27,13 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
   // Rebuild markers whenever the rider moves; the coordinate list is the signature.
   const signature = points.map((point) => `${point.latitude},${point.longitude}`).join('|');
   const isReturnPickup = String(live.delivery_method || '').toLowerCase() === 'instant_pickup';
-  const pickupTitle = isReturnPickup ? 'Your address' : 'Shop';
-  const dropTitle = isReturnPickup ? 'Shop' : 'Your address';
+  const yourAddress = t('customerApp.returns.detail.yourAddress');
+  const shopLabel = t('customerApp.returns.detail.shop');
+  const pickupTitle = isReturnPickup ? yourAddress : shopLabel;
+  const dropTitle = isReturnPickup ? shopLabel : yourAddress;
   const pickupLabel = live.pickup?.address || pickupTitle;
-  const dropLabel = live.drop?.address || (isReturnPickup ? 'Shop' : 'Delivery address');
-  const riderName = live.rider?.name || 'Rider';
+  const dropLabel = live.drop?.address || (isReturnPickup ? shopLabel : t('customerApp.orderDetail.deliveryAddress'));
+  const riderName = live.rider?.name || t('customerApp.returns.detail.rider');
 
   useEffect(() => {
     if (!MAPS_API_KEY || !center) return;
@@ -115,7 +119,7 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
   if (!center) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackText}>Live GPS will appear here when the rider starts sharing location.</Text>
+        <Text style={styles.fallbackText}>{t('customerApp.deliveryTracker.livePending')}</Text>
       </View>
     );
   }

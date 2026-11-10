@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ShopMasterKind, ShopMasterRecord } from '@ie-orbit/sdk';
+import type { TFunction } from 'i18next';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -21,121 +23,110 @@ import { confirmAction } from '../../utils/confirmAction';
 import { getApiErrorMessage } from '../../utils/format';
 import type { RootStackParamList } from '../../navigation/types';
 
-type KindMeta = {
+type KindDef = {
   kind: ShopMasterKind;
-  title: string;
-  subtitle: string;
   icon: keyof typeof Feather.glyphMap;
   tone: IconTone;
+};
+
+type KindMeta = KindDef & {
+  title: string;
+  subtitle: string;
   placeholder: string;
 };
 
-const KINDS: KindMeta[] = [
+const KINDS: KindDef[] = [
   {
     kind: 'category',
-    title: 'Product categories',
-    subtitle: 'Used on products and store filters',
     icon: 'grid',
     tone: 'navy',
-    placeholder: 'e.g. Pet food',
   },
   {
     kind: 'brand',
-    title: 'Brands',
-    subtitle: 'Reusable brand names on products',
     icon: 'tag',
     tone: 'amber',
-    placeholder: 'e.g. Pedigree',
   },
   {
     kind: 'unit',
-    title: 'Units',
-    subtitle: 'Pcs, kg, litre, and more',
     icon: 'box',
     tone: 'cyan',
-    placeholder: 'e.g. Bundle',
   },
   {
     kind: 'expense_category',
-    title: 'Expense categories',
-    subtitle: 'Books expense entries',
     icon: 'trending-down',
     tone: 'coral',
-    placeholder: 'e.g. Packaging',
   },
   {
     kind: 'income_category',
-    title: 'Income categories',
-    subtitle: 'Other income entries',
     icon: 'trending-up',
     tone: 'green',
-    placeholder: 'e.g. Commission',
   },
   {
     kind: 'tax_rate',
-    title: 'Tax rates',
-    subtitle: 'GST % presets for products',
     icon: 'percent',
     tone: 'violet',
-    placeholder: 'e.g. GST 18%',
   },
   {
     kind: 'pet_species',
-    title: 'Pet species',
-    subtitle: 'Dog, Cat, and custom species',
     icon: 'heart',
     tone: 'rose',
-    placeholder: 'e.g. Hamster',
   },
 ];
 
 const RELATED = [
-  { label: 'Godowns', route: 'ShopGodowns' as const, icon: 'home' as const, tone: 'navy' as IconTone },
-  { label: 'Cash & bank accounts', route: 'ShopBooksCash' as const, icon: 'credit-card' as const, tone: 'green' as IconTone },
-  { label: 'Parties / suppliers', route: 'ShopBooksParties' as const, icon: 'users' as const, tone: 'cyan' as IconTone },
+  { labelKey: 'opsApp.shop.masterFiles.relatedGodowns', route: 'ShopGodowns' as const, icon: 'home' as const, tone: 'navy' as IconTone },
+  { labelKey: 'opsApp.shop.masterFiles.relatedCash', route: 'ShopBooksCash' as const, icon: 'credit-card' as const, tone: 'green' as IconTone },
+  { labelKey: 'opsApp.shop.masterFiles.relatedParties', route: 'ShopBooksParties' as const, icon: 'users' as const, tone: 'cyan' as IconTone },
 ];
 
 type KindProps = NativeStackScreenProps<RootStackParamList, 'ShopMasterKind'>;
 type FilterKey = 'all' | 'active' | 'inactive';
 
-function kindMeta(kind: string): KindMeta {
-  return KINDS.find((item) => item.kind === kind) || {
+function kindMeta(kind: string, t: TFunction): KindMeta {
+  const known = KINDS.find((item) => item.kind === kind);
+  const def: KindDef = known || {
     kind: kind as ShopMasterKind,
-    title: 'Master',
-    subtitle: 'Reusable shop values',
     icon: 'database',
     tone: 'navy',
-    placeholder: 'New value',
+  };
+  return {
+    ...def,
+    title: known ? t(`shop.masterFiles.kinds.${kind}.title`) : t('opsApp.shop.masterFiles.fallbackTitle'),
+    subtitle: known ? t(`shop.masterFiles.kinds.${kind}.blurb`) : t('shop.masterFiles.fallbackBlurb'),
+    placeholder: known
+      ? t(`shop.masterFiles.kinds.${kind}.placeholder`)
+      : t('shop.masterFiles.fallbackPlaceholder'),
   };
 }
 
 export function ShopMasterFilesScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   return (
     <FormScreen>
-      <FormHero subtitle="Reusable lists for products and books — add once, pick everywhere." />
+      <FormHero subtitle={t('shop.masterFiles.subtitle')} />
 
-      <Text style={styles.sectionLabel}>Lookups</Text>
+      <Text style={styles.sectionLabel}>{t('opsApp.shop.masterFiles.lookups')}</Text>
       <GroupedList>
         {KINDS.map((item) => (
           <Pressable
             key={item.kind}
-            onPress={() => navigation.navigate('ShopMasterKind', { kind: item.kind, title: item.title })}
+            onPress={() => navigation.navigate('ShopMasterKind', { kind: item.kind, title: t(`shop.masterFiles.kinds.${item.kind}.title`) })}
             style={({ pressed }) => [styles.hubRow, pressed && styles.pressed]}
             accessibilityRole="button"
           >
             <IconBadge icon={item.icon} tone={item.tone} />
             <View style={styles.copy}>
-              <Text style={styles.subject}>{item.title}</Text>
-              <Text style={styles.detail}>{item.subtitle}</Text>
+              <Text style={styles.subject}>{t(`shop.masterFiles.kinds.${item.kind}.title`)}</Text>
+              <Text style={styles.detail}>{t(`shop.masterFiles.kinds.${item.kind}.blurb`)}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
           </Pressable>
         ))}
       </GroupedList>
 
-      <Text style={styles.sectionLabel}>Also in your shop</Text>
+      <Text style={styles.sectionLabel}>{t('shop.masterFiles.alsoInShop')}</Text>
       <GroupedList>
         {RELATED.map((item) => (
           <Pressable
@@ -145,7 +136,7 @@ export function ShopMasterFilesScreen() {
             accessibilityRole="button"
           >
             <IconBadge icon={item.icon} tone={item.tone} size="sm" />
-            <Text style={[styles.subject, styles.copy]}>{item.label}</Text>
+            <Text style={[styles.subject, styles.copy]}>{t(item.labelKey)}</Text>
             <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
           </Pressable>
         ))}
@@ -155,13 +146,14 @@ export function ShopMasterFilesScreen() {
 }
 
 export function ShopMasterKindScreen() {
+  const { t } = useTranslation();
   const route = useRoute<KindProps['route']>();
   const navigation = useNavigation();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
   const kind = route.params.kind;
-  const meta = kindMeta(kind);
+  const meta = kindMeta(kind, t);
   const [items, setItems] = useState<ShopMasterRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState('');
@@ -185,11 +177,11 @@ export function ShopMasterKindScreen() {
       });
       setItems(response.data.items ?? []);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to load master list'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.masterFiles.loadFailed')), 'error');
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, kind, toast]);
+  }, [businessId, client, kind, toast, t]);
 
   useEffect(() => {
     void load();
@@ -231,7 +223,7 @@ export function ShopMasterKindScreen() {
       setValue('');
       setFilter('all');
       setSearch('');
-      toast.push('Entry added.', 'success');
+      toast.push(t('shop.masterFiles.toastAdded'), 'success');
       setItems((current) => {
         if (current.some((row) => row.id === created.data.id)) {
           return current.map((row) => (row.id === created.data.id ? created.data : row));
@@ -243,7 +235,7 @@ export function ShopMasterKindScreen() {
       });
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.masterFiles.errSave')), 'error');
     } finally {
       setBusy(false);
     }
@@ -255,9 +247,9 @@ export function ShopMasterKindScreen() {
     try {
       const updated = await client.shop.patchMasterRecord(kind, row.id, { is_active: !row.is_active });
       setItems((current) => current.map((item) => (item.id === row.id ? updated.data : item)));
-      toast.push(row.is_active ? 'Hidden from pickers.' : 'Shown in pickers.', 'success');
+      toast.push(row.is_active ? t('opsApp.shop.masterFiles.toastHidden') : t('opsApp.shop.masterFiles.toastShown'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.masterFiles.errSave')), 'error');
     } finally {
       setRowBusyId(null);
     }
@@ -266,9 +258,9 @@ export function ShopMasterKindScreen() {
   async function removeRow(row: ShopMasterRecord) {
     if (!client || rowBusyId) return;
     const ok = await confirmAction({
-      title: `Delete “${row.label}”?`,
-      message: 'This removes it from master files. You can add it again later if needed.',
-      confirmLabel: 'Delete',
+      title: t('opsApp.shop.masterFiles.deleteTitle', { label: row.label }),
+      message: t('opsApp.shop.masterFiles.deleteMessage'),
+      confirmLabel: t('shop.masterFiles.delete'),
       destructive: true,
     });
     if (!ok) return;
@@ -276,18 +268,18 @@ export function ShopMasterKindScreen() {
     try {
       await client.shop.deleteMasterRecord(kind, row.id);
       setItems((current) => current.filter((item) => item.id !== row.id));
-      toast.push('Entry removed.', 'success');
+      toast.push(t('shop.masterFiles.toastRemoved'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't save this entry. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.masterFiles.errSave')), 'error');
     } finally {
       setRowBusyId(null);
     }
   }
 
   const filters: Array<{ key: FilterKey; label: string; count: number }> = [
-    { key: 'all', label: 'All', count: counts.total },
-    { key: 'active', label: 'Active', count: counts.active },
-    { key: 'inactive', label: 'Hidden', count: counts.inactive },
+    { key: 'all', label: t('shop.masterFiles.filterAll'), count: counts.total },
+    { key: 'active', label: t('shop.products.statuses.active'), count: counts.active },
+    { key: 'inactive', label: t('shop.masterFiles.filterHidden'), count: counts.inactive },
   ];
 
   return (
@@ -297,7 +289,7 @@ export function ShopMasterKindScreen() {
       footer={
         <Button
           icon="plus"
-          label={busy ? 'Adding…' : `Add ${kind === 'tax_rate' ? 'rate' : 'value'}`}
+          label={busy ? t('shop.masterFiles.adding') : kind === 'tax_rate' ? t('opsApp.shop.masterFiles.addRate') : t('opsApp.shop.masterFiles.addValue')}
           loading={busy}
           fullWidth
           disabled={!label.trim()}
@@ -307,9 +299,9 @@ export function ShopMasterKindScreen() {
     >
       <FormHero subtitle={meta.subtitle} />
 
-      <FormSection title="Add new" subtitle="Saved values appear in product and books pickers.">
+      <FormSection title={t('shop.masterFiles.addNew')} subtitle={t('shop.masterFiles.addNewHint')}>
         <Input
-          label={kind === 'tax_rate' ? 'Label' : 'Name'}
+          label={kind === 'tax_rate' ? t('shop.masterFiles.label') : t('shop.masterFiles.name')}
           required
           value={label}
           onChangeText={setLabel}
@@ -321,7 +313,7 @@ export function ShopMasterKindScreen() {
         />
         {kind === 'tax_rate' ? (
           <Input
-            label="Rate %"
+            label={t('shop.masterFiles.ratePercent')}
             optional
             value={value}
             onChangeText={setValue}
@@ -333,18 +325,18 @@ export function ShopMasterKindScreen() {
 
       <View style={styles.sectionHead}>
         <Text style={styles.sectionLabel}>
-          Values{counts.total ? ` · ${counts.total}` : ''}
+          {t('shop.masterFiles.values')}{counts.total ? ` · ${counts.total}` : ''}
         </Text>
       </View>
 
       {items.length > 0 ? (
         <>
           <Input
-            label="Search"
+            label={t('opsApp.shop.masterFiles.search')}
             optional
             value={search}
             onChangeText={setSearch}
-            placeholder="Filter by name"
+            placeholder={t('shop.masterFiles.filterByName')}
             leftIcon="search"
           />
           <View style={styles.chips}>
@@ -377,14 +369,14 @@ export function ShopMasterKindScreen() {
 
       {!loading && !items.length ? (
         <EmptyState
-          title="Nothing here yet"
-          message={`Add your first ${kind === 'tax_rate' ? 'tax rate' : 'value'} above.`}
+          title={t('opsApp.shop.masterFiles.nothingTitle')}
+          message={kind === 'tax_rate' ? t('opsApp.shop.masterFiles.addFirstRate') : t('opsApp.shop.masterFiles.addFirstValue')}
           icon={meta.icon}
         />
       ) : null}
 
       {!loading && items.length > 0 && !visible.length ? (
-        <EmptyState title="No matches" message="Try another search or filter." icon="search" />
+        <EmptyState title={t('opsApp.shop.masterFiles.noMatches')} message={t('opsApp.shop.masterFiles.tryAnother')} icon="search" />
       ) : null}
 
       {visible.length ? (
@@ -401,7 +393,11 @@ export function ShopMasterKindScreen() {
                 <View style={styles.copy}>
                   <Text style={styles.subject}>{item.label}</Text>
                   <Text style={styles.detail}>
-                    {kind === 'tax_rate' && item.value ? `${item.value}%` : item.is_active ? 'Active' : 'Hidden from pickers'}
+                    {kind === 'tax_rate' && item.value
+                      ? `${item.value}%`
+                      : item.is_active
+                        ? t('shop.products.statuses.active')
+                        : t('shop.masterFiles.hiddenFromPickers')}
                   </Text>
                 </View>
                 {busyRow ? (
@@ -413,7 +409,7 @@ export function ShopMasterKindScreen() {
                       hitSlop={8}
                       style={styles.iconBtn}
                       accessibilityRole="button"
-                      accessibilityLabel={item.is_active ? 'Hide from pickers' : 'Show in pickers'}
+                      accessibilityLabel={item.is_active ? t('shop.masterFiles.hideFromPickers') : t('shop.masterFiles.showInPickers')}
                     >
                       <Feather
                         name={item.is_active ? 'eye-off' : 'eye'}
@@ -426,7 +422,7 @@ export function ShopMasterKindScreen() {
                       hitSlop={8}
                       style={styles.iconBtn}
                       accessibilityRole="button"
-                      accessibilityLabel={`Delete ${item.label}`}
+                      accessibilityLabel={t('opsApp.shop.masterFiles.deleteNamed', { label: item.label })}
                     >
                       <Feather name="trash-2" size={16} color={colors.destructive} />
                     </Pressable>

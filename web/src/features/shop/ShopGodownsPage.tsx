@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { ArrowLeftRight, Pencil, Plus, Warehouse } from 'lucide-react';
 import type { ShopGodown } from '@ie-orbit/sdk';
@@ -77,6 +78,7 @@ function stockedCount(godown: ShopGodown) {
 }
 
 export function ShopGodownsPage() {
+  const { t } = useTranslation();
   const godowns = useShopGodowns();
   const products = useShopProducts('', 'active');
   const transfers = useShopStockTransfers();
@@ -150,7 +152,7 @@ export function ShopGodownsPage() {
     event.preventDefault();
     if (!form.name.trim()) return;
     if (!form.address.trim() || form.latitude == null || form.longitude == null) {
-      setMessage('Search and confirm the godown address on the map.');
+      setMessage(t('shop.godowns.errAddress'));
       return;
     }
     setMessage(null);
@@ -172,16 +174,16 @@ export function ShopGodownsPage() {
       if (editingId) {
         await patchGodown.mutateAsync({ godownId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Godown details saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.godowns.toastSaved'), 'success'), 0);
       } else {
         await createGodown.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Godown added.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.godowns.toastAdded'), 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't save this godown. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.godowns.errSave');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -190,15 +192,15 @@ export function ShopGodownsPage() {
   async function handleTransfer(event: React.FormEvent) {
     event.preventDefault();
     if (!fromGodownId || !toGodownId) {
-      setTransferMessage('Select from and to godowns.');
+      setTransferMessage(t('shop.godowns.errSelectFromTo'));
       return;
     }
     if (fromGodownId === toGodownId) {
-      setTransferMessage('From and to godowns must differ.');
+      setTransferMessage(t('shop.godowns.errSameGodown'));
       return;
     }
     if (!productId || !(Number(qty) > 0)) {
-      setTransferMessage('Select a product and quantity.');
+      setTransferMessage(t('shop.godowns.errSelectProductQty'));
       return;
     }
     setTransferMessage(null);
@@ -211,11 +213,11 @@ export function ShopGodownsPage() {
       });
       transferDialog.hide();
       window.setTimeout(
-        () => snackbar.push(`Transfer ${result.transfer_number} created.`, 'success'),
+        () => snackbar.push(t('shop.godowns.toastTransferCreated', { number: result.transfer_number }), 'success'),
         0,
       );
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't create this transfer. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.godowns.errTransfer');
       setTransferMessage(text);
       snackbar.push(text, 'error');
     }
@@ -227,7 +229,7 @@ export function ShopGodownsPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search location or product…"
+          searchPlaceholder={t('shop.godowns.searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setKindFilter('');
@@ -235,14 +237,14 @@ export function ShopGodownsPage() {
           filters={[
             {
               id: 'kind',
-              label: 'Type',
+              label: t('shop.godowns.type'),
               value: kindFilter,
               onChange: setKindFilter,
               options: [
-                { value: '', label: 'All locations' },
-                { value: 'standalone', label: 'Standalone' },
-                { value: 'office', label: 'Office' },
-                { value: 'default', label: 'Default · POS' },
+                { value: '', label: t('shop.godowns.allLocations') },
+                { value: 'standalone', label: t('shop.godowns.standalone') },
+                { value: 'office', label: t('shop.godowns.office') },
+                { value: 'default', label: t('shop.godowns.defaultPos') },
               ],
             },
           ]}
@@ -251,28 +253,28 @@ export function ShopGodownsPage() {
               <Button type="button" variant="neutral" onClick={() => openTransferDialog()}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <ArrowLeftRight size={16} aria-hidden="true" />
-                  Transfer
+                  {t('shop.godowns.transfer')}
                 </span>
               </Button>
               <Button type="button" variant="primary" onClick={openAddDialog}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Add godown
+                  {t('shop.godowns.addGodown')}
                 </span>
               </Button>
             </span>
           }
         />
 
-        {godowns.isLoading ? <p>Loading…</p> : null}
+        {godowns.isLoading ? <p>{t('common.loading')}</p> : null}
         {godowns.error ? <p role="alert">{(godowns.error as Error).message}</p> : null}
 
         {(transfers.data ?? []).length ? (
           <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
-            <strong>Recent transfers</strong>
+            <strong>{t('shop.godowns.recentTransfers')}</strong>
             {(transfers.data ?? []).slice(0, 6).map((transfer) => (
               <div key={transfer.id} style={{ fontSize: 13, color: '#4b5563' }}>
-                {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
+                {transfer.from_godown_name || t('shop.godowns.from')} → {transfer.to_godown_name || t('shop.godowns.to')}
                 {transfer.transfer_date ? ` · ${transfer.transfer_date}` : ''}
                 {` · ${transfer.transfer_number}`}
               </div>
@@ -316,53 +318,53 @@ export function ShopGodownsPage() {
                   <div style={{ minWidth: 0 }}>
                     <strong>
                       {godown.name}
-                      {godown.is_default ? ' · Default · POS' : ''}
+                      {godown.is_default ? ` · ${t('shop.godowns.defaultPosSuffix')}` : ''}
                     </strong>
                     <div style={{ opacity: 0.8 }}>
                       {godown.branch
-                        ? `Office · ${godown.branch_name || 'linked'}`
-                        : 'Standalone warehouse'}
+                        ? t('shop.godowns.officeLinked', { name: godown.branch_name || t('shop.godowns.linked') })
+                        : t('shop.godowns.standaloneWarehouse')}
                       {godown.code ? ` · ${godown.code}` : ''}
-                      {` · ${skuCount} SKU${skuCount === 1 ? '' : 's'}`}
+                      {` · ${skuCount === 1 ? t('shop.godowns.skuCountOne') : t('shop.godowns.skuCount', { n: skuCount })}`}
                     </div>
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       {[godown.address_line1, godown.city, godown.state].filter(Boolean).join(', ') ||
-                        'No mapped address yet'}
+                        t('shop.godowns.noMappedAddress')}
                     </div>
                     {preview.length ? (
                       <div style={{ fontSize: 12, marginTop: 6, color: '#4b5563' }}>
                         {preview
-                          .map((row) => `${row.product_name || 'Item'} × ${formatQty(row.quantity)}`)
+                          .map((row) => `${row.product_name || t('shop.godowns.item')} × ${formatQty(row.quantity)}`)
                           .join(' · ')}
-                        {lines.length > 3 ? ` · +${lines.length - 3} more` : ''}
+                        {lines.length > 3 ? ` · ${t('shop.godowns.moreCount', { n: lines.length - 3 })}` : ''}
                       </div>
                     ) : (
                       <div style={{ fontSize: 12, marginTop: 6, color: '#9ca3af' }}>
-                        No stock at this location yet.
+                        {t('shop.godowns.noStock')}
                       </div>
                     )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <Button type="button" variant="neutral" onClick={() => openTransferDialog(godown.id)}>
-                    Send
+                    {t('shop.godowns.send')}
                   </Button>
                   <Button
                     type="button"
                     variant="neutral"
                     onClick={() => openTransferDialog(undefined, godown.id)}
                   >
-                    Receive
+                    {t('shop.godowns.receive')}
                   </Button>
                   {godown.branch ? (
                     <Link to="/settings/business" style={{ fontSize: 13, alignSelf: 'center' }}>
-                      Edit office
+                      {t('shop.godowns.editOffice')}
                     </Link>
                   ) : (
                     <Button type="button" variant="neutral" onClick={() => openEditDialog(godown)}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Pencil size={14} aria-hidden="true" />
-                        Edit
+                        {t('shop.godowns.edit')}
                       </span>
                     </Button>
                   )}
@@ -374,14 +376,14 @@ export function ShopGodownsPage() {
             <div style={{ display: 'grid', gap: 8 }}>
               <p>
                 {rows.length
-                  ? 'No locations match these filters.'
-                  : 'No godowns yet. Add a warehouse. POS and online orders sell from the default godown.'}
+                  ? t('shop.godowns.emptyFiltered')
+                  : t('shop.godowns.emptyNone')}
               </p>
               {!rows.length ? (
                 <Button type="button" variant="primary" onClick={openAddDialog}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
-                    Add your first godown
+                    {t('shop.godowns.addFirst')}
                   </span>
                 </Button>
               ) : null}
@@ -393,29 +395,28 @@ export function ShopGodownsPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title={editingId ? 'Edit godown' : 'Add godown'}
+        title={editingId ? t('shop.godowns.editGodown') : t('shop.godowns.addGodown')}
         labelledBy="godown-dialog"
         busy={saving}
       >
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Standalone godowns need a mapped address so online orders can pick stock from here.
-            POS and online orders sell from the default godown.
+            {t('shop.godowns.dialogHint')}
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Name</span>
+              <span style={fieldLabel}>{t('shop.godowns.name')}</span>
               <input
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 required
-                placeholder="Main warehouse"
+                placeholder={t('shop.godowns.namePlaceholder')}
                 style={fieldInput}
               />
             </label>
             <div style={{ gridColumn: '1 / -1' }}>
               <AddressLocationPicker
-                label="Godown address"
+                label={t('shop.godowns.godownAddress')}
                 value={form.address}
                 latitude={form.latitude}
                 longitude={form.longitude}
@@ -441,16 +442,16 @@ export function ShopGodownsPage() {
               />
             </div>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Flat, floor, building or landmark</span>
+              <span style={fieldLabel}>{t('shop.godowns.line2')}</span>
               <input
                 value={form.addressLine2}
                 onChange={(event) => setForm({ ...form, addressLine2: event.target.value })}
-                placeholder="Bay 3, near loading dock"
+                placeholder={t('shop.godowns.line2Placeholder')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>City</span>
+              <span style={fieldLabel}>{t('shop.godowns.city')}</span>
               <input
                 value={form.city}
                 readOnly={form.latitude != null && form.longitude != null}
@@ -462,7 +463,7 @@ export function ShopGodownsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>State</span>
+              <span style={fieldLabel}>{t('shop.godowns.state')}</span>
               <input
                 value={form.state}
                 readOnly={form.latitude != null && form.longitude != null}
@@ -474,7 +475,7 @@ export function ShopGodownsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Country</span>
+              <span style={fieldLabel}>{t('shop.godowns.country')}</span>
               <input
                 value={form.country}
                 readOnly={form.latitude != null && form.longitude != null}
@@ -486,7 +487,7 @@ export function ShopGodownsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Postal code</span>
+              <span style={fieldLabel}>{t('shop.godowns.postalCode')}</span>
               <input
                 value={form.postalCode}
                 readOnly={form.latitude != null && form.longitude != null}
@@ -498,20 +499,20 @@ export function ShopGodownsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Pickup phone</span>
+              <span style={fieldLabel}>{t('shop.godowns.pickupPhone')}</span>
               <input
                 value={form.phone}
                 onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                placeholder="Optional"
+                placeholder={t('shop.godowns.optional')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Code</span>
+              <span style={fieldLabel}>{t('shop.godowns.code')}</span>
               <input
                 value={form.code}
                 onChange={(event) => setForm({ ...form, code: event.target.value })}
-                placeholder="Optional"
+                placeholder={t('shop.godowns.optional')}
                 style={fieldInput}
               />
             </label>
@@ -522,20 +523,20 @@ export function ShopGodownsPage() {
                 disabled={lockedDefault}
                 onChange={(event) => setForm({ ...form, isDefault: event.target.checked })}
               />
-              Default godown
+              {t('shop.godowns.defaultGodown')}
             </label>
           </div>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
             {lockedDefault
-              ? 'POS and online orders sell from this godown. Mark another godown as default to move them.'
-              : 'POS and online orders deduct stock from the default godown.'}
+              ? t('shop.godowns.lockedDefaultHint')
+              : t('shop.godowns.defaultHint')}
           </p>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create godown'}
+              {saving ? t('common.saving') : editingId ? t('common.saveChanges') : t('shop.godowns.createGodown')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
@@ -545,19 +546,19 @@ export function ShopGodownsPage() {
       <Dialog
         open={transferDialog.open}
         onClose={transferDialog.hide}
-        title="Stock transfer"
+        title={t('shop.godowns.stockTransfer')}
         labelledBy="transfer-dialog"
         busy={transferring}
       >
         <form onSubmit={handleTransfer} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={fieldLabel}>From godown</span>
+            <span style={fieldLabel}>{t('shop.godowns.fromGodown')}</span>
             <select
               value={fromGodownId}
               onChange={(event) => setFromGodownId(event.target.value)}
               style={fieldInput}
             >
-              <option value="">Select godown</option>
+              <option value="">{t('shop.godowns.selectGodown')}</option>
               {rows.map((godown) => (
                 <option key={godown.id} value={godown.id}>
                   {godown.code ? `${godown.name} (${godown.code})` : godown.name}
@@ -566,13 +567,13 @@ export function ShopGodownsPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={fieldLabel}>To godown</span>
+            <span style={fieldLabel}>{t('shop.godowns.toGodown')}</span>
             <select
               value={toGodownId}
               onChange={(event) => setToGodownId(event.target.value)}
               style={fieldInput}
             >
-              <option value="">Select godown</option>
+              <option value="">{t('shop.godowns.selectGodown')}</option>
               {rows.map((godown) => (
                 <option key={godown.id} value={godown.id}>
                   {godown.code ? `${godown.name} (${godown.code})` : godown.name}
@@ -581,13 +582,13 @@ export function ShopGodownsPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={fieldLabel}>Product</span>
+            <span style={fieldLabel}>{t('shop.godowns.product')}</span>
             <select
               value={productId}
               onChange={(event) => setProductId(event.target.value)}
               style={fieldInput}
             >
-              <option value="">Choose product</option>
+              <option value="">{t('shop.godowns.chooseProduct')}</option>
               {(products.data ?? []).map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
@@ -596,7 +597,7 @@ export function ShopGodownsPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={fieldLabel}>Quantity</span>
+            <span style={fieldLabel}>{t('shop.godowns.quantity')}</span>
             <input
               value={qty}
               onChange={(event) => setQty(event.target.value.replace(/[^0-9.]/g, ''))}
@@ -605,10 +606,10 @@ export function ShopGodownsPage() {
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={transferring}>
-              {transferring ? 'Saving…' : 'Create stock transfer'}
+              {transferring ? t('common.saving') : t('shop.godowns.createTransfer')}
             </Button>
             <Button type="button" variant="neutral" onClick={transferDialog.hide} disabled={transferring}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {transferMessage ? <p role="status">{transferMessage}</p> : null}

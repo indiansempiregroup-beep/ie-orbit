@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -36,6 +37,7 @@ import { GroupedList } from '../../components/ui/GroupedList';
 type PaymentType = 'payment_in' | 'payment_out';
 
 export function ShopBooksCashScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -70,7 +72,7 @@ export function ShopBooksCashScreen() {
         <Pressable
           onPress={() => setShowAccountForm((current) => !current)}
           accessibilityRole="button"
-          accessibilityLabel={showAccountForm ? 'Close' : 'Add account'}
+          accessibilityLabel={showAccountForm ? t('common.close') : t('shop.cashBank.addAccount')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -78,7 +80,7 @@ export function ShopBooksCashScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showAccountForm]);
+  }, [navigation, showAccountForm, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -100,11 +102,11 @@ export function ShopBooksCashScreen() {
       setCustomers(customersRes.data ?? []);
       setSuppliers(suppliersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load cash & bank');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.cash.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -115,22 +117,25 @@ export function ShopBooksCashScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
   const accountOptions = useMemo(
-    () => accounts.map((account) => ({ value: account.id, label: `${account.name} (${account.account_type})` })),
-    [accounts],
+    () => accounts.map((account) => ({
+        value: account.id,
+        label: `${account.name} (${t(`shop.cashBank.${account.account_type}`, { defaultValue: account.account_type })})`,
+      })),
+    [accounts, t],
   );
 
   const partyOptions = useMemo(() => {
     if (paymentType === 'payment_in') {
       return [
-        { value: '', label: 'No customer' },
+        { value: '', label: t('opsApp.shop.cash.noCustomer') },
         ...customers.map((customer) => ({ value: customer.id, label: customerLabel(customer) })),
       ];
     }
     return [
-      { value: '', label: 'No supplier' },
+      { value: '', label: t('opsApp.shop.cash.noSupplier') },
       ...suppliers.map((supplier) => ({ value: supplier.id, label: supplierLabel(supplier) })),
     ];
-  }, [paymentType, customers, suppliers]);
+  }, [paymentType, customers, suppliers, t]);
 
   const cashTotal = useMemo(
     () => accounts.filter((a) => a.account_type === 'cash').reduce((sum, a) => sum + voucherAmount(a.current_balance), 0),
@@ -174,7 +179,7 @@ export function ShopBooksCashScreen() {
 
   async function saveAccount() {
     if (!client || !businessId || !accountName.trim()) {
-      toast.push('Enter an account name', 'error');
+      toast.push(t('opsApp.shop.cash.enterAccountName'), 'error');
       return;
     }
     setBusy(true);
@@ -185,14 +190,14 @@ export function ShopBooksCashScreen() {
         account_type: accountType,
         opening_balance: accountOpening || '0',
       });
-      toast.push('Account added', 'success');
+      toast.push(t('shop.cashBank.toastAccountAdded'), 'success');
       setShowAccountForm(false);
       setAccountName('');
       setAccountType('cash');
       setAccountOpening('0');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't add this account. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('shop.cashBank.errAddAccount'), 'error');
     } finally {
       setBusy(false);
     }
@@ -202,7 +207,7 @@ export function ShopBooksCashScreen() {
     if (!client || !businessId) return;
     const numeric = Number(paymentAmount);
     if (!paymentAccountId || !numeric || numeric <= 0) {
-      toast.push('Choose an account and enter an amount', 'error');
+      toast.push(t('opsApp.shop.cash.chooseAccountAmount'), 'error');
       return;
     }
     setBusy(true);
@@ -217,14 +222,14 @@ export function ShopBooksCashScreen() {
         voucher_date: paymentDate || undefined,
         notes: paymentNotes.trim() || undefined,
       });
-      toast.push(`${paymentType === 'payment_in' ? 'Payment in' : 'Payment out'} ${response.data.voucher_number} recorded`, 'success');
+      toast.push(t('shop.cashBank.toastPaymentRecorded', { number: response.data.voucher_number }), 'success');
       setPaymentPartyId('');
       setPaymentAmount('');
       setPaymentNotes('');
       setPaymentDate(todayIso());
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't record that payment. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('shop.cashBank.errPayment'), 'error');
     } finally {
       setBusy(false);
     }
@@ -232,18 +237,18 @@ export function ShopBooksCashScreen() {
 
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
-    Alert.alert('Void payment', `Void ${voucher.voucher_number}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('opsApp.shop.cash.voidPayment'), t('shop.vouchers.confirmVoid', { number: voucher.voucher_number }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Void',
+        text: t('opsApp.shop.sale.void'),
         style: 'destructive',
         onPress: async () => {
           try {
             await client.shop.voidVoucher(voucher.id);
-            toast.push('Payment voided', 'success');
+            toast.push(t('opsApp.shop.cash.paymentVoided'), 'success');
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : "Couldn't void this payment. Try again.", 'error');
+            toast.push(err instanceof Error ? err.message : t('opsApp.shop.cash.voidFailed'), 'error');
           }
         },
       },
@@ -261,44 +266,44 @@ export function ShopBooksCashScreen() {
 
         <VoucherSummaryCards
           metrics={[
-            { label: 'Cash', value: formatMoney(cashTotal) },
-            { label: 'Bank', value: formatMoney(bankTotal) },
+            { label: t('shop.cashBank.cash'), value: formatMoney(cashTotal) },
+            { label: t('shop.cashBank.bank'), value: formatMoney(bankTotal) },
             {
-              label: 'In',
+              label: t('opsApp.shop.cash.in'),
               value: formatMoney(paymentInTotal),
               tone: 'paid',
-              hint: `Out ${formatMoney(paymentOutTotal)}`,
+              hint: t('opsApp.shop.cash.outHint', { amount: formatMoney(paymentOutTotal) }),
             },
           ]}
         />
 
         {showAccountForm ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Add account</Text>
+            <Text style={styles.cardTitle}>{t('shop.cashBank.addAccount')}</Text>
             <Input
-              label="Account name"
+              label={t('shop.cashBank.accountName')}
               required
               value={accountName}
               onChangeText={setAccountName}
-              placeholder="Account name"
+              placeholder={t('shop.cashBank.accountName')}
             />
             <View style={styles.chipRow}>
-              <Chip label="Cash" active={accountType === 'cash'} onPress={() => setAccountType('cash')} />
-              <Chip label="Bank" active={accountType === 'bank'} onPress={() => setAccountType('bank')} />
+              <Chip label={t('shop.cashBank.cash')} active={accountType === 'cash'} onPress={() => setAccountType('cash')} />
+              <Chip label={t('shop.cashBank.bank')} active={accountType === 'bank'} onPress={() => setAccountType('bank')} />
             </View>
             <Input
-              label="Opening balance"
+              label={t('shop.cashBank.openingBalance')}
               optional
               value={accountOpening}
               onChangeText={(value) => setAccountOpening(value.replace(/[^0-9.]/g, ''))}
-              placeholder="Opening balance"
+              placeholder={t('shop.cashBank.openingBalance')}
               keyboardType="decimal-pad"
             />
-            <Button label={busy ? 'Saving…' : 'Save account'} loading={busy} fullWidth onPress={() => void saveAccount()} />
+            <Button label={busy ? t('common.saving') : t('shop.cashBank.saveAccount')} loading={busy} fullWidth onPress={() => void saveAccount()} />
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Accounts</Text>
+        <Text style={styles.sectionTitle}>{t('shop.cashBank.accounts')}</Text>
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <GroupedList>
           {accounts.map((account) => (
@@ -306,8 +311,8 @@ export function ShopBooksCashScreen() {
               key={account.id}
               title={account.name}
               amount={formatMoney(account.current_balance)}
-              meta={account.account_type}
-              badge={account.is_active === false ? 'Inactive' : undefined}
+              meta={t(`shop.cashBank.${account.account_type}`, { defaultValue: account.account_type })}
+              badge={account.is_active === false ? t('shop.cashBank.inactive') : undefined}
               icon={account.account_type === 'bank' ? 'credit-card' : 'dollar-sign'}
               iconTone={account.account_type === 'bank' ? 'navy' : 'green'}
             />
@@ -316,18 +321,18 @@ export function ShopBooksCashScreen() {
         {!loading && !accounts.length ? (
           <EmptyState
             icon="credit-card"
-            title="No accounts yet"
-            message="Add a cash or bank account to record payments."
-            actionLabel="Add account"
+            title={t('opsApp.shop.cash.noAccountsTitle')}
+            message={t('opsApp.shop.cash.emptyHint')}
+            actionLabel={t('shop.cashBank.addAccount')}
             onAction={() => setShowAccountForm(true)}
           />
         ) : null}
 
-        <Text style={styles.sectionTitle}>Record payment</Text>
+        <Text style={styles.sectionTitle}>{t('opsApp.shop.cash.recordPayment')}</Text>
         <View style={styles.card}>
           <View style={styles.chipRow}>
             <Chip
-              label="Payment in"
+              label={t('shop.cashBank.paymentIn')}
               active={paymentType === 'payment_in'}
               onPress={() => {
                 setPaymentType('payment_in');
@@ -335,7 +340,7 @@ export function ShopBooksCashScreen() {
               }}
             />
             <Chip
-              label="Payment out"
+              label={t('shop.cashBank.paymentOut')}
               active={paymentType === 'payment_out'}
               onPress={() => {
                 setPaymentType('payment_out');
@@ -345,45 +350,55 @@ export function ShopBooksCashScreen() {
           </View>
 
           <SelectField
-            label={paymentType === 'payment_in' ? 'From customer' : 'To supplier'}
+            label={
+              paymentType === 'payment_in'
+                ? t('opsApp.shop.cash.fromCustomer')
+                : t('opsApp.shop.cash.toSupplier')
+            }
             required
             value={paymentPartyId}
             options={partyOptions}
             onChange={setPaymentPartyId}
             searchable
           />
-          <SelectField label="Account" required value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
+          <SelectField label={t('opsApp.shop.cash.account')} required value={paymentAccountId} options={accountOptions} onChange={setPaymentAccountId} />
           <Input
-            label="Amount"
+            label={t('shop.cashBank.amount')}
             required
             value={paymentAmount}
             onChangeText={(value) => setPaymentAmount(value.replace(/[^0-9.]/g, ''))}
-            placeholder="Amount"
+            placeholder={t('shop.cashBank.amount')}
             keyboardType="decimal-pad"
           />
-          <DateField label="Date" required value={paymentDate} onChange={setPaymentDate} allowClear={false} />
+          <DateField label={t('opsApp.shop.common.date')} required value={paymentDate} onChange={setPaymentDate} allowClear={false} />
           <Input
-            label="Notes"
+            label={t('shop.cashBank.notes')}
             optional
             value={paymentNotes}
             onChangeText={setPaymentNotes}
-            placeholder="Notes"
+            placeholder={t('shop.cashBank.notes')}
             multiline
           />
           <Button
-            label={busy ? 'Saving…' : `Record ${paymentType === 'payment_in' ? 'payment in' : 'payment out'}`}
+            label={
+              busy
+                ? t('common.saving')
+                : paymentType === 'payment_in'
+                  ? t('shop.cashBank.recordPaymentIn')
+                  : t('shop.cashBank.recordPaymentOut')
+            }
             loading={busy}
             fullWidth
             onPress={() => void submitPayment()}
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Recent payments</Text>
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search payments" style={styles.search} />
+        <Text style={styles.sectionTitle}>{t('opsApp.shop.cash.recentPayments')}</Text>
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('opsApp.shop.cash.searchPayments')} style={styles.search} />
         <View style={styles.chipRow}>
-          <Chip label="All" active={paymentFilter === 'all'} onPress={() => setPaymentFilter('all')} />
-          <Chip label="In" active={paymentFilter === 'payment_in'} onPress={() => setPaymentFilter('payment_in')} />
-          <Chip label="Out" active={paymentFilter === 'payment_out'} onPress={() => setPaymentFilter('payment_out')} />
+          <Chip label={t('common.all')} active={paymentFilter === 'all'} onPress={() => setPaymentFilter('all')} />
+          <Chip label={t('opsApp.shop.cash.in')} active={paymentFilter === 'payment_in'} onPress={() => setPaymentFilter('payment_in')} />
+          <Chip label={t('opsApp.shop.cash.out')} active={paymentFilter === 'payment_out'} onPress={() => setPaymentFilter('payment_out')} />
         </View>
         <GroupedList>
           {visiblePayments.slice(0, 25).map((item) => {
@@ -392,22 +407,22 @@ export function ShopBooksCashScreen() {
             return (
               <BooksDocumentRow
                 key={item.id}
-                title={item.customer_name || item.supplier_name || item.cash_account_name || (isIn ? 'Payment in' : 'Payment out')}
+                title={item.customer_name || item.supplier_name || item.cash_account_name || (isIn ? t('shop.cashBank.paymentIn') : t('shop.cashBank.paymentOut'))}
                 amount={formatMoney(item.total)}
                 amountTone={voided ? undefined : isIn ? 'paid' : 'due'}
                 meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
-                badge={item.status}
+                badge={t(`shop.vouchers.status.${item.status}`, { defaultValue: item.status })}
                 badgeKind={voided ? 'void' : isIn ? 'paid' : 'due'}
                 icon={isIn ? 'arrow-down' : 'arrow-up'}
                 iconTone={voided ? 'rose' : isIn ? 'green' : 'coral'}
                 dimmed={voided}
-                actionLabel={!voided ? 'Void' : undefined}
+                actionLabel={!voided ? t('opsApp.shop.sale.void') : undefined}
                 onAction={!voided ? () => void onVoid(item) : undefined}
               />
             );
           })}
         </GroupedList>
-        {!loading && !payments.length ? <Text style={styles.meta}>No payments recorded yet.</Text> : null}
+        {!loading && !payments.length ? <Text style={styles.meta}>{t('opsApp.shop.cash.noPayments')}</Text> : null}
       </RefreshableScrollView>
     </DesktopPage>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { DELIVERY_PROGRESS_STEPS, shopOrderProgressIndex } from './shopHelpers';
 import type { ShopOrder } from '@ie-orbit/sdk';
 import { colors, spacing, typography } from '../../theme/tokens';
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export function DeliveryProgressStepper({ order, primary, compact = false }: Props) {
+  const { t } = useTranslation();
   const activeIndex = shopOrderProgressIndex(order);
   return (
     <View style={styles.wrap}>
@@ -30,7 +32,7 @@ export function DeliveryProgressStepper({ order, primary, compact = false }: Pro
                 />
                 {!compact ? (
                   <Text style={[styles.label, done && { color: colors.foreground }]} numberOfLines={1}>
-                    {step.label}
+                    {t(`customerApp.deliveryProgress.${step.key}`)}
                   </Text>
                 ) : null}
               </View>

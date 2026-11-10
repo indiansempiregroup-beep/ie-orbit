@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pencil, Plus, TicketPercent } from 'lucide-react';
+import type { TFunction } from 'i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -102,17 +104,21 @@ function formPayload(form: FormState) {
   };
 }
 
-function discountLabel(coupon: ShopCoupon, currency?: string | null) {
+function discountLabel(coupon: ShopCoupon, currency: string | null | undefined, t: TFunction) {
   if (coupon.discount_type === 'amount') {
-    return `${formatMoney(Number(coupon.discount_value ?? 0), currency)} off`;
+    return t('shop.coupons.discountAmountOff', { amount: formatMoney(Number(coupon.discount_value ?? 0), currency) });
   }
-  const cap = coupon.max_discount_amount
-    ? ` (max ${formatMoney(Number(coupon.max_discount_amount), currency)})`
-    : '';
-  return `${coupon.discount_value}% off${cap}`;
+  if (coupon.max_discount_amount) {
+    return t('shop.coupons.discountPercentOffCap', {
+      value: coupon.discount_value,
+      max: formatMoney(Number(coupon.max_discount_amount), currency),
+    });
+  }
+  return t('shop.coupons.discountPercentOff', { value: coupon.discount_value });
 }
 
 export function ShopCouponsPage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
   const coupons = useShopCoupons();
@@ -159,16 +165,16 @@ export function ShopCouponsPage() {
       if (editingId) {
         await patchCoupon.mutateAsync({ couponId: editingId, body });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Coupon details saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.coupons.toastSaved'), 'success'), 0);
       } else {
         await createCoupon.mutateAsync(body);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Coupon added.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.coupons.toastAdded'), 'success'), 0);
       }
       setForm(EMPTY_FORM);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't save this coupon. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.coupons.errSave');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -176,16 +182,16 @@ export function ShopCouponsPage() {
 
   async function handleDelete() {
     if (!editingId) return;
-    if (!window.confirm(`Delete ${form.code || 'this coupon'}?`)) return;
+    if (!window.confirm(t('shop.coupons.confirmDelete', { code: form.code || t('shop.coupons.thisCoupon') }))) return;
     setMessage(null);
     try {
       await deleteCoupon.mutateAsync(editingId);
       dialog.hide();
-      window.setTimeout(() => snackbar.push('Coupon removed.', 'success'), 0);
+      window.setTimeout(() => snackbar.push(t('shop.coupons.toastRemoved'), 'success'), 0);
       setForm(EMPTY_FORM);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't remove this coupon. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.coupons.errRemove');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -197,7 +203,7 @@ export function ShopCouponsPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search code or name…"
+          searchPlaceholder={t('shop.coupons.searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setStatusFilter('');
@@ -205,13 +211,13 @@ export function ShopCouponsPage() {
           filters={[
             {
               id: 'status',
-              label: 'Status',
+              label: t('common.status'),
               value: statusFilter,
               onChange: setStatusFilter,
               options: [
-                { value: '', label: 'All coupons' },
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
+                { value: '', label: t('shop.coupons.allCoupons') },
+                { value: 'active', label: t('common.active') },
+                { value: 'inactive', label: t('shop.coupons.inactive') },
               ],
             },
           ]}
@@ -219,13 +225,13 @@ export function ShopCouponsPage() {
             <Button type="button" variant="primary" onClick={openCreate}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Plus size={16} aria-hidden="true" />
-                Add coupon
+                {t('shop.coupons.addCoupon')}
               </span>
             </Button>
           }
         />
 
-        {coupons.isLoading ? <p>Loading…</p> : null}
+        {coupons.isLoading ? <p>{t('common.loading')}</p> : null}
         {coupons.error ? <p role="alert">{(coupons.error as Error).message}</p> : null}
         <div style={{ display: 'grid', gap: 8 }}>
           {filtered.map((coupon) => (
@@ -259,18 +265,19 @@ export function ShopCouponsPage() {
                 <div style={{ minWidth: 0 }}>
                   <strong>{coupon.code}</strong>
                   <div style={{ opacity: 0.8 }}>
-                    {coupon.is_active === false ? 'Inactive' : 'Active'} · {coupon.name} ·{' '}
-                    {discountLabel(coupon, currency)}
+                    {coupon.is_active === false ? t('shop.coupons.inactive') : t('common.active')} · {coupon.name} ·{' '}
+                    {discountLabel(coupon, currency, t)}
                     {coupon.min_order_total && Number(coupon.min_order_total) > 0
-                      ? ` · min ${formatMoney(Number(coupon.min_order_total), currency)}`
+                      ? ` · ${t('shop.coupons.minOrderShort', { amount: formatMoney(Number(coupon.min_order_total), currency) })}`
                       : ''}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Used {coupon.redemption_count ?? 0}
-                    {coupon.max_redemptions != null ? `/${coupon.max_redemptions}` : ''}
-                    {coupon.first_order_only ? ' · first order only' : ''}
+                    {coupon.max_redemptions != null
+                      ? t('shop.coupons.usedOf', { used: coupon.redemption_count ?? 0, max: coupon.max_redemptions })
+                      : t('shop.coupons.used', { used: coupon.redemption_count ?? 0 })}
+                    {coupon.first_order_only ? ` · ${t('shop.coupons.firstOrderOnlyShort')}` : ''}
                     {coupon.starts_at || coupon.ends_at
-                      ? ` · ${dateInput(coupon.starts_at) || 'open'} → ${dateInput(coupon.ends_at) || 'open'}`
+                      ? ` · ${dateInput(coupon.starts_at) || t('shop.coupons.open')} → ${dateInput(coupon.ends_at) || t('shop.coupons.open')}`
                       : ''}
                   </div>
                 </div>
@@ -278,7 +285,7 @@ export function ShopCouponsPage() {
               <Button type="button" variant="neutral" onClick={() => openEdit(coupon)}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Pencil size={14} aria-hidden="true" />
-                  Edit
+                  {t('shop.coupons.edit')}
                 </span>
               </Button>
             </div>
@@ -287,14 +294,14 @@ export function ShopCouponsPage() {
             <div style={{ display: 'grid', gap: 8 }}>
               <p>
                 {coupons.data?.length
-                  ? 'No coupons match these filters.'
-                  : 'No coupons yet. Create a code customers can apply on online checkout.'}
+                  ? t('shop.coupons.emptyFiltered')
+                  : t('shop.coupons.emptyNone')}
               </p>
               {!coupons.data?.length ? (
                 <Button type="button" variant="primary" onClick={openCreate}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
-                    Add your first coupon
+                    {t('shop.coupons.addFirst')}
                   </span>
                 </Button>
               ) : null}
@@ -306,17 +313,17 @@ export function ShopCouponsPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title={editingId ? 'Edit coupon' : 'Add coupon'}
+        title={editingId ? t('shop.coupons.editCoupon') : t('shop.coupons.addCoupon')}
         labelledBy="coupon-dialog"
         busy={busy}
       >
         <form onSubmit={save} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Codes customers can apply on pickup and delivery checkout.
+            {t('shop.coupons.dialogHint')}
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Code</span>
+              <span style={fieldLabel}>{t('shop.coupons.code')}</span>
               <input
                 value={form.code}
                 onChange={(event) => setForm((current) => ({ ...current, code: event.target.value.toUpperCase() }))}
@@ -326,17 +333,17 @@ export function ShopCouponsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Name</span>
+              <span style={fieldLabel}>{t('shop.coupons.name')}</span>
               <input
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 required
-                placeholder="10% off first order"
+                placeholder={t('shop.coupons.namePlaceholder')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Description</span>
+              <span style={fieldLabel}>{t('shop.coupons.description')}</span>
               <input
                 value={form.description}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -344,7 +351,7 @@ export function ShopCouponsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Type</span>
+              <span style={fieldLabel}>{t('shop.coupons.type')}</span>
               <select
                 value={form.discountType}
                 onChange={(event) =>
@@ -355,12 +362,12 @@ export function ShopCouponsPage() {
                 }
                 style={fieldInput}
               >
-                <option value="percent">Percent</option>
-                <option value="amount">Fixed amount</option>
+                <option value="percent">{t('shop.coupons.percent')}</option>
+                <option value="amount">{t('shop.coupons.fixedAmount')}</option>
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>{form.discountType === 'percent' ? 'Percent' : 'Amount'}</span>
+              <span style={fieldLabel}>{form.discountType === 'percent' ? t('shop.coupons.percent') : t('shop.coupons.amount')}</span>
               <input
                 type="number"
                 min="0"
@@ -372,31 +379,31 @@ export function ShopCouponsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Min. order</span>
+              <span style={fieldLabel}>{t('shop.coupons.minOrder')}</span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={form.minOrder}
                 onChange={(event) => setForm((current) => ({ ...current, minOrder: event.target.value }))}
-                placeholder="Optional"
+                placeholder={t('shop.coupons.optional')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Max discount</span>
+              <span style={fieldLabel}>{t('shop.coupons.maxDiscount')}</span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={form.maxDiscount}
                 onChange={(event) => setForm((current) => ({ ...current, maxDiscount: event.target.value }))}
-                placeholder="Optional cap"
+                placeholder={t('shop.coupons.optionalCap')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Starts</span>
+              <span style={fieldLabel}>{t('shop.coupons.starts')}</span>
               <input
                 type="date"
                 value={form.startsAt}
@@ -405,7 +412,7 @@ export function ShopCouponsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Ends</span>
+              <span style={fieldLabel}>{t('shop.coupons.ends')}</span>
               <input
                 type="date"
                 value={form.endsAt}
@@ -414,24 +421,24 @@ export function ShopCouponsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Total uses</span>
+              <span style={fieldLabel}>{t('shop.coupons.totalUses')}</span>
               <input
                 type="number"
                 min="1"
                 value={form.maxRedemptions}
                 onChange={(event) => setForm((current) => ({ ...current, maxRedemptions: event.target.value }))}
-                placeholder="Unlimited"
+                placeholder={t('shop.coupons.unlimited')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Uses per customer</span>
+              <span style={fieldLabel}>{t('shop.coupons.usesPerCustomer')}</span>
               <input
                 type="number"
                 min="1"
                 value={form.perCustomer}
                 onChange={(event) => setForm((current) => ({ ...current, perCustomer: event.target.value }))}
-                placeholder="Unlimited"
+                placeholder={t('shop.coupons.unlimited')}
                 style={fieldInput}
               />
             </label>
@@ -441,7 +448,7 @@ export function ShopCouponsPage() {
                 checked={form.firstOrderOnly}
                 onChange={(event) => setForm((current) => ({ ...current, firstOrderOnly: event.target.checked }))}
               />
-              First online order only
+              {t('shop.coupons.firstOrderOnly')}
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
@@ -449,19 +456,19 @@ export function ShopCouponsPage() {
                 checked={form.isActive}
                 onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
               />
-              Active
+              {t('common.active')}
             </label>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? 'Saving…' : editingId ? 'Update coupon' : 'Save coupon'}
+              {busy ? t('common.saving') : editingId ? t('shop.coupons.updateCoupon') : t('shop.coupons.saveCoupon')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={busy}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             {editingId ? (
               <Button type="button" variant="ghost" onClick={() => void handleDelete()} disabled={busy}>
-                Delete coupon
+                {t('shop.coupons.deleteCoupon')}
               </Button>
             ) : null}
           </div>

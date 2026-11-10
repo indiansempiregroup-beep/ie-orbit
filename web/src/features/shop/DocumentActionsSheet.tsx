@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ShopDocumentKind } from '@ie-orbit/sdk';
 import { Eye, Download, Printer, Link2, MessageCircle, Mail, Smartphone } from 'lucide-react';
 import { Button } from '../../components/Button';
@@ -44,6 +45,8 @@ export function DocumentActionsSheet({
   allowNewBill = false,
   onNewBill,
 }: Props) {
+  const { t } = useTranslation();
+  const td = (key: string) => String(t(`shop.docSheet.${key}`));
   const auth = useAuthContext();
   const workspace = useWorkspace();
   const client = useApiClient();
@@ -85,7 +88,7 @@ export function DocumentActionsSheet({
         setAmountDue(String(share.data.amount_due || doc?.data?.amount_due || ''));
       } catch (error) {
         if (!cancelled) {
-          snackbar.push(error instanceof Error ? error.message : 'Could not prepare share link', 'error');
+          snackbar.push(error instanceof Error ? error.message : td('prepareFailed'), 'error');
         }
       } finally {
         if (!cancelled) setLoadingShare(false);
@@ -116,9 +119,9 @@ export function DocumentActionsSheet({
   async function onDownload(layout: 'a4' | 'thermal') {
     try {
       await downloadShopDocumentPdf(doc, auth.token, layout, workspace.tenantId);
-      snackbar.push('PDF downloaded', 'success');
+      snackbar.push(td('pdfDownloaded'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Download failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : td('downloadFailed'), 'error');
     }
   }
 
@@ -126,11 +129,11 @@ export function DocumentActionsSheet({
     try {
       const share = await ensureShare();
       const url = absoluteShareUrl(share.url);
-      if (!url) throw new Error('Link not ready yet');
+      if (!url) throw new Error(td('linkNotReady'));
       await copyText(url);
-      snackbar.push('Link copied', 'success');
+      snackbar.push(td('linkCopied'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Copy failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : td('copyFailed'), 'error');
     }
   }
 
@@ -139,7 +142,7 @@ export function DocumentActionsSheet({
       const share = await ensureShare();
       window.open(deviceWhatsAppUrl(phone, share.text), '_blank', 'noopener,noreferrer');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'WhatsApp share failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : td('whatsappFailed'), 'error');
     }
   }
 
@@ -148,7 +151,7 @@ export function DocumentActionsSheet({
       const share = await ensureShare();
       window.location.href = deviceSmsUrl(phone, share.text);
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'SMS share failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : td('smsFailed'), 'error');
     }
   }
 
@@ -157,11 +160,11 @@ export function DocumentActionsSheet({
       const share = await ensureShare();
       window.location.href = deviceMailtoUrl(
         email,
-        `${title || 'Document'} ${doc.number || ''}`.trim(),
+        `${title || td('document')} ${doc.number || ''}`.trim(),
         share.text,
       );
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Email share failed', 'error');
+      snackbar.push(error instanceof Error ? error.message : td('emailFailed'), 'error');
     }
   }
 
@@ -178,10 +181,10 @@ export function DocumentActionsSheet({
       const parts = Object.entries(result.data.channels || {}).map(
         ([channel, info]) => `${channel}: ${info.status || 'ok'}`,
       );
-      snackbar.push(parts.join(' · ') || 'Sent', 'success');
+      snackbar.push(parts.join(' · ') || td('sent'), 'success');
       if (result.data.public_url) setPublicUrl(result.data.public_url);
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't send. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : td('sendFailed'), 'error');
     } finally {
       setSending(false);
     }
@@ -193,10 +196,10 @@ export function DocumentActionsSheet({
     <Dialog
       open={open}
       onClose={onClose}
-      title={title || `Document ${doc.number || ''}`.trim()}
+      title={title || `${td('document')} ${doc.number || ''}`.trim()}
       labelledBy="shop-document-actions"
       busy={sending}
-      busyMessage="Sending…"
+      busyMessage={td('sending')}
     >
       <div style={{ display: 'grid', gap: 16, marginTop: 4 }}>
         {due > 0 ? (
@@ -212,13 +215,13 @@ export function DocumentActionsSheet({
               fontSize: 13,
             }}
           >
-            Amount due: <strong>{formatMoney(due, workspace.activeBusiness?.currency)}</strong>
+            {td('amountDue')} <strong>{formatMoney(due, workspace.activeBusiness?.currency)}</strong>
           </div>
         ) : null}
 
         <section style={{ display: 'grid', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em' }}>
-            QUICK ACTIONS
+            {td('quickActions')}
           </div>
           <div
             style={{
@@ -230,18 +233,18 @@ export function DocumentActionsSheet({
           >
             <QuickTile
               icon={<Eye size={16} />}
-              label="View"
+              label={td('view')}
               onClick={() =>
                 void openShopDocumentView(doc, auth.token, 'a4', workspace.tenantId).catch((error) =>
-                  snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+                  snackbar.push(error instanceof Error ? error.message : t('shop.vouchers.viewFailed'), 'error'),
                 )
               }
             />
-            <QuickTile icon={<Download size={16} />} label="PDF" onClick={() => void onDownload('a4')} />
-            <QuickTile icon={<Printer size={16} />} label="Thermal" onClick={() => void onDownload('thermal')} />
+            <QuickTile icon={<Download size={16} />} label={td('pdf')} onClick={() => void onDownload('a4')} />
+            <QuickTile icon={<Printer size={16} />} label={td('thermal')} onClick={() => void onDownload('thermal')} />
             <QuickTile
               icon={<Link2 size={16} />}
-              label="Copy link"
+              label={td('copyLink')}
               disabled={loadingShare && !publicUrl}
               onClick={() => void onCopyLink()}
             />
@@ -251,25 +254,25 @@ export function DocumentActionsSheet({
         <section style={{ display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em' }}>
-              CUSTOMER CONTACT
+              {td('customerContact')}
             </div>
-            {loadingShare ? <span style={{ fontSize: 12, color: '#6b7280' }}>Loading…</span> : null}
+            {loadingShare ? <span style={{ fontSize: 12, color: '#6b7280' }}>{t('common.loading')}</span> : null}
           </div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-            Prefills from the customer when available. You can edit before sending.
+            {td('prefillHint')}
           </p>
           <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
             <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-              Phone
+              {t('common.phone')}
               <input
                 value={phone}
                 onChange={(event) => setPhone(event.target.value)}
-                placeholder="WhatsApp / SMS"
+                placeholder={td('phonePlaceholder')}
                 style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb' }}
               />
             </label>
             <label style={{ display: 'grid', gap: 4, fontSize: 12 }}>
-              Email
+              {t('common.email')}
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -282,7 +285,7 @@ export function DocumentActionsSheet({
 
         <section style={{ display: 'grid', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em' }}>
-            SEND ON THIS DEVICE
+            {td('sendDevice')}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <Button type="button" onClick={() => void onDeviceWhatsApp()}>
@@ -292,29 +295,29 @@ export function DocumentActionsSheet({
               <Smartphone size={15} aria-hidden="true" /> SMS
             </Button>
             <Button type="button" variant="neutral" onClick={() => void onDeviceEmail()}>
-              <Mail size={15} aria-hidden="true" /> Email app
+              <Mail size={15} aria-hidden="true" /> {td('emailApp')}
             </Button>
             <Button
               type="button"
               variant="ghost"
               onClick={() =>
                 void printShopDocument(doc, auth.token, 'a4', workspace.tenantId).catch((error) =>
-                  snackbar.push(error instanceof Error ? error.message : 'Print failed', 'error'),
+                  snackbar.push(error instanceof Error ? error.message : td('printFailed'), 'error'),
                 )
               }
             >
-              Print A4
+              {td('printA4')}
             </Button>
           </div>
         </section>
 
         <section style={{ display: 'grid', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-foreground)', letterSpacing: '0.04em' }}>
-            SEND FROM SERVER
+            {td('sendServer')}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <Button type="button" variant="neutral" disabled={sending} onClick={() => void onServerSend(['whatsapp'])}>
-              Server WhatsApp
+              {td('serverWhatsapp')}
             </Button>
             <Button
               type="button"
@@ -322,7 +325,7 @@ export function DocumentActionsSheet({
               disabled={sending || !email}
               onClick={() => void onServerSend(['email'])}
             >
-              Server email
+              {td('serverEmail')}
             </Button>
             {due > 0 ? (
               <Button
@@ -331,7 +334,7 @@ export function DocumentActionsSheet({
                 disabled={sending}
                 onClick={() => void onServerSend(['whatsapp', 'email'], true)}
               >
-                Remind payment
+                {td('remindPayment')}
               </Button>
             ) : null}
           </div>
@@ -349,11 +352,11 @@ export function DocumentActionsSheet({
                 onNewBill?.();
               }}
             >
-              New bill
+              {td('newBill')}
             </Button>
           ) : null}
           <Button type="button" variant="ghost" onClick={onClose}>
-            Done
+            {t('common.done')}
           </Button>
         </div>
       </div>

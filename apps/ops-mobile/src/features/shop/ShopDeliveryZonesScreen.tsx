@@ -1,4 +1,6 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -18,13 +20,16 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { ShopDeliveryZone } from '@ie-orbit/sdk';
 import { shopListRefreshControl } from './shopRefreshControl';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All zones' },
-  { value: 'enabled', label: 'Enabled' },
-  { value: 'disabled', label: 'Disabled' },
-];
+function statusOptions(t: TFunction) {
+  return [
+    { value: '', label: t('shop.deliveryZones.allZones') },
+    { value: 'enabled', label: t('shop.deliveryZones.enabled') },
+    { value: 'disabled', label: t('shop.deliveryZones.disabled') },
+  ];
+}
 
 export function ShopDeliveryZonesScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -42,7 +47,7 @@ export function ShopDeliveryZonesScreen() {
         <Pressable
           onPress={() => navigation.navigate('ShopDeliveryZoneForm', {})}
           accessibilityRole="button"
-          accessibilityLabel="Add zone"
+          accessibilityLabel={t('shop.deliveryZones.addZone')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -50,7 +55,7 @@ export function ShopDeliveryZonesScreen() {
         </Pressable>
       ),
     });
-  }, [navigation]);
+  }, [navigation, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -60,11 +65,11 @@ export function ShopDeliveryZonesScreen() {
       const response = await client.shop.listDeliveryZones({ business_id: businessId });
       setZones(response.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load zones');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.zones.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -94,14 +99,14 @@ export function ShopDeliveryZonesScreen() {
           <SearchBar
             value={search}
             onChangeText={setSearch}
-            placeholder="Search zone, city, postal…"
+            placeholder={t('shop.deliveryZones.searchPlaceholder')}
             style={styles.searchFlex}
           />
           <FilterButton count={Number(Boolean(enabledFilter))} onPress={() => setFiltersOpen(true)} />
         </View>
         {enabledFilter ? (
           <Pressable onPress={() => setEnabledFilter('')} style={styles.clearFilters}>
-            <Text style={styles.clearFiltersText}>Clear filters</Text>
+            <Text style={styles.clearFiltersText}>{t('opsApp.shop.common.clearFilters')}</Text>
           </Pressable>
         ) : null}
 
@@ -111,9 +116,9 @@ export function ShopDeliveryZonesScreen() {
           onReset={() => setEnabledFilter('')}
         >
           <FilterChoiceGroup
-            label="Availability"
+            label={t('shop.deliveryZones.availability')}
             value={enabledFilter}
-            options={STATUS_OPTIONS}
+            options={statusOptions(t)}
             onChange={setEnabledFilter}
           />
         </FilterSheet>
@@ -129,9 +134,9 @@ export function ShopDeliveryZonesScreen() {
           renderItem={({ item }) => (
             <BooksDocumentRow
               title={item.name}
-              amount={`fee ${item.fee ?? 0}`}
-              meta={`${(item.cities ?? []).join(', ') || 'Any city'} · Prefixes ${(item.postal_prefixes ?? []).join(', ') || 'any'}${item.min_order_total && Number(item.min_order_total) ? ` · min ${item.min_order_total}` : ''}`}
-              badge={item.enabled ? 'Enabled' : 'Disabled'}
+              amount={t('shop.deliveryZones.fee', { amount: item.fee ?? 0 })}
+              meta={`${(item.cities ?? []).join(', ') || t('shop.deliveryZones.anyCity')} · ${t('shop.deliveryZones.prefixes', { list: (item.postal_prefixes ?? []).join(', ') || t('shop.deliveryZones.any') })}${item.min_order_total && Number(item.min_order_total) ? ` · ${t('shop.deliveryZones.minOrderShort', { amount: item.min_order_total })}` : ''}`}
+              badge={item.enabled ? t('shop.deliveryZones.enabled') : t('shop.deliveryZones.disabled')}
               badgeKind={item.enabled ? 'paid' : 'void'}
               icon="map-pin"
               iconTone="coral"
@@ -143,13 +148,13 @@ export function ShopDeliveryZonesScreen() {
             !loading ? (
               <EmptyState
                 icon="map-pin"
-                title={zones.length ? 'No matching zones' : 'No zones yet'}
+                title={zones.length ? t('opsApp.shop.zones.noMatching') : t('opsApp.shop.zones.noZones')}
                 message={
                   zones.length
-                    ? 'Try another search or clear filters.'
-                    : 'Add a delivery zone so checkout can match city and postal codes.'
+                    ? t('opsApp.shop.zones.tryAnother')
+                    : t('opsApp.shop.zones.emptyHint')
                 }
-                actionLabel={zones.length ? undefined : 'Add zone'}
+                actionLabel={zones.length ? undefined : t('shop.deliveryZones.addZone')}
                 onAction={zones.length ? undefined : () => navigation.navigate('ShopDeliveryZoneForm', {})}
               />
             ) : null

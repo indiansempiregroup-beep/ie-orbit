@@ -1,4 +1,5 @@
 import type { BIGrowthReport, BIShopieGrowth } from '@ie-orbit/sdk';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatMoney } from '../../lib/currency';
@@ -16,17 +17,18 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 function AppointieGrowth({ data, currency }: { data: BIGrowthReport; currency?: string }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Appoint" subtitle="Who is booking — and who comes back." />
+      <SectionHeading title={t('public.nav.appoint')} subtitle={t('bi.whoBooking')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="New customers" value={data.new_customers ?? 0} />
-        <StatCard label="Returning" value={data.returning_customers ?? 0} />
-        <StatCard label="Repeat rate" value={`${Math.round((data.repeat_rate ?? 0) * 100)}%`} />
-        <StatCard label="Avg visits / customer" value={data.avg_visits_per_customer ?? 0} />
+        <StatCard label={t('bi.newCustomers')} value={data.new_customers ?? 0} />
+        <StatCard label={t('bi.returning')} value={data.returning_customers ?? 0} />
+        <StatCard label={t('bi.repeatRate')} value={`${Math.round((data.repeat_rate ?? 0) * 100)}%`} />
+        <StatCard label={t('bi.avgVisitsPerCustomer')} value={data.avg_visits_per_customer ?? 0} />
       </div>
       <Card>
-        <h3 style={{ marginTop: 0 }}>Most active customers</h3>
+        <h3 style={{ marginTop: 0 }}>{t('bi.mostActiveCustomers')}</h3>
         <div style={{ display: 'grid', gap: 8 }}>
           {(data.top_customers ?? []).length ? (
             (data.top_customers ?? []).map((row) => (
@@ -34,14 +36,17 @@ function AppointieGrowth({ data, currency }: { data: BIGrowthReport; currency?: 
                 <div>
                   <div style={{ fontWeight: 600 }}>{row.customer_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    {row.bookings} bookings · {row.is_returning ? 'returning' : 'new'}
+                    {t('bi.bookingsStatus', {
+                      n: row.bookings,
+                      status: row.is_returning ? t('bi.returningLower') : t('bi.newLower'),
+                    })}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>{formatMoney(Number(row.revenue), currency)}</div>
               </div>
             ))
           ) : (
-            <p style={{ color: 'var(--muted-foreground)' }}>No customer booking activity in this period yet.</p>
+            <p style={{ color: 'var(--muted-foreground)' }}>{t('bi.noCustomerActivity')}</p>
           )}
         </div>
       </Card>
@@ -50,17 +55,18 @@ function AppointieGrowth({ data, currency }: { data: BIGrowthReport; currency?: 
 }
 
 function ShopieGrowth({ data, currency }: { data: BIShopieGrowth; currency?: string }) {
+  const { t } = useTranslation();
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Mart" subtitle="Who is buying — and who comes back to the shop." />
+      <SectionHeading title={t('public.nav.mart')} subtitle={t('bi.whoBuying')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="New customers" value={data.new_customers ?? 0} />
-        <StatCard label="Returning" value={data.returning_customers ?? 0} />
-        <StatCard label="Repeat rate" value={`${Math.round((data.repeat_rate ?? 0) * 100)}%`} />
-        <StatCard label="Avg orders / customer" value={data.avg_orders_per_customer ?? 0} />
+        <StatCard label={t('bi.newCustomers')} value={data.new_customers ?? 0} />
+        <StatCard label={t('bi.returning')} value={data.returning_customers ?? 0} />
+        <StatCard label={t('bi.repeatRate')} value={`${Math.round((data.repeat_rate ?? 0) * 100)}%`} />
+        <StatCard label={t('bi.avgOrdersPerCustomer')} value={data.avg_orders_per_customer ?? 0} />
       </div>
       <Card>
-        <h3 style={{ marginTop: 0 }}>Most active shoppers</h3>
+        <h3 style={{ marginTop: 0 }}>{t('bi.mostActiveShoppers')}</h3>
         <div style={{ display: 'grid', gap: 8 }}>
           {(data.top_customers ?? []).length ? (
             (data.top_customers ?? []).map((row) => (
@@ -68,14 +74,17 @@ function ShopieGrowth({ data, currency }: { data: BIShopieGrowth; currency?: str
                 <div>
                   <div style={{ fontWeight: 600 }}>{row.customer_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    {row.orders} orders · {row.is_returning ? 'returning' : 'new'}
+                    {t('bi.ordersStatus', {
+                      n: row.orders,
+                      status: row.is_returning ? t('bi.returningLower') : t('bi.newLower'),
+                    })}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>{formatMoney(Number(row.revenue), currency)}</div>
               </div>
             ))
           ) : (
-            <p style={{ color: 'var(--muted-foreground)' }}>No shop customer activity in this period yet.</p>
+            <p style={{ color: 'var(--muted-foreground)' }}>{t('bi.noShopActivity')}</p>
           )}
         </div>
       </Card>
@@ -84,7 +93,8 @@ function ShopieGrowth({ data, currency }: { data: BIShopieGrowth; currency?: str
 }
 
 export function BIGrowthPage() {
-  usePageMeta({ title: 'BI Growth — Orbit' });
+  const { t } = useTranslation();
+  usePageMeta({ title: `${t('bi.title')}: ${t('bi.growth')} — Orbit` });
   const { showAppointie, showShopie, currency } = useBiProductVisibility('growth');
   const { product, setProduct, showSwitcher } = useBiProductTab(showAppointie, showShopie);
   const growthQuery = useBIGrowthQuery();
@@ -95,10 +105,9 @@ export function BIGrowthPage() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card>
-        <h1 style={{ marginTop: 0 }}>Customer growth</h1>
+        <h1 style={{ marginTop: 0 }}>{t('bi.pageGrowth')}</h1>
         <p style={{ color: 'var(--muted-foreground)', marginBottom: showSwitcher ? 12 : undefined }}>
-          New vs returning customers for the last 30 days
-          {showSwitcher ? '. Switch between Orbit Appoint and Orbit Mart.' : '.'}
+          {showSwitcher ? t('bi.growthIntroSwitch') : t('bi.growthIntro')}
         </p>
         <BiProductTabs
           showAppointie={showAppointie}
@@ -107,7 +116,7 @@ export function BIGrowthPage() {
           onChange={setProduct}
         />
       </Card>
-      {growthQuery.isLoading && !data ? <Card>Loading growth…</Card> : null}
+      {growthQuery.isLoading && !data ? <Card>{t('bi.loadingGrowth')}</Card> : null}
       {product === 'appointie' && showAppointie && appointie ? (
         <AppointieGrowth data={appointie} currency={currency} />
       ) : null}
@@ -117,7 +126,7 @@ export function BIGrowthPage() {
       {!growthQuery.isLoading && !appointie && !shopie ? (
         <Card>
           <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
-            No growth analytics for your subscribed products in this period yet.
+            {t('bi.growthEmpty')}
           </p>
         </Card>
       ) : null}

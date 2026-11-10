@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
@@ -10,8 +12,10 @@ import { Button } from '../../components/Button';
 const STATUSES = ['open', 'pending', 'resolved'] as const;
 type StatusFilter = 'all' | (typeof STATUSES)[number];
 
-function statusLabel(status: string) {
-  if (status === 'pending') return 'Waiting';
+function statusLabel(status: string, t: TFunction) {
+  if (status === 'pending') return t('settings.supportTickets.statusWaiting');
+  if (status === 'open') return t('settings.supportTickets.statusOpen');
+  if (status === 'resolved') return t('settings.supportTickets.statusResolved');
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -22,7 +26,8 @@ function statusTone(status: string) {
 }
 
 export function SupportTicketsPage() {
-  usePageMeta({ title: 'Support tickets' });
+  const { t } = useTranslation();
+  usePageMeta({ title: t('settings.support') });
   const client = useApiClient();
   const queryClient = useQueryClient();
   const ticketsQuery = useQuery({
@@ -82,7 +87,7 @@ export function SupportTicketsPage() {
       await queryClient.invalidateQueries({ queryKey: ['support', 'tickets'] });
       await ticketQuery.refetch();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't send that reply. Try again.");
+      setMessage(err instanceof Error ? err.message : t('settings.supportTickets.sendFailed'));
     } finally {
       setBusy(false);
     }
@@ -92,18 +97,18 @@ export function SupportTicketsPage() {
     <div style={{ display: 'grid', gap: 16 }}>
       <div>
         <p style={{ margin: 0, color: '#0f766e', fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', fontSize: 12 }}>
-          Support
+          {t('settings.supportTickets.kicker')}
         </p>
-        <h1 style={{ margin: '8px 0 0', fontSize: 24 }}>Customer tickets</h1>
+        <h1 style={{ margin: '8px 0 0', fontSize: 24 }}>{t('settings.supportTickets.title')}</h1>
         <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-          Requests from your customer app, plus anything you opened with IE Orbit.
+          {t('settings.supportTickets.lead')}
         </p>
       </div>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
         {[
-          ['Open', counts.open, '#1d4ed8'],
-          ['Waiting', counts.pending, '#c2410c'],
-          ['Resolved', counts.resolved, '#047857'],
+          [t('settings.supportTickets.statusOpen'), counts.open, '#1d4ed8'],
+          [t('settings.supportTickets.statusWaiting'), counts.pending, '#c2410c'],
+          [t('settings.supportTickets.statusResolved'), counts.resolved, '#047857'],
         ].map(([label, value, color]) => (
           <Card key={String(label)} style={{ padding: 16 }}>
             <p style={{ margin: 0, fontSize: 12, color: '#6b7280', fontWeight: 700, textTransform: 'uppercase' }}>{label}</p>
@@ -117,16 +122,16 @@ export function SupportTicketsPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search subject or customer"
+              placeholder={t('settings.supportTickets.searchPlaceholder')}
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb' }}
             />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {(
                 [
-                  ['open', `Open (${counts.open})`],
-                  ['pending', `Waiting (${counts.pending})`],
-                  ['resolved', `Resolved (${counts.resolved})`],
-                  ['all', `All (${counts.all})`],
+                  ['open', t('settings.supportTickets.filterOpen', { count: counts.open })],
+                  ['pending', t('settings.supportTickets.filterWaiting', { count: counts.pending })],
+                  ['resolved', t('settings.supportTickets.filterResolved', { count: counts.resolved })],
+                  ['all', t('settings.supportTickets.filterAll', { count: counts.all })],
                 ] as Array<[StatusFilter, string]>
               ).map(([id, label]) => (
                 <button
@@ -175,11 +180,11 @@ export function SupportTicketsPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                       <strong style={{ fontSize: 14 }}>{row.subject}</strong>
                       <span style={{ ...tone, padding: '3px 8px', borderRadius: 999, fontSize: 11, fontWeight: 800 }}>
-                        {statusLabel(row.status)}
+                        {statusLabel(row.status, t)}
                       </span>
                     </div>
                     <p style={{ margin: '8px 0 0', color: '#6b7280', fontSize: 13 }}>
-                      {row.requester_email || 'Customer'} · {formatTimestamp(row.created_at)}
+                      {row.requester_email || t('settings.supportTickets.customer')} · {formatTimestamp(row.created_at)}
                     </p>
                     {row.preview ? (
                       <p style={{ margin: '6px 0 0', color: '#374151', fontSize: 13, lineHeight: 1.45 }}>{row.preview}</p>
@@ -187,10 +192,10 @@ export function SupportTicketsPage() {
                   </button>
                 );
               })}
-              {ticketsQuery.isLoading ? <p style={{ color: '#6b7280' }}>Loading tickets…</p> : null}
+              {ticketsQuery.isLoading ? <p style={{ color: '#6b7280' }}>{t('settings.supportTickets.loadingTickets')}</p> : null}
               {!ticketsQuery.isLoading && filtered.length === 0 ? (
                 <p style={{ color: '#6b7280' }}>
-                  {tickets.length ? 'No tickets match these filters.' : 'No tickets yet. Customer requests from the app will land here.'}
+                  {tickets.length ? t('settings.supportTickets.noMatch') : t('settings.supportTickets.empty')}
                 </p>
               ) : null}
             </div>
@@ -198,15 +203,15 @@ export function SupportTicketsPage() {
         </Card>
         <Card style={{ padding: 16 }}>
           {!selectedId ? (
-            <p style={{ color: '#6b7280' }}>Select a ticket to read the conversation and reply. Your reply is emailed to the customer.</p>
+            <p style={{ color: '#6b7280' }}>{t('settings.supportTickets.selectPrompt')}</p>
           ) : ticketQuery.isLoading ? (
-            <p style={{ color: '#6b7280' }}>Loading thread…</p>
+            <p style={{ color: '#6b7280' }}>{t('settings.supportTickets.loadingThread')}</p>
           ) : ticket ? (
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 18 }}>{ticket.subject}</h2>
                 <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
-                  {ticket.requester_email || 'Customer'} · {statusLabel(ticket.status)}
+                  {ticket.requester_email || t('settings.supportTickets.customer')} · {statusLabel(ticket.status, t)}
                 </p>
               </div>
               {(ticket.notes ?? []).map((item) => (
@@ -221,26 +226,26 @@ export function SupportTicketsPage() {
                 >
                   <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>{item.body}</p>
                   <p style={{ margin: '8px 0 0', color: '#6b7280', fontSize: 13 }}>
-                    {item.author_email || 'Support'} · {formatTimestamp(item.created_at)}
+                    {item.author_email || t('settings.supportTickets.author')} · {formatTimestamp(item.created_at)}
                   </p>
                 </article>
               ))}
               <label style={{ display: 'grid', gap: 6, fontWeight: 600 }}>
-                Reply
+                {t('settings.supportTickets.reply')}
                 <textarea
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
                   rows={4}
-                  placeholder="The customer will see this in the app and by email"
+                  placeholder={t('settings.supportTickets.replyPlaceholder')}
                 />
               </label>
               {message ? <p style={{ color: '#b91c1c' }}>{message}</p> : null}
               <Button variant="primary" disabled={busy || !note.trim()} onClick={() => void saveNote()}>
-                {busy ? 'Sending…' : 'Send reply'}
+                {busy ? t('settings.supportTickets.sending') : t('settings.supportTickets.send')}
               </Button>
             </div>
           ) : (
-            <p style={{ color: '#6b7280' }}>Ticket not found.</p>
+            <p style={{ color: '#6b7280' }}>{t('settings.supportTickets.notFound')}</p>
           )}
         </Card>
       </div>

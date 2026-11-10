@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -11,14 +12,17 @@ import { SelectField } from '../../components/SelectField';
 import { DesktopPage } from '../../components/DesktopPage';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, spacing, typography } from '../../theme/tokens';
+import type { TFunction } from 'i18next';
 import type { ShopComplianceSettings, ShopGstCompliance, ShopGstComplianceProvider } from '@ie-orbit/sdk';
 
-const PROVIDER_OPTIONS = [
-  { value: 'mock', label: 'Mock (demo, no credentials)' },
-  { value: 'nic_sandbox', label: 'NIC / GSP sandbox' },
-  { value: 'nic_production', label: 'NIC / GSP production' },
-  { value: 'custom', label: 'Custom GSP endpoint' },
-];
+function providerOptions(t: TFunction) {
+  return [
+    { value: 'mock', label: t('shop.compliance.providerMock') },
+    { value: 'nic_sandbox', label: t('shop.compliance.providerNicSandbox') },
+    { value: 'nic_production', label: t('shop.compliance.providerNicProduction') },
+    { value: 'custom', label: t('shop.compliance.providerCustom') },
+  ];
+}
 
 const EMPTY_COMPLIANCE: Required<ShopGstCompliance> = {
   provider: 'mock',
@@ -37,6 +41,7 @@ const EMPTY_COMPLIANCE: Required<ShopGstCompliance> = {
 };
 
 export function ShopBooksComplianceScreen() {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
@@ -63,11 +68,11 @@ export function ShopBooksComplianceScreen() {
       const response = await client.shop.getComplianceSettings({ business_id: businessId });
       applySettings(response.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to load compliance settings'));
+      setError(getApiErrorMessage(err, t('shop.compliance.errLoad')));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, applySettings]);
+  }, [businessId, client, applySettings, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -90,9 +95,9 @@ export function ShopBooksComplianceScreen() {
         gst_compliance: compliance,
       });
       applySettings(response.data);
-      toast.push('Compliance settings saved', 'success');
+      toast.push(t('shop.compliance.toastSaved'), 'success');
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't save compliance settings. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.compliance.errSave')), 'error');
     } finally {
       setSaving(false);
     }
@@ -110,55 +115,53 @@ export function ShopBooksComplianceScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Text style={styles.intro}>
-          Turn on IRN (e-invoice) and e-way bill generation for your GST sale vouchers. Defaults to a mock
-          provider so you can try it without NIC/GSP credentials.
+          {t('shop.compliance.intro')}
         </Text>
 
         <Card style={styles.card}>
           <View style={styles.switchRow}>
             <View style={styles.switchCopy}>
-              <Text style={styles.label}>E-invoice (IRN)</Text>
-              <Text style={styles.meta}>Generate IRN for GST sale vouchers</Text>
+              <Text style={styles.label}>{t('opsApp.shop.compliance.einvoice')}</Text>
+              <Text style={styles.meta}>{t('opsApp.shop.compliance.einvoiceMeta')}</Text>
             </View>
             <Switch value={einvoiceEnabled} onValueChange={setEinvoiceEnabled} disabled={loading} />
           </View>
           <View style={styles.switchRow}>
             <View style={styles.switchCopy}>
-              <Text style={styles.label}>E-way bill</Text>
-              <Text style={styles.meta}>Generate e-way bills for movement of goods</Text>
+              <Text style={styles.label}>{t('opsApp.shop.compliance.eway')}</Text>
+              <Text style={styles.meta}>{t('opsApp.shop.compliance.ewayMeta')}</Text>
             </View>
             <Switch value={ewayEnabled} onValueChange={setEwayEnabled} disabled={loading} />
           </View>
         </Card>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>GSP / portal provider</Text>
+          <Text style={styles.sectionTitle}>{t('shop.compliance.providerSection')}</Text>
           <SelectField
-            label="Provider"
+            label={t('shop.compliance.provider')}
             required
             value={compliance.provider ?? 'mock'}
-            options={PROVIDER_OPTIONS}
+            options={providerOptions(t)}
             onChange={(value) => setField('provider', value as ShopGstComplianceProvider)}
           />
           {!showCredentials ? (
             <Text style={styles.hint}>
-              Mock mode simulates IRN/e-way bill numbers so you can demo the flow. Switch providers when you have
-              live NIC/GSP credentials.
+              {t('shop.compliance.mockNote')}
             </Text>
           ) : (
             <>
-              <Input label="Username" required value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
+              <Input label={t('shop.compliance.username')} required value={compliance.username} onChangeText={(value) => setField('username', value)} autoCapitalize="none" />
               <Input
-                label="Password"
+                label={t('shop.compliance.password')}
                 required
                 value={compliance.password}
                 onChangeText={(value) => setField('password', value)}
                 secureTextEntry
                 autoCapitalize="none"
               />
-              <Input label="Client ID" optional value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
+              <Input label={t('shop.compliance.clientId')} optional value={compliance.client_id} onChangeText={(value) => setField('client_id', value)} autoCapitalize="none" />
               <Input
-                label="Client secret"
+                label={t('shop.compliance.clientSecret')}
                 optional
                 value={compliance.client_secret}
                 onChangeText={(value) => setField('client_secret', value)}
@@ -166,7 +169,7 @@ export function ShopBooksComplianceScreen() {
                 autoCapitalize="none"
               />
               <Input
-                label="Base URL"
+                label={t('shop.compliance.baseUrl')}
                 optional
                 value={compliance.base_url}
                 onChangeText={(value) => setField('base_url', value)}
@@ -179,24 +182,24 @@ export function ShopBooksComplianceScreen() {
         </Card>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>Seller address (as per GST registration)</Text>
-          <Input label="Legal name" required value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
-          <Input label="Trade name" optional value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
-          <Input label="Address line 1" required value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
-          <Input label="Address line 2" optional value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
-          <Input label="City / locality" required value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
-          <Input label="PIN code" required value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
+          <Text style={styles.sectionTitle}>{t('shop.compliance.sellerSection')}</Text>
+          <Input label={t('shop.compliance.legalName')} required value={compliance.seller_legal_name} onChangeText={(value) => setField('seller_legal_name', value)} />
+          <Input label={t('shop.compliance.tradeName')} optional value={compliance.seller_trade_name} onChangeText={(value) => setField('seller_trade_name', value)} />
+          <Input label={t('shop.compliance.addr1')} required value={compliance.seller_addr1} onChangeText={(value) => setField('seller_addr1', value)} />
+          <Input label={t('shop.compliance.addr2')} optional value={compliance.seller_addr2} onChangeText={(value) => setField('seller_addr2', value)} />
+          <Input label={t('shop.compliance.cityLocality')} required value={compliance.seller_loc} onChangeText={(value) => setField('seller_loc', value)} />
+          <Input label={t('shop.compliance.pinCode')} required value={compliance.seller_pin} onChangeText={(value) => setField('seller_pin', value)} keyboardType="number-pad" />
           <Input
-            label="State code (GST)"
+            label={t('shop.compliance.stateCode')}
             required
             value={compliance.seller_state_code}
             onChangeText={(value) => setField('seller_state_code', value)}
-            placeholder="e.g. 27"
+            placeholder={t('shop.compliance.statePlaceholder')}
             keyboardType="number-pad"
           />
         </Card>
 
-        <Button label={saving ? 'Saving…' : 'Save compliance settings'} loading={saving} fullWidth size="lg" onPress={() => void handleSave()} />
+        <Button label={saving ? t('common.saving') : t('shop.compliance.saveSettings')} loading={saving} fullWidth size="lg" onPress={() => void handleSave()} />
       </ScrollView>
     </DesktopPage>
   );

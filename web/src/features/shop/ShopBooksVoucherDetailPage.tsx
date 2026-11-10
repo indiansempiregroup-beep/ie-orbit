@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { ShopBooksVoucher } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
@@ -31,6 +32,7 @@ function listPathFor(voucher: ShopBooksVoucher): string {
 }
 
 export function ShopBooksVoucherDetailPage() {
+  const { t } = useTranslation();
   const { voucherId = '' } = useParams<{ voucherId: string }>();
   const navigate = useNavigate();
   const workspace = useWorkspace();
@@ -52,13 +54,13 @@ export function ShopBooksVoucherDetailPage() {
 
   async function handleVoid() {
     if (!voucher) return;
-    if (!window.confirm(`Void ${voucher.voucher_number}? This cannot be undone.`)) return;
+    if (!window.confirm(t('shop.vouchers.confirmVoid', { number: voucher.voucher_number }))) return;
     try {
       await voidVoucher.mutateAsync(voucher.id);
-      snackbar.push(`${voucher.voucher_number} voided.`, 'success');
+      snackbar.push(t('shop.vouchers.voided', { number: voucher.voucher_number }), 'success');
       navigate(backPath, { replace: true });
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't void this voucher. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.vouchers.voidFailed')), 'error');
     }
   }
 
@@ -67,10 +69,15 @@ export function ShopBooksVoucherDetailPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <div>
           <Link to={backPath} style={{ fontSize: 13 }}>
-            ← Back to {isSale ? 'sale invoices' : isPurchase ? 'purchases' : 'books'}
+            {isSale
+              ? t('shop.voucherDetail.backToSale')
+              : isPurchase
+                ? t('shop.voucherDetail.backToPurchases')
+                : t('shop.voucherDetail.backToBooks')}
           </Link>
           <h1 style={{ margin: '8px 0 0', fontSize: 22 }}>
-            {voucher?.voucher_number || (voucherQuery.isLoading ? 'Loading…' : 'Books invoice')}
+            {voucher?.voucher_number ||
+              (voucherQuery.isLoading ? t('common.loading') : t('shop.voucherDetail.booksInvoice'))}
           </h1>
         </div>
         {voucher && isSale && workspace.businessId ? (
@@ -87,21 +94,21 @@ export function ShopBooksVoucherDetailPage() {
               })
             }
           >
-            View / Print / Share
+            {t('shop.vouchers.viewPrintShare')}
           </Button>
         ) : null}
       </div>
 
-      {voucherQuery.isLoading ? <p>Loading invoice…</p> : null}
+      {voucherQuery.isLoading ? <p>{t('shop.voucherDetail.loadingInvoice')}</p> : null}
       {voucherQuery.isError ? (
         <Card>
           <p role="alert" style={{ margin: 0 }}>
-            Couldn&apos;t open this books invoice. It may have been deleted, or you may not have access.
+            {t('shop.voucherDetail.errOpen')}
           </p>
           <div style={{ marginTop: 12 }}>
             <Link to="/shop/books">
               <Button type="button" variant="neutral">
-                Books home
+                {t('shop.voucherDetail.booksHome')}
               </Button>
             </Link>
           </div>
@@ -113,15 +120,19 @@ export function ShopBooksVoucherDetailPage() {
           <div style={{ display: 'grid', gap: 14 }}>
             <div style={{ fontSize: 14, color: 'var(--muted-foreground)' }}>
               {formatVoucherWhen(voucher.voucher_date, voucher.created_at) || voucher.voucher_date} ·{' '}
-              {voucher.customer_name || voucher.supplier_name || 'Cash'} ·{' '}
-              {voided ? 'Void' : paid ? 'Paid' : `To pay ${formatMoney(dueAmount, currency)}`}
+              {voucher.customer_name || voucher.supplier_name || t('shop.vouchers.cashParty')} ·{' '}
+              {voided
+                ? t('shop.vouchers.status.void')
+                : paid
+                  ? t('shop.voucherDetail.paidStatus')
+                  : t('shop.voucherDetail.toPayAmount', { amount: formatMoney(dueAmount, currency) })}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 14 }}>
               <span>
-                Paid <strong>{formatMoney(paidAmount, currency)}</strong>
+                {t('shop.vouchers.stripPaid')} <strong>{formatMoney(paidAmount, currency)}</strong>
               </span>
               <span>
-                {isPurchase ? 'To pay' : 'Due'} <strong>{formatMoney(dueAmount, currency)}</strong>
+                {isPurchase ? t('shop.vouchers.stripToPay') : t('shop.vouchers.stripDue')} <strong>{formatMoney(dueAmount, currency)}</strong>
               </span>
             </div>
 
@@ -130,7 +141,7 @@ export function ShopBooksVoucherDetailPage() {
                 const productId = String(line.product_id || '').trim();
                 const label = (
                   <>
-                    {line.name} {line.hsn_sac ? `· HSN ${line.hsn_sac}` : ''} × {line.qty}
+                    {line.name} {line.hsn_sac ? t('shop.vouchers.hsnLine', { hsn: line.hsn_sac }) : ''} × {line.qty}
                   </>
                 );
                 return (
@@ -146,7 +157,7 @@ export function ShopBooksVoucherDetailPage() {
                   </div>
                 );
               })}
-              {!voucher.line_items?.length ? <p style={{ margin: 0 }}>No line items.</p> : null}
+              {!voucher.line_items?.length ? <p style={{ margin: 0 }}>{t('shop.vouchers.noLineItems')}</p> : null}
             </div>
 
             <div
@@ -159,24 +170,24 @@ export function ShopBooksVoucherDetailPage() {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Subtotal</span>
+                <span>{t('shop.vouchers.summary.subtotal')}</span>
                 <span>{formatMoney(Number(voucher.subtotal ?? 0), currency)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Tax</span>
+                <span>{t('shop.vouchers.summary.tax')}</span>
                 <span>{formatMoney(Number(voucher.tax_total ?? 0), currency)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
-                <span>Total</span>
+                <span>{t('shop.vouchers.summary.total')}</span>
                 <span>{formatMoney(Number(voucher.total ?? 0), currency)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Paid</span>
+                <span>{t('shop.vouchers.stripPaid')}</span>
                 <span>{formatMoney(Number(voucher.amount_paid ?? 0), currency)}</span>
               </div>
             </div>
 
-            {voucher.notes ? <p style={{ margin: 0, fontSize: 13 }}>Notes: {voucher.notes}</p> : null}
+            {voucher.notes ? <p style={{ margin: 0, fontSize: 13 }}>{t('shop.vouchers.notes', { notes: voucher.notes })}</p> : null}
 
             {isPurchase ? <PurchasePayForm voucher={voucher} /> : null}
 
@@ -188,11 +199,11 @@ export function ShopBooksVoucherDetailPage() {
                   onClick={() => void handleVoid()}
                   disabled={voidVoucher.isPending}
                 >
-                  {voidVoucher.isPending ? 'Voiding…' : 'Void bill'}
+                  {voidVoucher.isPending ? t('shop.vouchers.voiding') : t('shop.voucherDetail.voidBill')}
                 </Button>
               ) : null}
               <Button type="button" variant="ghost" onClick={() => navigate(backPath)}>
-                Back to list
+                {t('shop.voucherDetail.backToList')}
               </Button>
             </div>
           </div>
@@ -203,7 +214,11 @@ export function ShopBooksVoucherDetailPage() {
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Sale ${docActions.number || ''}` : 'Sale invoice'}
+        title={
+          docActions
+            ? t('shop.vouchers.saleDoc', { number: docActions.number || '' })
+            : t('shop.vouchers.saleInvoice')
+        }
       />
     </div>
   );

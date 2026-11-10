@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Truck } from 'lucide-react';
 import { Button } from '../../components/Button';
@@ -17,6 +18,7 @@ import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHook
 import type { ShopBooksDocument } from '@ie-orbit/sdk';
 
 export function ShopDeliveryChallansPage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const auth = useAuthContext();
   const navigate = useNavigate();
@@ -32,6 +34,12 @@ export function ShopDeliveryChallansPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const rows = challans.data ?? [];
+  const statusLabel = (value: string) => {
+    const key = value.toLowerCase();
+    return ['draft', 'confirmed', 'dispatched', 'converted', 'cancelled', 'void'].includes(key)
+      ? t(`shop.deliveryChallans.statuses.${key}`)
+      : value;
+  };
 
   useEffect(() => {
     const documentId = searchParams.get('document');
@@ -66,17 +74,17 @@ export function ShopDeliveryChallansPage() {
   ).length;
 
   async function dispatch(documentId: string, documentNumber: string) {
-    if (!window.confirm(`Dispatch ${documentNumber} and reduce stock?`)) return;
+    if (!window.confirm(t('shop.deliveryChallans.confirmDispatch', { number: documentNumber }))) return;
     try {
       await convert.mutateAsync({ documentId, action: 'dispatch' });
-      snackbar.push(`${documentNumber} marked as dispatched.`, 'success');
+      snackbar.push(t('shop.deliveryChallans.toastDispatched', { number: documentNumber }), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't dispatch this challan. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.deliveryChallans.errDispatch')), 'error');
     }
   }
 
   async function invoice(documentId: string, documentNumber: string) {
-    if (!window.confirm(`Create a sale invoice from ${documentNumber}?`)) return;
+    if (!window.confirm(t('shop.deliveryChallans.confirmInvoice', { number: documentNumber }))) return;
     try {
       const result = await convert.mutateAsync({ documentId, action: 'to_invoice' });
       const voucher =
@@ -85,14 +93,14 @@ export function ShopDeliveryChallansPage() {
           : null;
       snackbar.push(
         voucher?.voucher_number
-          ? `${documentNumber} invoiced as ${voucher.voucher_number}.`
-          : `${documentNumber} converted to invoice.`,
+          ? t('shop.deliveryChallans.toastInvoicedAs', { number: documentNumber, invoice: voucher.voucher_number })
+          : t('shop.deliveryChallans.toastConverted', { number: documentNumber }),
         'success',
       );
       setSelected(null);
       if (voucher?.id) navigate(`/shop/books/sale/${voucher.id}`);
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't create an invoice from this challan. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.deliveryChallans.errInvoice')), 'error');
     }
   }
 
@@ -102,32 +110,36 @@ export function ShopDeliveryChallansPage() {
         open={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Challan ${docActions.number || ''}` : 'Delivery challan'}
+        title={
+          docActions
+            ? t('shop.deliveryChallans.challanNumber', { number: docActions.number || '' })
+            : t('shop.deliveryChallans.dispatchTitle')
+        }
       />
       <div className="invoice-page-header">
-        <h1 className="invoice-page-title">Delivery challans</h1>
+        <h1 className="invoice-page-title">{t('shop.deliveryChallans.title')}</h1>
         <Link to="/shop/pos?mode=delivery_challan" style={{ textDecoration: 'none' }}>
           <Button type="button" variant="primary">
-            <Plus size={16} aria-hidden="true" /> New challan
+            <Plus size={16} aria-hidden="true" /> {t('shop.deliveryChallans.newChallan')}
           </Button>
         </Link>
       </div>
 
       <div className="invoice-strip">
         <div className="invoice-strip__cell">
-          <span>All</span>
+          <span>{t('shop.deliveryChallans.statAll')}</span>
           <strong>{rows.length}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Open</span>
+          <span>{t('shop.deliveryChallans.statOpen')}</span>
           <strong>{openCount}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Dispatched</span>
+          <span>{t('shop.deliveryChallans.statDispatched')}</span>
           <strong>{dispatchedCount}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Invoiced</span>
+          <span>{t('shop.deliveryChallans.statInvoiced')}</span>
           <strong>{invoicedCount}</strong>
         </div>
       </div>
@@ -138,44 +150,44 @@ export function ShopDeliveryChallansPage() {
           <label style={{ position: 'relative', flex: '1 1 260px' }}>
             <Search size={16} aria-hidden="true" style={{ position: 'absolute', left: 12, top: 12, color: 'var(--muted-foreground)' }} />
             <input
-              aria-label="Search delivery challans"
+              aria-label={t('shop.deliveryChallans.searchAria')}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search number, customer, or notes…"
+              placeholder={t('shop.deliveryChallans.searchPlaceholder')}
               style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 36px', border: '1px solid var(--border, #e5e7eb)', borderRadius: 10 }}
             />
           </label>
           <Select
-            aria-label="Filter by status"
+            aria-label={t('shop.deliveryChallans.filterStatusAria')}
             compact
             value={status}
             onChange={(event) => setStatus(event.target.value)}
             options={[
-              { value: '', label: 'All statuses' },
-              { value: 'open', label: 'Open' },
-              { value: 'dispatched', label: 'Dispatched' },
-              { value: 'converted', label: 'Invoiced' },
+              { value: '', label: t('shop.deliveryChallans.allStatuses') },
+              { value: 'open', label: t('shop.deliveryChallans.statOpen') },
+              { value: 'dispatched', label: t('shop.deliveryChallans.statDispatched') },
+              { value: 'converted', label: t('shop.deliveryChallans.statInvoiced') },
             ]}
             style={{ minWidth: 180 }}
           />
         </div>
 
-        {challans.isLoading ? <p role="status">Loading challans…</p> : null}
-        {challans.error ? <p role="alert">{getApiErrorMessage(challans.error, 'Unable to load challans.')}</p> : null}
+        {challans.isLoading ? <p role="status">{t('shop.deliveryChallans.loading')}</p> : null}
+        {challans.error ? <p role="alert">{getApiErrorMessage(challans.error, t('shop.deliveryChallans.errLoad'))}</p> : null}
         {!challans.isLoading && !filteredRows.length ? (
           <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--muted-foreground)' }}>
             <Truck size={30} aria-hidden="true" />
             <p style={{ marginBottom: 4, fontWeight: 700, color: 'var(--foreground)' }}>
-              {rows.length ? 'No challans match these filters' : 'No delivery challans yet'}
+              {rows.length ? t('shop.deliveryChallans.emptyFiltered') : t('shop.deliveryChallans.emptyNone')}
             </p>
             <span style={{ fontSize: 13 }}>
-              {rows.length ? 'Try a different search or status.' : 'Open the Sale counter to scan items and save a challan.'}
+              {rows.length ? t('shop.deliveryChallans.hintFiltered') : t('shop.deliveryChallans.hintNone')}
             </span>
             {!rows.length ? (
               <div style={{ marginTop: 12 }}>
                 <Link to="/shop/pos?mode=delivery_challan" style={{ textDecoration: 'none' }}>
                   <Button type="button" variant="primary">
-                    Open Sale counter
+                    {t('shop.deliveryChallans.openSaleCounter')}
                   </Button>
                 </Link>
               </div>
@@ -205,7 +217,7 @@ export function ShopDeliveryChallansPage() {
                 style={{ cursor: 'pointer' }}
               >
                 <div className="invoice-row__main">
-                  <strong>{row.customer_name || 'Walk-in / no customer'}</strong>
+                  <strong>{row.customer_name || t('shop.deliveryChallans.walkIn')}</strong>
                   <span>
                     {row.document_number}
                     {row.document_date || row.created_at
@@ -218,7 +230,7 @@ export function ShopDeliveryChallansPage() {
                   <span
                     className={`invoice-pill ${isVoid ? 'is-void' : invoiced ? 'is-paid' : dispatched ? 'is-paid' : 'is-due'}`}
                   >
-                    {invoiced ? 'invoiced' : row.status}
+                    {invoiced ? t('shop.deliveryChallans.invoicedBadge') : statusLabel(row.status)}
                   </span>
                 </div>
                 {workspace.businessId ? (
@@ -226,8 +238,8 @@ export function ShopDeliveryChallansPage() {
                     <button
                       type="button"
                       className="invoice-row__action"
-                      title="View challan"
-                      aria-label={`View ${row.document_number}`}
+                      title={t('shop.deliveryChallans.viewTitle')}
+                      aria-label={t('shop.deliveryChallans.viewAria', { number: row.document_number })}
                       onClick={() => {
                         const target = {
                           kind: 'delivery_challan' as const,
@@ -238,17 +250,17 @@ export function ShopDeliveryChallansPage() {
                           email: row.customer_email || '',
                         };
                         void openShopDocumentView(target, auth.token, 'a4', workspace.tenantId).catch((error) =>
-                          snackbar.push(error instanceof Error ? error.message : 'View failed', 'error'),
+                          snackbar.push(error instanceof Error ? error.message : t('shop.deliveryChallans.viewFailed'), 'error'),
                         );
                       }}
                     >
-                      View
+                      {t('shop.deliveryChallans.view')}
                     </button>
                     <button
                       type="button"
                       className="invoice-row__action"
-                      title="Share challan"
-                      aria-label={`Share ${row.document_number}`}
+                      title={t('shop.deliveryChallans.shareTitle')}
+                      aria-label={t('shop.deliveryChallans.shareAria', { number: row.document_number })}
                       onClick={() =>
                         setDocActions({
                           kind: 'delivery_challan',
@@ -260,7 +272,7 @@ export function ShopDeliveryChallansPage() {
                         })
                       }
                     >
-                      Share
+                      {t('shop.deliveryChallans.share')}
                     </button>
                   </div>
                 ) : null}
@@ -274,7 +286,7 @@ export function ShopDeliveryChallansPage() {
                       void dispatch(row.id, row.document_number);
                     }}
                   >
-                    Dispatch
+                    {t('shop.deliveryChallans.dispatch')}
                   </Button>
                 ) : null}
                 {canInvoice ? (
@@ -287,7 +299,7 @@ export function ShopDeliveryChallansPage() {
                       void invoice(row.id, row.document_number);
                     }}
                   >
-                    Create invoice
+                    {t('shop.deliveryChallans.createInvoice')}
                   </Button>
                 ) : null}
               </div>

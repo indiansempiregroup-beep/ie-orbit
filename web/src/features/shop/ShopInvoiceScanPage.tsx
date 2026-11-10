@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { Camera } from 'lucide-react';
 import { SHOP_PRODUCT_CATEGORIES, type ShopInvoiceScanDraft, type ShopInvoiceScanLine } from '@ie-orbit/sdk';
@@ -21,12 +22,7 @@ function formatWallet(paise?: number | null, currency = 'INR') {
   return formatMoney(Number(paise || 0) / 100, currency);
 }
 
-const PRODUCT_STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'archived', label: 'Archived' },
-];
+const PRODUCT_STATUSES = ['active', 'draft', 'inactive', 'archived'];
 
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD'];
 
@@ -44,6 +40,7 @@ function LineCatalogFields({
   line: ShopInvoiceScanLine;
   patch: (next: Partial<ShopInvoiceScanLine>) => void;
 }) {
+  const { t } = useTranslation();
   const categories = SHOP_PRODUCT_CATEGORIES.some((item) => item.value === line.category)
     ? SHOP_PRODUCT_CATEGORIES
     : line.category
@@ -52,57 +49,57 @@ function LineCatalogFields({
   return (
     <div className="invoice-scan-extra">
       <label>
-        Qty
+        {t('shop.invoiceScan.qty')}
         <input value={line.qty} onChange={(event) => patch({ qty: event.target.value })} />
       </label>
       <label>
-        Purchase price
+        {t('shop.invoiceScan.purchasePrice')}
         <input value={line.rate} onChange={(event) => patch({ rate: event.target.value })} />
       </label>
       <label>
-        Selling price
+        {t('shop.invoiceScan.sellingPrice')}
         <input
           value={line.price || ''}
-          placeholder="MRP from bill"
+          placeholder={t('shop.invoiceScan.mrpPlaceholder')}
           onChange={(event) => patch({ price: event.target.value })}
         />
       </label>
       <label>
-        SKU
+        {t('shop.invoiceScan.sku')}
         <input value={line.sku || ''} onChange={(event) => patch({ sku: event.target.value })} />
       </label>
       <label>
-        GST
+        {t('shop.invoiceScan.gst')}
         <input value={line.gst_rate || ''} onChange={(event) => patch({ gst_rate: event.target.value })} />
       </label>
       <label>
-        HSN
+        {t('shop.invoiceScan.hsn')}
         <input value={line.hsn_sac || ''} onChange={(event) => patch({ hsn_sac: event.target.value })} />
       </label>
       <label>
-        Brand
+        {t('shop.invoiceScan.brand')}
         <input value={line.brand || ''} onChange={(event) => patch({ brand: event.target.value })} />
       </label>
       <label>
-        Pack size / quantity
+        {t('shop.invoiceScan.packSize')}
         <input
           value={line.pack_size || ''}
-          placeholder="e.g. 1 kg, 12 pcs"
+          placeholder={t('shop.invoiceScan.packSizePlaceholder')}
           onChange={(event) => patch({ pack_size: event.target.value })}
         />
       </label>
       <label>
-        Status
+        {t('shop.invoiceScan.status')}
         <select value={line.status || 'active'} onChange={(event) => patch({ status: event.target.value })}>
-          {PRODUCT_STATUSES.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
+          {PRODUCT_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {t(`shop.products.statuses.${value}`)}
             </option>
           ))}
         </select>
       </label>
       <label>
-        Category
+        {t('shop.invoiceScan.category')}
         <select value={line.category || ''} onChange={(event) => patch({ category: event.target.value })}>
           <option value="">—</option>
           {categories.map((item) => (
@@ -113,7 +110,7 @@ function LineCatalogFields({
         </select>
       </label>
       <label>
-        Currency
+        {t('shop.invoiceScan.currency')}
         <select value={line.currency || 'INR'} onChange={(event) => patch({ currency: event.target.value })}>
           {(line.currency && !CURRENCIES.includes(line.currency) ? [line.currency, ...CURRENCIES] : CURRENCIES).map(
             (code) => (
@@ -125,34 +122,34 @@ function LineCatalogFields({
         </select>
       </label>
       <div>
-        <span>GST on sell price</span>
+        <span>{t('shop.invoiceScan.gstOnSellPrice')}</span>
         <div className="invoice-scan-chips">
           <button
             type="button"
             className={line.tax_inclusive ? undefined : 'is-on'}
             onClick={() => patch({ tax_inclusive: false })}
           >
-            GST excluded
+            {t('shop.invoiceScan.gstExcluded')}
           </button>
           <button
             type="button"
             className={line.tax_inclusive ? 'is-on' : undefined}
             onClick={() => patch({ tax_inclusive: true })}
           >
-            GST included
+            {t('shop.invoiceScan.gstIncluded')}
           </button>
         </div>
       </div>
       <label>
-        On hand
+        {t('shop.invoiceScan.onHand')}
         <input value={line.stock_on_hand || '0'} readOnly />
       </label>
       <label>
-        After this bill
+        {t('shop.invoiceScan.afterBill')}
         <input value={stockAfter(line)} readOnly />
       </label>
       <label className="is-wide">
-        Description
+        {t('shop.invoiceScan.description')}
         <textarea
           rows={2}
           value={line.description || ''}
@@ -160,7 +157,7 @@ function LineCatalogFields({
         />
       </label>
       <label className="is-wide">
-        Product details
+        {t('shop.invoiceScan.productDetails')}
         <textarea
           rows={2}
           value={line.details_html || ''}
@@ -172,6 +169,7 @@ function LineCatalogFields({
 }
 
 export function ShopInvoiceScanPage() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -214,7 +212,7 @@ export function ShopInvoiceScanPage() {
             tenantId,
             businessId,
             imageFile: file,
-            label: 'Vendor invoice',
+            label: t('shop.invoiceScan.vendorInvoiceLabel'),
             prepareProductCanvas: false,
           }),
         );
@@ -224,9 +222,14 @@ export function ShopInvoiceScanPage() {
       setChargedPaise(0);
       setBalanceAfter(null);
       setChargeMessage('');
-      snackbar.push(`Uploaded ${uploaded.length} photo${uploaded.length === 1 ? '' : 's'}.`, 'success');
+      snackbar.push(
+        uploaded.length === 1
+          ? t('shop.invoiceScan.uploadedOne')
+          : t('shop.invoiceScan.uploadedMany', { n: uploaded.length }),
+        'success',
+      );
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't upload that photo."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.invoiceScan.errUpload')), 'error');
     } finally {
       setUploading(false);
     }
@@ -243,7 +246,7 @@ export function ShopInvoiceScanPage() {
       const data = response.data;
       if (!data.ok || !data.draft) {
         if (data.source === 'smart_lookup_no_balance') setTopUpOpen(true);
-        snackbar.push(data.message || "Couldn't read that invoice.", 'error');
+        snackbar.push(data.message || t('shop.invoiceScan.errRead'), 'error');
         return;
       }
       setDraft({ ...data.draft, usage_id: data.usage_id, image_urls: imageUrls });
@@ -251,9 +254,9 @@ export function ShopInvoiceScanPage() {
       setBalanceAfter(data.balance_after_paise ?? null);
       setChargeCurrency(data.charge_currency || 'INR');
       setChargeMessage(data.message || '');
-      snackbar.push(data.message || 'Invoice read. Review the lines.', 'success');
+      snackbar.push(data.message || t('shop.invoiceScan.toastRead'), 'success');
     } catch (error) {
-      const message = getApiErrorMessage(error, "Couldn't read that invoice.");
+      const message = getApiErrorMessage(error, t('shop.invoiceScan.errRead'));
       if (/wallet|balance|top up/i.test(message)) setTopUpOpen(true);
       snackbar.push(message, 'error');
     } finally {
@@ -277,7 +280,7 @@ export function ShopInvoiceScanPage() {
     const code = (overrideCode ?? line.barcode ?? '').trim();
     const query = line.name.trim();
     if (!code && !query) {
-      snackbar.push('Type or scan a barcode, or keep the product name, then Fetch.', 'error');
+      snackbar.push(t('shop.invoiceScan.errNeedBarcodeOrName'), 'error');
       return;
     }
     setFetchingIndex(index);
@@ -286,7 +289,7 @@ export function ShopInvoiceScanPage() {
         try {
           const existing = await client.shop.lookupBarcode({ business_id: businessId, code });
           patchLine(index, applyShopProductToScanLine({ ...line, barcode: code }, existing.data, code));
-          snackbar.push(`Matched ${existing.data.name} in your catalog.`, 'success');
+          snackbar.push(t('shop.invoiceScan.toastMatched', { name: existing.data.name }), 'success');
           return;
         } catch {
           // New barcode — fill from the free catalog next.
@@ -299,12 +302,14 @@ export function ShopInvoiceScanPage() {
       const next = applyEnrichmentToScanLine({ ...line, barcode: code || line.barcode }, response.data);
       patchLine(index, next);
       if (response.data.found) {
-        snackbar.push(response.data.name ? `Fetched ${response.data.name}.` : 'Catalog details added.', 'success');
+        snackbar.push(response.data.name
+            ? t('shop.invoiceScan.toastFetchedNamed', { name: response.data.name })
+            : t('shop.invoiceScan.toastCatalogAdded'), 'success');
       } else {
-        snackbar.push(response.data.message || 'No catalog match. Add the barcode or fill the product.', 'info');
+        snackbar.push(response.data.message || t('shop.invoiceScan.toastNoMatch'), 'info');
       }
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't fetch that product."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.invoiceScan.errFetch')), 'error');
     } finally {
       setFetchingIndex(null);
     }
@@ -319,13 +324,13 @@ export function ShopInvoiceScanPage() {
         tenantId,
         businessId,
         imageFile: file,
-        label: draft?.lines[index]?.name || 'Product',
+        label: draft?.lines[index]?.name || t('shop.invoiceScan.defaultProductLabel'),
         prepareProductCanvas: true,
       });
       patchLine(index, { image_url: url, use_image: true, image_source: 'upload' });
-      snackbar.push('Product photo updated.', 'success');
+      snackbar.push(t('shop.invoiceScan.toastPhotoUpdated'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't upload that product photo."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.invoiceScan.errPhoto')), 'error');
     } finally {
       setPhotoBusy(null);
     }
@@ -341,10 +346,10 @@ export function ShopInvoiceScanPage() {
         create_missing: true,
         create_supplier: Boolean(draft.supplier.create),
       });
-      snackbar.push(`Posted ${response.data.voucher_number}.`, 'success');
+      snackbar.push(t('shop.invoiceScan.toastPosted', { number: response.data.voucher_number }), 'success');
       navigate(`/shop/books/purchase/${response.data.voucher_id}`);
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't post that purchase."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.invoiceScan.errPost')), 'error');
     } finally {
       setConfirming(false);
     }
@@ -354,15 +359,14 @@ export function ShopInvoiceScanPage() {
     <div className="page-stack">
       <div className="invoice-page-header">
         <div>
-          <h1 className="invoice-page-title">Scan vendor invoice</h1>
+          <h1 className="invoice-page-title">{t('shop.invoiceScan.title')}</h1>
           <p className="muted" style={{ margin: '6px 0 0' }}>
-            Photograph the supplier bill. Invoice photos use more tokens than a pack photo — the exact
-            AI wallet charge appears after the scan.
+            {t('shop.invoiceScan.intro')}
           </p>
         </div>
         <Link to="/shop/books/purchase">
           <Button type="button" variant="ghost">
-            Back to purchases
+            {t('shop.invoiceScan.backToPurchases')}
           </Button>
         </Link>
       </div>
@@ -371,10 +375,12 @@ export function ShopInvoiceScanPage() {
         <p className="invoice-banner is-charge" role="status">
           <strong>
             {chargedPaise > 0
-              ? `AI wallet charge ${formatWallet(chargedPaise, chargeCurrency)}`
-              : 'No AI wallet charge'}
+              ? t('shop.invoiceScan.walletCharge', { amount: formatWallet(chargedPaise, chargeCurrency) })
+              : t('shop.invoiceScan.noWalletCharge')}
           </strong>
-          {balanceAfter != null ? `Wallet balance ${formatWallet(balanceAfter, chargeCurrency)}` : chargeMessage}
+          {balanceAfter != null
+            ? t('shop.invoiceScan.walletBalance', { amount: formatWallet(balanceAfter, chargeCurrency) })
+            : chargeMessage}
         </p>
       ) : null}
 
@@ -390,14 +396,16 @@ export function ShopInvoiceScanPage() {
             }}
           />
           <Button type="button" variant="primary" disabled={!imageUrls.length || uploading || analyzing} onClick={() => void analyze()}>
-            {analyzing ? 'Reading invoice…' : 'Extract with AI'}
+            {analyzing ? t('shop.invoiceScan.readingInvoice') : t('shop.invoiceScan.extractWithAi')}
           </Button>
         </div>
         {imageUrls.length ? (
           <>
             <p className="muted" style={{ marginTop: 12 }}>
-              {imageUrls.length} photo{imageUrls.length === 1 ? '' : 's'} ready. Tap a photo to preview.
-              {uploading ? ' Uploading…' : ''}
+              {imageUrls.length === 1
+                ? t('shop.invoiceScan.photosReadyOne')
+                : t('shop.invoiceScan.photosReadyMany', { n: imageUrls.length })}
+              {uploading ? ` ${t('shop.invoiceScan.uploadingSuffix')}` : ''}
             </p>
             <div className="invoice-scan-bill-thumbs">
               {imageUrls.map((url, index) => {
@@ -408,12 +416,12 @@ export function ShopInvoiceScanPage() {
                       type="button"
                       className="invoice-scan-bill-thumb"
                       onClick={() => setLightboxUrl(preview)}
-                      aria-label={`Preview invoice photo ${index + 1}`}
+                      aria-label={t('shop.invoiceScan.previewPhotoAria', { n: index + 1 })}
                     >
                       <img src={preview} alt="" />
                     </button>
                     <button type="button" className="invoice-clear" onClick={() => setLightboxUrl(preview)}>
-                      Preview
+                      {t('shop.invoiceScan.preview')}
                     </button>
                     <button
                       type="button"
@@ -422,7 +430,7 @@ export function ShopInvoiceScanPage() {
                         setImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))
                       }
                     >
-                      Remove
+                      {t('shop.products.remove')}
                     </button>
                   </div>
                 );
@@ -437,15 +445,15 @@ export function ShopInvoiceScanPage() {
         <Card>
           {draft.duplicate?.found ? <p className="invoice-banner is-warn">{draft.duplicate.message}</p> : null}
           {draft.totals_mismatch ? (
-            <p className="invoice-banner is-warn">Line totals do not match the printed grand total. Check qty and rates.</p>
+            <p className="invoice-banner is-warn">{t('shop.invoiceScan.warnTotalsMismatch')}</p>
           ) : null}
           {!draft.lines.length ? (
-            <p className="invoice-banner is-warn">No products were read. Try a flatter, well-lit photo of the full bill.</p>
+            <p className="invoice-banner is-warn">{t('shop.invoiceScan.warnNoProducts')}</p>
           ) : null}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
             <Input
-              label="Supplier"
+              label={t('shop.invoiceScan.supplier')}
               value={draft.supplier.name || ''}
               onChange={(event) =>
                 setDraft((current) =>
@@ -454,7 +462,7 @@ export function ShopInvoiceScanPage() {
               }
             />
             <Input
-              label="GSTIN"
+              label={t('shop.invoiceScan.gstin')}
               value={draft.supplier.gstin || draft.header.gstin || ''}
               onChange={(event) =>
                 setDraft((current) =>
@@ -462,17 +470,17 @@ export function ShopInvoiceScanPage() {
                 )
               }
             />
-            <Input label="Invoice no." value={draft.header.invoice_number || ''} readOnly />
-            <Input label="Date" value={draft.header.invoice_date || ''} readOnly />
-            <Input label="Printed total" value={draft.header.grand_total || ''} readOnly />
+            <Input label={t('shop.invoiceScan.invoiceNo')} value={draft.header.invoice_number || ''} readOnly />
+            <Input label={t('shop.invoiceScan.date')} value={draft.header.invoice_date || ''} readOnly />
+            <Input label={t('shop.invoiceScan.printedTotal')} value={draft.header.grand_total || ''} readOnly />
           </div>
           {draft.supplier.match ? (
             <p className="muted" style={{ marginTop: 8 }}>
-              Supplier matched by {draft.supplier.match}.
+              {t('shop.invoiceScan.supplierMatched', { match: draft.supplier.match })}
             </p>
           ) : (
             <div style={{ marginTop: 12 }}>
-              <span className="muted">Supplier is optional.</span>
+              <span className="muted">{t('shop.invoiceScan.supplierOptional')}</span>
               <div className="invoice-scan-chips" style={{ marginTop: 8 }}>
                 <button
                   type="button"
@@ -481,7 +489,7 @@ export function ShopInvoiceScanPage() {
                     setDraft((current) => (current ? { ...current, supplier: { ...current.supplier, create: false } } : current))
                   }
                 >
-                  Don't create
+                  {t('shop.invoiceScan.dontCreate')}
                 </button>
                 <button
                   type="button"
@@ -490,14 +498,16 @@ export function ShopInvoiceScanPage() {
                     setDraft((current) => (current ? { ...current, supplier: { ...current.supplier, create: true } } : current))
                   }
                 >
-                  Create supplier
+                  {t('shop.invoiceScan.createSupplier')}
                 </button>
               </div>
             </div>
           )}
           {draft.lines.length ? (
             <p className="muted" style={{ marginTop: 8 }}>
-              {draft.lines.length} product{draft.lines.length === 1 ? '' : 's'} on this bill — add a barcode and Fetch on each.
+              {draft.lines.length === 1
+                ? t('shop.invoiceScan.productsOnBillOne')
+                : t('shop.invoiceScan.productsOnBillMany', { n: draft.lines.length })}
             </p>
           ) : null}
         </Card>
@@ -510,13 +520,13 @@ export function ShopInvoiceScanPage() {
               return (
               <article key={`${line.name}-${index}`} className={`invoice-scan-card${line.skip ? ' is-skip' : ''}`}>
                 <div className="invoice-scan-card-kicker">
-                  <strong>Product {index + 1} of {draft.lines.length}</strong>
+                  <strong>{t('shop.invoiceScan.productOfTotal', { index: index + 1, total: draft.lines.length })}</strong>
                   <span className="muted">
-                    {line.match || (line.create ? 'Will create' : 'Unmatched')}
-                    {line.skip ? ' · Skipped' : ''}
+                    {line.match || (line.create ? t('shop.invoiceScan.willCreate') : t('shop.invoiceScan.unmatched'))}
+                    {line.skip ? ` · ${t('shop.invoiceScan.skipped')}` : ''}
                   </span>
                   <Button type="button" variant="ghost" onClick={() => patchLine(index, { skip: !line.skip })}>
-                    {line.skip ? 'Include' : 'Skip'}
+                    {line.skip ? t('shop.invoiceScan.include') : t('shop.invoiceScan.skip')}
                   </Button>
                 </div>
                 <div className="invoice-scan-card-head">
@@ -526,7 +536,9 @@ export function ShopInvoiceScanPage() {
                         type="button"
                         className="invoice-scan-photo-preview"
                         onClick={() => setLightboxUrl(photoUrl)}
-                        aria-label={`Preview photo for ${line.name || `product ${index + 1}`}`}
+                        aria-label={t('shop.invoiceScan.previewPhotoFor', {
+                          name: line.name || t('shop.invoiceScan.productN', { n: index + 1 }),
+                        })}
                       >
                         <img src={photoUrl} alt="" />
                       </button>
@@ -541,7 +553,7 @@ export function ShopInvoiceScanPage() {
                             event.target.value = '';
                           }}
                         />
-                        <span>Add photo</span>
+                        <span>{t('shop.invoiceScan.addPhoto')}</span>
                       </label>
                     )}
                     <div className="invoice-scan-photo-actions">
@@ -555,11 +567,15 @@ export function ShopInvoiceScanPage() {
                             event.target.value = '';
                           }}
                         />
-                        {photoBusy === index ? 'Uploading…' : photoUrl ? 'Replace photo' : 'Add photo'}
+                        {photoBusy === index
+                          ? t('shop.invoiceScan.uploadingSuffix')
+                          : photoUrl
+                            ? t('shop.invoiceScan.replacePhoto')
+                            : t('shop.invoiceScan.addPhoto')}
                       </label>
                       {photoUrl ? (
                         <button type="button" className="invoice-clear" onClick={() => setLightboxUrl(photoUrl)}>
-                          Preview
+                          {t('shop.invoiceScan.preview')}
                         </button>
                       ) : null}
                       {photoUrl ? (
@@ -568,25 +584,27 @@ export function ShopInvoiceScanPage() {
                           className="invoice-clear"
                           onClick={() => patchLine(index, { image_url: '', use_image: false })}
                         >
-                          Remove
+                          {t('shop.products.remove')}
                         </button>
                       ) : null}
                     </div>
                   </div>
                   <div className="invoice-scan-card-title">
                     <label>
-                      Name
+                      {t('shop.invoiceScan.name')}
                       <input
                         value={line.name}
                         onChange={(event) => patchLine(index, { name: event.target.value })}
-                        aria-label={`Product ${index + 1} name`}
+                        aria-label={t('shop.invoiceScan.productNameAria', { n: index + 1 })}
                       />
                     </label>
                     <div className="invoice-scan-barcode">
                       <input
                         value={line.barcode || ''}
-                        placeholder="Add barcode"
-                        aria-label={`Barcode for ${line.name || `product ${index + 1}`}`}
+                        placeholder={t('shop.invoiceScan.addBarcode')}
+                        aria-label={t('shop.invoiceScan.barcodeForAria', {
+                          name: line.name || t('shop.invoiceScan.productN', { n: index + 1 }),
+                        })}
                         onChange={(event) => patchLine(index, { barcode: event.target.value })}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
@@ -598,7 +616,7 @@ export function ShopInvoiceScanPage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        aria-label="Scan barcode with camera"
+                        aria-label={t('shop.invoiceScan.scanBarcodeCameraAria')}
                         onClick={() => setCameraLine(index)}
                         style={{ padding: 8, minWidth: 36 }}
                       >
@@ -610,7 +628,7 @@ export function ShopInvoiceScanPage() {
                         disabled={fetchingIndex === index}
                         onClick={() => void fetchLine(index)}
                       >
-                        {fetchingIndex === index ? 'Fetching…' : 'Fetch'}
+                        {fetchingIndex === index ? t('shop.invoiceScan.fetching') : t('shop.invoiceScan.fetch')}
                       </Button>
                     </div>
                   </div>
@@ -624,7 +642,11 @@ export function ShopInvoiceScanPage() {
 
           <div>
             <Button type="button" variant="primary" disabled={!readyLines.length || confirming} onClick={() => void confirm()}>
-              {confirming ? 'Posting…' : `Post purchase · ${readyLines.length} line${readyLines.length === 1 ? '' : 's'}`}
+              {confirming
+                ? t('shop.invoiceScan.posting')
+                : readyLines.length === 1
+                  ? t('shop.invoiceScan.postPurchaseOne')
+                  : t('shop.invoiceScan.postPurchaseMany', { n: readyLines.length })}
             </Button>
           </div>
         </>
@@ -632,7 +654,7 @@ export function ShopInvoiceScanPage() {
 
       {cameraLine != null ? (
         <Card>
-          <p style={{ margin: '0 0 8px', fontSize: 14 }}>Scan a barcode onto product {(cameraLine || 0) + 1}.</p>
+          <p style={{ margin: '0 0 8px', fontSize: 14 }}>{t('shop.invoiceScan.scanOntoProduct', { n: (cameraLine || 0) + 1 })}</p>
           <BarcodeCameraPanel
             active
             onClose={() => setCameraLine(null)}
@@ -647,7 +669,7 @@ export function ShopInvoiceScanPage() {
       ) : null}
 
       {lightboxUrl ? (
-        <button type="button" className="invoice-scan-lightbox" onClick={() => setLightboxUrl(null)} aria-label="Close photo preview">
+        <button type="button" className="invoice-scan-lightbox" onClick={() => setLightboxUrl(null)} aria-label={t('shop.invoiceScan.closePreviewAria')}>
           <img src={lightboxUrl} alt="" />
         </button>
       ) : null}

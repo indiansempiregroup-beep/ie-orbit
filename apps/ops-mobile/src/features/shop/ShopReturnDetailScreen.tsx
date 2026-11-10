@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Linking,
@@ -19,6 +20,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
+import type { TFunction } from 'i18next';
 import { ArrangeReturnPickupSheet } from './ArrangeReturnPickupSheet';
 import { DeliveryMapLegend } from './DeliveryMapLegend';
 import { DeliveryTrackingMap } from './DeliveryTrackingMap';
@@ -26,26 +28,28 @@ import { formatMoney } from './posPayment';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopReturnDetail'>;
 
-function returnMethodLabel(method?: string | null) {
-  if (method === 'dropoff') return 'Drop-off';
-  if (method === 'reverse_pickup') return 'Reverse pickup';
-  if (method === 'instant_pickup') return 'Instant pickup';
-  if (method === 'in_store') return 'In store';
+function returnMethodLabel(method: string | null | undefined, t: TFunction) {
+  if (method === 'dropoff') return t('shop.returnsPage.methods.dropoff');
+  if (method === 'reverse_pickup') return t('shop.returnsPage.methods.reverse_pickup');
+  if (method === 'instant_pickup') return t('shop.returnsPage.methods.instant_pickup');
+  if (method === 'in_store') return t('shop.returnsPage.methods.in_store');
   return method ? String(method).replace(/_/g, ' ') : '';
 }
 
-function returnStatusLabel(item: ShopReturn) {
+function returnStatusLabel(item: ShopReturn, t: TFunction) {
   const status = String(item.status || '').toLowerCase();
-  if (status === 'completed') return 'Completed';
-  if (status === 'rejected') return 'Rejected';
-  if (status === 'awaiting_customer') return 'Awaiting customer';
+  if (status === 'completed') return t('shop.returnsPage.statusLabels.completed');
+  if (status === 'rejected') return t('shop.returnsPage.statusLabels.rejected');
+  if (status === 'awaiting_customer') return t('opsApp.shop.returns.awaitingCustomer');
   if (status === 'approved' || item.pickup_arranged_at) {
-    return item.return_method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged';
+    return item.return_method === 'instant_pickup'
+      ? t('shop.returnsPage.statusLabels.riderDispatched')
+      : t('shop.returnsPage.statusLabels.pickupArranged');
   }
-  if (item.return_method === 'dropoff') return 'Awaiting drop-off';
-  if (item.return_method === 'instant_pickup') return 'Awaiting dispatch';
-  if (item.return_method === 'reverse_pickup') return 'Awaiting pickup';
-  return status || 'Pending';
+  if (item.return_method === 'dropoff') return t('shop.returnsPage.statusLabels.awaitingDropoff');
+  if (item.return_method === 'instant_pickup') return t('shop.returnsPage.statusLabels.awaitingDispatch');
+  if (item.return_method === 'reverse_pickup') return t('shop.returnsPage.statusLabels.awaitingPickup');
+  return status || t('shop.returnsPage.statusLabels.pending');
 }
 
 function canArrange(item: ShopReturn) {
@@ -63,6 +67,7 @@ function isOpen(item: ShopReturn) {
 }
 
 export function ShopReturnDetailScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const { returnId } = route.params;
@@ -116,7 +121,7 @@ export function ShopReturnDetailScreen() {
         setShopReturn(null);
         setOrder(null);
         setPickupLive(null);
-        setError('Return not found.');
+        setError(t('opsApp.shop.returns.notFound'));
         return;
       }
       setShopReturn(found);
@@ -132,12 +137,12 @@ export function ShopReturnDetailScreen() {
       }
       await loadPickupLive(found);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Couldn't load this return."));
+      setError(getApiErrorMessage(err, t('opsApp.shop.returns.loadDetailFailed')));
       setShopReturn(null);
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, loadPickupLive, returnId]);
+  }, [businessId, client, loadPickupLive, returnId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -158,9 +163,11 @@ export function ShopReturnDetailScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: shopReturn?.return_number ? `Return ${shopReturn.return_number}` : 'Return detail',
+      title: shopReturn?.return_number
+        ? t('opsApp.shop.returns.detailTitle', { number: shopReturn.return_number })
+        : t('opsApp.shop.returns.detailFallbackTitle'),
     });
-  }, [navigation, shopReturn?.return_number]);
+  }, [navigation, shopReturn?.return_number, t]);
 
   async function runAction(action: 'receive' | 'reject') {
     if (!client || !businessId || !shopReturn) return;
@@ -168,14 +175,14 @@ export function ShopReturnDetailScreen() {
     try {
       if (action === 'receive') {
         await client.shop.receiveReturn(shopReturn.id, { business_id: businessId });
-        toast.push('Return received — refund and stock updated.', 'success');
+        toast.push(t('shop.returnsPage.received'), 'success');
       } else {
         await client.shop.rejectReturn(shopReturn.id, { business_id: businessId });
-        toast.push('Return rejected.', 'success');
+        toast.push(t('shop.returnsPage.rejected'), 'success');
       }
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't update this return."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.returnsPage.updateFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -192,7 +199,7 @@ export function ShopReturnDetailScreen() {
   if (!shopReturn) {
     return (
       <FormScreen>
-        <Text style={styles.error}>{error || 'Return not found.'}</Text>
+        <Text style={styles.error}>{error || t('opsApp.shop.returns.notFound')}</Text>
       </FormScreen>
     );
   }
@@ -206,7 +213,7 @@ export function ShopReturnDetailScreen() {
   const footer = !open ? undefined : (
     <View style={styles.footer}>
       <Button
-        label="Reject"
+        label={t('opsApp.shop.returns.reject')}
         icon="x"
         variant="soft"
         disabled={busy}
@@ -215,7 +222,7 @@ export function ShopReturnDetailScreen() {
       />
       {showArrange ? (
         <Button
-          label="Arrange pickup"
+          label={t('opsApp.shop.returns.arrangePickup')}
           icon="truck"
           variant="soft"
           disabled={busy}
@@ -224,7 +231,7 @@ export function ShopReturnDetailScreen() {
         />
       ) : null}
       <Button
-        label={busy ? 'Saving…' : 'Mark received'}
+        label={busy ? t('common.saving') : t('opsApp.shop.returns.markReceived')}
         icon="check"
         loading={busy}
         disabled={busy}
@@ -244,17 +251,19 @@ export function ShopReturnDetailScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <View style={styles.card}>
-          <Text style={styles.kicker}>Return</Text>
+          <Text style={styles.kicker}>{t('opsApp.shop.returns.kicker')}</Text>
           <Text style={styles.title}>{shopReturn.return_number}</Text>
           <Text style={styles.meta}>
-            {returnStatusLabel(shopReturn)}
-            {shopReturn.return_method ? ` · ${returnMethodLabel(shopReturn.return_method)}` : ''}
+            {returnStatusLabel(shopReturn, t)}
+            {shopReturn.return_method ? ` · ${returnMethodLabel(shopReturn.return_method, t)}` : ''}
           </Text>
           <Text style={styles.refund}>
             {formatMoney(shopReturn.refund_total, shopReturn.currency)}
           </Text>
           {shopReturn.created_at ? (
-            <Text style={styles.meta}>Requested {formatDateTime(shopReturn.created_at)}</Text>
+            <Text style={styles.meta}>
+              {t('opsApp.shop.returns.requested', { date: formatDateTime(shopReturn.created_at) })}
+            </Text>
           ) : null}
           {shopReturn.reason ? <Text style={styles.body}>{shopReturn.reason}</Text> : null}
         </View>
@@ -267,7 +276,7 @@ export function ShopReturnDetailScreen() {
             }
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.kicker}>Original order</Text>
+              <Text style={styles.kicker}>{t('opsApp.shop.returns.originalOrder')}</Text>
               <Text style={styles.linkTitle}>{order.order_number}</Text>
               <Text style={styles.meta}>
                 {formatMoney(order.total, order.currency)} · {order.status}
@@ -287,13 +296,15 @@ export function ShopReturnDetailScreen() {
                 ]}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.kicker}>RETURN PICKUP</Text>
+                <Text style={styles.kicker}>{t('opsApp.shop.returns.returnPickup')}</Text>
                 <Text style={styles.liveTitle}>
                   {pickupLive.headline || String(pickupLive.partner_status || '').replace(/_/g, ' ')}
                 </Text>
                 {pickupLive.subtitle ? <Text style={styles.meta}>{pickupLive.subtitle}</Text> : null}
                 <Text style={[styles.meta, pickupLive.stale ? styles.stale : null]}>
-                  {pickupLive.stale ? 'Location may be stale' : 'Tracking up to date'}
+                  {pickupLive.stale
+                    ? t('opsApp.shop.returns.locationStale')
+                    : t('opsApp.shop.returns.trackingUpToDate')}
                   {pickupLive.last_updated
                     ? ` · ${formatDateTime(pickupLive.last_updated)}`
                     : ''}
@@ -302,7 +313,7 @@ export function ShopReturnDetailScreen() {
               {pickupLive.eta_minutes != null ? (
                 <View style={styles.etaCard}>
                   <Text style={styles.etaValue}>{pickupLive.eta_minutes}</Text>
-                  <Text style={styles.etaLabel}>min ETA</Text>
+                  <Text style={styles.etaLabel}>{t('opsApp.shop.returns.etaMin')}</Text>
                 </View>
               ) : null}
             </View>
@@ -310,8 +321,8 @@ export function ShopReturnDetailScreen() {
             {liveRider?.name || liveRider?.phone ? (
               <View style={styles.riderCard}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.kicker}>Rider</Text>
-                  <Text style={styles.riderName}>{liveRider?.name || 'Assigned rider'}</Text>
+                  <Text style={styles.kicker}>{t('opsApp.shop.returns.rider')}</Text>
+                  <Text style={styles.riderName}>{liveRider?.name || t('opsApp.shop.returns.assignedRider')}</Text>
                   {liveRider?.vehicle ? (
                     <Text style={styles.meta}>{String(liveRider.vehicle)}</Text>
                   ) : null}
@@ -322,7 +333,7 @@ export function ShopReturnDetailScreen() {
                     onPress={() => void Linking.openURL(`tel:${String(liveRider.phone)}`)}
                   >
                     <Feather name="phone" size={16} color="#fff" />
-                    <Text style={styles.callBtnText}>Call</Text>
+                    <Text style={styles.callBtnText}>{t('opsApp.shop.returns.call')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -334,7 +345,7 @@ export function ShopReturnDetailScreen() {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.section}>Items</Text>
+          <Text style={styles.section}>{t('opsApp.shop.returns.items')}</Text>
           {lines.length ? (
             lines.map((raw, index) => {
               if (!raw || typeof raw !== 'object') return null;
@@ -342,8 +353,10 @@ export function ShopReturnDetailScreen() {
               return (
                 <View key={`${row.name}-${index}`} style={styles.lineRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.lineName}>{row.name || `Item ${index + 1}`}</Text>
-                    <Text style={styles.meta}>Qty {String(row.quantity ?? '')}</Text>
+                    <Text style={styles.lineName}>{row.name || t('opsApp.shop.returns.itemN', { n: index + 1 })}</Text>
+                    <Text style={styles.meta}>
+                      {t('opsApp.shop.returns.qty', { qty: String(row.quantity ?? '') })}
+                    </Text>
                   </View>
                   {row.line_total != null ? (
                     <Text style={styles.lineTotal}>
@@ -354,7 +367,7 @@ export function ShopReturnDetailScreen() {
               );
             })
           ) : (
-            <Text style={styles.meta}>No line items on this return.</Text>
+            <Text style={styles.meta}>{t('opsApp.shop.returns.noLineItems')}</Text>
           )}
         </View>
 

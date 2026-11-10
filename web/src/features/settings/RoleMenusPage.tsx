@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { RoleMenuCatalogItem, RoleMenuRoleCode } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useRoleMenusQuery, useUpdateRoleMenus } from '../../hooks/useRoleMenus';
 import { applyRoleMenuToggle } from '../../utils/roleMenus';
 
-const ROLE_LABELS: Record<RoleMenuRoleCode, string> = {
-  business_owner: 'Owner',
-  manager: 'Manager',
-  staff: 'Staff',
+const ROLE_LABEL_KEYS: Record<RoleMenuRoleCode, string> = {
+  business_owner: 'settings.roleMenusPage.owner',
+  manager: 'settings.roleMenusPage.manager',
+  staff: 'settings.roleMenusPage.staff',
 };
 
 const OWNER_LOCKED = new Set(['home', 'alerts', 'profile', 'settings']);
 
 export function RoleMenusPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const query = useRoleMenusQuery();
   const update = useUpdateRoleMenus();
@@ -50,26 +53,26 @@ export function RoleMenusPage() {
     setSaving(true);
     try {
       await update.mutateAsync(nextEnabled);
-      snackbar.push('Role menus saved.', 'success');
+      snackbar.push(t('settings.roleMenusPage.saved'), 'success');
     } catch {
       const fallback = query.data?.enabled ?? {};
       draftRef.current = fallback;
       setDraft(fallback);
-      snackbar.push("Couldn't save role menus.", 'error');
+      snackbar.push(t('settings.roleMenusPage.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
   }
 
   if (query.isLoading && !query.data) {
-    return <p>Loading menus…</p>;
+    return <p>{t('settings.roleMenusPage.loading')}</p>;
   }
 
   if (!query.data?.can_manage) {
     return (
       <Card>
-        <h2 style={{ margin: '8px 0' }}>Role menus</h2>
-        <p style={{ color: 'var(--muted-foreground)' }}>Only the business owner can change role menus.</p>
+        <h2 style={{ margin: '8px 0' }}>{t('settings.roleMenus')}</h2>
+        <p style={{ color: 'var(--muted-foreground)' }}>{t('settings.roleMenusPage.ownerOnly')}</p>
       </Card>
     );
   }
@@ -77,12 +80,10 @@ export function RoleMenusPage() {
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <Card>
-        <p className="public-kicker">Team</p>
-        <h2 style={{ margin: '8px 0' }}>Role menus</h2>
+        <p className="public-kicker">{t('settings.team')}</p>
+        <h2 style={{ margin: '8px 0' }}>{t('settings.roleMenus')}</h2>
         <p style={{ color: 'var(--muted-foreground)', marginTop: 0 }}>
-          Choose which menus each role can open. Under Books, turn individual sections on for
-          Manager or Staff. Plan features and permissions still apply. Manager and staff start
-          with Books and its sections off.
+          {t('settings.roleMenusPage.lead')}
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           {(query.data?.roles ?? (['business_owner', 'manager', 'staff'] as RoleMenuRoleCode[])).map((code) => (
@@ -100,13 +101,13 @@ export function RoleMenusPage() {
                 cursor: 'pointer',
               }}
             >
-              {ROLE_LABELS[code] ?? code}
+              {ROLE_LABEL_KEYS[code] ? t(ROLE_LABEL_KEYS[code]) : code}
             </button>
           ))}
         </div>
       </Card>
 
-      {query.isLoading ? <p>Loading menus…</p> : null}
+      {query.isLoading ? <p>{t('settings.roleMenusPage.loading')}</p> : null}
 
       {groups.map((group) => (
         <Card key={group.group}>
@@ -136,7 +137,7 @@ export function RoleMenusPage() {
                         <button
                           type="button"
                           aria-expanded={booksOpen}
-                          aria-label={booksOpen ? 'Hide Books sections' : 'Show Books sections'}
+                          aria-label={booksOpen ? t('settings.roleMenusPage.hideBooks') : t('settings.roleMenusPage.showBooks')}
                           onClick={() => setBooksOpen((open) => !open)}
                           style={{
                             border: 0,
@@ -155,7 +156,7 @@ export function RoleMenusPage() {
                         <strong>{item.label}</strong>
                         {locked ? (
                           <span style={{ display: 'block', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                            Always available
+                            {t('settings.roleMenusPage.alwaysAvailable')}
                           </span>
                         ) : expandable ? (
                           <button
@@ -172,11 +173,11 @@ export function RoleMenusPage() {
                               textAlign: 'left',
                             }}
                           >
-                            {booksSectionSummary(children, selected, on)}
+                            {booksSectionSummary(children, selected, on, t)}
                           </button>
                         ) : !inRoleDefault ? (
                           <span style={{ display: 'block', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                            Off by default
+                            {t('settings.roleMenusPage.offByDefault')}
                           </span>
                         ) : null}
                       </span>
@@ -217,11 +218,11 @@ export function RoleMenusPage() {
                               <strong>{child.label}</strong>
                               {parentOff ? (
                                 <span style={{ display: 'block', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                                  Turn on Books first
+                                  {t('settings.roleMenusPage.turnOnBooksFirst')}
                                 </span>
                               ) : !childDefault ? (
                                 <span style={{ display: 'block', color: 'var(--muted-foreground)', fontSize: 13 }}>
-                                  Off by default
+                                  {t('settings.roleMenusPage.offByDefault')}
                                 </span>
                               ) : null}
                             </span>
@@ -246,11 +247,16 @@ export function RoleMenusPage() {
   );
 }
 
-function booksSectionSummary(children: RoleMenuCatalogItem[], selected: Set<string>, booksOn: boolean): string {
-  if (!booksOn) return 'Off · click to view sections';
+function booksSectionSummary(
+  children: RoleMenuCatalogItem[],
+  selected: Set<string>,
+  booksOn: boolean,
+  t: TFunction,
+): string {
+  if (!booksOn) return t('settings.roleMenusPage.summaryOff');
   const onCount = children.filter((child) => selected.has(child.key)).length;
-  if (onCount === children.length) return `All ${children.length} sections · click to edit`;
-  return `${onCount} of ${children.length} sections · click to edit`;
+  if (onCount === children.length) return t('settings.roleMenusPage.summaryAll', { count: children.length });
+  return t('settings.roleMenusPage.summarySome', { on: onCount, total: children.length });
 }
 
 function isLocked(role: RoleMenuRoleCode, catalog: RoleMenuCatalogItem[], key: string): boolean {

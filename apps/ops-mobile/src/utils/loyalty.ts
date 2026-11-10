@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 export type LoyaltyPrefs = {
   enabled: boolean;
   points_per_currency_unit: number;
@@ -106,7 +108,7 @@ export function loyaltyBillHighlight(options: {
   reversalReason?: string;
   /** Omit or null when balance is unknown — earned line still shows. */
   pointsBalance?: number | null;
-}): string {
+}, t?: TFunction): string {
   if (!options.enabled) return '';
   const earned = Math.max(0, Math.floor(Number(options.pointsEarned) || 0));
   const pending = Math.max(0, Math.floor(Number(options.pointsToEarn) || 0));
@@ -117,9 +119,25 @@ export function loyaltyBillHighlight(options: {
     options.pointsBalance != null && Number.isFinite(Number(options.pointsBalance));
   const balance = hasBalance ? Math.max(0, Math.floor(Number(options.pointsBalance) || 0)) : null;
   const parts: string[] = [];
-  if (earned > 0) parts.push(`+${earned} points earned`);
-  else if (pending > 0) parts.push(`+${pending} points to earn`);
-  if (reversed > 0) parts.push(`−${reversed} reversed${why ? ` · ${why}` : ''}`);
-  else if (balance != null && balance > 0) parts.push(`${balance} pts total`);
+  if (earned > 0) {
+    parts.push(
+      t ? t('opsApp.shop.saleDetail.pointsEarned', { n: earned }) : `+${earned} points earned`,
+    );
+  } else if (pending > 0) {
+    parts.push(
+      t ? t('opsApp.shop.saleDetail.pointsToEarn', { n: pending }) : `+${pending} points to earn`,
+    );
+  }
+  if (reversed > 0) {
+    parts.push(
+      t
+        ? why
+          ? t('opsApp.shop.saleDetail.reversedWhy', { n: reversed, why })
+          : t('opsApp.shop.saleDetail.reversed', { n: reversed })
+        : `−${reversed} reversed${why ? ` · ${why}` : ''}`,
+    );
+  } else if (balance != null && balance > 0) {
+    parts.push(t ? t('opsApp.shop.saleDetail.pointsTotal', { n: balance }) : `${balance} pts total`);
+  }
   return parts.join(' · ');
 }

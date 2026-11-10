@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import type { MerchantPaymentSettings } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -9,6 +10,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { getApiErrorMessage } from '../../lib/apiClient';
 
 export function PaymentSettingsPage() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
@@ -42,9 +44,9 @@ export function PaymentSettingsPage() {
           Boolean(response.data.cashfree?.enabled && response.data.cashfree?.connected),
         );
       })
-      .catch((error) => snackbar.push(getApiErrorMessage(error, 'Unable to load payment settings.'), 'error'))
+      .catch((error) => snackbar.push(getApiErrorMessage(error, t('settings.paymentsPage.loadFailed')), 'error'))
       .finally(() => setLoading(false));
-  }, [client, snackbar, workspace.businessId]);
+  }, [client, snackbar, workspace.businessId, t]);
 
   async function save(nextEnabled = enabled) {
     if (!workspace.businessId) return;
@@ -67,14 +69,14 @@ export function PaymentSettingsPage() {
       snackbar.push(
         response.data.connected
           ? nextEnabled
-            ? 'Razorpay is connected and ready.'
-            : 'Razorpay tested.'
-          : 'Razorpay settings saved.',
+            ? t('settings.paymentsPage.toastConnected', { provider: 'Razorpay' })
+            : t('settings.paymentsPage.toastTested', { provider: 'Razorpay' })
+          : t('settings.paymentsPage.toastSaved', { provider: 'Razorpay' }),
         'success',
       );
     } catch (error) {
       setEnabled(Boolean(settings?.enabled && settings?.connected));
-      snackbar.push(getApiErrorMessage(error, "Couldn't connect Razorpay. Check the keys and try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.paymentsPage.toastConnectFailed', { provider: 'Razorpay' })), 'error');
     } finally {
       setSaving(false);
     }
@@ -101,14 +103,14 @@ export function PaymentSettingsPage() {
       snackbar.push(
         response.data.cashfree?.connected
           ? nextEnabled
-            ? 'Cashfree is connected and ready.'
-            : 'Cashfree tested.'
-          : 'Cashfree settings saved.',
+            ? t('settings.paymentsPage.toastConnected', { provider: 'Cashfree' })
+            : t('settings.paymentsPage.toastTested', { provider: 'Cashfree' })
+          : t('settings.paymentsPage.toastSaved', { provider: 'Cashfree' }),
         'success',
       );
     } catch (error) {
       setCashfreeEnabled(Boolean(settings?.cashfree?.enabled && settings?.cashfree?.connected));
-      snackbar.push(getApiErrorMessage(error, "Couldn't connect Cashfree. Check the keys and try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.paymentsPage.toastConnectFailed', { provider: 'Cashfree' })), 'error');
     } finally {
       setSavingCashfree(false);
     }
@@ -117,16 +119,16 @@ export function PaymentSettingsPage() {
   async function copyCashfreeWebhook() {
     if (!settings?.cashfree?.webhook_url) return;
     await navigator.clipboard.writeText(settings.cashfree.webhook_url);
-    snackbar.push('Cashfree webhook URL copied.', 'success');
+    snackbar.push(t('settings.paymentsPage.webhookCopied'), 'success');
   }
 
   async function copyWebhook() {
     if (!settings?.webhook_url) return;
     await navigator.clipboard.writeText(settings.webhook_url);
-    snackbar.push('Webhook URL copied.', 'success');
+    snackbar.push(t('settings.paymentsPage.webhookCopied'), 'success');
   }
 
-  if (loading) return <p role="status">Loading payment settings…</p>;
+  if (loading) return <p role="status">{t('settings.paymentsPage.loading')}</p>;
 
   const billingRegion = settings?.billing_region ?? 'IN';
   const isIntl = billingRegion === 'INTL';
@@ -145,9 +147,9 @@ export function PaymentSettingsPage() {
         window.location.assign(url);
         return;
       }
-      snackbar.push('Stripe Connect started. Complete onboarding when the link is ready.', 'success');
+      snackbar.push(t('settings.paymentsPage.stripeStarted'), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, 'Unable to start Stripe Connect.'), 'error');
+      snackbar.push(getApiErrorMessage(error, t('settings.paymentsPage.stripeStartFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -156,11 +158,9 @@ export function PaymentSettingsPage() {
   return (
     <div className="page-stack" style={{ display: 'grid', gap: 16 }}>
       <div>
-        <h1 style={{ marginBottom: 6 }}>Payments</h1>
+        <h1 style={{ marginBottom: 6 }}>{t('settings.paymentsPage.title')}</h1>
         <p style={{ margin: 0, color: '#6b7280' }}>
-          {isIntl
-            ? 'Connect Stripe so customers pay you for shop orders. Settlement is to your Stripe account. Platform subscription (USD) is billed separately.'
-            : 'Connect your own Razorpay and/or Cashfree accounts. Customer payments settle directly to the merchant account. We never hold your money.'}
+          {isIntl ? t('settings.paymentsPage.leadIntl') : t('settings.paymentsPage.leadIn')}
         </p>
       </div>
 
@@ -171,12 +171,14 @@ export function PaymentSettingsPage() {
               <strong>Stripe Connect</strong>
               <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
                 {!settings?.stripe?.platform_enabled
-                  ? 'Disabled for this tenant by the platform administrator.'
+                  ? t('settings.paymentsPage.platformDisabled')
                   : !settings?.stripe?.plan_entitled
-                    ? 'Upgrade to a package that includes Stripe customer payments.'
+                    ? t('settings.paymentsPage.upgradePackage', { provider: 'Stripe' })
                     : settings?.stripe?.connected
-                      ? `Connected${settings.stripe.account_id_masked ? ` as ${settings.stripe.account_id_masked}` : ''}.`
-                      : 'Create a Stripe Express account and finish onboarding to accept cards.'}
+                      ? settings.stripe.account_id_masked
+                        ? t('settings.paymentsPage.stripeConnectedAs', { account: settings.stripe.account_id_masked })
+                        : t('settings.paymentsPage.stripeConnected')
+                      : t('settings.paymentsPage.stripeCreate')}
               </p>
             </div>
             <Button
@@ -186,10 +188,10 @@ export function PaymentSettingsPage() {
               onClick={() => void startStripeConnect()}
             >
               {saving
-                ? 'Opening Stripe…'
+                ? t('settings.paymentsPage.stripeOpening')
                 : settings?.stripe?.configured
-                  ? 'Continue Stripe onboarding'
-                  : 'Connect with Stripe'}
+                  ? t('settings.paymentsPage.stripeContinue')
+                  : t('settings.paymentsPage.stripeConnect')}
             </Button>
           </div>
         </Card>
@@ -200,13 +202,13 @@ export function PaymentSettingsPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div>
-            <strong>Accept Razorpay payments</strong>
+            <strong>{t('settings.paymentsPage.acceptRazorpay')}</strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
               {!settings?.platform_enabled
-                ? 'Disabled for this tenant by the platform administrator.'
+                ? t('settings.paymentsPage.platformDisabled')
                 : !settings?.plan_entitled
-                  ? 'Upgrade to a package that includes Razorpay customer payments.'
-                  : 'Turn online customer payments on or off without deleting your credentials.'}
+                  ? t('settings.paymentsPage.upgradePackage', { provider: 'Razorpay' })
+                  : t('settings.paymentsPage.razorpayToggleHelp')}
             </p>
           </div>
           <input
@@ -220,7 +222,7 @@ export function PaymentSettingsPage() {
                 return;
               }
               if (!keyId.trim() && !settings?.configured) {
-                snackbar.push('Add your Razorpay Key ID and Key Secret, then save to test.', 'error');
+                snackbar.push(t('settings.paymentsPage.addRazorpayKeysFirst'), 'error');
                 return;
               }
               if (settings?.connected) {
@@ -229,7 +231,7 @@ export function PaymentSettingsPage() {
               }
               void save(true);
             }}
-            aria-label="Enable Razorpay payments"
+            aria-label={t('settings.paymentsPage.enableAria', { provider: 'Razorpay' })}
           />
         </div>
       </Card>
@@ -239,21 +241,21 @@ export function PaymentSettingsPage() {
           <div>
             <strong>
               {settings?.can_accept_payments
-                ? 'Razorpay payments are live'
+                ? t('settings.paymentsPage.statusLive', { provider: 'Razorpay' })
                 : settings?.status === 'verification_required'
-                  ? 'Razorpay verification required'
+                  ? t('settings.paymentsPage.statusVerification', { provider: 'Razorpay' })
                   : settings?.status === 'paused'
-                    ? 'Razorpay is connected but paused'
-                    : 'Razorpay is not connected'}
+                    ? t('settings.paymentsPage.statusPaused', { provider: 'Razorpay' })
+                    : t('settings.paymentsPage.statusNotConnected', { provider: 'Razorpay' })}
             </strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
               {settings?.can_accept_payments
-                ? `Connected as ${settings.key_id}. Customers can use Pay online at the counter.`
+                ? t('settings.paymentsPage.razorpayLiveDetail', { id: settings.key_id })
                 : settings?.status === 'verification_required'
-                  ? 'Credentials are saved but have not passed a connection test.'
+                  ? t('settings.paymentsPage.verificationDetail', { provider: 'Razorpay' })
                   : settings?.connected
-                    ? 'Enable payments above to accept cards, UPI and netbanking.'
-                    : 'Connect an account to accept cards, UPI and netbanking at checkout.'}
+                    ? t('settings.paymentsPage.enableAbove')
+                    : t('settings.paymentsPage.razorpayNotConnectedDetail')}
             </p>
           </div>
           <span
@@ -267,99 +269,97 @@ export function PaymentSettingsPage() {
             }}
           >
             {settings?.can_accept_payments
-              ? 'Live'
+              ? t('settings.paymentsPage.badgeLive')
               : settings?.status === 'verification_required'
-                ? 'Test required'
+                ? t('settings.paymentsPage.badgeTestRequired')
                 : settings?.connected
-                  ? 'Paused'
-                  : 'Setup needed'}
+                  ? t('settings.paymentsPage.badgePaused')
+                  : t('settings.paymentsPage.badgeSetupNeeded')}
           </span>
         </div>
       </Card>
 
       <Card>
-        <h2 style={{ marginTop: 0 }}>1. Connect Razorpay</h2>
+        <h2 style={{ marginTop: 0 }}>{t('settings.paymentsPage.step1Title')}</h2>
         <p style={{ color: '#6b7280' }}>
-          In Razorpay Dashboard, open Account &amp; Settings → API Keys. Create keys and paste them below.
-          Secrets are encrypted and are never shown again.
+          {t('settings.paymentsPage.step1Help')}
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-          <Input label="Key ID" value={keyId} onChange={(event) => setKeyId(event.target.value)} placeholder="rzp_live_…" />
+          <Input label={t('settings.paymentsPage.keyId')} value={keyId} onChange={(event) => setKeyId(event.target.value)} placeholder="rzp_live_…" />
           <Input
-            label={settings?.configured ? 'Key Secret (leave blank to keep saved secret)' : 'Key Secret'}
+            label={settings?.configured ? t('settings.paymentsPage.keySecretKeep') : t('settings.paymentsPage.keySecret')}
             type="password"
             value={keySecret}
             onChange={(event) => setKeySecret(event.target.value)}
-            placeholder={settings?.configured ? '••••••••' : 'Paste key secret'}
+            placeholder={settings?.configured ? '••••••••' : t('settings.paymentsPage.pasteKeySecret')}
             autoComplete="new-password"
           />
         </div>
       </Card>
 
       <Card>
-        <h2 style={{ marginTop: 0 }}>2. Configure payment webhook</h2>
+        <h2 style={{ marginTop: 0 }}>{t('settings.paymentsPage.step2Title')}</h2>
         <p style={{ color: '#6b7280' }}>
-          Add this URL in Razorpay Dashboard → Webhooks and enable <code>payment.captured</code>. Choose a webhook
-          secret there, then enter the same secret below.
+          <Trans i18nKey="settings.paymentsPage.step2Help" components={{ code: <code /> }} />
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
-          <Input label="Webhook URL" value={settings?.webhook_url ?? ''} readOnly style={{ minWidth: 320 }} />
-          <Button type="button" variant="neutral" onClick={copyWebhook}>Copy URL</Button>
+          <Input label={t('settings.paymentsPage.webhookUrl')} value={settings?.webhook_url ?? ''} readOnly style={{ minWidth: 320 }} />
+          <Button type="button" variant="neutral" onClick={copyWebhook}>{t('settings.paymentsPage.copyUrl')}</Button>
         </div>
         <Input
-          label={settings?.webhook_secret_masked ? 'Webhook Secret (leave blank to keep saved secret)' : 'Webhook Secret'}
+          label={settings?.webhook_secret_masked ? t('settings.paymentsPage.webhookSecretKeep') : t('settings.paymentsPage.webhookSecret')}
           type="password"
           value={webhookSecret}
           onChange={(event) => setWebhookSecret(event.target.value)}
-          placeholder={settings?.webhook_secret_masked || 'Enter the webhook secret'}
+          placeholder={settings?.webhook_secret_masked || t('settings.paymentsPage.enterWebhookSecret')}
           autoComplete="new-password"
         />
       </Card>
 
       <Card>
-        <h2 style={{ marginTop: 0 }}>3. Keep a UPI fallback</h2>
+        <h2 style={{ marginTop: 0 }}>{t('settings.paymentsPage.step3Title')}</h2>
         <Input
-          label="Shop UPI ID"
+          label={t('settings.paymentsPage.shopUpiId')}
           value={upiVpa}
           onChange={(event) => setUpiVpa(event.target.value)}
           placeholder="shop@okaxis"
         />
-        <p style={{ margin: 0, color: '#6b7280' }}>Used for manual QR collection when online checkout is unavailable.</p>
+        <p style={{ margin: 0, color: '#6b7280' }}>{t('settings.paymentsPage.upiFallbackHelp')}</p>
       </Card>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div>
-            <strong>Allow cash on delivery / pay at pickup</strong>
+            <strong>{t('settings.paymentsPage.codTitle')}</strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
-              Customers pay in cash when they collect or receive the order. Turn off to require UPI only.
+              {t('settings.paymentsPage.codHelp')}
             </p>
           </div>
           <input
             type="checkbox"
             checked={codEnabled}
             onChange={(event) => setCodEnabled(event.target.checked)}
-            aria-label="Allow cash on delivery"
+            aria-label={t('settings.paymentsPage.codAria')}
           />
         </div>
       </Card>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button variant="primary" onClick={() => void save()} disabled={saving || !settings?.available}>
-          {saving ? 'Testing connection…' : settings?.configured ? 'Save Razorpay and test' : 'Connect Razorpay and test'}
+          {saving ? t('settings.paymentsPage.testingConnection') : settings?.configured ? t('settings.paymentsPage.saveRazorpayTest') : t('settings.paymentsPage.connectRazorpayTest')}
         </Button>
       </div>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div>
-            <strong>Accept Cashfree payments</strong>
+            <strong>{t('settings.paymentsPage.acceptCashfree')}</strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
               {!settings?.cashfree?.platform_enabled
-                ? 'Disabled for this tenant by the platform administrator.'
+                ? t('settings.paymentsPage.platformDisabled')
                 : !settings?.cashfree?.plan_entitled
-                  ? 'Upgrade to a package that includes Cashfree customer payments.'
-                  : 'Turn Cashfree on or off without deleting your credentials. Credentials must pass a connection test first.'}
+                  ? t('settings.paymentsPage.upgradePackage', { provider: 'Cashfree' })
+                  : t('settings.paymentsPage.cashfreeToggleHelp')}
             </p>
           </div>
           <input
@@ -373,7 +373,7 @@ export function PaymentSettingsPage() {
                 return;
               }
               if (!cashfreeAppId.trim() && !settings?.cashfree?.configured) {
-                snackbar.push('Add your Cashfree App ID and Secret Key, then save to test.', 'error');
+                snackbar.push(t('settings.paymentsPage.addCashfreeKeysFirst'), 'error');
                 return;
               }
               if (settings?.cashfree?.connected) {
@@ -382,7 +382,7 @@ export function PaymentSettingsPage() {
               }
               void saveCashfree(true);
             }}
-            aria-label="Enable Cashfree payments"
+            aria-label={t('settings.paymentsPage.enableAria', { provider: 'Cashfree' })}
           />
         </div>
       </Card>
@@ -392,19 +392,19 @@ export function PaymentSettingsPage() {
           <div>
             <strong>
               {settings?.cashfree?.can_accept_payments
-                ? 'Cashfree payments are live'
+                ? t('settings.paymentsPage.statusLive', { provider: 'Cashfree' })
                 : settings?.cashfree?.status === 'verification_required'
-                  ? 'Cashfree verification required'
+                  ? t('settings.paymentsPage.statusVerification', { provider: 'Cashfree' })
                   : settings?.cashfree?.status === 'paused'
-                    ? 'Cashfree is connected but paused'
-                    : 'Cashfree is not connected'}
+                    ? t('settings.paymentsPage.statusPaused', { provider: 'Cashfree' })
+                    : t('settings.paymentsPage.statusNotConnected', { provider: 'Cashfree' })}
             </strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
               {settings?.cashfree?.can_accept_payments
-                ? `Connected as ${settings.cashfree.app_id}. Customers can use Pay with Cashfree at the counter.`
+                ? t('settings.paymentsPage.cashfreeLiveDetail', { id: settings.cashfree.app_id })
                 : settings?.cashfree?.status === 'verification_required'
-                  ? 'Credentials are saved but have not passed a Cashfree connection test.'
-                  : 'Connect an account to accept cards, UPI and netbanking through Cashfree.'}
+                  ? t('settings.paymentsPage.verificationDetail', { provider: 'Cashfree' })
+                  : t('settings.paymentsPage.cashfreeNotConnectedDetail')}
             </p>
           </div>
           <span
@@ -418,44 +418,43 @@ export function PaymentSettingsPage() {
             }}
           >
             {settings?.cashfree?.can_accept_payments
-              ? 'Live'
+              ? t('settings.paymentsPage.badgeLive')
               : settings?.cashfree?.status === 'verification_required'
-                ? 'Test required'
+                ? t('settings.paymentsPage.badgeTestRequired')
                 : settings?.cashfree?.connected
-                  ? 'Paused'
-                  : 'Setup needed'}
+                  ? t('settings.paymentsPage.badgePaused')
+                  : t('settings.paymentsPage.badgeSetupNeeded')}
           </span>
         </div>
       </Card>
 
       <Card>
-        <h2 style={{ marginTop: 0 }}>Connect Cashfree</h2>
+        <h2 style={{ marginTop: 0 }}>{t('settings.paymentsPage.connectCashfreeTitle')}</h2>
         <p style={{ color: '#6b7280' }}>
-          In Cashfree Dashboard, open Developers → API Keys. Paste the App ID and Secret Key. Add the webhook
-          URL below and subscribe to <code>PAYMENT_SUCCESS_WEBHOOK</code>.
+          <Trans i18nKey="settings.paymentsPage.connectCashfreeHelp" components={{ code: <code /> }} />
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
           <Input
-            label="App ID"
+            label={t('settings.paymentsPage.appId')}
             value={cashfreeAppId}
             onChange={(event) => setCashfreeAppId(event.target.value)}
             placeholder="TEST…"
           />
           <Input
-            label={settings?.cashfree?.configured ? 'Secret Key (leave blank to keep saved secret)' : 'Secret Key'}
+            label={settings?.cashfree?.configured ? t('settings.paymentsPage.secretKeyKeep') : t('settings.paymentsPage.secretKey')}
             type="password"
             value={cashfreeSecret}
             onChange={(event) => setCashfreeSecret(event.target.value)}
-            placeholder={settings?.cashfree?.configured ? '••••••••' : 'Paste secret key'}
+            placeholder={settings?.cashfree?.configured ? '••••••••' : t('settings.paymentsPage.pasteSecretKey')}
             autoComplete="new-password"
           />
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginTop: 12 }}>
-          <Input label="Webhook URL" value={settings?.cashfree?.webhook_url ?? ''} readOnly style={{ minWidth: 320 }} />
-          <Button type="button" variant="neutral" onClick={copyCashfreeWebhook}>Copy URL</Button>
+          <Input label={t('settings.paymentsPage.webhookUrl')} value={settings?.cashfree?.webhook_url ?? ''} readOnly style={{ minWidth: 320 }} />
+          <Button type="button" variant="neutral" onClick={copyCashfreeWebhook}>{t('settings.paymentsPage.copyUrl')}</Button>
         </div>
         <p style={{ marginBottom: 0, color: '#6b7280' }}>
-          Cashfree signs webhooks with the same Secret Key above; no separate webhook secret is required.
+          {t('settings.paymentsPage.cashfreeSignNote')}
         </p>
       </Card>
 
@@ -466,10 +465,10 @@ export function PaymentSettingsPage() {
           disabled={savingCashfree || !settings?.cashfree?.available}
         >
           {savingCashfree
-            ? 'Testing Cashfree…'
+            ? t('settings.paymentsPage.testingCashfree')
             : settings?.cashfree?.configured
-              ? 'Save Cashfree and test'
-              : 'Connect Cashfree and test'}
+              ? t('settings.paymentsPage.saveCashfreeTest')
+              : t('settings.paymentsPage.connectCashfreeTest')}
         </Button>
       </div>
         </>
@@ -478,22 +477,22 @@ export function PaymentSettingsPage() {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
           <div>
-            <strong>Allow cash on delivery / pay at pickup</strong>
+            <strong>{t('settings.paymentsPage.codTitle')}</strong>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
-              Customers pay in cash when they collect or receive the order. Turn off to require UPI only.
+              {t('settings.paymentsPage.codHelp')}
             </p>
           </div>
           <input
             type="checkbox"
             checked={codEnabled}
             onChange={(event) => setCodEnabled(event.target.checked)}
-            aria-label="Allow cash on delivery"
+            aria-label={t('settings.paymentsPage.codAria')}
           />
         </div>
       </Card>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button variant="primary" onClick={() => void save()} disabled={saving}>
-              {saving ? 'Saving…' : 'Save payment preferences'}
+              {saving ? t('common.saving') : t('settings.paymentsPage.savePrefs')}
             </Button>
           </div>
         </>

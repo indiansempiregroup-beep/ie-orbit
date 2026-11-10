@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -29,6 +30,7 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import type { TFunction } from 'i18next';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { useAuth } from '../../contexts/AuthContext';
@@ -40,6 +42,7 @@ import {
   formatMoney,
   formatVoucherDate,
   formatVoucherDateTime,
+  statusText,
   todayIso,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
@@ -65,13 +68,12 @@ function emptyLine(): QuoteLine {
   };
 }
 
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'accepted', label: 'Accepted' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'expired', label: 'Expired' },
-];
+function statusOptions(t: TFunction) {
+  return ['draft', 'sent', 'accepted', 'rejected', 'expired'].map((value) => ({
+    value,
+    label: t(`shop.billingPage.quoteStatuses.${value}`),
+  }));
+}
 
 function canConvert(quotation: ShopQuotation) {
   if (quotation.converted_order) return false;
@@ -107,6 +109,7 @@ export function ShopBooksQuotationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksQuotations'>>();
   const openQuotationId = route.params?.quotationId;
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
   const auth = useAuth();
@@ -145,16 +148,20 @@ export function ShopBooksQuotationsScreen() {
 
   const openEdit = useCallback((quote: ShopQuotation) => {
     if (!canEdit(quote)) {
-      toast.push('Converted quotations cannot be edited', 'error');
+      toast.push(t('opsApp.shop.quotations.convertedLocked'), 'error');
       return;
     }
     setDetailQuote(null);
     navigation.navigate('ShopPos', { mode: 'quotation', quotationId: quote.id });
-  }, [navigation, toast]);
+  }, [navigation, toast, t]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: showForm ? (editingId ? 'Edit quotation' : 'New quotation') : 'Estimates / Proforma',
+      title: showForm
+        ? editingId
+          ? t('opsApp.shop.quotations.editTitle')
+          : t('opsApp.shop.quotations.newTitle')
+        : t('opsApp.shop.quotations.title'),
       headerRight: () => (
         <Pressable
           onPress={() => {
@@ -162,7 +169,7 @@ export function ShopBooksQuotationsScreen() {
             else navigation.navigate('ShopPos', { mode: 'quotation' });
           }}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'New quotation'}
+          accessibilityLabel={showForm ? t('opsApp.shop.common.close') : t('opsApp.shop.quotations.newTitle')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -170,7 +177,7 @@ export function ShopBooksQuotationsScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, editingId, closeForm]);
+  }, [navigation, showForm, editingId, closeForm, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -186,11 +193,11 @@ export function ShopBooksQuotationsScreen() {
       setProducts(productsRes.data ?? []);
       setCustomers(customersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load quotations');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.quotations.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -207,14 +214,14 @@ export function ShopBooksQuotationsScreen() {
         if (!cancelled && response.data) setDetailQuote(response.data);
       } catch (err) {
         if (!cancelled) {
-          toast.push(getApiErrorMessage(err, "Couldn't open that quotation."), 'error');
+          toast.push(getApiErrorMessage(err, t('opsApp.shop.quotations.openFailed')), 'error');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [openQuotationId, client, toast]);
+  }, [openQuotationId, client, toast, t]);
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
@@ -258,10 +265,10 @@ export function ShopBooksQuotationsScreen() {
 
   const customerOptions = useMemo(
     () => [
-      { value: '', label: 'No customer' },
+      { value: '', label: t('opsApp.shop.common.noCustomer') },
       ...customers.map((customer) => ({ value: customer.id, label: customerLabel(customer) })),
     ],
-    [customers],
+    [customers, t],
   );
 
   const productOptions = useMemo(
@@ -320,7 +327,7 @@ export function ShopBooksQuotationsScreen() {
     if (!client || !businessId) return;
     const validLines = lines.filter((line) => line.productId && Number(line.qty) > 0);
     if (!validLines.length) {
-      toast.push('Add at least one product line', 'error');
+      toast.push(t('opsApp.shop.documents.addAtLeastOne'), 'error');
       return;
     }
     const linesPayload = validLines.map((line) => ({
@@ -339,7 +346,7 @@ export function ShopBooksQuotationsScreen() {
           status,
           lines: linesPayload,
         });
-        toast.push(`Quotation ${response.data.quotation_number} updated`, 'success');
+        toast.push(t('shop.billingPage.quoteUpdated', { number: response.data.quotation_number }), 'success');
         closeForm();
         setDetailQuote(response.data);
         await load();
@@ -352,7 +359,7 @@ export function ShopBooksQuotationsScreen() {
         notes: notes.trim() || undefined,
         lines: linesPayload,
       });
-      toast.push(`Quotation ${response.data.quotation_number} created`, 'success');
+      toast.push(t('opsApp.shop.quotations.created', { number: response.data.quotation_number }), 'success');
       closeForm();
       setDocActions({
         kind: 'quotation',
@@ -367,7 +374,7 @@ export function ShopBooksQuotationsScreen() {
       toast.push(
         getApiErrorMessage(
           err,
-          editingId ? "Couldn't update this quotation. Try again." : "Couldn't create this quotation. Try again.",
+          editingId ? t('shop.billingPage.quoteUpdateFailed') : t('opsApp.shop.quotations.createFailed'),
         ),
         'error',
       );
@@ -379,9 +386,9 @@ export function ShopBooksQuotationsScreen() {
   async function onConvert(quotation: ShopQuotation) {
     if (!client) return;
     const ok = await confirmAction({
-      title: 'Convert to sale',
-      message: `Convert ${quotation.quotation_number} into a sale invoice?`,
-      confirmLabel: 'Convert',
+      title: t('shop.booksDocuments.convertToSale'),
+      message: t('shop.booksDocuments.confirmConvertSale', { number: quotation.quotation_number }),
+      confirmLabel: t('opsApp.shop.documents.convert'),
     });
     if (!ok) return;
     setConvertingId(quotation.id);
@@ -389,12 +396,12 @@ export function ShopBooksQuotationsScreen() {
       const response = await client.shop.convertQuotationToSale(quotation.id, {
         voucher_date: todayIso(),
       });
-      toast.push(`Converted to sale ${response.data.voucher_number}`, 'success');
+      toast.push(t('opsApp.shop.quotations.convertedToSale', { number: response.data.voucher_number }), 'success');
       closeDetail();
       await load();
       navigation.navigate('ShopBooksSale', { voucherId: response.data.id });
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't convert this quotation. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.billingPage.convertFailed')), 'error');
     } finally {
       setConvertingId(null);
     }
@@ -405,7 +412,13 @@ export function ShopBooksQuotationsScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : editingId ? 'Save quotation' : 'Create quotation'}
+            label={
+              busy
+                ? t('common.saving')
+                : editingId
+                  ? t('opsApp.shop.quotations.saveQuotation')
+                  : t('opsApp.shop.quotations.createQuotation')
+            }
             loading={busy}
             fullWidth
             size="lg"
@@ -416,32 +429,32 @@ export function ShopBooksQuotationsScreen() {
         <FormHero
           subtitle={
             editingId
-              ? 'Update the customer, lines, validity, or status. Converted quotations stay locked.'
-              : 'Add products and send this estimate. Convert it to a sale when the customer confirms.'
+              ? t('opsApp.shop.quotations.heroEdit')
+              : t('opsApp.shop.quotations.heroCreate')
           }
         />
         <SelectField
-          label="Customer"
+          label={t('opsApp.shop.common.customer')}
           value={customerId}
           options={customerOptions}
           onChange={setCustomerId}
           optional
         />
         {editingId ? (
-          <SelectField label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
+          <SelectField label={t('opsApp.shop.quotations.status')} value={status} options={statusOptions(t)} onChange={setStatus} />
         ) : null}
         <Input
-          label="Valid until"
+          label={t('opsApp.shop.quotations.validUntil')}
           value={validUntil}
           onChangeText={setValidUntil}
           placeholder="YYYY-MM-DD"
           optional
         />
-        <Text style={styles.section}>Items</Text>
+        <Text style={styles.section}>{t('opsApp.shop.documents.items')}</Text>
         {lines.map((line) => (
           <View key={line.key} style={styles.lineCard}>
             <SelectField
-              label="Product"
+              label={t('opsApp.shop.documents.product')}
               value={line.productId}
               options={productOptions}
               onChange={(value) => selectProductForLine(line.key, value)}
@@ -449,7 +462,7 @@ export function ShopBooksQuotationsScreen() {
             <View style={styles.lineRow}>
               <View style={styles.lineField}>
                 <Input
-                  label="Qty"
+                  label={t('opsApp.shop.documents.qty')}
                   value={line.qty}
                   onChangeText={(value) => setLine(line.key, { qty: value.replace(/[^0-9.]/g, '') })}
                   keyboardType="decimal-pad"
@@ -457,7 +470,7 @@ export function ShopBooksQuotationsScreen() {
               </View>
               <View style={styles.lineField}>
                 <Input
-                  label="Rate"
+                  label={t('opsApp.shop.documents.rate')}
                   value={line.rate}
                   onChangeText={(value) => setLine(line.key, { rate: value.replace(/[^0-9.]/g, '') })}
                   keyboardType="decimal-pad"
@@ -465,7 +478,7 @@ export function ShopBooksQuotationsScreen() {
               </View>
               <View style={styles.lineField}>
                 <Input
-                  label="GST %"
+                  label={t('opsApp.shop.documents.gstPct')}
                   value={line.gst}
                   onChangeText={(value) => setLine(line.key, { gst: value.replace(/[^0-9.]/g, '') })}
                   keyboardType="decimal-pad"
@@ -474,11 +487,15 @@ export function ShopBooksQuotationsScreen() {
             </View>
             <View style={styles.rowBottom}>
               <Text style={styles.meta}>
-                Line {formatMoney((Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + (Number(line.gst) || 0) / 100))}
+                {t('opsApp.shop.quotations.line', {
+                  amount: formatMoney(
+                    (Number(line.qty) || 0) * (Number(line.rate) || 0) * (1 + (Number(line.gst) || 0) / 100),
+                  ),
+                })}
               </Text>
               {lines.length > 1 ? (
                 <Pressable onPress={() => removeLine(line.key)} style={styles.removeBtn} hitSlop={8}>
-                  <Text style={styles.convertText}>Remove</Text>
+                  <Text style={styles.convertText}>{t('opsApp.shop.common.remove')}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -486,24 +503,24 @@ export function ShopBooksQuotationsScreen() {
         ))}
         <Pressable style={styles.addLineBtn} onPress={addLine}>
           <Feather name="plus" size={16} color={colors.primary} />
-          <Text style={styles.addLineText}>Add line</Text>
+          <Text style={styles.addLineText}>{t('opsApp.shop.quotations.addLine')}</Text>
         </Pressable>
         <View style={styles.totalsCard}>
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Subtotal</Text>
+            <Text style={styles.meta}>{t('opsApp.shop.documents.subtotal')}</Text>
             <Text style={styles.meta}>{formatMoney(totals.subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.meta}>Tax</Text>
+            <Text style={styles.meta}>{t('opsApp.shop.documents.tax')}</Text>
             <Text style={styles.meta}>{formatMoney(totals.tax)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.payableLabel}>Total</Text>
+            <Text style={styles.payableLabel}>{t('opsApp.shop.documents.total')}</Text>
             <Text style={styles.payableValue}>{formatMoney(totals.total)}</Text>
           </View>
         </View>
         <Input
-          label="Notes"
+          label={t('opsApp.shop.common.notes')}
           value={notes}
           onChangeText={setNotes}
           multiline
@@ -526,13 +543,13 @@ export function ShopBooksQuotationsScreen() {
             unpaidCount: 0,
           }}
           metrics={[
-            { label: 'Total', value: formatMoney(quoteSummary.total), hint: String(quoteSummary.count) },
-            { label: 'Open', value: String(quoteSummary.open), tone: 'due' },
-            { label: 'Converted', value: String(quoteSummary.converted), tone: 'paid' },
+            { label: t('opsApp.shop.documents.total'), value: formatMoney(quoteSummary.total), hint: String(quoteSummary.count) },
+            { label: t('opsApp.shop.documents.open'), value: String(quoteSummary.open), tone: 'due' },
+            { label: t('opsApp.shop.documents.convertedBadge'), value: String(quoteSummary.converted), tone: 'paid' },
           ]}
         />
         <View style={styles.topBar}>
-          <SearchBar style={styles.searchFlex} value={search} onChangeText={setSearch} placeholder="Search quotations" />
+          <SearchBar style={styles.searchFlex} value={search} onChangeText={setSearch} placeholder={t('opsApp.shop.quotations.searchPlaceholder')} />
           <FilterButton
             count={Number(Boolean(statusFilter))}
             onPress={() => setFiltersOpen(true)}
@@ -544,12 +561,12 @@ export function ShopBooksQuotationsScreen() {
           onReset={() => setStatusFilter('')}
         >
           <FilterChoiceGroup
-            label="Status"
+            label={t('opsApp.shop.quotations.status')}
             value={statusFilter}
             options={[
-              { value: '', label: 'All' },
-              { value: 'open', label: 'Open' },
-              { value: 'converted', label: 'Converted' },
+              { value: '', label: t('opsApp.shop.documents.all') },
+              { value: 'open', label: t('opsApp.shop.documents.open') },
+              { value: 'converted', label: t('opsApp.shop.documents.convertedBadge') },
             ]}
             onChange={setStatusFilter}
           />
@@ -569,31 +586,37 @@ export function ShopBooksQuotationsScreen() {
               (item.customer && customerById.get(item.customer)
                 ? customerLabel(customerById.get(item.customer)!)
                 : item.customer
-                  ? 'Customer'
-                  : 'No customer');
+                  ? t('opsApp.shop.common.customer')
+                  : t('opsApp.shop.common.noCustomer'));
             const open = canConvert(item);
             const converted = Boolean(item.converted_order || (item.status || '').toLowerCase() === 'converted');
             return (
               <BooksDocumentRow
                 title={customer}
                 amount={formatMoney(item.total)}
-                meta={`${item.quotation_number}${item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}${item.valid_until ? ` · Valid till ${formatVoucherDate(item.valid_until)}` : ''}`}
-                badge={converted ? 'Converted' : item.status}
+                meta={`${item.quotation_number}${item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}${item.valid_until ? ` · ${t('opsApp.shop.quotations.validTill', { date: formatVoucherDate(item.valid_until) })}` : ''}`}
+                badge={converted ? t('opsApp.shop.documents.convertedBadge') : statusText(item.status, t)}
                 badgeKind={converted ? 'paid' : open ? 'due' : 'neutral'}
                 icon="file-text"
                 iconTone={converted ? 'green' : 'navy'}
                 onPress={() => setDetailQuote(item)}
-                actionLabel={open ? (converting ? 'Converting…' : 'Convert to sale') : undefined}
+                actionLabel={
+                  open
+                    ? converting
+                      ? t('opsApp.shop.quotations.converting')
+                      : t('shop.booksDocuments.convertToSale')
+                    : undefined
+                }
                 onAction={open && !converting ? () => void onConvert(item) : undefined}
                 extraActions={
                   businessId
                     ? [
                         {
-                          label: 'View',
+                          label: t('opsApp.shop.documents.view'),
                           icon: 'eye',
                           onPress: () => {
                             if (!auth.token) {
-                              toast.push('Sign in again to view this quotation', 'error');
+                              toast.push(t('opsApp.shop.quotations.signIn'), 'error');
                               return;
                             }
                             void openShopDocumentHtmlView({
@@ -606,12 +629,12 @@ export function ShopBooksQuotationsScreen() {
                               token: auth.token,
                               tenantId,
                             }).catch((err) =>
-                              toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                              toast.push(getApiErrorMessage(err, t('opsApp.shop.documents.viewFailed')), 'error'),
                             );
                           },
                         },
                         {
-                          label: 'Share',
+                          label: t('opsApp.shop.documents.share'),
                           icon: 'share-2',
                           onPress: () => {
                             const customer =
@@ -638,9 +661,13 @@ export function ShopBooksQuotationsScreen() {
             !loading ? (
               <EmptyState
                 icon="file-text"
-                title={search || statusFilter ? 'No matching quotations' : 'No quotations yet'}
-                message="Create a quotation and convert it to a sale when the customer confirms."
-                actionLabel="New quotation"
+                title={
+                  search || statusFilter
+                    ? t('opsApp.shop.quotations.noMatching')
+                    : t('opsApp.shop.quotations.noneYet')
+                }
+                message={t('opsApp.shop.quotations.emptyMessage')}
+                actionLabel={t('opsApp.shop.quotations.newTitle')}
                 onAction={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
               />
             ) : null
@@ -663,7 +690,11 @@ export function ShopBooksQuotationsScreen() {
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Quotation ${docActions.number || ''}` : 'Quotation'}
+        title={
+          docActions
+            ? t('shop.billingPage.quotationDoc', { number: docActions.number || '' })
+            : t('shop.billingPage.quotation')
+        }
       />
     </DesktopPage>
   );

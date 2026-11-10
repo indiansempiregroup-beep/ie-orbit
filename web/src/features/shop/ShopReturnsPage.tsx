@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -20,6 +21,11 @@ import {
 import { ShopFilterBar } from './ShopFilterBar';
 
 export function ShopReturnsPage() {
+  const { t } = useTranslation();
+  const tr = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.returnsPage.${key}`, options));
+  const td = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.orderDetail.${key}`, options));
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
@@ -40,24 +46,30 @@ export function ShopReturnsPage() {
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   function methodLabel(method?: string | null) {
-    if (method === 'dropoff') return 'Drop-off';
-    if (method === 'reverse_pickup') return 'Reverse pickup';
-    if (method === 'instant_pickup') return 'Instant pickup';
-    if (method === 'in_store') return 'In store';
+    if (
+      method === 'dropoff' ||
+      method === 'reverse_pickup' ||
+      method === 'instant_pickup' ||
+      method === 'in_store'
+    ) {
+      return tr(`methods.${method}`);
+    }
     return '';
   }
 
   function statusLabel(item: { status?: string; return_method?: string; pickup_arranged_at?: string | null }) {
     const value = String(item.status || '').toLowerCase();
-    if (value === 'completed') return 'Completed';
-    if (value === 'rejected') return 'Rejected';
+    if (value === 'completed') return tr('statusLabels.completed');
+    if (value === 'rejected') return tr('statusLabels.rejected');
     if (value === 'approved' || item.pickup_arranged_at) {
-      return item.return_method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged';
+      return item.return_method === 'instant_pickup'
+        ? tr('statusLabels.riderDispatched')
+        : tr('statusLabels.pickupArranged');
     }
-    if (item.return_method === 'dropoff') return 'Awaiting drop-off';
-    if (item.return_method === 'instant_pickup') return 'Awaiting dispatch';
-    if (item.return_method === 'reverse_pickup') return 'Awaiting pickup';
-    return value || 'Pending';
+    if (item.return_method === 'dropoff') return tr('statusLabels.awaitingDropoff');
+    if (item.return_method === 'instant_pickup') return tr('statusLabels.awaitingDispatch');
+    if (item.return_method === 'reverse_pickup') return tr('statusLabels.awaitingPickup');
+    return value || tr('statusLabels.pending');
   }
 
   async function runReturnAction(
@@ -67,10 +79,7 @@ export function ShopReturnsPage() {
     setActionBusyId(returnId);
     try {
       if (action === 'arrange') {
-        const modeRaw = window.prompt(
-          'Pickup mode: type "instant" for rider, or leave blank for manual/courier',
-          'instant',
-        );
+        const modeRaw = window.prompt(tr('promptPickupMode'), 'instant');
         if (modeRaw === null) return;
         const mode = modeRaw.trim().toLowerCase() === 'manual' ? 'manual' : 'instant';
         if (mode === 'instant') {
@@ -81,18 +90,20 @@ export function ShopReturnsPage() {
             });
             const data = quote.data;
             if (!data.available) {
-              snackbar.push('Instant pickup quote unavailable for this return.', 'error');
+              snackbar.push(tr('quoteUnavailable'), 'error');
               return;
             }
-            quoteHint = `Fee ${data.quoted_fee ?? '?'} ${data.currency ?? ''}. ETA ~${data.eta_minutes ?? '?'} min. Net refund if customer pays: ${data.customer_net_refund_if_charged ?? '?'}.`;
+            quoteHint = tr('quoteHint', {
+              fee: data.quoted_fee ?? '?',
+              currency: data.currency ?? '',
+              eta: data.eta_minutes ?? '?',
+              net: data.customer_net_refund_if_charged ?? '?',
+            });
           } catch (error) {
-            snackbar.push(getApiErrorMessage(error, "Couldn't load pickup quote."), 'error');
+            snackbar.push(getApiErrorMessage(error, tr('quoteFailed')), 'error');
             return;
           }
-          const who = window.prompt(
-            `${quoteHint}\n\nWho pays? Type "customer" to deduct from refund, or leave blank for shop pays.`,
-            '',
-          );
+          const who = window.prompt(tr('promptWhoPays', { hint: quoteHint }), '');
           if (who === null) return;
           const charge_bearer =
             who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant';
@@ -103,23 +114,20 @@ export function ShopReturnsPage() {
           });
           snackbar.push(
             arranged.status === 'awaiting_customer'
-              ? 'Sent to customer — waiting for accept or cancel.'
-              : 'Pickup rider dispatched.',
+              ? tr('sentToCustomer')
+              : tr('riderDispatched'),
             'success',
           );
         } else {
-          const notes = window.prompt('Pickup notes (optional)') ?? '';
-          const tracking = window.prompt('Tracking number (optional)') ?? '';
-          const who = window.prompt(
-            'Who pays courier fee? Type "customer" to deduct from refund (they must accept), or leave blank for shop.',
-            '',
-          );
+          const notes = window.prompt(tr('promptNotes')) ?? '';
+          const tracking = window.prompt(tr('promptTracking')) ?? '';
+          const who = window.prompt(tr('promptCourierWho'), '');
           if (who === null) return;
           const charge_bearer =
             who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant';
           let fee: string | undefined;
           if (charge_bearer === 'customer') {
-            const feeRaw = window.prompt('Courier / pickup fee to deduct from refund', '0');
+            const feeRaw = window.prompt(tr('promptCourierFee'), '0');
             if (feeRaw === null) return;
             fee = feeRaw.trim() || '0';
           }
@@ -133,21 +141,21 @@ export function ShopReturnsPage() {
           });
           snackbar.push(
             arranged.status === 'awaiting_customer'
-              ? 'Sent to customer — waiting for accept or cancel.'
-              : 'Pickup arranged.',
+              ? tr('sentToCustomer')
+              : tr('pickupArranged'),
             'success',
           );
         }
       } else if (action === 'receive') {
         await receiveReturn.mutateAsync({ returnId });
-        snackbar.push('Return received — refund and stock updated.', 'success');
+        snackbar.push(tr('received'), 'success');
       } else {
-        const why = window.prompt('Rejection reason (optional)') ?? '';
+        const why = window.prompt(tr('promptRejectReason')) ?? '';
         await rejectReturn.mutateAsync({ returnId, reason: why.trim() || undefined });
-        snackbar.push('Return rejected.', 'success');
+        snackbar.push(tr('rejected'), 'success');
       }
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't update this return."), 'error');
+      snackbar.push(getApiErrorMessage(error, tr('updateFailed')), 'error');
     } finally {
       setActionBusyId(null);
     }
@@ -198,13 +206,11 @@ export function ShopReturnsPage() {
       const next = await patchSettings.mutateAsync({ return_days: days });
       setReturnDays(String(next.return_days ?? days));
       snackbar.push(
-        days > 0
-          ? `Return window set to ${days} day${days === 1 ? '' : 's'} for POS and online orders.`
-          : 'Return window cleared — no time limit.',
+        days > 0 ? tr('windowSet', { count: days }) : tr('windowCleared'),
         'success',
       );
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't save return policy."), 'error');
+      snackbar.push(getApiErrorMessage(error, tr('policyFailed')), 'error');
     }
   }
 
@@ -218,7 +224,7 @@ export function ShopReturnsPage() {
       }))
       .filter((line) => line.quantity > 0);
     if (!lines.length) {
-      setMessage('Enter a return quantity for at least one line.');
+      setMessage(td('enterReturnQty'));
       return;
     }
     setMessage(null);
@@ -235,7 +241,7 @@ export function ShopReturnsPage() {
       setReason('');
       dialog.hide();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Couldn't process this return. Try again.");
+      setMessage(error instanceof Error ? error.message : td('returnFailed'));
     }
   }
 
@@ -247,14 +253,13 @@ export function ShopReturnsPage() {
           style={{ display: 'grid', gap: 12, gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end' }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>Return policy</h2>
+            <h2 style={{ margin: 0 }}>{tr('policyTitle')}</h2>
             <p style={{ margin: '6px 0 0', color: '#6b7280' }}>
-              Days after purchase or delivery within which returns are accepted on POS and online
-              orders. Use 0 for no time limit.
+              {tr('policyBody')}
             </p>
             <div style={{ marginTop: 12, maxWidth: 220 }}>
               <Input
-                label="Return days"
+                label={tr('returnDays')}
                 type="number"
                 min={0}
                 max={3650}
@@ -265,7 +270,7 @@ export function ShopReturnsPage() {
             </div>
           </div>
           <Button type="submit" variant="primary" disabled={patchSettings.isPending || settings.isLoading}>
-            {patchSettings.isPending ? 'Saving…' : 'Save policy'}
+            {patchSettings.isPending ? tr('saving') : tr('savePolicy')}
           </Button>
         </form>
       </Card>
@@ -274,7 +279,7 @@ export function ShopReturnsPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search return number, reason…"
+          searchPlaceholder={tr('searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setStatus('');
@@ -282,15 +287,15 @@ export function ShopReturnsPage() {
           filters={[
             {
               id: 'status',
-              label: 'Status',
+              label: t('common.status'),
               value: status,
               onChange: setStatus,
               options: [
-                { value: '', label: 'All statuses' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'approved', label: 'Pickup arranged' },
-                { value: 'completed', label: 'Completed' },
-                { value: 'rejected', label: 'Rejected' },
+                { value: '', label: tr('allStatuses') },
+                { value: 'pending', label: tr('statusLabels.pending') },
+                { value: 'approved', label: tr('statusLabels.pickupArranged') },
+                { value: 'completed', label: tr('statusLabels.completed') },
+                { value: 'rejected', label: tr('statusLabels.rejected') },
               ],
             },
           ]}
@@ -298,7 +303,7 @@ export function ShopReturnsPage() {
             <Button type="button" variant="primary" onClick={openCreateDialog}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Plus size={16} aria-hidden="true" />
-                New in-store return
+                {tr('newInStore')}
               </span>
             </Button>
           }
@@ -335,11 +340,11 @@ export function ShopReturnsPage() {
                       {statusLabel(item)}
                       {methodLabel(item.return_method) ? ` · ${methodLabel(item.return_method)}` : ''}
                       {' · '}
-                      refund {item.refund_total}
+                      {tr('refund', { amount: item.refund_total })}
                       {item.created_at ? ` · ${new Date(item.created_at).toLocaleString()}` : ''}
                     </div>
                   </div>
-                  <Link to={`/shop/orders/${item.order}`}>Order</Link>
+                  <Link to={`/shop/orders/${item.order}`}>{tr('orderLink')}</Link>
                 </div>
                 {open ? (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -350,7 +355,7 @@ export function ShopReturnsPage() {
                         disabled={busy}
                         onClick={() => void runReturnAction(item.id, 'arrange')}
                       >
-                        Arrange pickup
+                        {td('arrangePickup')}
                       </Button>
                     ) : null}
                     <Button
@@ -359,7 +364,7 @@ export function ShopReturnsPage() {
                       disabled={busy}
                       onClick={() => void runReturnAction(item.id, 'receive')}
                     >
-                      Mark received
+                      {td('markReceived')}
                     </Button>
                     <Button
                       type="button"
@@ -367,38 +372,38 @@ export function ShopReturnsPage() {
                       disabled={busy}
                       onClick={() => void runReturnAction(item.id, 'reject')}
                     >
-                      Reject
+                      {td('reject')}
                     </Button>
                   </div>
                 ) : null}
               </div>
             );
           })}
-          {!returns.data?.length ? <p>No returns yet.</p> : null}
-          {returns.data?.length && !filteredReturns.length ? <p>No returns match these filters.</p> : null}
+          {!returns.data?.length ? <p>{tr('noReturns')}</p> : null}
+          {returns.data?.length && !filteredReturns.length ? <p>{tr('noMatch')}</p> : null}
         </div>
       </Card>
 
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title="New return"
+        title={tr('dialogTitle')}
         labelledBy="new-return-dialog"
         busy={createReturn.isPending}
       >
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            Order
+            {tr('orderLabel')}
             <select
               value={orderId}
               onChange={(event) => setOrderId(event.target.value)}
               required
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
-              <option value="">Select order…</option>
+              <option value="">{tr('selectOrder')}</option>
               {returnableOrders.map((order) => (
                 <option key={order.id} value={order.id}>
-                  {order.order_number} · {order.status} · {order.total}
+                  {order.order_number} · {t(`shop.orders.statuses.${order.status}`, { defaultValue: order.status })} · {order.total}
                 </option>
               ))}
             </select>
@@ -408,7 +413,7 @@ export function ShopReturnsPage() {
               {(selected.lines ?? []).map((line) => (
                 <label key={line.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <span style={{ flex: 1 }}>
-                    {line.product_name} (sold {line.quantity})
+                    {td('soldQty', { name: line.product_name, qty: line.quantity })}
                   </span>
                   <input
                     type="number"
@@ -420,14 +425,14 @@ export function ShopReturnsPage() {
                       setQtyByLine((current) => ({ ...current, [line.id]: event.target.value }))
                     }
                     style={{ width: 96, padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-                    placeholder="Qty"
+                    placeholder={td('qtyPlaceholder')}
                   />
                 </label>
               ))}
             </div>
           ) : null}
           <label style={{ display: 'grid', gap: 8 }}>
-            Reason
+            {td('reason')}
             <input
               value={reason}
               onChange={(event) => setReason(event.target.value)}
@@ -436,10 +441,10 @@ export function ShopReturnsPage() {
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={!selected || createReturn.isPending}>
-              {createReturn.isPending ? 'Processing…' : 'Process return'}
+              {createReturn.isPending ? tr('processing') : td('processReturn')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createReturn.isPending}>
-              Cancel
+              {td('cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}

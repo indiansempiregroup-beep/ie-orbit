@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +33,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import { shopListRefreshControl } from './shopRefreshControl';
+import type { TFunction } from 'i18next';
 import { confirmAction } from '../../utils/confirmAction';
 
 type FormState = {
@@ -70,11 +72,13 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 };
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All coupons' },
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
-];
+function statusOptions(t: TFunction) {
+  return [
+    { value: '', label: t('shop.coupons.allCoupons') },
+    { value: 'active', label: t('common.active') },
+    { value: 'inactive', label: t('shop.coupons.inactive') },
+  ];
+}
 
 function dateInput(value?: string | null) {
   return value ? String(value).slice(0, 10) : '';
@@ -108,26 +112,32 @@ function couponToForm(coupon: ShopCoupon): FormState {
   };
 }
 
-function channelLabel(coupon: ShopCoupon) {
+function channelLabel(coupon: ShopCoupon, t: TFunction) {
   const online = coupon.applies_to_online !== false;
   const pos = Boolean(coupon.applies_to_pos);
-  if (online && pos) return 'Online + POS';
-  if (pos) return 'POS only';
-  if (online) return 'Online only';
-  return 'No channel';
+  if (online && pos) return t('opsApp.shop.coupons.channelOnlinePos');
+  if (pos) return t('opsApp.shop.coupons.channelPosOnly');
+  if (online) return t('opsApp.shop.coupons.channelOnlineOnly');
+  return t('opsApp.shop.coupons.channelNone');
 }
 
-function discountLabel(coupon: ShopCoupon, currency?: string | null) {
+function discountLabel(coupon: ShopCoupon, t: TFunction, currency?: string | null) {
   if (coupon.discount_type === 'amount') {
-    return `${formatMoney(coupon.discount_value, currency)} off`;
+    return t('shop.coupons.discountAmountOff', {
+      amount: formatMoney(coupon.discount_value, currency),
+    });
   }
-  const cap = coupon.max_discount_amount
-    ? ` (max ${formatMoney(coupon.max_discount_amount, currency)})`
-    : '';
-  return `${coupon.discount_value}% off${cap}`;
+  if (coupon.max_discount_amount) {
+    return t('shop.coupons.discountPercentOffCap', {
+      value: coupon.discount_value,
+      max: formatMoney(coupon.max_discount_amount, currency),
+    });
+  }
+  return t('shop.coupons.discountPercentOff', { value: coupon.discount_value });
 }
 
 export function ShopCouponsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -173,7 +183,7 @@ export function ShopCouponsScreen() {
             else openCreate();
           }}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'Add coupon'}
+          accessibilityLabel={showForm ? t('common.close') : t('shop.coupons.addCoupon')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -181,7 +191,7 @@ export function ShopCouponsScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, openCreate]);
+  }, [navigation, showForm, closeForm, openCreate, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -191,11 +201,11 @@ export function ShopCouponsScreen() {
       const response = await client.shop.listCoupons({ business_id: businessId });
       setCoupons(response.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load coupons');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.coupons.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -218,7 +228,11 @@ export function ShopCouponsScreen() {
   async function save() {
     if (!client || !businessId) return;
     if (!form.code.trim() || !form.name.trim()) {
-      setError(!form.code.trim() ? 'Code is required' : 'Name is required');
+      setError(
+        !form.code.trim()
+          ? t('opsApp.shop.coupons.codeRequired')
+          : t('opsApp.shop.coupons.nameRequired'),
+      );
       return;
     }
     setBusy(true);
@@ -244,15 +258,15 @@ export function ShopCouponsScreen() {
       };
       if (editingId) {
         await client.shop.updateCoupon(editingId, payload);
-        toast.push('Coupon details saved.', 'success');
+        toast.push(t('shop.coupons.toastSaved'), 'success');
       } else {
         await client.shop.createCoupon(payload);
-        toast.push('Coupon added.', 'success');
+        toast.push(t('shop.coupons.toastAdded'), 'success');
       }
       closeForm();
       await load();
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Couldn't save this coupon. Try again.";
+      const text = err instanceof Error ? err.message : t('shop.coupons.errSave');
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -263,19 +277,19 @@ export function ShopCouponsScreen() {
   async function confirmDelete() {
     if (!editingId || !client) return;
     const ok = await confirmAction({
-      title: 'Delete coupon',
-      message: `Remove ${form.code || 'this coupon'}?`,
-      confirmLabel: 'Delete',
+      title: t('shop.coupons.deleteCoupon'),
+      message: t('opsApp.shop.coupons.removeBody', { code: form.code || t('shop.coupons.thisCoupon') }),
+      confirmLabel: t('opsApp.shop.common.delete'),
       destructive: true,
     });
     if (!ok) return;
     try {
       await client.shop.deleteCoupon(editingId);
-      toast.push('Coupon removed.', 'success');
+      toast.push(t('shop.coupons.toastRemoved'), 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't remove this coupon. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('shop.coupons.errRemove'), 'error');
     }
   }
 
@@ -287,7 +301,7 @@ export function ShopCouponsScreen() {
             {editingId ? (
               <View style={styles.footerBtn}>
                 <Button
-                  label="Delete"
+                  label={t('opsApp.shop.common.delete')}
                   variant="destructive"
                   fullWidth
                   size="lg"
@@ -297,7 +311,13 @@ export function ShopCouponsScreen() {
             ) : null}
             <View style={editingId ? styles.footerBtnPrimary : undefined}>
               <Button
-                label={busy ? 'Saving…' : editingId ? 'Update coupon' : 'Save coupon'}
+                label={
+                  busy
+                    ? t('common.saving')
+                    : editingId
+                      ? t('shop.coupons.updateCoupon')
+                      : t('shop.coupons.saveCoupon')
+                }
                 fullWidth
                 size="lg"
                 loading={busy}
@@ -307,72 +327,72 @@ export function ShopCouponsScreen() {
           </View>
         }
       >
-        <Text style={styles.formTitle}>{editingId ? 'Edit coupon' : 'Add coupon'}</Text>
+        <Text style={styles.formTitle}>{editingId ? t('shop.coupons.editCoupon') : t('shop.coupons.addCoupon')}</Text>
         <Text style={styles.help}>
           Codes for online checkout and/or the sale counter. Turn on POS to show them on the sale page.
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Input
-          label="Code"
+          label={t('shop.coupons.code')}
           required
           value={form.code}
           onChangeText={(code) => setForm((current) => ({ ...current, code: code.toUpperCase() }))}
           placeholder="SAVE10"
           autoCapitalize="characters"
-          error={!form.code.trim() && error === 'Code is required' ? error : undefined}
+          error={!form.code.trim() && error === t('opsApp.shop.coupons.codeRequired') ? error : undefined}
         />
         <Input
-          label="Name"
+          label={t('shop.coupons.name')}
           required
           value={form.name}
           onChangeText={(name) => setForm((current) => ({ ...current, name }))}
-          placeholder="10% off first order"
-          error={!form.name.trim() && error === 'Name is required' ? error : undefined}
+          placeholder={t('shop.coupons.namePlaceholder')}
+          error={!form.name.trim() && error === t('opsApp.shop.coupons.nameRequired') ? error : undefined}
         />
         <Input
-          label="Description"
+          label={t('shop.coupons.description')}
           optional
           value={form.description}
           onChangeText={(description) => setForm((current) => ({ ...current, description }))}
-          placeholder="Optional"
+          placeholder={t('shop.coupons.optional')}
         />
         <View style={styles.chipRow}>
           <Chip
-            label="Percent"
+            label={t('shop.coupons.percent')}
             active={form.discountType === 'percent'}
             onPress={() => setForm((current) => ({ ...current, discountType: 'percent' }))}
           />
           <Chip
-            label="Amount"
+            label={t('shop.coupons.amount')}
             active={form.discountType === 'amount'}
             onPress={() => setForm((current) => ({ ...current, discountType: 'amount' }))}
           />
         </View>
         <Input
-          label={form.discountType === 'percent' ? 'Percent' : 'Amount'}
+          label={form.discountType === 'percent' ? t('shop.coupons.percent') : t('shop.coupons.amount')}
           required
           value={form.discountValue}
           onChangeText={(discountValue) => setForm((current) => ({ ...current, discountValue }))}
           keyboardType="decimal-pad"
         />
         <Input
-          label="Min. order"
+          label={t('shop.coupons.minOrder')}
           optional
           value={form.minOrder}
           onChangeText={(minOrder) => setForm((current) => ({ ...current, minOrder }))}
-          placeholder="Optional"
+          placeholder={t('shop.coupons.optional')}
           keyboardType="decimal-pad"
         />
         <Input
-          label="Max discount"
+          label={t('shop.coupons.maxDiscount')}
           optional
           value={form.maxDiscount}
           onChangeText={(maxDiscount) => setForm((current) => ({ ...current, maxDiscount }))}
-          placeholder="Optional cap"
+          placeholder={t('shop.coupons.optionalCap')}
           keyboardType="decimal-pad"
         />
         <DateField
-          label="Starts"
+          label={t('shop.coupons.starts')}
           optional
           value={form.startsAt}
           onChange={(startsAt) => setForm((current) => ({ ...current, startsAt }))}
@@ -381,7 +401,7 @@ export function ShopCouponsScreen() {
           allowClear
         />
         <DateField
-          label="Ends"
+          label={t('shop.coupons.ends')}
           optional
           value={form.endsAt}
           onChange={(endsAt) => setForm((current) => ({ ...current, endsAt }))}
@@ -390,23 +410,23 @@ export function ShopCouponsScreen() {
           allowClear
         />
         <Input
-          label="Total uses"
+          label={t('shop.coupons.totalUses')}
           optional
           value={form.maxRedemptions}
           onChangeText={(maxRedemptions) => setForm((current) => ({ ...current, maxRedemptions }))}
-          placeholder="Unlimited"
+          placeholder={t('shop.coupons.unlimited')}
           keyboardType="number-pad"
         />
         <Input
-          label="Uses per customer"
+          label={t('shop.coupons.usesPerCustomer')}
           optional
           value={form.perCustomer}
           onChangeText={(perCustomer) => setForm((current) => ({ ...current, perCustomer }))}
-          placeholder="Unlimited"
+          placeholder={t('shop.coupons.unlimited')}
           keyboardType="number-pad"
         />
         <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>First order only</Text>
+          <Text style={styles.switchLabel}>{t('shop.coupons.firstOrderOnly')}</Text>
           <Switch
             value={form.firstOrderOnly}
             onValueChange={(firstOrderOnly) => setForm((current) => ({ ...current, firstOrderOnly }))}
@@ -414,8 +434,8 @@ export function ShopCouponsScreen() {
         </View>
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={styles.switchLabel}>Online orders</Text>
-            <Text style={styles.switchHint}>Pickup and delivery checkout</Text>
+            <Text style={styles.switchLabel}>{t('opsApp.shop.coupons.onlineOrders')}</Text>
+            <Text style={styles.switchHint}>{t('opsApp.shop.coupons.onlineOrdersHint')}</Text>
           </View>
           <Switch
             value={form.appliesToOnline}
@@ -424,8 +444,8 @@ export function ShopCouponsScreen() {
         </View>
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: spacing.md }}>
-            <Text style={styles.switchLabel}>Sale counter (POS)</Text>
-            <Text style={styles.switchHint}>Show and apply on the sale page</Text>
+            <Text style={styles.switchLabel}>{t('opsApp.shop.coupons.posCounter')}</Text>
+            <Text style={styles.switchHint}>{t('opsApp.shop.coupons.posCounterHint')}</Text>
           </View>
           <Switch
             value={form.appliesToPos}
@@ -433,7 +453,7 @@ export function ShopCouponsScreen() {
           />
         </View>
         <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Active</Text>
+          <Text style={styles.switchLabel}>{t('common.active')}</Text>
           <Switch
             value={form.isActive}
             onValueChange={(isActive) => setForm((current) => ({ ...current, isActive }))}
@@ -449,18 +469,18 @@ export function ShopCouponsScreen() {
         <SearchBar
           value={search}
           onChangeText={setSearch}
-          placeholder="Search code or name…"
+          placeholder={t('shop.coupons.searchPlaceholder')}
           style={styles.search}
         />
         <SelectField
-          label="Status"
+          label={t('common.status')}
           value={statusFilter}
-          options={STATUS_OPTIONS}
+          options={statusOptions(t)}
           onChange={setStatusFilter}
         />
         {statusFilter ? (
           <Pressable onPress={() => setStatusFilter('')} style={styles.clearFilters}>
-            <Text style={styles.clearFiltersText}>Clear filters</Text>
+            <Text style={styles.clearFiltersText}>{t('opsApp.shop.common.clearFilters')}</Text>
           </Pressable>
         ) : null}
 
@@ -475,9 +495,13 @@ export function ShopCouponsScreen() {
           renderItem={({ item }) => (
             <BooksDocumentRow
               title={item.code}
-              amount={discountLabel(item, currency)}
-              meta={`${item.name} · ${channelLabel(item)} · Used ${item.redemption_count ?? 0}${item.max_redemptions != null ? `/${item.max_redemptions}` : ''}${item.min_order_total && Number(item.min_order_total) > 0 ? ` · min ${formatMoney(item.min_order_total, currency)}` : ''}`}
-              badge={item.is_active === false ? 'Inactive' : 'Active'}
+              amount={discountLabel(item, t, currency)}
+              meta={`${item.name} · ${channelLabel(item, t)} · ${
+                item.max_redemptions != null
+                  ? t('shop.coupons.usedOf', { used: item.redemption_count ?? 0, max: item.max_redemptions })
+                  : t('opsApp.shop.coupons.usedMeta', { used: item.redemption_count ?? 0 })
+              }${item.min_order_total && Number(item.min_order_total) > 0 ? ` · ${t('shop.coupons.minOrderShort', { amount: formatMoney(item.min_order_total, currency) })}` : ''}`}
+              badge={item.is_active === false ? t('shop.coupons.inactive') : t('common.active')}
               badgeKind={item.is_active === false ? 'void' : 'paid'}
               icon="tag"
               iconTone="coral"
@@ -489,13 +513,17 @@ export function ShopCouponsScreen() {
             !loading ? (
               <EmptyState
                 icon="tag"
-                title={coupons.length ? 'No matching coupons' : 'No coupons yet'}
+                title={
+                  coupons.length
+                    ? t('opsApp.shop.coupons.noMatching')
+                    : t('opsApp.shop.coupons.noCoupons')
+                }
                 message={
                   coupons.length
-                    ? 'Try another search or clear filters.'
-                    : 'Create a code for online checkout and the sale counter.'
+                    ? t('opsApp.shop.coupons.tryAnother')
+                    : t('opsApp.shop.coupons.emptyHint')
                 }
-                actionLabel={coupons.length ? undefined : 'Add coupon'}
+                actionLabel={coupons.length ? undefined : t('shop.coupons.addCoupon')}
                 onAction={coupons.length ? undefined : openCreate}
               />
             ) : null

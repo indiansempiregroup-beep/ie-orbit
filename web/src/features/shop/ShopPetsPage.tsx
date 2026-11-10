@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Heart, Pencil, Plus } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import type { ShopPet } from '@ie-orbit/sdk';
@@ -56,8 +57,20 @@ function formFromPet(pet: ShopPet, masterLabels: string[]): FormState {
   };
 }
 
+const SPECIES_KEYS = ['dog', 'cat', 'bird', 'rabbit', 'other'];
+const SEX_KEYS = ['male', 'female', 'unknown'];
+
 export function ShopPetsPage() {
+  const { t } = useTranslation();
   const pets = useShopPets();
+  const speciesLabel = (value: string) => {
+    const key = value.trim().toLowerCase();
+    return SPECIES_KEYS.includes(key) ? t(`shop.pets.speciesList.${key}`) : value;
+  };
+  const sexLabel = (value: string) => {
+    const key = value.trim().toLowerCase();
+    return SEX_KEYS.includes(key) ? t(`shop.pets.sexList.${key}`) : value;
+  };
   const { createPet, patchPet, deletePet, notifyPetOwner } = useShopPetMutations();
   const dialog = useDialog();
   const notifyDialog = useDialog();
@@ -154,7 +167,7 @@ export function ShopPetsPage() {
     if (!pet) return;
     setSelectedPet(pet);
     if (searchParams.get('notify') === '1') {
-      setNotifySubject(`Happy birthday reminder for ${pet.name}`);
+      setNotifySubject(t('shop.pets.birthdayReminderSubject', { name: pet.name }));
       setNotifyBody('');
       setNotifyMessage(null);
       notifyDialog.show();
@@ -171,7 +184,7 @@ export function ShopPetsPage() {
         (subscription.status === 'active' || subscription.status === 'trialing'),
     );
     if (!shopie) {
-      setMessage('Subscribe to Orbit Mart first, then add the Pets pack.');
+      setMessage(t('shop.pets.errSubscribeFirst'));
       return;
     }
     try {
@@ -183,9 +196,9 @@ export function ShopPetsPage() {
       });
       await workspace.refreshWorkspace();
       await queryClient.invalidateQueries({ queryKey: ['shop'] });
-      snackbar.push(`Pets pack subscribed · ${petsPriceLabel}/month`, 'success');
+      snackbar.push(t('shop.pets.toastSubscribed', { price: petsPriceLabel }), 'success');
     } catch (error) {
-      const text = getApiErrorMessage(error, "Couldn't subscribe to Pets pack. Try again.");
+      const text = getApiErrorMessage(error, t('shop.pets.errSubscribe'));
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -207,7 +220,7 @@ export function ShopPetsPage() {
 
   function openNotify(pet: ShopPet) {
     setSelectedPet(pet);
-    setNotifySubject(`Happy birthday reminder for ${pet.name}`);
+    setNotifySubject(t('shop.pets.birthdayReminderSubject', { name: pet.name }));
     setNotifyBody('');
     setNotifyMessage(null);
     notifyDialog.show();
@@ -231,12 +244,12 @@ export function ShopPetsPage() {
         tenantId: workspace.tenantId,
         businessId: workspace.businessId,
         imageFile: file,
-        petName: form.name || 'Pet',
+        petName: form.name || t('shop.pets.defaultPet'),
       });
       const stored = toStoredMediaAssetUrl(url) || url;
       setForm((current) => ({ ...current, photoUrl: stored }));
     } catch (error) {
-      const text = error instanceof Error ? error.message : 'Photo upload failed.';
+      const text = error instanceof Error ? error.message : t('shop.pets.errUpload');
       setMessage(text);
       snackbar.push(text, 'error');
     } finally {
@@ -250,11 +263,11 @@ export function ShopPetsPage() {
     const speciesValue =
       form.speciesChoice === 'Other' ? form.speciesOther.trim() : form.speciesChoice.trim();
     if (form.speciesChoice === 'Other' && !speciesValue) {
-      setMessage('Enter the species.');
+      setMessage(t('shop.pets.errEnterSpecies'));
       return;
     }
     if (!speciesValue) {
-      setMessage('Select a species.');
+      setMessage(t('shop.pets.errSelectSpecies'));
       return;
     }
     setMessage(null);
@@ -272,16 +285,16 @@ export function ShopPetsPage() {
       if (editingId) {
         await patchPet.mutateAsync({ petId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Pet details saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.pets.toastSaved'), 'success'), 0);
       } else {
         await createPet.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Pet added.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.pets.toastAdded'), 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't save this pet. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.pets.errSave');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -289,16 +302,16 @@ export function ShopPetsPage() {
 
   async function handleDelete() {
     if (!editingId) return;
-    if (!window.confirm(`Delete ${form.name || 'this pet'}?`)) return;
+    if (!window.confirm(t('shop.pets.confirmDelete', { name: form.name || t('shop.pets.thisPet') }))) return;
     setMessage(null);
     try {
       await deletePet.mutateAsync(editingId);
       dialog.hide();
-      window.setTimeout(() => snackbar.push('Pet removed.', 'success'), 0);
+      window.setTimeout(() => snackbar.push(t('shop.pets.toastRemoved'), 'success'), 0);
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't remove this pet. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.pets.errRemove');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -308,7 +321,7 @@ export function ShopPetsPage() {
     event.preventDefault();
     if (!selectedPet) return;
     if (!notifySubject.trim() || !notifyBody.trim()) {
-      setNotifyMessage('Subject and message are required.');
+      setNotifyMessage(t('shop.pets.errNotifyRequired'));
       return;
     }
     setNotifyMessage(null);
@@ -318,11 +331,11 @@ export function ShopPetsPage() {
         subject: notifySubject.trim(),
         body: notifyBody.trim(),
       });
-      const channels = (result.sent_channels || []).join(', ') || 'none';
+      const channels = (result.sent_channels || []).join(', ') || t('shop.pets.none');
       closeNotify();
-      snackbar.push(`Notification sent to owner of ${selectedPet.name} (${channels}).`, 'success');
+      snackbar.push(t('shop.pets.toastNotified', { name: selectedPet.name, channels }), 'success');
     } catch (error) {
-      setNotifyMessage(getApiErrorMessage(error, "Couldn't notify the owner. Try again."));
+      setNotifyMessage(getApiErrorMessage(error, t('shop.pets.errNotify')));
     }
   }
 
@@ -333,7 +346,7 @@ export function ShopPetsPage() {
       {!petsSubscribed ? (
         <Card>
           <p>
-            Pets pack manages pet profiles, birthdays, and owner alerts for {petsPriceLabel}/month.
+            {t('shop.pets.packDescription', { price: petsPriceLabel })}
           </p>
           <Button
             type="button"
@@ -341,7 +354,7 @@ export function ShopPetsPage() {
             onClick={() => void subscribePets()}
             disabled={updateAddons.isPending}
           >
-            {updateAddons.isPending ? 'Subscribing…' : `Subscribe · ${petsPriceLabel}/mo`}
+            {updateAddons.isPending ? t('shop.pets.subscribing') : t('shop.pets.subscribeButton', { price: petsPriceLabel })}
           </Button>
           {message ? <p role="status">{message}</p> : null}
         </Card>
@@ -350,7 +363,7 @@ export function ShopPetsPage() {
           <ShopFilterBar
             search={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search pet name, breed, notes…"
+            searchPlaceholder={t('shop.pets.searchPlaceholder')}
             onClear={() => {
               setSearch('');
               setSpeciesFilter('');
@@ -360,28 +373,28 @@ export function ShopPetsPage() {
               <Button type="button" variant="primary" onClick={openAddDialog}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={16} aria-hidden="true" />
-                  Add pet
+                  {t('shop.pets.addPet')}
                 </span>
               </Button>
             }
             filters={[
               {
                 id: 'species',
-                label: 'Species',
+                label: t('shop.pets.species'),
                 value: speciesFilter,
                 onChange: setSpeciesFilter,
                 options: [
-                  { value: '', label: 'All species' },
-                  ...speciesOptions.map((value) => ({ value, label: value })),
+                  { value: '', label: t('shop.pets.allSpecies') },
+                  ...speciesOptions.map((value) => ({ value, label: speciesLabel(value) })),
                 ],
               },
               {
                 id: 'customer',
-                label: 'Customer',
+                label: t('shop.pets.customer'),
                 value: customerFilter,
                 onChange: setCustomerFilter,
                 options: [
-                  { value: '', label: 'All customers' },
+                  { value: '', label: t('shop.pets.allCustomers') },
                   ...(customers.data ?? []).map((customer) => ({
                     value: customer.id,
                     label: customer.full_name ?? customer.email ?? customer.id,
@@ -390,7 +403,7 @@ export function ShopPetsPage() {
               },
             ]}
           />
-          {pets.isLoading ? <p>Loading…</p> : null}
+          {pets.isLoading ? <p>{t('common.loading')}</p> : null}
           {pets.error ? <p role="alert">{(pets.error as Error).message}</p> : null}
           <div style={{ display: 'grid', gap: 8 }}>
             {filtered.map((pet) => {
@@ -443,24 +456,24 @@ export function ShopPetsPage() {
                     <div style={{ minWidth: 0 }}>
                       <strong>{pet.name}</strong>
                       <div style={{ opacity: 0.8 }}>
-                        {[pet.species, pet.breed].filter(Boolean).join(' · ') || 'No species'}
-                        {pet.birthday ? ` · birthday ${String(pet.birthday).slice(0, 10)}` : ''}
+                        {[pet.species ? speciesLabel(pet.species) : '', pet.breed].filter(Boolean).join(' · ') || t('shop.pets.noSpecies')}
+                        {pet.birthday ? ` · ${t('shop.pets.birthdayShort', { date: String(pet.birthday).slice(0, 10) })}` : ''}
                         {owner ? ` · ${owner}` : ''}
                       </div>
                       <div style={{ fontSize: 12, opacity: 0.7 }}>
-                        {pet.sex ? `${pet.sex} · ` : ''}
-                        {pet.medical_notes || 'No medical notes'}
+                        {pet.sex ? `${sexLabel(pet.sex)} · ` : ''}
+                        {pet.medical_notes || t('shop.pets.noMedicalNotes')}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     <Button type="button" variant="neutral" onClick={() => openNotify(pet)}>
-                      Notify
+                      {t('shop.pets.notify')}
                     </Button>
                     <Button type="button" variant="neutral" onClick={() => openEditDialog(pet)}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Pencil size={14} aria-hidden="true" />
-                        Edit
+                        {t('shop.pets.edit')}
                       </span>
                     </Button>
                   </div>
@@ -469,12 +482,12 @@ export function ShopPetsPage() {
             })}
             {!pets.isLoading && !filtered.length ? (
               <div style={{ display: 'grid', gap: 8 }}>
-                <p>{pets.data?.length ? 'No pets match these filters.' : 'No pets yet.'}</p>
+                <p>{pets.data?.length ? t('shop.pets.emptyFiltered') : t('shop.pets.emptyNone')}</p>
                 {!pets.data?.length ? (
                   <Button type="button" variant="primary" onClick={openAddDialog}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <Plus size={16} aria-hidden="true" />
-                      Add your first pet
+                      {t('shop.pets.addFirst')}
                     </span>
                   </Button>
                 ) : null}
@@ -487,16 +500,16 @@ export function ShopPetsPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title={editingId ? 'Edit pet' : 'Add pet'}
+        title={editingId ? t('shop.pets.editPet') : t('shop.pets.addPet')}
         labelledBy="pet-dialog"
         busy={saving}
       >
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Pet profiles, photos, and birthdays used for owner reminders.
+            {t('shop.pets.dialogHint')}
           </p>
           <label style={{ display: 'grid', gap: 8 }}>
-            <span style={fieldLabel}>Photo</span>
+            <span style={fieldLabel}>{t('shop.pets.photo')}</span>
             <input
               type="file"
               accept="image/*"
@@ -512,22 +525,22 @@ export function ShopPetsPage() {
                   style={{ objectFit: 'cover', borderRadius: 12, border: '1px solid #e5e7eb' }}
                 />
                 <Button type="button" variant="neutral" onClick={() => setForm({ ...form, photoUrl: '' })}>
-                  Remove
+                  {t('shop.pets.remove')}
                 </Button>
               </div>
             ) : null}
-            {uploading ? <span style={{ fontSize: 12 }}>Uploading…</span> : null}
+            {uploading ? <span style={{ fontSize: 12 }}>{t('shop.pets.uploading')}</span> : null}
           </label>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Customer</span>
+              <span style={fieldLabel}>{t('shop.pets.customer')}</span>
               <select
                 value={form.customerId}
                 onChange={(event) => setForm({ ...form, customerId: event.target.value })}
                 required
                 style={fieldInput}
               >
-                <option value="">Select customer…</option>
+                <option value="">{t('shop.pets.selectCustomer')}</option>
                 {(customers.data ?? []).map((customer) => (
                   <option key={customer.id} value={customer.id}>
                     {customer.full_name ?? customer.email ?? customer.id}
@@ -536,7 +549,7 @@ export function ShopPetsPage() {
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Pet name</span>
+              <span style={fieldLabel}>{t('shop.pets.petName')}</span>
               <input
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -545,7 +558,7 @@ export function ShopPetsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Species</span>
+              <span style={fieldLabel}>{t('shop.pets.species')}</span>
               <select
                 value={form.speciesChoice}
                 onChange={(event) =>
@@ -560,25 +573,25 @@ export function ShopPetsPage() {
               >
                 {[...masterSpeciesLabels, 'Other'].map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {speciesLabel(value)}
                   </option>
                 ))}
               </select>
             </label>
             {form.speciesChoice === 'Other' ? (
               <label style={{ display: 'grid', gap: 6 }}>
-                <span style={fieldLabel}>Species name</span>
+                <span style={fieldLabel}>{t('shop.pets.speciesName')}</span>
                 <input
                   value={form.speciesOther}
                   onChange={(event) => setForm({ ...form, speciesOther: event.target.value })}
                   required
-                  placeholder="e.g. Hamster"
+                  placeholder={t('shop.pets.speciesPlaceholder')}
                   style={fieldInput}
                 />
               </label>
             ) : null}
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Breed</span>
+              <span style={fieldLabel}>{t('shop.pets.breed')}</span>
               <input
                 value={form.breed}
                 onChange={(event) => setForm({ ...form, breed: event.target.value })}
@@ -586,22 +599,22 @@ export function ShopPetsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Sex</span>
+              <span style={fieldLabel}>{t('shop.pets.sex')}</span>
               <select
                 value={form.sex}
                 onChange={(event) => setForm({ ...form, sex: event.target.value })}
                 style={fieldInput}
               >
-                <option value="">Select…</option>
+                <option value="">{t('shop.pets.selectPlain')}</option>
                 {SEX_OPTIONS.map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {sexLabel(value)}
                   </option>
                 ))}
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Birthday</span>
+              <span style={fieldLabel}>{t('shop.pets.birthday')}</span>
               <input
                 type="date"
                 value={form.birthday}
@@ -610,7 +623,7 @@ export function ShopPetsPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Medical notes</span>
+              <span style={fieldLabel}>{t('shop.pets.medicalNotes')}</span>
               <textarea
                 value={form.medicalNotes}
                 onChange={(event) => setForm({ ...form, medicalNotes: event.target.value })}
@@ -621,14 +634,14 @@ export function ShopPetsPage() {
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Update pet' : 'Save pet'}
+              {saving ? t('common.saving') : editingId ? t('shop.pets.updatePet') : t('shop.pets.savePet')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             {editingId ? (
               <Button type="button" variant="ghost" onClick={() => void handleDelete()} disabled={saving}>
-                Delete pet
+                {t('shop.pets.deletePet')}
               </Button>
             ) : null}
           </div>
@@ -639,18 +652,21 @@ export function ShopPetsPage() {
       <Dialog
         open={notifyDialog.open}
         onClose={closeNotify}
-        title={selectedPet ? `Notify owner · ${selectedPet.name}` : 'Notify owner'}
+        title={selectedPet ? t('shop.pets.notifyOwnerNamed', { name: selectedPet.name }) : t('shop.pets.notifyOwner')}
         labelledBy="notify-pet-owner-dialog"
         busy={notifyPetOwner.isPending}
       >
         <form onSubmit={(event) => void submitNotify(event)} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           {selectedPet ? (
             <p style={{ margin: 0, color: '#6b7280' }}>
-              Birthday: {selectedPet.birthday || 'Not set'} · Species: {selectedPet.species || '—'}
+              {t('shop.pets.notifySummary', {
+                birthday: selectedPet.birthday || t('shop.pets.notSet'),
+                species: selectedPet.species ? speciesLabel(selectedPet.species) : '—',
+              })}
             </p>
           ) : null}
           <label style={{ display: 'grid', gap: 8 }}>
-            <span style={fieldLabel}>Subject</span>
+            <span style={fieldLabel}>{t('shop.pets.subject')}</span>
             <input
               value={notifySubject}
               onChange={(event) => setNotifySubject(event.target.value)}
@@ -659,25 +675,25 @@ export function ShopPetsPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            <span style={fieldLabel}>Message</span>
+            <span style={fieldLabel}>{t('shop.pets.message')}</span>
             <textarea
               value={notifyBody}
               onChange={(event) => setNotifyBody(event.target.value)}
               required
               rows={4}
-              placeholder="Write a custom message for the pet owner…"
+              placeholder={t('shop.pets.messagePlaceholder')}
               style={fieldInput}
             />
           </label>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-            Sends in-app (if they have an account) and email.
+            {t('shop.pets.notifyHint')}
           </p>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={notifyPetOwner.isPending}>
-              {notifyPetOwner.isPending ? 'Sending…' : 'Send notification'}
+              {notifyPetOwner.isPending ? t('shop.pets.sending') : t('shop.pets.sendNotification')}
             </Button>
             <Button type="button" variant="neutral" onClick={closeNotify} disabled={notifyPetOwner.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {notifyMessage ? <p role="status">{notifyMessage}</p> : null}

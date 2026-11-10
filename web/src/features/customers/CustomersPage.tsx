@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CustomerLoyaltyBalance } from '@ie-orbit/sdk';
 import {
@@ -25,6 +26,7 @@ import { normalizeGstin, validateGstin } from '../../lib/gstin';
 import { hasSubscribedProduct } from '../../config/products';
 
 export function CustomersPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const client = useApiClient();
@@ -109,41 +111,41 @@ export function CustomersPage() {
         show={createCustomer.isPending || updateCustomer.isPending || archiveCustomer.isPending || restoreCustomer.isPending}
         message={
           createCustomer.isPending
-            ? 'Adding customer…'
+            ? t('customers.overlayAdding')
             : archiveCustomer.isPending
-              ? 'Archiving customer…'
+              ? t('customers.overlayArchiving')
               : restoreCustomer.isPending
-                ? 'Restoring customer…'
-                : 'Updating customer…'
+                ? t('customers.overlayRestoring')
+                : t('customers.overlayUpdating')
         }
       />
       <div style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Customer Management</p>
-            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>Customers</h1>
-            <p style={{ margin: 0, color: '#6b7280' }}>Review customer records, tags, and recent activity in one place.</p>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>{t('customers.eyebrow')}</p>
+            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>{t('customers.title')}</h1>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.subtitle')}</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Link to="/shop/loyalty">
-              <Button variant="neutral">Reward points activity</Button>
+              <Button variant="neutral">{t('customers.rewardActivity')}</Button>
             </Link>
-            <Button variant="primary" onClick={() => dialog.show()}>Add customer</Button>
-            <Button variant="neutral" onClick={() => refetch()}>Refresh</Button>
+            <Button variant="primary" onClick={() => dialog.show()}>{t('customers.add')}</Button>
+            <Button variant="neutral" onClick={() => refetch()}>{t('common.refresh')}</Button>
           </div>
         </header>
 
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Total customers</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.total')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{customerSummary.total}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Active</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('common.active')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{customerSummary.active}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Inactive</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.inactive')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{customerSummary.inactive}</p>
           </Card>
         </div>
@@ -152,27 +154,27 @@ export function CustomersPage() {
           <ManagementListToolbar
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            searchPlaceholder="Search customers by name, email or phone"
-            searchAriaLabel="Search customers"
+            searchPlaceholder={t('customers.searchPlaceholder')}
+            searchAriaLabel={t('customers.searchAria')}
             onClear={() => setSearchTerm('')}
           />
 
           <Card style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 0.7fr 0.7fr 1.3fr', padding: '16px 20px', background: '#f9fafb', fontWeight: 700, color: '#6b7280' }}>
-              <span>Name</span>
-              <span>Email</span>
-              <span>Phone</span>
-              <span>Points</span>
-              <span>Status</span>
-              <span>Actions</span>
+              <span>{t('customers.name')}</span>
+              <span>{t('common.email')}</span>
+              <span>{t('common.phone')}</span>
+              <span>{t('customers.colPoints')}</span>
+              <span>{t('common.status')}</span>
+              <span>{t('customers.colActions')}</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
               {isLoading || search.isLoading ? (
-                <div style={{ padding: 28, textAlign: 'center' }}>Loading customers…</div>
+                <div style={{ padding: 28, textAlign: 'center' }}>{t('customers.loading')}</div>
               ) : error || search.error ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? search.error?.message ?? 'Unable to load customers'}</div>
+                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? search.error?.message ?? t('customers.loadFailed')}</div>
               ) : selectedData.length === 0 ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No customers found.</div>
+                <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>{t('customers.noneFound')}</div>
               ) : (
                 selectedData.map((customer) => {
                   const isActive = customer.status === 'active';
@@ -201,7 +203,7 @@ export function CustomersPage() {
                         }}
                         style={{ cursor: 'pointer', fontWeight: 600 }}
                       >
-                        {customer.full_name ?? 'Unknown customer'}
+                        {customer.full_name ?? t('customers.unknownCustomer')}
                       </span>
                       <span>{customer.email ?? '—'}</span>
                       <span>{customer.phone_number ?? '—'}</span>
@@ -211,7 +213,7 @@ export function CustomersPage() {
                           onClick={() => {
                             if (!customer.id) return;
                             setLoyaltyCustomerId(customer.id);
-                            setLoyaltyCustomerName(customer.full_name ?? 'Customer');
+                            setLoyaltyCustomerName(customer.full_name ?? t('dashboard.customerFallback'));
                             setLoyaltyData(null);
                             setLoyaltyError(null);
                             setLoyaltyBusy(true);
@@ -220,7 +222,7 @@ export function CustomersPage() {
                               .then((response) => setLoyaltyData(response.data))
                               .catch((error) =>
                                 setLoyaltyError(
-                                  error instanceof Error ? error.message : 'Unable to load points',
+                                  error instanceof Error ? error.message : t('customers.unableLoadPoints'),
                                 ),
                               )
                               .finally(() => setLoyaltyBusy(false));
@@ -237,61 +239,61 @@ export function CustomersPage() {
                           {customer.loyalty_points ?? 0}
                         </button>
                       </span>
-                      <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{customer.status ?? 'Unknown'}</span>
+                      <span style={{ color: isActive ? '#10b981' : '#6b7280' }}>{t(`customers.statuses.${customer.status ?? 'unknown'}`, { defaultValue: customer.status ?? '' })}</span>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {isArchived ? (
                           <Button
                             type="button"
                             variant="primary"
                             loading={restoreCustomer.isPending}
-                            loadingLabel="Activating…"
+                            loadingLabel={t('customers.activating')}
                             onClick={() =>
                               customer.id &&
                               restoreCustomer.mutate(customer.id, {
-                                onSuccess: () => snackbar.push('Customer is active again.', 'success'),
+                                onSuccess: () => snackbar.push(t('customers.activated'), 'success'),
                                 onError: (error) => snackbar.push(error.message, 'error'),
                               })
                             }
                           >
-                            Activate
+                            {t('customers.activate')}
                           </Button>
                         ) : isActive ? (
                           <Button
                             type="button"
                             variant="neutral"
                             loading={updateCustomer.isPending}
-                            loadingLabel="Deactivating…"
+                            loadingLabel={t('customers.deactivating')}
                             onClick={() =>
                               customer.id &&
                               updateCustomer.mutate(
                                 { customerId: customer.id, customer: { status: 'inactive' } },
                                 {
-                                  onSuccess: () => snackbar.push('Customer deactivated.', 'success'),
+                                  onSuccess: () => snackbar.push(t('customers.deactivated'), 'success'),
                                   onError: (error) => snackbar.push(error.message, 'error'),
                                 },
                               )
                             }
                           >
-                            Deactivate
+                            {t('customers.deactivate')}
                           </Button>
                         ) : (
                           <Button
                             type="button"
                             variant="primary"
                             loading={updateCustomer.isPending}
-                            loadingLabel="Activating…"
+                            loadingLabel={t('customers.activating')}
                             onClick={() =>
                               customer.id &&
                               updateCustomer.mutate(
                                 { customerId: customer.id, customer: { status: 'active' } },
                                 {
-                                  onSuccess: () => snackbar.push('Customer is active again.', 'success'),
+                                  onSuccess: () => snackbar.push(t('customers.activated'), 'success'),
                                   onError: (error) => snackbar.push(error.message, 'error'),
                                 },
                               )
                             }
                           >
-                            Activate
+                            {t('customers.activate')}
                           </Button>
                         )}
                         {!isArchived && isActive ? (
@@ -299,16 +301,16 @@ export function CustomersPage() {
                             type="button"
                             variant="ghost"
                             loading={archiveCustomer.isPending}
-                            loadingLabel="Archiving…"
+                            loadingLabel={t('customers.archiving')}
                             onClick={() =>
                               customer.id &&
                               archiveCustomer.mutate(customer.id, {
-                                onSuccess: () => snackbar.push('Customer archived.', 'success'),
+                                onSuccess: () => snackbar.push(t('customers.archived'), 'success'),
                                 onError: (error) => snackbar.push(error.message, 'error'),
                               })
                             }
                           >
-                            Archive
+                            {t('customers.archive')}
                           </Button>
                         ) : null}
                       </div>
@@ -324,10 +326,10 @@ export function CustomersPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title="Add customer"
+        title={t('customers.add')}
         labelledBy="add-customer-dialog"
         busy={createCustomer.isPending}
-        busyMessage="Adding customer…"
+        busyMessage={t('customers.overlayAdding')}
       >
         <form
           onSubmit={(event) => {
@@ -370,12 +372,12 @@ export function CustomersPage() {
               },
               {
               onSuccess: () => {
-                snackbar.push('Customer added.', 'success');
+                snackbar.push(t('customers.customerAdded'), 'success');
                 dialog.hide();
                 resetForm();
               },
               onError: (err) => {
-                setCreationError(err.message ?? "Couldn't save this customer. Check the details and try again.");
+                setCreationError(err.message ?? t('customers.saveFailed'));
               },
             });
           }}
@@ -390,27 +392,27 @@ export function CustomersPage() {
             required
             value={formState.customer_code}
             onChange={(event) => setFormState({ ...formState, customer_code: event.target.value })}
-            placeholder="Customer code"
+            placeholder={t('customers.customerCode')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
             required
             value={formState.display_name}
             onChange={(event) => setFormState({ ...formState, display_name: event.target.value })}
-            placeholder="Display name"
+            placeholder={t('customers.displayName')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
             value={formState.email}
             onChange={(event) => setFormState({ ...formState, email: event.target.value })}
-            placeholder="Email"
+            placeholder={t('common.email')}
             type="email"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
             value={formState.phone_number}
             onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
-            placeholder="Phone number"
+            placeholder={t('customers.phoneNumber')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           {showGstFields ? (
@@ -419,7 +421,7 @@ export function CustomersPage() {
               onChange={(event) =>
                 setFormState({ ...formState, gstin: normalizeGstin(event.target.value) })
               }
-              placeholder="GSTIN (optional, for Orbit Mart B2B bills)"
+              placeholder={t('customers.gstinPlaceholder')}
               maxLength={15}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
@@ -430,11 +432,11 @@ export function CustomersPage() {
               checked={formState.send_registration_invite}
               onChange={(event) => setFormState({ ...formState, send_registration_invite: event.target.checked })}
             />
-            <span>Send registration invite email</span>
+            <span>{t('customers.sendInvite')}</span>
           </label>
           <div style={{ display: 'grid', gap: 8 }}>
             <AddressLocationPicker
-              label="Customer address (Google Maps)"
+              label={t('customers.addressLabel')}
               value={formState.full_address}
               latitude={formState.latitude}
               longitude={formState.longitude}
@@ -461,7 +463,7 @@ export function CustomersPage() {
             <input
               value={formState.line2}
               onChange={(event) => setFormState((current) => ({ ...current, line2: event.target.value }))}
-              placeholder="Flat, floor, building or landmark"
+              placeholder={t('customers.line2Placeholder')}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
             <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
@@ -471,7 +473,7 @@ export function CustomersPage() {
                   value={formState[field]}
                   readOnly={formState.latitude != null && formState.longitude != null}
                   onChange={(event) => setFormState((current) => ({ ...current, [field]: event.target.value }))}
-                  placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
+                  placeholder={t(field === 'postal_code' ? 'customers.postalCode' : `customers.${field}`)}
                   style={{
                     padding: 12,
                     borderRadius: 12,
@@ -483,11 +485,11 @@ export function CustomersPage() {
             </div>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" loading={createCustomer.isPending} loadingLabel="Creating…">
-              Create customer
+            <Button type="submit" variant="primary" loading={createCustomer.isPending} loadingLabel={t('customers.creating')}>
+              {t('customers.create')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createCustomer.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}
@@ -501,19 +503,19 @@ export function CustomersPage() {
           setLoyaltyData(null);
           setLoyaltyError(null);
         }}
-        title={`Reward points · ${loyaltyCustomerName}`}
+        title={t('customers.rewardPointsTitle', { name: loyaltyCustomerName })}
         labelledBy="customer-loyalty-dialog"
         busy={loyaltyBusy}
       >
-        {loyaltyBusy ? <p>Loading…</p> : null}
+        {loyaltyBusy ? <p>{t('common.loading')}</p> : null}
         {loyaltyError ? <p role="alert" style={{ color: '#dc2626' }}>{loyaltyError}</p> : null}
         {loyaltyData ? (
           <div style={{ display: 'grid', gap: 12 }}>
             <p style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              Balance {loyaltyData.points_balance}
+              {t('customers.balance', { n: loyaltyData.points_balance })}
               {!loyaltyData.enabled ? (
                 <span style={{ marginLeft: 8, fontSize: 13, color: '#b45309', fontWeight: 600 }}>
-                  (program off)
+                  {t('customers.programOff')}
                 </span>
               ) : null}
             </p>
@@ -531,7 +533,7 @@ export function CustomersPage() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 600 }}>{entry.reason || 'Points update'}</div>
+                    <div style={{ fontWeight: 600 }}>{entry.reason || t('customers.pointsUpdate')}</div>
                     <div style={{ color: '#6b7280' }}>
                       {entry.created_at ? new Date(entry.created_at).toLocaleString() : '—'}
                     </div>
@@ -542,7 +544,7 @@ export function CustomersPage() {
                 </div>
               ))}
               {!loyaltyData.ledger?.length ? (
-                <p style={{ margin: 0, color: '#6b7280' }}>No recent points activity.</p>
+                <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.noRecentPoints')}</p>
               ) : null}
             </div>
           </div>

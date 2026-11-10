@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import type { Business } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
@@ -31,6 +32,7 @@ function readLoyaltyPrefs(business?: Business | null): LoyaltyForm {
 }
 
 export function RewardPointsSettingsPanel() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
   const businessQuery = useBusinessProfileQuery();
@@ -65,11 +67,10 @@ export function RewardPointsSettingsPanel() {
       <div className="reward-points">
         <div className="reward-points-header">
           <div>
-            <p className="product-settings-kicker">Loyalty</p>
-            <h2 className="product-settings-title">Reward points</h2>
+            <p className="product-settings-kicker">{t('settings.rewardPoints.kicker')}</p>
+            <h2 className="product-settings-title">{t('settings.rewardPoints.title')}</h2>
             <p className="product-settings-lead">
-              One customer balance for bookings, online orders, POS, and Books sales. Customers earn
-              points on completed services and shop spend, then redeem them as a discount.
+              {t('settings.rewardPoints.lead')}
             </p>
           </div>
           {planEntitled ? (
@@ -78,7 +79,7 @@ export function RewardPointsSettingsPanel() {
                 form.enabled ? 'product-settings-chip--subscribed' : ''
               }`}
             >
-              {form.enabled ? 'Enabled' : 'Disabled'}
+              {form.enabled ? t('settings.rewardPoints.enabled') : t('settings.rewardPoints.disabled')}
             </span>
           ) : (
             <span className="product-settings-chip product-settings-chip--trial">Pro</span>
@@ -87,13 +88,13 @@ export function RewardPointsSettingsPanel() {
 
         {!planEntitled ? (
           <div className="reward-points-notice reward-points-notice--warn">
-            <strong>Plan upgrade required.</strong>{' '}
-            <Link to="/settings/products">Upgrade in Products & billing</Link> to unlock reward points.
+            <strong>{t('settings.rewardPoints.upgradeRequired')}</strong>{' '}
+            <Trans i18nKey="settings.rewardPoints.upgradeBody" components={{ link: <Link to="/settings/products" /> }} />
           </div>
         ) : null}
         {planEntitled && softLocked ? (
           <div className="reward-points-notice reward-points-notice--danger">
-            Your plan is soft-locked. Renew or upgrade before changing these settings.
+            {t('settings.rewardPoints.softLocked')}
           </div>
         ) : null}
 
@@ -101,11 +102,11 @@ export function RewardPointsSettingsPanel() {
           <>
             <label className={`reward-points-toggle ${!canConfigure ? 'is-disabled' : ''}`}>
               <span>
-                <strong>Enable for customers</strong>
+                <strong>{t('settings.rewardPoints.enableTitle')}</strong>
                 <small>
                   {form.enabled
-                    ? 'Visible in the customer app for earn and redeem.'
-                    : 'Turn on to let customers earn and redeem points.'}
+                    ? t('settings.rewardPoints.enableOn')
+                    : t('settings.rewardPoints.enableOff')}
                 </small>
               </span>
               <input
@@ -117,19 +118,22 @@ export function RewardPointsSettingsPanel() {
             </label>
 
             <div className="reward-points-example">
-              <span>Example</span>
+              <span>{t('settings.rewardPoints.exampleLabel')}</span>
               <p>
-                {form.points_per_currency_unit} points = ₹1 · max {form.max_redeem_percent}% off · min{' '}
-                {form.min_redeem_points} pts to redeem · {form.earn_points_per_100} pts per ₹100 spent
-                in shop
+                {t('settings.rewardPoints.example', {
+                  points: form.points_per_currency_unit,
+                  percent: form.max_redeem_percent,
+                  min: form.min_redeem_points,
+                  earn: form.earn_points_per_100,
+                })}
               </p>
             </div>
 
             <div className="reward-points-fields">
               <label className="product-settings-plan-field">
                 <span>
-                  Points per ₹1
-                  <small className="reward-points-field-hint">How many points equal ₹1 off</small>
+                  {t('settings.rewardPoints.pointsPerRupee')}
+                  <small className="reward-points-field-hint">{t('settings.rewardPoints.pointsPerRupeeHint')}</small>
                 </span>
                 <input
                   type="number"
@@ -146,8 +150,8 @@ export function RewardPointsSettingsPanel() {
               </label>
               <label className="product-settings-plan-field">
                 <span>
-                  Max redeem %
-                  <small className="reward-points-field-hint">Share of price customers can cover</small>
+                  {t('settings.rewardPoints.maxRedeem')}
+                  <small className="reward-points-field-hint">{t('settings.rewardPoints.maxRedeemHint')}</small>
                 </span>
                 <input
                   type="number"
@@ -165,8 +169,8 @@ export function RewardPointsSettingsPanel() {
               </label>
               <label className="product-settings-plan-field">
                 <span>
-                  Minimum redeem points
-                  <small className="reward-points-field-hint">Smallest redeem amount allowed</small>
+                  {t('settings.rewardPoints.minRedeem')}
+                  <small className="reward-points-field-hint">{t('settings.rewardPoints.minRedeemHint')}</small>
                 </span>
                 <input
                   type="number"
@@ -183,8 +187,8 @@ export function RewardPointsSettingsPanel() {
               </label>
               <label className="product-settings-plan-field">
                 <span>
-                  Points per ₹100 spent
-                  <small className="reward-points-field-hint">Shop orders, POS, and Books sales</small>
+                  {t('settings.rewardPoints.earnPer100')}
+                  <small className="reward-points-field-hint">{t('settings.rewardPoints.earnPer100Hint')}</small>
                 </span>
                 <input
                   type="number"
@@ -213,16 +217,16 @@ export function RewardPointsSettingsPanel() {
                         loyalty_preferences: form,
                       },
                     });
-                    snackbar.push('Reward points settings saved.', 'success');
+                    snackbar.push(t('settings.rewardPoints.saved'), 'success');
                   } catch (error) {
                     snackbar.push(
-                      getApiErrorMessage(error, "Couldn't save reward points settings. Try again."),
+                      getApiErrorMessage(error, t('settings.rewardPoints.saveFailed')),
                       'error',
                     );
                   }
                 }}
               >
-                {updateBusiness.isPending ? 'Saving…' : 'Save reward points'}
+                {updateBusiness.isPending ? t('common.saving') : t('settings.rewardPoints.save')}
               </Button>
             </div>
           </>

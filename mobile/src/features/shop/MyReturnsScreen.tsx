@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,38 +24,44 @@ import {
   formatShopMoney,
   formatShopQty,
   shopReturnMethodLabel,
+  shopReturnStatusKey,
   shopReturnStatusLabel,
 } from './shopHelpers';
+import type { TFunction } from 'i18next';
 import type { ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
-const STATUS_FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'approved', label: 'Pickup arranged' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'rejected', label: 'Rejected' },
-] as const;
+type StatusFilter = 'all' | 'pending' | 'approved' | 'completed' | 'rejected';
 
-type StatusFilter = (typeof STATUS_FILTERS)[number]['id'];
+function statusFilters(t: TFunction): { id: StatusFilter; label: string }[] {
+  return [
+    { id: 'all', label: t('customerApp.returns.filterAll') },
+    { id: 'pending', label: t('customerApp.returns.status.pending') },
+    { id: 'approved', label: t('customerApp.returns.status.pickupArranged') },
+    { id: 'completed', label: t('customerApp.returns.status.completed') },
+    { id: 'rejected', label: t('customerApp.returns.filterRejected') },
+  ];
+}
 
 type ReturnLine = { name?: string; quantity?: string | number };
 
-function returnTone(item: ShopReturn) {
+function returnTone(item: ShopReturn, t: TFunction) {
   const value = String(item.status || '').toLowerCase();
+  const label = shopReturnStatusLabel(item, t);
+  const key = shopReturnStatusKey(item);
   if (value === 'completed') {
-    return { bg: '#ECFDF5', text: '#047857', dot: '#047857', label: shopReturnStatusLabel(item) };
+    return { bg: '#ECFDF5', text: '#047857', dot: '#047857', label, key };
   }
   if (value === 'rejected') {
-    return { bg: '#FEF2F2', text: '#B91C1C', dot: '#B91C1C', label: shopReturnStatusLabel(item) };
+    return { bg: '#FEF2F2', text: '#B91C1C', dot: '#B91C1C', label, key };
   }
   if (value === 'awaiting_customer') {
-    return { bg: '#FFF7ED', text: '#C2410C', dot: '#EA580C', label: shopReturnStatusLabel(item) };
+    return { bg: '#FFF7ED', text: '#C2410C', dot: '#EA580C', label, key };
   }
   if (value === 'approved' || item.pickup_arranged_at) {
-    return { bg: '#EFF6FF', text: '#1D4ED8', dot: '#1D4ED8', label: shopReturnStatusLabel(item) };
+    return { bg: '#EFF6FF', text: '#1D4ED8', dot: '#1D4ED8', label, key };
   }
-  return { bg: '#FFFBEB', text: '#B45309', dot: '#B45309', label: shopReturnStatusLabel(item) };
+  return { bg: '#FFFBEB', text: '#B45309', dot: '#B45309', label, key };
 }
 
 function returnLines(item: ShopReturn): ReturnLine[] {
@@ -82,6 +89,7 @@ function countActive(status: StatusFilter) {
 export function MyReturnsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { t } = useTranslation();
   const { branding } = useBootstrap();
   const { tenantSlug, businessCode } = useBusinessContext();
   const [items, setItems] = useState<ShopReturn[]>([]);
@@ -93,7 +101,9 @@ export function MyReturnsScreen() {
   const [draft, setDraft] = useState<{ status: StatusFilter }>({ status: 'all' });
   const primary = branding?.primaryColor ?? colors.primary;
   const activeFilterCount = countActive(status);
-  const statusLabel = STATUS_FILTERS.find((item) => item.id === status)?.label ?? 'All';
+  const filterOptions = statusFilters(t);
+  const statusLabel =
+    filterOptions.find((item) => item.id === status)?.label ?? t('customerApp.returns.filterAll');
 
   const load = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -143,18 +153,23 @@ export function MyReturnsScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Returns" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('customerApp.returns.title')} onBack={() => navigation.goBack()} />
       <SearchFilterToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search return number or item"
+        placeholder={t('customerApp.returns.searchPlaceholder')}
         primaryColor={primary}
         activeFilterCount={activeFilterCount}
         onOpenFilters={openFilters}
         activeSummary={status !== 'all' ? statusLabel : undefined}
         onClearFilters={clearAppliedFilters}
         countLabel={
-          loading ? null : `${visible.length} ${visible.length === 1 ? 'return' : 'returns'}`
+          loading
+            ? null
+            : t(
+                visible.length === 1 ? 'customerApp.returns.countOne' : 'customerApp.returns.countMany',
+                { count: visible.length },
+              )
         }
       />
       {loading && !items.length ? <ActivityIndicator color={primary} style={styles.loader} /> : null}
@@ -176,10 +191,10 @@ export function MyReturnsScreen() {
           />
         }
         renderItem={({ item }) => {
-          const tone = returnTone(item);
+          const tone = returnTone(item, t);
           const preview = itemPreview(item);
           const count = itemCount(item);
-          const method = shopReturnMethodLabel(item.return_method);
+          const method = shopReturnMethodLabel(item.return_method, t);
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -188,11 +203,11 @@ export function MyReturnsScreen() {
               <View style={[styles.iconWrap, { backgroundColor: tone.bg }]}>
                 <Feather
                   name={
-                    tone.label === 'Completed'
+                    tone.key === 'completed'
                       ? 'check-circle'
-                      : tone.label === 'Declined'
+                      : tone.key === 'declined'
                         ? 'x-circle'
-                        : tone.label === 'Pickup arranged'
+                        : tone.key === 'pickupArranged'
                           ? 'truck'
                           : 'rotate-ccw'
                   }
@@ -210,7 +225,9 @@ export function MyReturnsScreen() {
                 <Text style={styles.meta} numberOfLines={1}>
                   {formatShopDateTime(item.created_at)}
                   {method ? ` · ${method}` : ''}
-                  {count ? ` · ${count} item${count === 1 ? '' : 's'}` : ''}
+                  {count
+                    ? ` · ${t(count === 1 ? 'customerApp.returns.itemsOne' : 'customerApp.returns.itemsMany', { count })}`
+                    : ''}
                 </Text>
                 {preview ? (
                   <Text style={styles.preview} numberOfLines={2}>
@@ -230,11 +247,15 @@ export function MyReturnsScreen() {
           !loading ? (
             <EmptyState
               icon="rotate-ccw"
-              title={items.length || search || activeFilterCount ? 'No matching returns' : 'No returns yet'}
+              title={
+                items.length || search || activeFilterCount
+                  ? t('customerApp.returns.noMatching')
+                  : t('customerApp.returns.noneYet')
+              }
               description={
                 items.length || search || activeFilterCount
-                  ? 'Try another search or clear the filters.'
-                  : 'Open a completed order and tap Return items if you need to send something back.'
+                  ? t('customerApp.returns.tryAnother')
+                  : t('customerApp.returns.openCompleted')
               }
             />
           ) : null
@@ -245,7 +266,7 @@ export function MyReturnsScreen() {
         visible={filterOpen}
         onClose={() => setFilterOpen(false)}
         primaryColor={primary}
-        sections={[{ id: 'status', label: 'Status', options: [...STATUS_FILTERS] }]}
+        sections={[{ id: 'status', label: t('customerApp.returns.statusFilter'), options: filterOptions }]}
         values={{ status: draft.status }}
         onSelect={(_sectionId, optionId) => setDraft({ status: optionId as StatusFilter })}
         onClear={() => setDraft({ status: 'all' })}

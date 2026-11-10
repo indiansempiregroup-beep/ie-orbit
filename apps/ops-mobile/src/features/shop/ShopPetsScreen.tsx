@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +33,7 @@ import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../utils/products';
 import { shopListRefreshControl } from './shopRefreshControl';
 
 export function ShopPetsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -64,11 +66,11 @@ export function ShopPetsScreen() {
         setPets([]);
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to load pets');
+      setMessage(err instanceof Error ? err.message : t('opsApp.shop.pets.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, petsSubscribed]);
+  }, [businessId, client, petsSubscribed, t]);
 
   const subscribePets = useCallback(async () => {
     const shopie = activeBusiness?.product_subscriptions?.find(
@@ -77,7 +79,7 @@ export function ShopPetsScreen() {
         (subscription.status === 'active' || subscription.status === 'trialing'),
     );
     if (!shopie) {
-      setMessage('Subscribe to Orbit Mart first, then add the Pets pack.');
+      setMessage(t('shop.pets.errSubscribeFirst'));
       return;
     }
     setSubscribing(true);
@@ -89,13 +91,13 @@ export function ShopPetsScreen() {
         pets_pack_enabled: true,
       });
       await refreshWorkspace();
-      setMessage(`Pets pack subscribed · ₹${petsPriceInr}/month`);
+      setMessage(t('shop.pets.toastSubscribed', { price: `₹${petsPriceInr}` }));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't subscribe to Pets pack. Try again.");
+      setMessage(err instanceof Error ? err.message : t('shop.pets.errSubscribe'));
     } finally {
       setSubscribing(false);
     }
-  }, [activeBusiness?.product_subscriptions, addons, petsPriceInr, refreshWorkspace]);
+  }, [activeBusiness?.product_subscriptions, addons, petsPriceInr, refreshWorkspace, t]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -104,7 +106,7 @@ export function ShopPetsScreen() {
           <Pressable
             onPress={() => navigation.navigate('ShopPetForm')}
             accessibilityRole="button"
-            accessibilityLabel="Add pet"
+            accessibilityLabel={t('shop.pets.addPet')}
             hitSlop={8}
             style={styles.headerBtn}
           >
@@ -112,7 +114,7 @@ export function ShopPetsScreen() {
           </Pressable>
         ) : null,
     });
-  }, [navigation, petsSubscribed]);
+  }, [navigation, petsSubscribed, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -129,8 +131,8 @@ export function ShopPetsScreen() {
     const values = Array.from(
       new Set(pets.map((pet) => (pet.species || '').trim()).filter(Boolean)),
     ).sort((a, b) => a.localeCompare(b));
-    return [{ value: '', label: 'All species' }, ...values.map((value) => ({ value, label: value }))];
-  }, [pets]);
+    return [{ value: '', label: t('shop.pets.allSpecies') }, ...values.map((value) => ({ value, label: value }))];
+  }, [pets, t]);
 
   const customerOptions = useMemo(() => {
     const fromPets = pets
@@ -154,12 +156,12 @@ export function ShopPetsScreen() {
       if (!map.has(option.value)) map.set(option.value, option.label);
     }
     return [
-      { value: '', label: 'All owners' },
+      { value: '', label: t('opsApp.shop.pets.allOwners') },
       ...Array.from(map.entries())
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     ];
-  }, [pets, customers]);
+  }, [pets, customers, t]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -195,23 +197,22 @@ export function ShopPetsScreen() {
             onRefresh={onRefresh}
             contentContainerStyle={{ gap: 8, paddingBottom: insets.bottom + spacing.xl }}
           >
-            <Text style={styles.title}>Pets pack</Text>
+            <Text style={styles.title}>{t('opsApp.shop.pets.packTitle')}</Text>
             <Text style={styles.meta}>
-              Manage pet profiles, photos, birthdays, and owner alerts. Birthday reminders go out 5 days
-              ahead to the pet owner (in-app + email) and to business owners/managers.
+              {t('opsApp.shop.pets.packIntro')}
             </Text>
-            <Text style={styles.price}>₹{petsPriceInr}/month</Text>
+            <Text style={styles.price}>{t('opsApp.shop.pets.perMonth', { price: `₹${petsPriceInr}` })}</Text>
             <Pressable
               style={[styles.button, subscribing && styles.buttonDisabled]}
               onPress={() => void subscribePets()}
               disabled={subscribing}
             >
               <Text style={styles.buttonText}>
-                {subscribing ? 'Subscribing…' : `Subscribe · ₹${petsPriceInr}/mo`}
+                {subscribing ? t('shop.pets.subscribing') : t('shop.pets.subscribeButton', { price: `₹${petsPriceInr}` })}
               </Text>
             </Pressable>
             <Pressable onPress={() => navigation.navigate('ProductSettings')}>
-              <Text style={styles.link}>Or manage from Product settings</Text>
+              <Text style={styles.link}>{t('opsApp.shop.pets.manageFromSettings')}</Text>
             </Pressable>
           </RefreshableScrollView>
         ) : (
@@ -220,7 +221,7 @@ export function ShopPetsScreen() {
               <SearchBar
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search pet, breed, owner…"
+                placeholder={t('opsApp.shop.pets.searchLong')}
                 style={styles.searchFlex}
               />
               <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
@@ -234,21 +235,21 @@ export function ShopPetsScreen() {
                 setSortBy('name_asc');
               }}
             >
-              <FilterChoiceGroup label="Species" value={speciesFilter} options={speciesOptions} onChange={setSpeciesFilter} />
+              <FilterChoiceGroup label={t('shop.pets.species')} value={speciesFilter} options={speciesOptions} onChange={setSpeciesFilter} />
               <FilterChoiceGroup
-                label="Owner"
+                label={t('opsApp.shop.pets.owner')}
                 value={customerFilter}
                 options={customerOptions}
                 onChange={setCustomerFilter}
                 searchable
               />
               <FilterChoiceGroup
-                label="Sort"
+                label={t('shop.products.filterSort')}
                 value={sortBy}
                 options={[
-                  { value: 'name_asc', label: 'Name A–Z' },
-                  { value: 'name_desc', label: 'Name Z–A' },
-                  { value: 'species', label: 'Species' },
+                  { value: 'name_asc', label: t('shop.products.sort.nameAsc') },
+                  { value: 'name_desc', label: t('shop.products.sort.nameDesc') },
+                  { value: 'species', label: t('shop.pets.species') },
                 ]}
                 onChange={setSortBy}
               />
@@ -256,8 +257,8 @@ export function ShopPetsScreen() {
             {activeFilterCount ? (
               <View style={styles.filterMetaRow}>
                 <Text style={styles.meta}>
-                  {filtered.length} pet{filtered.length === 1 ? '' : 's'}
-                  {` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}`}
+                  {t('opsApp.shop.pets.petsCount', { count: filtered.length })}
+                  {` · ${t('opsApp.shop.pets.filtersCount', { count: activeFilterCount })}`}
                 </Text>
                 <Pressable
                   onPress={() => {
@@ -266,12 +267,12 @@ export function ShopPetsScreen() {
                     setCustomerFilter('');
                   }}
                 >
-                  <Text style={styles.clearFilters}>Clear filters</Text>
+                  <Text style={styles.clearFilters}>{t('shop.products.clearFilters')}</Text>
                 </Pressable>
               </View>
             ) : (
               <Text style={[styles.meta, styles.countMeta]}>
-                {filtered.length} pet{filtered.length === 1 ? '' : 's'}
+                {t('opsApp.shop.pets.petsCount', { count: filtered.length })}
               </Text>
             )}
 
@@ -283,14 +284,16 @@ export function ShopPetsScreen() {
               refreshControl={shopListRefreshControl(refreshing, onRefresh)}
               contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
               renderItem={({ item }) => {
-                const owner = item.customer_name ? `Owner: ${item.customer_name}` : 'No owner name';
+                const owner = item.customer_name
+                  ? t('opsApp.shop.pets.ownerLine', { name: item.customer_name })
+                  : t('opsApp.shop.pets.noOwnerName');
                 return (
                   <BooksDocumentRow
                     title={item.name}
-                    meta={[[item.species, item.breed].filter(Boolean).join(' · ') || 'No species', item.birthday ? `birthday ${item.birthday}` : '', owner, item.sex]
+                    meta={[[item.species, item.breed].filter(Boolean).join(' · ') || t('shop.pets.noSpecies'), item.birthday ? t('shop.pets.birthdayShort', { date: item.birthday }) : '', owner, item.sex]
                       .filter(Boolean)
                       .join(' · ')}
-                    badge={item.species || 'Pet'}
+                    badge={item.species || t('shop.pets.defaultPet')}
                     icon="heart"
                     iconTone="rose"
                     onPress={() => navigation.navigate('ShopPetDetail', { petId: item.id })}
@@ -301,13 +304,13 @@ export function ShopPetsScreen() {
                 !loading ? (
                   <EmptyState
                     icon="heart"
-                    title={pets.length ? 'No matching pets' : 'No pets yet'}
+                    title={pets.length ? t('opsApp.shop.pets.emptyNoMatch') : t('opsApp.shop.pets.emptyNoneTitle')}
                     message={
                       pets.length
-                        ? 'Try another search or clear filters.'
-                        : 'Add a pet profile with photo, birthday, and owner details.'
+                        ? t('opsApp.shop.pets.emptyTryAnother')
+                        : t('opsApp.shop.pets.emptyNoneMessage')
                     }
-                    actionLabel={pets.length ? undefined : 'Add pet'}
+                    actionLabel={pets.length ? undefined : t('shop.pets.addPet')}
                     onAction={pets.length ? undefined : () => navigation.navigate('ShopPetForm')}
                   />
                 ) : null

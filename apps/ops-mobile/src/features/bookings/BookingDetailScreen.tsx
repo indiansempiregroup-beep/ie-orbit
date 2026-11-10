@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Image,
@@ -66,12 +67,13 @@ function sanitizeDecimalInput(raw: string): string {
 }
 
 function PaymentQrCode({ value, size }: { value: string; size: number }) {
+  const { t } = useTranslation();
   const Comp =
     typeof QRCodeSvg === 'function'
       ? QRCodeSvg
       : (QRCodeSvg as { default?: React.ComponentType<{ value: string; size: number }> })?.default;
   if (typeof Comp !== 'function') {
-    return <Text style={styles.help}>QR unavailable</Text>;
+    return <Text style={styles.help}>{t('bookings.detailScreen.qrUnavailable')}</Text>;
   }
   return <Comp value={value} size={size} />;
 }
@@ -84,6 +86,7 @@ function formatLineItemPrice(value?: string | number | null, currency?: string |
 }
 
 export function BookingDetailScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, token, ensureFreshAccess } = useAuth();
@@ -213,7 +216,7 @@ export function BookingDetailScreen() {
 
   async function uploadUpiProof(asset: ImagePickerAsset) {
     if (!tenantId || !businessId) {
-      setProofError('Select a business before uploading payment proof.');
+      setProofError(t('bookings.detailScreen.selectBusinessProof'));
       return;
     }
     setProofPreviewUri(asset.uri);
@@ -221,7 +224,7 @@ export function BookingDetailScreen() {
     setProofError(null);
     try {
       const access = (await ensureFreshAccess()) || token;
-      if (!access) throw new Error('Sign in again to upload payment proof.');
+      if (!access) throw new Error(t('bookings.detailScreen.signInAgain'));
       const uploaded = await uploadMedia({
         token: access,
         tenantId,
@@ -237,7 +240,7 @@ export function BookingDetailScreen() {
     } catch (err) {
       clearUpiProof();
       setProofPreviewUri(asset.uri);
-      setProofError(getApiErrorMessage(err, 'Unable to upload payment screenshot.'));
+      setProofError(getApiErrorMessage(err, t('bookings.uploadPaymentFailed')));
     } finally {
       setProofUploading(false);
     }
@@ -316,9 +319,9 @@ export function BookingDetailScreen() {
       navigation.navigate('PaymentProofCamera');
     } catch (err) {
       setShowCollect(true);
-      const message = getApiErrorMessage(err, 'Unable to open the camera.');
+      const message = getApiErrorMessage(err, t('bookings.detailScreen.unableOpenCamera'));
       setProofError(message);
-      Alert.alert('Camera', message);
+      Alert.alert(t('bookings.detailScreen.cameraTitle'), message);
     }
   }
 
@@ -328,8 +331,8 @@ export function BookingDetailScreen() {
       if (Platform.OS !== 'web') {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          setProofError('Allow photo library access to choose a screenshot.');
-          Alert.alert('Permission needed', 'Allow photo library access to choose a screenshot.');
+          setProofError(t('bookings.detailScreen.allowPhotoLibrary'));
+          Alert.alert(t('bookings.detailScreen.permissionNeeded'), t('bookings.detailScreen.allowPhotoLibrary'));
           return;
         }
         setShowCollect(false);
@@ -347,9 +350,9 @@ export function BookingDetailScreen() {
       await uploadUpiProof(result.assets[0]);
     } catch (err) {
       if (Platform.OS !== 'web') setShowCollect(true);
-      const message = getApiErrorMessage(err, 'Unable to open the photo library.');
+      const message = getApiErrorMessage(err, t('bookings.detailScreen.unableOpenGallery'));
       setProofError(message);
-      Alert.alert('Gallery', message);
+      Alert.alert(t('bookings.gallery'), message);
     }
   }
 
@@ -360,10 +363,12 @@ export function BookingDetailScreen() {
         .map((item) => item.service_name || entityLabel(serviceMap, item.service_id, ''))
         .filter(Boolean);
       if (names.length === 1) return names[0];
-      if (names.length > 1) return `${names[0]} + ${names.length - 1} more`;
+      if (names.length > 1) {
+        return t('bookings.detailScreen.servicePlusMore', { first: names[0], n: names.length - 1 });
+      }
     }
-    return entityLabel(serviceMap, booking?.service_id, 'Booking');
-  }, [booking?.service_label, booking?.line_items, booking?.service_id, serviceMap]);
+    return entityLabel(serviceMap, booking?.service_id, t('bookings.detailScreen.bookingFallback'));
+  }, [booking?.service_label, booking?.line_items, booking?.service_id, serviceMap, t]);
 
   const customerName = useMemo(() => {
     if (booking?.customer_name?.trim()) return booking.customer_name;
@@ -385,8 +390,8 @@ export function BookingDetailScreen() {
 
   const staffName = useMemo(() => {
     if (booking?.staff_name?.trim()) return booking.staff_name;
-    return entityLabel(staffMap, booking?.staff_id, 'Unassigned');
-  }, [booking?.staff_name, booking?.staff_id, staffMap]);
+    return entityLabel(staffMap, booking?.staff_id, t('bookings.unassigned'));
+  }, [booking?.staff_name, booking?.staff_id, staffMap, t]);
 
   const servicePriceLabel = useMemo(() => {
     if (booking?.line_items?.length) {
@@ -435,7 +440,7 @@ export function BookingDetailScreen() {
   );
 
   const staffOptions = useMemo(() => {
-    const auto = { value: '', label: 'Auto-assign' };
+    const auto = { value: '', label: t('bookings.autoAssign') };
     let options: Array<{ value: string; label: string }> = [auto];
 
     if (reassignableStaff?.mode === 'single') {
@@ -474,7 +479,7 @@ export function BookingDetailScreen() {
         auto,
         {
           value: currentId,
-          label: booking?.staff_name?.trim() || entityLabel(staffMap, currentId, 'Current staff'),
+          label: booking?.staff_name?.trim() || entityLabel(staffMap, currentId, t('bookings.detailScreen.currentStaff')),
         },
         ...options.filter((option) => option.value !== ''),
       ];
@@ -490,21 +495,22 @@ export function BookingDetailScreen() {
     booking?.staff_name,
     staffDraft,
     staffMap,
+    t,
   ]);
 
   const lineStaffOptionsMap = useMemo(() => {
     const map: Record<string, Array<{ value: string; label: string }>> = {};
-    const fallback = [{ value: '', label: 'Auto-assign' }, ...fallbackStaffOptions];
+    const fallback = [{ value: '', label: t('bookings.autoAssign') }, ...fallbackStaffOptions];
     if (reassignableStaff?.mode === 'per_line') {
       for (const [lineId, options] of Object.entries(reassignableStaff.line_item_options ?? {})) {
         map[lineId] = [
-          { value: '', label: 'Auto-assign' },
+          { value: '', label: t('bookings.autoAssign') },
           ...options.map((member) => ({ value: String(member.id), label: member.display_name })),
         ];
       }
     } else if (reassignableStaff?.mode === 'single') {
       const shared = [
-        { value: '', label: 'Auto-assign' },
+        { value: '', label: t('bookings.autoAssign') },
         ...(reassignableStaff.staff_options ?? []).map((member) => ({
           value: String(member.id),
           label: member.display_name,
@@ -525,10 +531,10 @@ export function BookingDetailScreen() {
       const options = map[lineId] ?? fallback;
       if (currentId && !options.some((option) => option.value === currentId)) {
         map[lineId] = [
-          { value: '', label: 'Auto-assign' },
+          { value: '', label: t('bookings.autoAssign') },
           {
             value: currentId,
-            label: item.staff_name?.trim() || entityLabel(staffMap, currentId, 'Current staff'),
+            label: item.staff_name?.trim() || entityLabel(staffMap, currentId, t('bookings.detailScreen.currentStaff')),
           },
           ...options.filter((option) => option.value !== ''),
         ];
@@ -543,6 +549,7 @@ export function BookingDetailScreen() {
     booking?.line_items,
     lineStaffDraft,
     staffMap,
+    t,
   ]);
 
   const staffSelectionChanged = useMemo(() => {
@@ -594,16 +601,16 @@ export function BookingDetailScreen() {
           }
           if (paymentMethod === 'upi' && receivedAmount > 0) {
             if (proofUploading) {
-              throw new Error('Wait for the payment screenshot to finish uploading.');
+              throw new Error(t('bookings.waitUpload'));
             }
             if (!proofMediaId && !proofUrl) {
-              throw new Error('Capture and upload a UPI payment screenshot before completing.');
+              throw new Error(t('bookings.captureFirst'));
             }
             if (proofUrl) body.payment_proof_url = proofUrl;
             if (proofMediaId) body.payment_proof_media_id = proofMediaId;
           }
           if (balanceDue > 0 && !booking.customer_id) {
-            throw new Error('Customer is required when any amount is due.');
+            throw new Error(t('bookings.detailScreen.customerRequiredDue'));
           }
         }
         await mutations.complete(booking.id, body);
@@ -611,7 +618,7 @@ export function BookingDetailScreen() {
       }
       if (action === 'cancel') await mutations.cancel(booking.id, reason || undefined);
       if (action === 'reschedule') {
-        if (!rescheduleSlot) throw new Error('Select a new time slot.');
+        if (!rescheduleSlot) throw new Error(t('bookings.detailScreen.selectNewSlot'));
         await mutations.reschedule(booking.id, rescheduleSlot, reason || undefined);
         setShowReschedule(false);
         setRescheduleSlot('');
@@ -634,26 +641,26 @@ export function BookingDetailScreen() {
         }
         setStaffModalOpen(false);
         setReassignError(null);
-        toast.push("Staff updated — they've been notified.", 'success');
+        toast.push(t('bookings.staffUpdated'), 'success');
       } else {
         const successMessage =
           action === 'confirm'
-            ? 'Booking confirmed.'
+            ? t('bookings.bookingConfirmed')
             : action === 'checkin'
-              ? 'Customer checked in.'
+              ? t('bookings.checkedIn')
               : action === 'complete'
-                ? 'Booking completed.'
+                ? t('bookings.completed')
                 : action === 'cancel'
-                  ? 'Booking cancelled.'
+                  ? t('bookings.bookingCancelled')
                   : action === 'reschedule'
-                    ? 'Booking rescheduled.'
-                    : 'Booking updated.';
+                    ? t('bookings.rescheduled')
+                    : t('bookings.detailScreen.bookingUpdated');
         toast.push(successMessage, 'success');
       }
       bumpBookingsListRevision();
       await reload();
     } catch (err) {
-      const message = getApiErrorMessage(err, "That didn't go through. Try again.");
+      const message = getApiErrorMessage(err, t('bookings.detailScreen.didntGoThrough'));
       if (action === 'reassign') {
         setReassignError(message);
       } else if (action === 'complete') {
@@ -689,7 +696,7 @@ export function BookingDetailScreen() {
       }
       const response = await client.bookings.invoice(booking.id);
       if (!response.data.available || !response.data.voucher_id) {
-        toast.push(response.data.reason || 'Tax invoice is not available yet.', 'error');
+        toast.push(response.data.reason || t('bookings.detailScreen.taxInvoiceUnavailable'), 'error');
         return;
       }
       setDocActions({
@@ -702,7 +709,7 @@ export function BookingDetailScreen() {
       });
       await reload();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Could not open tax invoice.'), 'error');
+      toast.push(getApiErrorMessage(err, t('bookings.detailScreen.couldNotOpenInvoice')), 'error');
     } finally {
       setInvoiceBusy(false);
     }
@@ -713,7 +720,7 @@ export function BookingDetailScreen() {
       <ScreenState
         loading={loading}
         error={error}
-        actionLabel={error ? 'Retry' : undefined}
+        actionLabel={error ? t('common.retry') : undefined}
         onAction={error ? () => void reload() : undefined}
       />
     );
@@ -737,7 +744,7 @@ export function BookingDetailScreen() {
   const footer = !showFooter ? undefined : hasInvoice && !isOpenBooking ? (
     <View style={styles.footer}>
       <Button
-        label={invoiceBusy ? 'Opening…' : 'View / Share invoice'}
+        label={invoiceBusy ? t('bookings.detailScreen.opening') : t('bookings.detailScreen.viewShareInvoice')}
         icon="file-text"
         loading={invoiceBusy}
         disabled={!businessId || invoiceBusy}
@@ -748,7 +755,7 @@ export function BookingDetailScreen() {
   ) : (
     <View style={styles.footer}>
       <Button
-        label="Cancel"
+        label={t('common.cancel')}
         variant="soft"
         icon="x"
         loading={actionLoading === 'cancel'}
@@ -756,14 +763,14 @@ export function BookingDetailScreen() {
         onPress={() => void run('cancel')}
       />
       <Button
-        label="Reschedule"
+        label={t('bookings.reschedule')}
         variant="soft"
         icon="calendar"
         style={styles.footerBtn}
         onPress={openRescheduleModal}
       />
       <Button
-        label="Reassign"
+        label={t('bookings.detailScreen.reassign')}
         variant="soft"
         icon="users"
         style={styles.footerBtn}
@@ -771,7 +778,7 @@ export function BookingDetailScreen() {
       />
       {canConfirm ? (
         <Button
-          label="Confirm"
+          label={t('bookings.confirm')}
           icon="check"
           loading={actionLoading === 'confirm'}
           style={styles.footerPrimary}
@@ -779,7 +786,7 @@ export function BookingDetailScreen() {
         />
       ) : canCheckIn ? (
         <Button
-          label="Check in"
+          label={t('bookings.checkIn')}
           icon="log-in"
           loading={actionLoading === 'checkin'}
           style={styles.footerPrimary}
@@ -787,7 +794,7 @@ export function BookingDetailScreen() {
         />
       ) : canComplete ? (
         <Button
-          label="Complete"
+          label={t('bookings.complete')}
           icon="check-circle"
           loading={actionLoading === 'complete'}
           style={styles.footerPrimary}
@@ -806,7 +813,11 @@ export function BookingDetailScreen() {
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Invoice ${docActions.number || ''}`.trim() : 'Sale invoice'}
+        title={
+          docActions
+            ? t('shop.orders.detail.invoiceTitle', { number: docActions.number || '' }).trim()
+            : t('shop.orders.detail.saleInvoice')
+        }
       />
       <Card>
         <View style={styles.headerRow}>
@@ -828,18 +839,21 @@ export function BookingDetailScreen() {
             addressPreview={customerAddress || undefined}
           />
         ) : (
-          <DetailRow label="Customer" value={customerName} />
+          <DetailRow label={t('bookings.customer')} value={customerName} />
         )}
-        <DetailRow label="Staff" value={staffName} />
-        <DetailRow label="Starts" value={formatDateTime(booking.start_at)} />
-        <DetailRow label="Ends" value={formatDateTime(booking.end_at)} />
-        <DetailRow label="Duration" value={booking.duration_minutes ? `${booking.duration_minutes} min` : '—'} />
+        <DetailRow label={t('bookings.staff')} value={staffName} />
+        <DetailRow label={t('bookings.detailScreen.starts')} value={formatDateTime(booking.start_at)} />
+        <DetailRow label={t('bookings.detailScreen.ends')} value={formatDateTime(booking.end_at)} />
+        <DetailRow
+          label={t('bookings.detailScreen.duration')}
+          value={booking.duration_minutes ? t('bookings.minutesShort', { n: booking.duration_minutes }) : '—'}
+        />
         {booking.line_items?.length ? (
           <View style={styles.itemsBlock}>
-            <Text style={styles.itemsLabel}>Services</Text>
+            <Text style={styles.itemsLabel}>{t('bookings.detailScreen.services')}</Text>
             {booking.line_items.map((item) => (
               <Text key={item.id} style={styles.itemRow}>
-                {item.service_name || entityLabel(serviceMap, item.service_id, 'Service')}
+                {item.service_name || entityLabel(serviceMap, item.service_id, t('bookings.service'))}
                 {' · '}
                 {item.start_at ? formatTime(item.start_at) : '—'}
                 {' · '}
@@ -851,8 +865,8 @@ export function BookingDetailScreen() {
             ))}
           </View>
         ) : null}
-        <DetailRow label="Price" value={servicePriceLabel} />
-        <DetailRow label="Notes" value={booking.notes || '—'} />
+        <DetailRow label={t('bookings.detailScreen.price')} value={servicePriceLabel} />
+        <DetailRow label={t('bookings.detailScreen.notes')} value={booking.notes || '—'} />
       </Card>
 
       <RewardPointsBanner
@@ -868,12 +882,12 @@ export function BookingDetailScreen() {
 
       {booking.review ? (
         <Card>
-          <SectionHeader title="Customer review" />
+          <SectionHeader title={t('bookings.detailScreen.customerReview')} />
           <Text style={styles.rating}>
             {'★'.repeat(booking.review.rating)}
             {'☆'.repeat(5 - booking.review.rating)}
           </Text>
-          <Text style={styles.reviewComment}>{booking.review.comment?.trim() || 'No written comment.'}</Text>
+          <Text style={styles.reviewComment}>{booking.review.comment?.trim() || t('bookings.detailScreen.noComment')}</Text>
           <Text style={styles.reviewMeta}>{formatDateTime(booking.review.created_at)}</Text>
         </Card>
       ) : null}
@@ -881,10 +895,10 @@ export function BookingDetailScreen() {
       {canAct && isOpenBooking ? (
         <>
           <Input
-            label="Reason (optional)"
+            label={t('bookings.reasonOptional')}
             value={reason}
             onChangeText={setReason}
-            placeholder="Visible in audit trail"
+            placeholder={t('bookings.detailScreen.auditPlaceholder')}
           />
           {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
         </>
@@ -892,44 +906,49 @@ export function BookingDetailScreen() {
 
       {recordedPaymentMethod || recordedProofUri ? (
         <Card>
-          <SectionHeader title="Payment" />
+          <SectionHeader title={t('bookings.payment')} />
           {recordedPaymentMethod ? (
             <DetailRow
-              label="Method"
+              label={t('bookings.detailScreen.method')}
               value={
                 recordedPaymentMethod === 'borrow'
-                  ? 'Credit'
-                  : recordedPaymentMethod.charAt(0).toUpperCase() + recordedPaymentMethod.slice(1)
+                  ? t('bookings.methodCredit')
+                  : t(`bookings.method${recordedPaymentMethod.charAt(0).toUpperCase()}${recordedPaymentMethod.slice(1)}`, {
+                      defaultValue:
+                        recordedPaymentMethod.charAt(0).toUpperCase() + recordedPaymentMethod.slice(1),
+                    })
               }
             />
           ) : null}
           {recordedAmountPaid != null && Number.isFinite(recordedAmountPaid) ? (
-            <DetailRow label="Amount paid" value={formatMoney(recordedAmountPaid, currency)} />
+            <DetailRow label={t('bookings.detailScreen.amountPaid')} value={formatMoney(recordedAmountPaid, currency)} />
           ) : null}
           {recordedProofUri ? (
             <View style={styles.proofViewBlock}>
-              <Text style={styles.fieldLabel}>Payment proof</Text>
-              <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel="View payment proof">
+              <Text style={styles.fieldLabel}>{t('bookings.paymentProof')}</Text>
+              <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel={t('bookings.detailScreen.viewPaymentProof')}>
                 <Image source={{ uri: recordedProofUri }} style={styles.proofViewImage} resizeMode="cover" />
               </Pressable>
-              <Text style={styles.help}>Tap to view full size</Text>
+              <Text style={styles.help}>{t('bookings.detailScreen.tapFullSize')}</Text>
             </View>
           ) : null}
         </Card>
       ) : null}
 
       {hasInvoice && String(booking.books_voucher_number || '').trim() ? (
-        <Text style={styles.help}>Books · {booking.books_voucher_number}</Text>
+        <Text style={styles.help}>
+          {t('shop.orders.detail.booksRef', { number: booking.books_voucher_number })}
+        </Text>
       ) : !hasInvoice && isOpenBooking ? (
         <Text style={styles.help}>
-          Tax invoice actions appear after this appointment is completed and posted to Books.
+          {t('bookings.detailScreen.taxInvoiceAfterCompleted')}
         </Text>
       ) : null}
 
       <ImageLightbox
         uri={recordedProofUri || null}
         visible={proofLightboxOpen}
-        title="Payment proof"
+        title={t('bookings.paymentProof')}
         onClose={() => setProofLightboxOpen(false)}
       />
 
@@ -943,11 +962,11 @@ export function BookingDetailScreen() {
           <Pressable
             style={styles.modalBackdrop}
             onPress={() => setShowReschedule(false)}
-            accessibilityLabel="Close"
+            accessibilityLabel={t('shop.pos.a11yClose')}
           />
           <View style={[styles.sheet, styles.rescheduleSheet]}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Reschedule</Text>
+              <Text style={styles.sheetTitle}>{t('bookings.reschedule')}</Text>
               <Pressable onPress={() => setShowReschedule(false)} hitSlop={8}>
                 <Feather name="x" size={20} color={colors.mutedForeground} />
               </Pressable>
@@ -956,7 +975,7 @@ export function BookingDetailScreen() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.sheetContent}
             >
-              <Text style={styles.sheetHint}>Pick a new date and available time for this appointment.</Text>
+              <Text style={styles.sheetHint}>{t('bookings.detailScreen.reschedulePickHint')}</Text>
               <CalendarPicker
                 value={rescheduleDate}
                 onChange={(next) => {
@@ -969,25 +988,25 @@ export function BookingDetailScreen() {
                 selected={rescheduleSlot}
                 onSelect={setRescheduleSlot}
                 loading={slotsLoading}
-                emptyMessage="No timeslot available for this staff on this date. Try another day."
+                emptyMessage={t('bookings.detailScreen.emptyStaffDate')}
               />
               {rescheduleSlot ? (
                 <Card>
-                  <Text style={styles.summaryLabel}>New time</Text>
+                  <Text style={styles.summaryLabel}>{t('bookings.detailScreen.newTime')}</Text>
                   <Text style={styles.summaryValue}>{formatDateTime(rescheduleSlot)}</Text>
                 </Card>
               ) : null}
               {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
               <View style={styles.sheetActions}>
                 <Button
-                  label="Cancel"
+                  label={t('common.cancel')}
                   variant="soft"
                   icon="x"
                   style={styles.footerBtn}
                   onPress={() => setShowReschedule(false)}
                 />
                 <Button
-                  label="Confirm"
+                  label={t('bookings.confirm')}
                   icon="check"
                   loading={actionLoading === 'reschedule'}
                   disabled={!rescheduleSlot}
@@ -1010,29 +1029,29 @@ export function BookingDetailScreen() {
           <Pressable
             style={styles.modalBackdrop}
             onPress={() => setShowCollect(false)}
-            accessibilityLabel="Close"
+            accessibilityLabel={t('shop.pos.a11yClose')}
           />
           <View style={[styles.sheet, styles.collectSheet]}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Collect payment</Text>
+              <Text style={styles.sheetTitle}>{t('bookings.collectPayment')}</Text>
               <Pressable onPress={() => setShowCollect(false)} hitSlop={8}>
                 <Feather name="x" size={20} color={colors.mutedForeground} />
               </Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sheetContent}>
-              <Text style={styles.sheetHint}>Record how the customer paid before completing.</Text>
+              <Text style={styles.sheetHint}>{t('bookings.detailScreen.collectHint')}</Text>
               <Card>
-                <Text style={styles.summaryLabel}>Bill total</Text>
+                <Text style={styles.summaryLabel}>{t('bookings.detailScreen.billTotalLabel')}</Text>
                 <Text style={styles.summaryValue}>{formatMoney(billTotal, currency)}</Text>
               </Card>
-              <Text style={styles.fieldLabel}>Payment type</Text>
+              <Text style={styles.fieldLabel}>{t('shop.pos.paymentType')}</Text>
               <View style={styles.methodRow}>
                 {(
                   [
-                    { value: 'cash', label: 'Cash' },
-                    { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' },
-                    { value: 'borrow', label: 'Credit' },
+                    { value: 'cash', label: t('bookings.methodCash') },
+                    { value: 'upi', label: t('bookings.methodUpi') },
+                    { value: 'card', label: t('bookings.methodCard') },
+                    { value: 'borrow', label: t('bookings.methodCredit') },
                   ] as const
                 ).map((method) => (
                   <Chip
@@ -1049,7 +1068,7 @@ export function BookingDetailScreen() {
                 ))}
               </View>
               <Text style={styles.fieldLabel}>
-                {paymentMethod === 'borrow' ? 'Amount paid now (optional)' : 'Amount received'}
+                {paymentMethod === 'borrow' ? t('bookings.amountPaidNowOptional') : t('bookings.amountReceived')}
               </Text>
               <TextInput
                 style={styles.amountInput}
@@ -1072,12 +1091,12 @@ export function BookingDetailScreen() {
               />
               <Text style={styles.help}>
                 {balanceDue > 0
-                  ? `Balance due ${formatMoney(balanceDue, currency)} goes to the customer’s credit.`
-                  : 'Bill will be marked fully paid.'}
+                  ? t('shop.pos.balanceDueCredit', { amount: formatMoney(balanceDue, currency) })
+                  : t('shop.pos.fullyPaid')}
               </Text>
               {paymentMethod === 'upi' && receivedAmount > 0 ? (
                 <View style={styles.upiQrBlock}>
-                  <Text style={styles.fieldLabel}>Scan to pay</Text>
+                  <Text style={styles.fieldLabel}>{t('bookings.scanToPay')}</Text>
                   {upiPayUrl ? (
                     <View style={styles.upiQrCard}>
                       <PaymentQrCode value={upiPayUrl} size={180} />
@@ -1091,17 +1110,17 @@ export function BookingDetailScreen() {
                         style={styles.upiQrImage}
                         resizeMode="contain"
                       />
-                      <Text style={styles.help}>Static payment QR</Text>
+                      <Text style={styles.help}>{t('bookings.staticQr')}</Text>
                     </View>
                   ) : (
                     <Text style={styles.error}>
-                      Add a UPI ID in Business Profile to show a payment QR.
+                      {t('bookings.addUpiId')}
                     </Text>
                   )}
                   <View style={styles.proofBlock}>
-                    <Text style={styles.fieldLabel}>Payment screenshot *</Text>
+                    <Text style={styles.fieldLabel}>{t('bookings.detailScreen.paymentScreenshotRequired')}</Text>
                     <Text style={styles.help}>
-                      After the customer pays, take a photo of their UPI success screen.
+                      {t('bookings.screenshotHint')}
                     </Text>
                     {proofPreviewUri || proofUrl ? (
                       <Image
@@ -1112,14 +1131,14 @@ export function BookingDetailScreen() {
                     ) : null}
                     <View style={styles.proofActions}>
                       <Button
-                        label={proofPreviewUri || proofUrl ? 'Retake photo' : 'Take photo'}
+                        label={proofPreviewUri || proofUrl ? t('bookings.retakePhoto') : t('bookings.takePhoto')}
                         icon="camera"
                         style={styles.footerPrimary}
                         disabled={proofUploading}
                         onPress={() => void captureUpiProofFromCamera()}
                       />
                       <Button
-                        label="Gallery"
+                        label={t('bookings.gallery')}
                         variant="soft"
                         icon="image"
                         style={styles.footerBtn}
@@ -1130,7 +1149,7 @@ export function BookingDetailScreen() {
                     {proofUploading ? (
                       <View style={styles.proofUploading}>
                         <ActivityIndicator color={colors.primary} />
-                        <Text style={styles.help}>Uploading proof…</Text>
+                        <Text style={styles.help}>{t('bookings.uploadingProof')}</Text>
                       </View>
                     ) : null}
                     {proofError ? <Text style={styles.error}>{proofError}</Text> : null}
@@ -1138,19 +1157,19 @@ export function BookingDetailScreen() {
                 </View>
               ) : null}
               {balanceDue > 0 && !booking.customer_id ? (
-                <Text style={styles.error}>Customer is required when any amount is due.</Text>
+                <Text style={styles.error}>{t('bookings.detailScreen.customerRequiredDue')}</Text>
               ) : null}
               {collectError ? <Text style={styles.error}>{collectError}</Text> : null}
               <View style={styles.sheetActions}>
                 <Button
-                  label="Cancel"
+                  label={t('common.cancel')}
                   variant="soft"
                   icon="x"
                   style={styles.footerBtn}
                   onPress={() => setShowCollect(false)}
                 />
                 <Button
-                  label="Complete"
+                  label={t('bookings.complete')}
                   icon="check-circle"
                   loading={actionLoading === 'complete'}
                   disabled={
@@ -1179,11 +1198,11 @@ export function BookingDetailScreen() {
           <Pressable
             style={styles.modalBackdrop}
             onPress={() => setStaffModalOpen(false)}
-            accessibilityLabel="Close"
+            accessibilityLabel={t('shop.pos.a11yClose')}
           />
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Reassign staff</Text>
+              <Text style={styles.sheetTitle}>{t('bookings.detailScreen.reassignStaff')}</Text>
               <Pressable onPress={() => setStaffModalOpen(false)} hitSlop={8}>
                 <Feather name="x" size={20} color={colors.mutedForeground} />
               </Pressable>
@@ -1194,14 +1213,14 @@ export function BookingDetailScreen() {
             >
               <Text style={styles.sheetHint}>
                 {usePerLineReassign
-                  ? 'Choose staff assigned to each service. Busy staff may fail reassignment — reschedule if needed.'
-                  : 'Choose a different staff member, then confirm. Busy staff may fail reassignment — reschedule if needed.'}
+                  ? t('bookings.detailScreen.reassignPerServiceHint')
+                  : t('bookings.detailScreen.reassignSingleHint')}
               </Text>
               {reassignableLoading ? <ActivityIndicator color={colors.primary} /> : null}
               {reassignableError ? <Text style={styles.error}>{reassignableError}</Text> : null}
               {reassignableError && !reassignableStaff ? (
                 <Text style={styles.sheetHint}>
-                  Could not load availability filter. Showing all staff — reassignment may fail if they are busy.
+                  {t('bookings.detailScreen.availabilityFilterFailed')}
                 </Text>
               ) : null}
               {usePerLineReassign ? (
@@ -1209,41 +1228,41 @@ export function BookingDetailScreen() {
                   <SelectField
                     key={item.id}
                     label={
-                      item.service_name || entityLabel(serviceMap, item.service_id, 'Service')
+                      item.service_name || entityLabel(serviceMap, item.service_id, t('bookings.service'))
                     }
                     optional
                     value={lineStaffDraft[item.id] ?? ''}
-                    options={lineStaffOptionsMap[String(item.id)] ?? [{ value: '', label: 'Auto-assign' }]}
+                    options={lineStaffOptionsMap[String(item.id)] ?? [{ value: '', label: t('bookings.autoAssign') }]}
                     onChange={(next) =>
                       setLineStaffDraft((current) => ({ ...current, [item.id]: next }))
                     }
-                    placeholder="Choose staff"
+                    placeholder={t('bookings.detailScreen.chooseStaff')}
                   />
                 ))
               ) : (
                 <SelectField
-                  label="Staff member"
+                  label={t('bookings.detailScreen.staffMember')}
                   optional
                   value={staffDraft}
                   options={staffOptions}
                   onChange={setStaffDraft}
-                  placeholder="Choose staff"
+                  placeholder={t('bookings.detailScreen.chooseStaff')}
                 />
               )}
               {reassignError ? <Text style={styles.error}>{reassignError}</Text> : null}
               {!staffSelectionChanged ? (
-                <Text style={styles.sheetHint}>Select a different staff member to enable confirm.</Text>
+                <Text style={styles.sheetHint}>{t('bookings.detailScreen.selectDifferentStaff')}</Text>
               ) : null}
               <View style={styles.sheetActions}>
                 <Button
-                  label="Cancel"
+                  label={t('common.cancel')}
                   variant="soft"
                   icon="x"
                   style={styles.footerBtn}
                   onPress={() => setStaffModalOpen(false)}
                 />
                 <Button
-                  label="Confirm"
+                  label={t('bookings.confirm')}
                   icon="check"
                   loading={actionLoading === 'reassign'}
                   disabled={!staffSelectionChanged}

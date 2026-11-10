@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { BusinessBillingSnapshot } from '@ie-orbit/sdk';
 import { formatDate } from '../../lib/datetime';
 import { formatPlanDisplayName } from '../../config/products';
@@ -20,29 +21,30 @@ type Props = {
 };
 
 export function BillingDates({ billing, className }: Props) {
+  const { t } = useTranslation();
   const isTrial = (billing.status || '').toLowerCase().includes('trial');
 
   const rows: Array<{ label: string; value: string }> = [
-    { label: 'Started', value: formatDate(billing.subscribed_at) },
+    { label: t('settings.productsPage.started'), value: formatDate(billing.subscribed_at) },
     {
-      label: isTrial ? 'Trial ends' : 'Trial ended',
+      label: isTrial ? t('settings.billingPage.dates.trialEnds') : t('settings.billingPage.dates.trialEnded'),
       value: formatDate(billing.trial_ends_at),
     },
-    { label: 'Period start', value: formatDate(billing.current_period_starts_at) },
-    { label: 'Period end', value: formatDate(billing.current_period_ends_at) },
-    { label: 'Next payment due', value: formatDate(billing.renews_at || billing.current_period_ends_at) },
+    { label: t('settings.billingPage.dates.periodStart'), value: formatDate(billing.current_period_starts_at) },
+    { label: t('settings.billingPage.dates.periodEnd'), value: formatDate(billing.current_period_ends_at) },
+    { label: t('settings.billingPage.dates.nextDue'), value: formatDate(billing.renews_at || billing.current_period_ends_at) },
   ];
 
   if (billing.plan_locked_until) {
-    rows.push({ label: 'Current plan locked until', value: formatDate(billing.plan_locked_until) });
+    rows.push({ label: t('settings.billingPage.dates.lockedUntil'), value: formatDate(billing.plan_locked_until) });
   }
   if (billing.pending_plan_code) {
-    rows.push({ label: 'Next plan', value: formatPlanDisplayName(undefined, billing.pending_plan_code) });
-    rows.push({ label: 'Next plan starts', value: formatDate(billing.plan_change_effective_at) });
+    rows.push({ label: t('settings.billingPage.dates.nextPlan'), value: formatPlanDisplayName(undefined, billing.pending_plan_code) });
+    rows.push({ label: t('settings.billingPage.dates.nextPlanStarts'), value: formatDate(billing.plan_change_effective_at) });
   }
 
   if (billing.canceled_at) {
-    rows.push({ label: 'Canceled', value: formatDate(billing.canceled_at) });
+    rows.push({ label: t('settings.billingPage.dates.canceled'), value: formatDate(billing.canceled_at) });
   }
 
   return (

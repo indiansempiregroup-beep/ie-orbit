@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -42,30 +43,11 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 import { formatMoney } from './posPayment';
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All statuses' },
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'inactive', label: 'Inactive' },
-];
-
-const BULK_STATUS_OPTIONS = [
-  { value: '', label: 'Keep status' },
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'inactive', label: 'Inactive' },
-  { value: 'archived', label: 'Archived' },
-];
-
 const BULK_HINT_KEY = 'shop.bulkHint.dismissed';
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
-const CATEGORY_OPTIONS = [
-  { value: '', label: 'All categories' },
-  ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
-];
-
 export function ShopProductsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -100,6 +82,33 @@ export function ShopProductsScreen() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
 
+  const statusOptions = useMemo(
+    () => [
+      { value: '', label: t('shop.products.allStatuses') },
+      { value: 'active', label: t('shop.products.statuses.active') },
+      { value: 'draft', label: t('shop.products.statuses.draft') },
+      { value: 'inactive', label: t('shop.products.statuses.inactive') },
+    ],
+    [t],
+  );
+  const bulkStatusOptions = useMemo(
+    () => [
+      { value: '', label: t('shop.products.keepStatus') },
+      { value: 'active', label: t('shop.products.statuses.active') },
+      { value: 'draft', label: t('shop.products.statuses.draft') },
+      { value: 'inactive', label: t('shop.products.statuses.inactive') },
+      { value: 'archived', label: t('shop.products.statuses.archived') },
+    ],
+    [t],
+  );
+  const categoryOptions = useMemo(
+    () => [
+      { value: '', label: t('shop.products.allCategories') },
+      ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
+    ],
+    [t],
+  );
+
   useEffect(() => {
     if (!canWrite) return;
     void getPersistentItem(BULK_HINT_KEY).then((value) => {
@@ -115,12 +124,12 @@ export function ShopProductsScreen() {
             <Pressable
               onPress={() => navigation.navigate('BI', { tab: 'profit' })}
               accessibilityRole="button"
-              accessibilityLabel="BI Profit insights"
+              accessibilityLabel={t('shop.products.a11yBiProfit')}
               hitSlop={8}
               style={isDesktop ? styles.headerTextBtn : styles.headerBtn}
             >
               <Feather name="trending-up" size={isDesktop ? 16 : 18} color={colors.primary} />
-              {isDesktop ? <Text style={styles.headerTextBtnLabel}>BI Profit</Text> : null}
+              {isDesktop ? <Text style={styles.headerTextBtnLabel}>{t('shop.products.biProfit')}</Text> : null}
             </Pressable>
           ) : null}
           {canScanInvoice ? (
@@ -128,17 +137,17 @@ export function ShopProductsScreen() {
               <Pressable
                 onPress={() => navigation.navigate('ShopInvoiceScan')}
                 accessibilityRole="button"
-                accessibilityLabel="Scan invoice"
+                accessibilityLabel={t('shop.products.scanInvoice')}
                 style={styles.headerTextBtn}
               >
                 <Feather name="camera" size={16} color={colors.primary} />
-                <Text style={styles.headerTextBtnLabel}>Scan invoice</Text>
+                <Text style={styles.headerTextBtnLabel}>{t('shop.products.scanInvoice')}</Text>
               </Pressable>
             ) : (
               <Pressable
                 onPress={() => navigation.navigate('ShopInvoiceScan')}
                 accessibilityRole="button"
-                accessibilityLabel="Scan invoice"
+                accessibilityLabel={t('shop.products.scanInvoice')}
                 hitSlop={8}
                 style={styles.headerBtn}
               >
@@ -152,17 +161,17 @@ export function ShopProductsScreen() {
                 <Pressable
                   onPress={() => navigation.navigate('ShopProductsAddMany')}
                   accessibilityRole="button"
-                  accessibilityLabel="Add many products"
+                  accessibilityLabel={t('shop.products.a11yAddMany')}
                   style={styles.headerTextBtn}
                 >
                   <Feather name="grid" size={16} color={colors.primary} />
-                  <Text style={styles.headerTextBtnLabel}>Add many</Text>
+                  <Text style={styles.headerTextBtnLabel}>{t('shop.products.addMany')}</Text>
                 </Pressable>
               ) : (
                 <Pressable
                   onPress={() => navigation.navigate('ShopProductsAddMany')}
                   accessibilityRole="button"
-                  accessibilityLabel="Add many products"
+                  accessibilityLabel={t('shop.products.a11yAddMany')}
                   hitSlop={8}
                   style={styles.headerBtn}
                 >
@@ -172,7 +181,7 @@ export function ShopProductsScreen() {
               <Pressable
                 onPress={() => navigation.navigate('ShopProductAdd')}
                 accessibilityRole="button"
-                accessibilityLabel="Add product"
+                accessibilityLabel={t('shop.products.addProduct')}
                 hitSlop={8}
                 style={styles.headerBtn}
               >
@@ -183,7 +192,7 @@ export function ShopProductsScreen() {
         </View>
       ),
     });
-  }, [canScanInvoice, canSeeProfit, canWrite, isDesktop, navigation]);
+  }, [canScanInvoice, canSeeProfit, canWrite, isDesktop, navigation, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -197,7 +206,7 @@ export function ShopProductsScreen() {
       });
       setItems(rows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products');
+      setError(err instanceof Error ? err.message : t('shop.products.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -273,7 +282,7 @@ export function ShopProductsScreen() {
     if (bulkPrice.trim()) updates.price = { set: bulkPrice.trim() };
     else if (bulkPercent.trim()) updates.price = { percent: bulkPercent.trim() };
     if (!Object.keys(updates).length) {
-      toast.push('Choose a status, category, GST, or price change.', 'error');
+      toast.push(t('shop.products.chooseChange'), 'error');
       return;
     }
     setBulkBusy(true);
@@ -285,7 +294,7 @@ export function ShopProductsScreen() {
       });
       const failed = result.data.errors.length;
       if (result.data.updated.length && !failed) {
-        toast.push(`Updated ${result.data.updated.length} product${result.data.updated.length === 1 ? '' : 's'}.`, 'success');
+        toast.push(t('shop.products.updatedCount', { count: result.data.updated.length }), 'success');
         setSelectedIds([]);
         setBulkOpen(false);
         setBulkStatus('');
@@ -294,13 +303,16 @@ export function ShopProductsScreen() {
         setBulkPrice('');
         setBulkPercent('');
       } else if (result.data.updated.length) {
-        toast.push(`Updated ${result.data.updated.length}; ${failed} didn't update.`, 'info');
+        toast.push(
+          t('shop.products.partialUpdate', { updated: result.data.updated.length, failed }),
+          'info',
+        );
       } else {
-        toast.push(result.data.errors[0]?.message || "Couldn't update the selected products. Try again.", 'error');
+        toast.push(result.data.errors[0]?.message || t('shop.products.bulkFailed'), 'error');
       }
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't update the selected products. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('shop.products.bulkFailed'), 'error');
     } finally {
       setBulkBusy(false);
     }
@@ -313,7 +325,7 @@ export function ShopProductsScreen() {
           <SearchBar
             value={search}
             onChangeText={setSearch}
-            placeholder="Search products"
+            placeholder={t('shop.products.searchShort')}
             style={styles.searchFlex}
           />
           <FilterButton
@@ -326,16 +338,16 @@ export function ShopProductsScreen() {
             onPress={() => navigation.navigate('ShopProductsAddMany')}
             style={styles.addManyChip}
             accessibilityRole="button"
-            accessibilityLabel="Add many products"
+            accessibilityLabel={t('shop.products.a11yAddMany')}
           >
             <Feather name="grid" size={14} color={colors.primary} />
-            <Text style={styles.addManyChipText}>Add many</Text>
+            <Text style={styles.addManyChipText}>{t('shop.products.addMany')}</Text>
           </Pressable>
         ) : null}
         {canWrite && showBulkHint ? (
           <View style={styles.hint}>
             <Text style={styles.hintText}>
-              Need a catalog? Add many lets you paste Excel or scan barcodes.
+              {t('shop.products.bulkHint')}
             </Text>
             <Pressable
               onPress={() => {
@@ -343,7 +355,7 @@ export function ShopProductsScreen() {
                 void setPersistentItem(BULK_HINT_KEY, '1');
               }}
               hitSlop={8}
-              accessibilityLabel="Dismiss hint"
+              accessibilityLabel={t('shop.products.dismissHint')}
             >
               <Feather name="x" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -357,7 +369,7 @@ export function ShopProductsScreen() {
             }}
             style={styles.clearFilters}
           >
-            <Text style={styles.clearFiltersText}>Clear filters</Text>
+            <Text style={styles.clearFiltersText}>{t('shop.products.clearFilters')}</Text>
           </Pressable>
         ) : null}
 
@@ -370,18 +382,29 @@ export function ShopProductsScreen() {
             setSortBy('name_asc');
           }}
         >
-          <FilterChoiceGroup label="Status" value={status} options={STATUS_OPTIONS} onChange={setStatus} />
-          <FilterChoiceGroup label="Category" value={category} options={CATEGORY_OPTIONS} onChange={setCategory} searchable />
           <FilterChoiceGroup
-            label="Sort"
+            label={t('common.status')}
+            value={status}
+            options={statusOptions}
+            onChange={setStatus}
+          />
+          <FilterChoiceGroup
+            label={t('shop.products.category')}
+            value={category}
+            options={categoryOptions}
+            onChange={setCategory}
+            searchable
+          />
+          <FilterChoiceGroup
+            label={t('shop.products.filterSort')}
             value={sortBy}
             options={[
-              { value: 'name_asc', label: 'Name A–Z' },
-              { value: 'name_desc', label: 'Name Z–A' },
-              { value: 'price_desc', label: 'Price high–low' },
-              { value: 'price_asc', label: 'Price low–high' },
-              { value: 'stock_desc', label: 'Stock high–low' },
-              { value: 'stock_asc', label: 'Stock low–high' },
+              { value: 'name_asc', label: t('shop.products.sort.nameAsc') },
+              { value: 'name_desc', label: t('shop.products.sort.nameDesc') },
+              { value: 'price_desc', label: t('shop.products.sort.priceDesc') },
+              { value: 'price_asc', label: t('shop.products.sort.priceAsc') },
+              { value: 'stock_desc', label: t('shop.products.sort.stockDesc') },
+              { value: 'stock_asc', label: t('shop.products.sort.stockAsc') },
             ]}
             onChange={setSortBy}
           />
@@ -397,18 +420,20 @@ export function ShopProductsScreen() {
                 size={20}
                 color={allPageSelected ? colors.primary : colors.mutedForeground}
               />
-              <Text style={styles.selectAllText}>Select page ({pageRows.length})</Text>
+              <Text style={styles.selectAllText}>
+                {t('shop.products.selectPage', { count: pageRows.length })}
+              </Text>
             </Pressable>
             {selectedIds.length ? (
               <Pressable
                 onPress={() => setBulkOpen(true)}
                 style={styles.bulkChip}
                 accessibilityRole="button"
-                accessibilityLabel={`Edit ${selectedIds.length} selected products`}
+                accessibilityLabel={t('shop.products.a11yEditSelected', { n: selectedIds.length })}
               >
                 <Feather name="edit-3" size={14} color={colors.primary} />
                 <Text style={styles.bulkChipText}>
-                  {selectedIds.length} selected · Edit
+                  {t('shop.products.selectedEdit', { count: selectedIds.length })}
                 </Text>
               </Pressable>
             ) : null}
@@ -429,8 +454,8 @@ export function ShopProductsScreen() {
               <BooksDocumentRow
                 title={item.name}
                 amount={formatMoney(item.price, item.currency)}
-                meta={`SKU ${item.sku || '—'} · stock ${item.stock_on_hand}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
-                badge={item.status}
+                meta={`${t('shop.products.rowMeta', { sku: item.sku || '—', stock: item.stock_on_hand })}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
+                badge={t(`shop.products.statuses.${item.status}`, { defaultValue: item.status })}
                 badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}
                 icon="package"
                 iconTone="amber"
@@ -443,7 +468,7 @@ export function ShopProductsScreen() {
                       hitSlop={8}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: selected }}
-                      accessibilityLabel={`Select ${item.name}`}
+                      accessibilityLabel={t('shop.products.selectProductAria', { name: item.name })}
                       style={styles.productCheck}
                     >
                       <Feather
@@ -462,11 +487,11 @@ export function ShopProductsScreen() {
               <EmptyState
                 icon="package"
                 tone="amber"
-                title="No products yet"
-                message="Add items with price and stock to sell from Sale or invoices."
-                actionLabel={canWrite ? 'Add product' : undefined}
+                title={t('shop.products.emptyTitle')}
+                message={t('shop.products.emptyMessage')}
+                actionLabel={canWrite ? t('shop.products.addProduct') : undefined}
                 onAction={canWrite ? () => navigation.navigate('ShopProductAdd') : undefined}
-                secondaryLabel={canWrite ? 'Add many' : undefined}
+                secondaryLabel={canWrite ? t('shop.products.addMany') : undefined}
                 onSecondary={canWrite ? () => navigation.navigate('ShopProductsAddMany') : undefined}
               />
             ) : null
@@ -475,12 +500,12 @@ export function ShopProductsScreen() {
         {filtered.length ? (
           <View style={[styles.pager, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
             <Text style={styles.pagerMeta} numberOfLines={1}>
-              {pageStart}–{pageEnd} of {filtered.length}
+              {t('shop.products.pagerRange', { start: pageStart, end: pageEnd, total: filtered.length })}
             </Text>
             <View style={styles.pagerSelectWrap}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Rows per page"
+                accessibilityLabel={t('shop.products.rowsPerPage')}
                 onPress={() => setSizeMenuOpen((open) => !open)}
                 style={styles.pagerSelect}
               >
@@ -512,7 +537,7 @@ export function ShopProductsScreen() {
             <View style={styles.pagerNav}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Previous page"
+                accessibilityLabel={t('shop.products.previousPage')}
                 disabled={safePage <= 0}
                 onPress={() => setPage(safePage - 1)}
                 style={[styles.pagerBtn, safePage <= 0 && styles.pagerBtnDisabled]}
@@ -524,7 +549,7 @@ export function ShopProductsScreen() {
               </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Next page"
+                accessibilityLabel={t('shop.products.nextPage')}
                 disabled={safePage >= pageCount - 1}
                 onPress={() => setPage(safePage + 1)}
                 style={[styles.pagerBtn, safePage >= pageCount - 1 && styles.pagerBtnDisabled]}
@@ -547,20 +572,25 @@ export function ShopProductsScreen() {
             >
                 <View style={styles.popupHeader}>
                   <Text style={styles.bulkTitle}>
-                    Edit {selectedIds.length} product{selectedIds.length === 1 ? '' : 's'}
-                    {selectedIds.length > 200 ? ' (first 200)' : ''}
+                    {t('shop.products.bulkTitle', { count: selectedIds.length })}
+                    {selectedIds.length > 200 ? t('shop.products.bulkFirst200') : ''}
                   </Text>
-                  <Pressable onPress={() => setBulkOpen(false)} hitSlop={8} accessibilityLabel="Close">
+                  <Pressable onPress={() => setBulkOpen(false)} hitSlop={8} accessibilityLabel={t('shop.products.close')}>
                     <Feather name="x" size={20} color={colors.mutedForeground} />
                   </Pressable>
                 </View>
                 <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.popupBody}>
-                  <SelectField label="Status" value={bulkStatus} options={BULK_STATUS_OPTIONS} onChange={setBulkStatus} />
                   <SelectField
-                    label="Category"
+                    label={t('common.status')}
+                    value={bulkStatus}
+                    options={bulkStatusOptions}
+                    onChange={setBulkStatus}
+                  />
+                  <SelectField
+                    label={t('shop.products.category')}
                     value={bulkCategory}
                     options={[
-                      { value: '', label: 'Keep category' },
+                      { value: '', label: t('shop.products.keepCategory') },
                       ...SHOP_PRODUCT_CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
                     ]}
                     onChange={setBulkCategory}
@@ -570,7 +600,7 @@ export function ShopProductsScreen() {
                     <TextInput
                       value={bulkGst}
                       onChangeText={setBulkGst}
-                      placeholder="GST %"
+                      placeholder={t('shop.products.gstPercent')}
                       keyboardType="decimal-pad"
                       style={styles.bulkInput}
                       placeholderTextColor={colors.mutedForeground}
@@ -581,7 +611,7 @@ export function ShopProductsScreen() {
                         setBulkPrice(value);
                         if (value) setBulkPercent('');
                       }}
-                      placeholder="Set price"
+                      placeholder={t('shop.products.setPrice')}
                       keyboardType="decimal-pad"
                       style={styles.bulkInput}
                       placeholderTextColor={colors.mutedForeground}
@@ -592,16 +622,16 @@ export function ShopProductsScreen() {
                         setBulkPercent(value);
                         if (value) setBulkPrice('');
                       }}
-                      placeholder="Price %"
+                      placeholder={t('shop.products.pricePercent')}
                       keyboardType="decimal-pad"
                       style={styles.bulkInput}
                       placeholderTextColor={colors.mutedForeground}
                     />
                   </View>
                   <View style={styles.bulkActions}>
-                    <Button label="Apply" loading={bulkBusy} onPress={() => void applyBulkEdit()} />
+                    <Button label={t('shop.products.apply')} loading={bulkBusy} onPress={() => void applyBulkEdit()} />
                     <Button
-                      label="Clear selection"
+                      label={t('shop.products.clearSelection')}
                       variant="ghost"
                       onPress={() => {
                         setSelectedIds([]);

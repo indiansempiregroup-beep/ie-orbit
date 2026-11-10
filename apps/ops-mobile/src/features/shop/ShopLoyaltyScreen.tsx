@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -16,6 +17,7 @@ import { customerLabel, formatMoney } from './shopBooksHelpers';
 import { readLoyaltyPrefs } from '../../utils/loyalty';
 
 export function ShopLoyaltyScreen() {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId, activeBusiness, refreshWorkspace } = useWorkspace();
@@ -54,11 +56,11 @@ export function ShopLoyaltyScreen() {
       setCustomers(customersRes.data ?? []);
       setReport(reportRes.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reward points settings');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.loyalty.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -70,10 +72,10 @@ export function ShopLoyaltyScreen() {
 
   const customerOptions = useMemo(
     () => [
-      { value: '', label: 'Search customer…' },
+      { value: '', label: t('opsApp.shop.loyalty.searchCustomer') },
       ...customers.map((c) => ({ value: c.id, label: customerLabel(c) })),
     ],
-    [customers],
+    [customers, t],
   );
 
   const selectedCustomer = useMemo(
@@ -120,9 +122,9 @@ export function ShopLoyaltyScreen() {
         },
       });
       await refreshWorkspace();
-      toast.push('Reward points settings saved', 'success');
+      toast.push(t('settings.rewardPoints.saved'), 'success');
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't save settings. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('settings.rewardPoints.saveFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -144,7 +146,7 @@ export function ShopLoyaltyScreen() {
       onRefresh={onRefresh}
       footer={
         <Button
-          label={busy ? 'Saving…' : 'Save reward points'}
+          label={busy ? t('common.saving') : t('settings.rewardPoints.save')}
           loading={busy}
           fullWidth
           size="lg"
@@ -154,13 +156,12 @@ export function ShopLoyaltyScreen() {
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.help}>
-        Same program as Products & billing. One balance for bookings, online orders, POS, and Books
-        sales.
-        {activeBusiness?.display_name ? ` Workspace: ${activeBusiness.display_name}.` : ''}
+        {t('opsApp.shop.loyalty.help')}
+        {activeBusiness?.display_name ? ` ${t('opsApp.shop.loyalty.workspace', { name: activeBusiness.display_name })}` : ''}
       </Text>
 
       <View style={styles.switchRow}>
-        <Text style={styles.label}>Enable for customers</Text>
+        <Text style={styles.label}>{t('settings.rewardPoints.enableTitle')}</Text>
         <Switch
           value={enabled}
           onValueChange={setEnabled}
@@ -170,28 +171,28 @@ export function ShopLoyaltyScreen() {
       </View>
 
       <Input
-        label="Points per ₹1 off"
+        label={t('settings.rewardPoints.pointsPerRupee')}
         required
         value={pointsPerUnit}
         onChangeText={(value) => setPointsPerUnit(value.replace(/[^0-9]/g, ''))}
         keyboardType="number-pad"
       />
       <Input
-        label="Max redeem %"
+        label={t('settings.rewardPoints.maxRedeem')}
         required
         value={maxRedeemPercent}
         onChangeText={(value) => setMaxRedeemPercent(value.replace(/[^0-9]/g, ''))}
         keyboardType="number-pad"
       />
       <Input
-        label="Minimum redeem points"
+        label={t('settings.rewardPoints.minRedeem')}
         required
         value={minRedeemPoints}
         onChangeText={(value) => setMinRedeemPoints(value.replace(/[^0-9]/g, ''))}
         keyboardType="number-pad"
       />
       <Input
-        label="Points per ₹100 spent"
+        label={t('settings.rewardPoints.earnPer100')}
         required
         value={earnPointsPer100}
         onChangeText={(value) => setEarnPointsPer100(value.replace(/[^0-9]/g, ''))}
@@ -200,16 +201,16 @@ export function ShopLoyaltyScreen() {
 
       {report?.summary ? (
         <View style={styles.customerCard}>
-          <Text style={styles.section}>Activity totals</Text>
-          <Text style={styles.meta}>Given · {report.summary.points_earned}</Text>
-          <Text style={styles.meta}>Redeemed · {report.summary.points_redeemed}</Text>
-          <Text style={styles.meta}>Net · {report.summary.net_points}</Text>
+          <Text style={styles.section}>{t('opsApp.shop.loyalty.activityTotals')}</Text>
+          <Text style={styles.meta}>{t('opsApp.shop.loyalty.given', { n: report.summary.points_earned })}</Text>
+          <Text style={styles.meta}>{t('opsApp.shop.loyalty.redeemed', { n: report.summary.points_redeemed })}</Text>
+          <Text style={styles.meta}>{t('opsApp.shop.loyalty.net', { n: report.summary.net_points })}</Text>
         </View>
       ) : null}
 
-      <Text style={styles.section}>Customer lookup</Text>
+      <Text style={styles.section}>{t('opsApp.shop.loyalty.customerLookup')}</Text>
       <SelectField
-        label="Customer"
+        label={t('opsApp.shop.loyalty.customer')}
         optional
         value={customerId}
         options={customerOptions}
@@ -221,34 +222,35 @@ export function ShopLoyaltyScreen() {
           <Text style={styles.customerName}>{customerLabel(selectedCustomer)}</Text>
           {selectedCustomer.borrow_balance_due != null ? (
             <Text style={styles.meta}>
-              Borrow due · {formatMoney(selectedCustomer.borrow_balance_due)}
+              {t('opsApp.shop.loyalty.borrowDue', { amount: formatMoney(selectedCustomer.borrow_balance_due) })}
             </Text>
           ) : null}
           <Text style={styles.meta}>
-            Reward points ·{' '}
-            {customerLoyalty?.points_balance ?? selectedCustomer.loyalty_points ?? 0}
+            {t('opsApp.shop.loyalty.rewardPointsLine', {
+              points: customerLoyalty?.points_balance ?? selectedCustomer.loyalty_points ?? 0,
+            })}
           </Text>
           {(customerLoyalty?.ledger ?? []).slice(0, 8).map((entry) => (
             <Text key={entry.id} style={styles.meta}>
               {entry.points_delta >= 0 ? `+${entry.points_delta}` : entry.points_delta} ·{' '}
-              {entry.reason || 'Update'}
+              {entry.reason || t('opsApp.shop.loyalty.update')}
             </Text>
           ))}
         </View>
       ) : (
-        <Text style={styles.meta}>Search a customer to see their reward points balance.</Text>
+        <Text style={styles.meta}>{t('opsApp.shop.loyalty.searchHint')}</Text>
       )}
 
       {(report?.ledger ?? []).length ? (
         <>
-          <Text style={styles.section}>Recent points given / redeemed</Text>
+          <Text style={styles.section}>{t('opsApp.shop.loyalty.recent')}</Text>
           {report!.ledger.slice(0, 12).map((entry) => (
             <View key={entry.id} style={styles.customerCard}>
               <Text style={styles.customerName}>
-                {entry.customer_name || 'Customer'} ·{' '}
+                {entry.customer_name || t('opsApp.shop.loyalty.customer')} ·{' '}
                 {entry.points_delta >= 0 ? `+${entry.points_delta}` : entry.points_delta}
               </Text>
-              <Text style={styles.meta}>{entry.reason || entry.entry_type || 'Update'}</Text>
+              <Text style={styles.meta}>{entry.reason || entry.entry_type || t('opsApp.shop.loyalty.update')}</Text>
             </View>
           ))}
         </>

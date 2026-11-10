@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import { formatMoney, type VoucherListSummary } from './shopBooksHelpers';
 
@@ -30,18 +31,25 @@ export function VoucherSummaryCards({
   onPressUnpaid,
   metrics,
 }: Props) {
-  const unpaidLabel = mode === 'purchase' ? 'To pay' : mode === 'expense' ? 'Spent' : 'Due';
+  const { t } = useTranslation();
+  const unpaidLabel =
+    mode === 'purchase'
+      ? t('opsApp.shop.purchaseDetail.toPay')
+      : mode === 'expense'
+        ? t('opsApp.shop.voucherSummary.spent')
+        : t('opsApp.shop.voucherSummary.due');
+  const totalLabel = t('shop.booksInvoiceDrawer.total');
   const items =
     metrics ??
     (mode === 'expense'
       ? [
-          { label: 'Total', value: formatMoney(summary.totalAmount), hint: `${summary.count}` },
-          { label: 'Entries', value: String(summary.count) },
+          { label: totalLabel, value: formatMoney(summary.totalAmount), hint: `${summary.count}` },
+          { label: t('opsApp.shop.voucherSummary.entries'), value: String(summary.count) },
         ]
       : [
-          { label: 'Total', value: formatMoney(summary.totalAmount), hint: `${summary.count}`, onPress: onPressTotal },
+          { label: totalLabel, value: formatMoney(summary.totalAmount), hint: `${summary.count}`, onPress: onPressTotal },
           {
-            label: 'Paid',
+            label: t('shop.booksInvoiceDrawer.paid'),
             value: formatMoney(summary.paidAmount),
             hint: String(summary.paidCount),
             tone: 'paid' as const,

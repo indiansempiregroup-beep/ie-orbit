@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { Booking, BookingCreateInput, BookingLineItemInput, Service } from '@ie-orbit/sdk';
 
 export function serviceDurationMinutes(service: Service): number {
@@ -10,11 +11,18 @@ export function servicesTotalDurationMinutes(services: Service[]): number {
   return services.reduce((sum, service) => sum + serviceDurationMinutes(service), 0);
 }
 
-export function compactServiceSummary(services: Service[], nameFor: (service: Service) => string): string {
+export function compactServiceSummary(
+  services: Service[],
+  nameFor: (service: Service) => string,
+  t?: TFunction,
+): string {
   if (!services.length) return '';
   if (services.length === 1) return nameFor(services[0]);
   if (services.length === 2) return `${nameFor(services[0])}, ${nameFor(services[1])}`;
-  return `${nameFor(services[0])}, ${nameFor(services[1])} + ${services.length - 2} more`;
+  const more = t
+    ? t('bookings.servicePicker.more', { count: services.length - 2 })
+    : `+ ${services.length - 2} more`;
+  return `${nameFor(services[0])}, ${nameFor(services[1])} ${more}`;
 }
 
 export function bookingServiceLabel(

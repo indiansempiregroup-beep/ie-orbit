@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Trans, useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -32,6 +33,7 @@ import {
 import { useCancelPendingProductPlanChange } from './businessSettingsHooks';
 
 export function BillingPlanFoundation() {
+  const { t } = useTranslation();
   const [eventFilter, setEventFilter] = useState<'all' | 'failed' | 'dead_letter'>('all');
   const [selectedPlanCode, setSelectedPlanCode] = useState('appointie-starter');
   const [showPlatformSummary, setShowPlatformSummary] = useState(false);
@@ -94,34 +96,40 @@ export function BillingPlanFoundation() {
   return (
     <Card className="billing-foundation">
       <div className="billing-foundation-header">
-        <p className="public-kicker">Billing foundation</p>
-        <h2 style={{ margin: 0 }}>Your plan & usage</h2>
+        <p className="public-kicker">{t('settings.billingPage.kicker')}</p>
+        <h2 style={{ margin: 0 }}>{t('settings.billingPage.title')}</h2>
         {billing ? (
           <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
             <div className="billing-foundation-chips">
-              <span className="billing-chip billing-chip--ok">Plan: {formatPlanDisplayName(undefined, billing.plan_code)}</span>
+              <span className="billing-chip billing-chip--ok">{t('settings.billingPage.planChip', { plan: formatPlanDisplayName(undefined, billing.plan_code) })}</span>
               <span className="billing-chip billing-chip--muted" style={{ textTransform: 'capitalize' }}>
-                {billing.status.replace('_', ' ')}
+                {t(`settings.billingPage.billingStatus.${billing.status}`, { defaultValue: billing.status.replace('_', ' ') })}
               </span>
-              <span className="billing-chip billing-chip--muted">{billing.billing_interval}</span>
+              <span className="billing-chip billing-chip--muted">
+                {billing.billing_interval === 'yearly'
+                  ? t('settings.productsPage.intervalYearly')
+                  : billing.billing_interval === 'monthly'
+                    ? t('settings.productsPage.intervalMonthly')
+                    : billing.billing_interval}
+              </span>
               {billing.soft_locked ? (
-                <span className="billing-chip billing-chip--warn">Soft locked — renew required</span>
+                <span className="billing-chip billing-chip--warn">{t('settings.billingPage.softLocked')}</span>
               ) : null}
               {billing.plan_locked_until ? (
                 <span className="billing-chip billing-chip--muted">
-                  Locked until period end
+                  {t('settings.billingPage.lockedUntilPeriodEnd')}
                 </span>
               ) : null}
               {billing.pending_plan_code ? (
                 <span className="billing-chip billing-chip--warn">
-                  Next: {formatPlanDisplayName(undefined, billing.pending_plan_code)}
+                  {t('settings.billingPage.nextChip', { plan: formatPlanDisplayName(undefined, billing.pending_plan_code) })}
                 </span>
               ) : null}
             </div>
             <BillingDates billing={billing} />
             {billing.pending_plan_code ? (
               <p className="billing-section-meta" style={{ margin: 0 }}>
-                Downgrades take effect on the renewal date. You keep {formatPlanDisplayName(undefined, billing.plan_code)} until then.
+                {t('settings.billingPage.downgradeNote', { plan: formatPlanDisplayName(undefined, billing.plan_code) })}
                 {businessId ? (
                   <>
                     {' '}
@@ -134,34 +142,47 @@ export function BillingPlanFoundation() {
                           {
                             onSuccess: () => {
                               void billingSnapshotQuery.refetch();
-                              snackbar.push('Pending plan change cancelled.', 'success');
+                              snackbar.push(t('settings.billingPage.pendingCancelled'), 'success');
                             },
-                            onError: () => snackbar.push("Couldn't cancel the pending plan change. Try again.", 'error'),
+                            onError: () => snackbar.push(t('settings.billingPage.pendingCancelFailed'), 'error'),
                           },
                         );
                       }}
                     >
-                      {cancelPendingPlan.isPending ? 'Canceling…' : 'Cancel pending change'}
+                      {cancelPendingPlan.isPending ? t('settings.billingPage.canceling') : t('settings.billingPage.cancelPendingChange')}
                     </Button>
                   </>
                 ) : null}
               </p>
             ) : (
               <p className="billing-section-meta" style={{ margin: 0 }}>
-                Renew before period end to avoid a soft lock. There is no automatic charge.
+                {t('settings.billingPage.renewNote')}
               </p>
             )}
             <p className="billing-section-meta" style={{ margin: 0 }}>
-              Staff {billing.used_staff}/{billing.effective_max_staff} · Offices {billing.used_offices}/
-              {billing.effective_max_branches} · Total ₹{(billing.pricing.total_amount_paise / 100).toFixed(0)}
-              {billing.billing_interval === 'yearly' ? '/year' : '/month'}
+              {t('settings.billingPage.usageLine', {
+                usedStaff: billing.used_staff,
+                maxStaff: billing.effective_max_staff,
+                usedOffices: billing.used_offices,
+                maxOffices: billing.effective_max_branches,
+                total: (billing.pricing.total_amount_paise / 100).toFixed(0),
+                per: billing.billing_interval === 'yearly' ? t('settings.productsPage.perYear') : t('settings.productsPage.perMonth'),
+              })}
             </p>
             <p className="billing-section-meta" style={{ margin: 0 }}>
-              Included {billing.included_staff} staff / {billing.included_offices} offices · Add-ons +
-              {billing.extra_staff} staff (+₹{(billing.pricing.addon_staff_unit_paise / 100).toFixed(0)} each) · +
-              {billing.extra_offices} offices (+₹{(billing.pricing.addon_office_unit_paise / 100).toFixed(0)} each)
+              {t('settings.billingPage.addonsLine', {
+                staff: billing.included_staff,
+                offices: billing.included_offices,
+                extraStaff: billing.extra_staff,
+                staffUnit: (billing.pricing.addon_staff_unit_paise / 100).toFixed(0),
+                extraOffices: billing.extra_offices,
+                officeUnit: (billing.pricing.addon_office_unit_paise / 100).toFixed(0),
+              })}
               {checkoutProductCode === 'shopie'
-                ? ` · Pets ${billing.pets_pack_enabled ? 'on' : 'off'} (+₹${((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0)}/mo)`
+                ? ` · ${t('settings.billingPage.petsLine', {
+                    state: billing.pets_pack_enabled ? t('settings.billingPage.stateOn') : t('settings.billingPage.stateOff'),
+                    price: ((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0),
+                  })}`
                 : ''}
             </p>
             {starterAddonCapHint(billing.max_extra_staff, billing.max_extra_offices) ? (
@@ -171,7 +192,7 @@ export function BillingPlanFoundation() {
             ) : null}
             <div className="billing-addons-row">
               <label>
-                Extra staff
+                {t('settings.billingPage.extraStaff')}
                 <input
                   type="number"
                   min={0}
@@ -185,7 +206,7 @@ export function BillingPlanFoundation() {
                 />
               </label>
               <label>
-                Extra offices
+                {t('settings.billingPage.extraOffices')}
                 <input
                   type="number"
                   min={0}
@@ -205,7 +226,7 @@ export function BillingPlanFoundation() {
                     checked={petsPackEnabled}
                     onChange={(event) => setPetsPackEnabled(event.target.checked)}
                   />
-                  Pets pack (₹{((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0)}/mo)
+                  {t('settings.billingPage.petsPack', { price: ((billing.pricing.addon_pets_unit_paise ?? 50000) / 100).toFixed(0) })}
                 </label>
               ) : null}
               <Button
@@ -220,55 +241,57 @@ export function BillingPlanFoundation() {
                       ...(checkoutProductCode === 'shopie' ? { pets_pack_enabled: petsPackEnabled } : {}),
                     },
                     {
-                      onSuccess: () => snackbar.push('Add-ons updated — next bill total refreshed.', 'success'),
+                      onSuccess: () => snackbar.push(t('settings.billingPage.addonsUpdated'), 'success'),
                       onError: (error) =>
                         snackbar.push(
-                          getApiErrorMessage(error, "Couldn't update add-ons. Check usage limits."),
+                          getApiErrorMessage(error, t('settings.billingPage.addonsFailed')),
                           'error',
                         ),
                     },
                   );
                 }}
               >
-                {updateAddons.isPending ? 'Updating…' : 'Update add-ons'}
+                {updateAddons.isPending ? t('settings.billingPage.updating') : t('settings.billingPage.updateAddons')}
               </Button>
             </div>
           </div>
         ) : (
-          <p className="billing-section-meta">Loading current entitlements…</p>
+          <p className="billing-section-meta">{t('settings.billingPage.loadingEntitlements')}</p>
         )}
-        <h2 style={{ margin: '20px 0 0' }}>Online checkout</h2>
+        <h2 style={{ margin: '20px 0 0' }}>{t('settings.billingPage.checkoutTitle')}</h2>
         <p className="billing-section-meta">
           {isIntlBilling
             ? isConfigured
-              ? 'International SaaS bills in USD via Stripe Checkout (Stripe Tax where applicable).'
-              : 'No live Stripe gateway is configured yet. Checkout runs in mock mode until Stripe keys are set.'
+              ? t('settings.billingPage.checkoutIntlConfigured')
+              : t('settings.billingPage.checkoutIntlMock')
             : isConfigured
-              ? 'At least one payment gateway is configured. Start checkout with Razorpay and/or Cashfree for the selected plan.'
-              : 'No live gateway is configured yet. Checkout runs in mock mode until you add Razorpay or Cashfree keys.'}
+              ? t('settings.billingPage.checkoutInConfigured')
+              : t('settings.billingPage.checkoutInMock')}
         </p>
         <div className="billing-foundation-chips">
           <span className={`billing-chip ${launchReady ? 'billing-chip--ok' : 'billing-chip--warn'}`}>
-            Launch Ready: {launchReady ? 'Yes' : 'No'}
+            {t('settings.billingPage.chipLaunchReady', { value: launchReady ? t('common.yes') : t('common.no') })}
           </span>
-          <span className="billing-chip billing-chip--muted">Region: {billingRegion}</span>
-          <span className="billing-chip billing-chip--muted">Provider: {status?.provider ?? (isIntlBilling ? 'stripe' : 'razorpay')}</span>
-          <span className="billing-chip billing-chip--muted">SaaS currency: {saasCurrency}</span>
+          <span className="billing-chip billing-chip--muted">{t('settings.billingPage.chipRegion', { value: billingRegion })}</span>
+          <span className="billing-chip billing-chip--muted">
+            {t('settings.billingPage.chipProvider', { value: status?.provider ?? (isIntlBilling ? 'stripe' : 'razorpay') })}
+          </span>
+          <span className="billing-chip billing-chip--muted">{t('settings.billingPage.chipSaasCurrency', { value: saasCurrency })}</span>
           <span className={`billing-chip ${mockMode ? 'billing-chip--muted' : 'billing-chip--ok'}`}>
-            Mode: {mockMode ? 'Mock (no live charges)' : 'Live'}
+            {t('settings.billingPage.chipMode', { value: mockMode ? t('settings.billingPage.modeMock') : t('settings.billingPage.modeLive') })}
           </span>
         </div>
       </div>
 
       <div className="billing-section">
-        <p className="billing-section-title">Plan catalog</p>
+        <p className="billing-section-title">{t('settings.billingPage.catalogTitle')}</p>
         <p className="billing-section-meta">
-          Every Starter and Pro plan includes a white-label customer app under your brand. Pro is ad-free.
+          {t('settings.billingPage.catalogMeta')}
         </p>
         {plansQuery.isLoading ? (
-          <p className="billing-section-meta">Loading plans...</p>
+          <p className="billing-section-meta">{t('settings.billingPage.loadingPlans')}</p>
         ) : plans.length === 0 ? (
-          <p className="billing-section-meta">No billable plans configured.</p>
+          <p className="billing-section-meta">{t('settings.billingPage.noPlans')}</p>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
             <select
@@ -284,7 +307,16 @@ export function BillingPlanFoundation() {
             </select>
             {selectedPlan ? (
               <p className="billing-section-meta">
-                {selectedPlan.description} · Trial {selectedPlan.trial_days} days · {selectedPlan.billing_interval}
+                {t('settings.billingPage.planDetails', {
+                  description: selectedPlan.description,
+                  days: selectedPlan.trial_days,
+                  interval:
+                    selectedPlan.billing_interval === 'yearly'
+                      ? t('settings.productsPage.intervalYearly')
+                      : selectedPlan.billing_interval === 'monthly'
+                        ? t('settings.productsPage.intervalMonthly')
+                        : selectedPlan.billing_interval,
+                })}
               </p>
             ) : null}
           </div>
@@ -293,33 +325,33 @@ export function BillingPlanFoundation() {
 
       <div className="billing-section">
         <p className="billing-section-title">
-          Go-live readiness:{' '}
+          {t('settings.billingPage.goLiveTitle')}{' '}
           {goLive?.ready ? (
-            <span style={{ color: '#166534' }}>Ready</span>
+            <span style={{ color: '#166534' }}>{t('settings.billingPage.ready')}</span>
           ) : (
-            <span style={{ color: '#991b1b' }}>Not ready</span>
+            <span style={{ color: '#991b1b' }}>{t('settings.billingPage.notReady')}</span>
           )}
         </p>
         {!goLiveQuery.isLoading && goLive ? (
           <p className="billing-section-meta">
-            Blockers: {goLive.blockers.length} · Warnings: {goLive.warnings.length}
+            {t('settings.billingPage.blockersWarnings', { blockers: goLive.blockers.length, warnings: goLive.warnings.length })}
           </p>
         ) : null}
       </div>
 
       <div className="billing-section">
         <p className="billing-section-title">
-          Release gate preflight:{' '}
+          {t('settings.billingPage.releaseGateTitle')}{' '}
           {releaseGate?.passed ? (
-            <span style={{ color: '#166534' }}>Pass</span>
+            <span style={{ color: '#166534' }}>{t('settings.billingPage.pass')}</span>
           ) : (
-            <span style={{ color: '#991b1b' }}>Fail</span>
+            <span style={{ color: '#991b1b' }}>{t('settings.billingPage.fail')}</span>
           )}
         </p>
         {!releaseGateQuery.isLoading && releaseGate ? (
           <div>
             <p className="billing-section-meta">
-              Blockers: {releaseGate.blockers.length} · Warnings: {releaseGate.warnings.length}
+              {t('settings.billingPage.blockersWarnings', { blockers: releaseGate.blockers.length, warnings: releaseGate.warnings.length })}
             </p>
             {releaseGate.failing_checks.length > 0 ? (
               <ul className="billing-fail-list">
@@ -335,28 +367,33 @@ export function BillingPlanFoundation() {
       </div>
 
       <div className="billing-section">
-        <p className="billing-section-title">Operational signals (24h)</p>
+        <p className="billing-section-title">{t('settings.billingPage.signalsTitle')}</p>
         {observabilityQuery.isLoading || !observability ? (
-          <p className="billing-section-meta">Loading signals...</p>
+          <p className="billing-section-meta">{t('settings.billingPage.loadingSignals')}</p>
         ) : (
           <p className="billing-section-meta">
-            Failed events: {observability.events.billing_webhook_failed} · Dead-letter events:{' '}
-            {observability.events.billing_webhook_dead_letter} · Onboarding provisions:{' '}
-            {observability.events.onboarding_workspace_provisioned} · Reconciliation runs:{' '}
-            {observability.audits.reconciliation_runs}
+            {t('settings.billingPage.signalsLine', {
+              failed: observability.events.billing_webhook_failed,
+              deadLetter: observability.events.billing_webhook_dead_letter,
+              onboarding: observability.events.onboarding_workspace_provisioned,
+              reconciliation: observability.audits.reconciliation_runs,
+            })}
           </p>
         )}
       </div>
 
       <div className="billing-section">
-        <p className="billing-section-title">Ops snapshot export</p>
+        <p className="billing-section-title">{t('settings.billingPage.snapshotTitle')}</p>
         {!opsSnapshotQuery.isLoading && opsSnapshot ? (
           <p className="billing-section-meta">
-            Generated {formatTimestamp(opsSnapshot.generated_at)} · Ready: {opsSnapshot.ready ? 'yes' : 'no'} ·
-            Health score: {opsSnapshot.health_score}/100
+            {t('settings.billingPage.snapshotMeta', {
+              time: formatTimestamp(opsSnapshot.generated_at),
+              ready: opsSnapshot.ready ? t('common.yes') : t('common.no'),
+              score: opsSnapshot.health_score,
+            })}
           </p>
         ) : (
-          <p className="billing-section-meta">Preparing snapshot...</p>
+          <p className="billing-section-meta">{t('settings.billingPage.preparingSnapshot')}</p>
         )}
         {opsSnapshot && opsSnapshot.recommendations.length > 0 ? (
           <ul className="billing-fail-list">
@@ -370,24 +407,30 @@ export function BillingPlanFoundation() {
         {opsSnapshot ? (
           <div style={{ display: 'grid', gap: 8 }}>
             <p style={{ margin: 0, color: trendDirectionColor, fontWeight: 600 }}>
-              Trend vs previous {opsSnapshot.trend.comparison_window_hours}h:{' '}
-              {opsSnapshot.trend.direction === 'improving' ? '↘ Improving' : '↗ Degrading'}
+              {t('settings.billingPage.trendLine', {
+                hours: opsSnapshot.trend.comparison_window_hours,
+                direction: opsSnapshot.trend.direction === 'improving' ? t('settings.billingPage.trendImproving') : t('settings.billingPage.trendDegrading'),
+              })}
             </p>
             <div className="billing-trend-chips">
               <span className={`billing-trend-chip ${failureDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}>
-                Failure rate {failureDelta <= 0 ? '↓' : '↑'} {(failureDelta * 100).toFixed(2)}%
+                {t('settings.billingPage.trendFailureRate', { arrow: failureDelta <= 0 ? '↓' : '↑', value: (failureDelta * 100).toFixed(2) })}
               </span>
               <span
                 className={`billing-trend-chip ${deadLetterDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}
               >
-                Dead-letter {deadLetterDelta <= 0 ? '↓' : '↑'} {deadLetterDelta >= 0 ? '+' : ''}
-                {deadLetterDelta}
+                {t('settings.billingPage.trendDeadLetter', {
+                  arrow: deadLetterDelta <= 0 ? '↓' : '↑',
+                  value: `${deadLetterDelta >= 0 ? '+' : ''}${deadLetterDelta}`,
+                })}
               </span>
               <span
                 className={`billing-trend-chip ${stuckRetryDelta <= 0 ? 'billing-trend-chip--down' : 'billing-trend-chip--up'}`}
               >
-                Stuck retries {stuckRetryDelta <= 0 ? '↓' : '↑'} {stuckRetryDelta >= 0 ? '+' : ''}
-                {stuckRetryDelta}
+                {t('settings.billingPage.trendStuckRetries', {
+                  arrow: stuckRetryDelta <= 0 ? '↓' : '↑',
+                  value: `${stuckRetryDelta >= 0 ? '+' : ''}${stuckRetryDelta}`,
+                })}
               </span>
             </div>
           </div>
@@ -406,7 +449,7 @@ export function BillingPlanFoundation() {
               URL.revokeObjectURL(url);
             }}
           >
-            Download JSON snapshot
+            {t('settings.billingPage.downloadJson')}
           </Button>
           <Button
             variant="ghost"
@@ -425,7 +468,7 @@ export function BillingPlanFoundation() {
                   headers,
                 });
                 if (!response.ok) {
-                  throw new Error('Snapshot export failed.');
+                  throw new Error(t('settings.billingPage.exportFailed'));
                 }
                 const csv = await response.text();
                 const blob = new Blob([csv], { type: 'text/csv' });
@@ -436,19 +479,19 @@ export function BillingPlanFoundation() {
                 anchor.click();
                 URL.revokeObjectURL(url);
               } catch (error) {
-                snackbar.push(error instanceof Error ? error.message : 'Snapshot export failed.', 'error');
+                snackbar.push(error instanceof Error ? error.message : t('settings.billingPage.exportFailed'), 'error');
               }
             }}
           >
-            Download CSV snapshot
+            {t('settings.billingPage.downloadCsv')}
           </Button>
         </div>
       </div>
 
       <div className="billing-section">
-        <p className="billing-section-title">Ops handoff digest</p>
+        <p className="billing-section-title">{t('settings.billingPage.digestTitle')}</p>
         {opsDigestQuery.isLoading || !opsDigest ? (
-          <p className="billing-section-meta">Generating digest...</p>
+          <p className="billing-section-meta">{t('settings.billingPage.generatingDigest')}</p>
         ) : (
           <>
             <p className="billing-section-meta">{opsDigest.digest_text}</p>
@@ -458,13 +501,13 @@ export function BillingPlanFoundation() {
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(opsDigest.digest_text);
-                    snackbar.push('Ops digest copied to clipboard.', 'success');
+                    snackbar.push(t('settings.billingPage.digestCopied'), 'success');
                   } catch {
-                    snackbar.push('Could not copy digest to clipboard.', 'warning');
+                    snackbar.push(t('settings.billingPage.digestCopyFailed'), 'warning');
                   }
                 }}
               >
-                Copy digest text
+                {t('settings.billingPage.copyDigest')}
               </Button>
             </div>
           </>
@@ -472,51 +515,54 @@ export function BillingPlanFoundation() {
       </div>
 
       <div className="billing-section">
-        <p className="billing-section-title">Platform ops summary (admin)</p>
+        <p className="billing-section-title">{t('settings.billingPage.platformSummaryTitle')}</p>
         <div>
           <Button
             variant="ghost"
             onClick={() => setShowPlatformSummary(true)}
             disabled={platformSummaryQuery.isLoading}
           >
-            {platformSummaryQuery.isLoading ? 'Loading summary...' : 'Load platform summary'}
+            {platformSummaryQuery.isLoading ? t('settings.billingPage.loadingSummary') : t('settings.billingPage.loadPlatformSummary')}
           </Button>
         </div>
         {showPlatformSummary && platformSummaryQuery.error ? (
           <p style={{ margin: 0, color: '#991b1b' }}>
-            {platformSummaryQuery.error.message || 'Platform summary is only available to platform admins.'}
+            {platformSummaryQuery.error.message || t('settings.billingPage.platformAdminsOnly')}
           </p>
         ) : null}
         {showPlatformSummary && platformSummaryQuery.data ? (
           <p className="billing-section-meta">
-            Tenants: {platformSummaryQuery.data.tenant_count} · Ready: {platformSummaryQuery.data.ready_count} · Not
-            ready: {platformSummaryQuery.data.not_ready_count}
+            {t('settings.billingPage.platformSummaryLine', {
+              tenants: platformSummaryQuery.data.tenant_count,
+              ready: platformSummaryQuery.data.ready_count,
+              notReady: platformSummaryQuery.data.not_ready_count,
+            })}
           </p>
         ) : null}
       </div>
 
       {summary?.stuck_retries ? (
         <div className="billing-alert">
-          <strong>Retry backlog detected.</strong> {summary.stuck_retries} webhook
-          {summary.stuck_retries === 1 ? '' : 's'} missed scheduled retry windows.
+          <strong>{t('settings.billingPage.retryBacklog')}</strong>{' '}
+          {t('settings.billingPage.retryBacklogBody', { count: summary.stuck_retries })}
         </div>
       ) : null}
 
       <div className="billing-metric-strip">
         <div className="billing-metric">
-          <strong>Total (24h)</strong>
+          <strong>{t('settings.billingPage.metricTotal')}</strong>
           <p>{summary?.total ?? 0}</p>
         </div>
         <div className="billing-metric">
-          <strong>Processed</strong>
+          <strong>{t('settings.billingPage.metricProcessed')}</strong>
           <p>{summary?.processed ?? 0}</p>
         </div>
         <div className="billing-metric">
-          <strong>Failed</strong>
+          <strong>{t('settings.billingPage.metricFailed')}</strong>
           <p>{(summary?.failed ?? 0) + (summary?.dead_letter ?? 0)}</p>
         </div>
         <div className="billing-metric">
-          <strong>Failure rate</strong>
+          <strong>{t('settings.billingPage.metricFailureRate')}</strong>
           <p>{((summary?.failure_rate ?? 0) * 100).toFixed(1)}%</p>
         </div>
       </div>
@@ -533,7 +579,7 @@ export function BillingPlanFoundation() {
                   onSuccess: (session) => {
                     if (session.mock_mode) {
                       snackbar.push(
-                        `Mock Stripe session ${session.order_id} created. Add Stripe keys to enable live checkout.`,
+                        t('settings.billingPage.toastMockStripe', { id: session.order_id }),
                         'success',
                       );
                       return;
@@ -543,14 +589,14 @@ export function BillingPlanFoundation() {
                       if (!opened) window.location.assign(session.checkout_url);
                       return;
                     }
-                    snackbar.push(`Stripe checkout session ${session.order_id} created.`, 'success');
+                    snackbar.push(t('settings.billingPage.toastStripeSession', { id: session.order_id }), 'success');
                   },
                   onError: (error) => snackbar.push(error.message, 'error'),
                 },
               )
             }
           >
-            {checkout.isPending ? 'Creating checkout…' : mockMode ? 'Create mock Stripe checkout' : 'Checkout with Stripe'}
+            {checkout.isPending ? t('settings.billingPage.creatingCheckout') : mockMode ? t('settings.billingPage.mockStripeCheckout') : t('settings.billingPage.stripeCheckout')}
           </Button>
         ) : (
           <>
@@ -564,11 +610,11 @@ export function BillingPlanFoundation() {
                     onSuccess: (session) => {
                       if (session.mock_mode) {
                         snackbar.push(
-                          `Mock order ${session.order_id} created. Add Razorpay or Cashfree keys to enable live checkout.`,
+                          t('settings.billingPage.toastMockOrder', { id: session.order_id }),
                           'success',
                         );
                       } else {
-                        snackbar.push(`Razorpay checkout order ${session.order_id} created.`, 'success');
+                        snackbar.push(t('settings.billingPage.toastRazorpayOrder', { id: session.order_id }), 'success');
                       }
                     },
                     onError: (error) => snackbar.push(error.message, 'error'),
@@ -576,7 +622,7 @@ export function BillingPlanFoundation() {
                 )
               }
             >
-              {checkout.isPending ? 'Creating checkout…' : mockMode ? 'Create mock checkout' : 'Upgrade with Razorpay'}
+              {checkout.isPending ? t('settings.billingPage.creatingCheckout') : mockMode ? t('settings.billingPage.mockCheckout') : t('settings.billingPage.upgradeRazorpay')}
             </Button>
             {status?.cashfree?.configured ? (
               <Button
@@ -588,10 +634,10 @@ export function BillingPlanFoundation() {
                     {
                       onSuccess: async (session) => {
                         if (session.mock_mode) {
-                          snackbar.push(`Mock Cashfree order ${session.order_id} created.`, 'success');
+                          snackbar.push(t('settings.billingPage.toastMockCashfree', { id: session.order_id }), 'success');
                           return;
                         }
-                        snackbar.push(`Cashfree checkout order ${session.order_id} created.`, 'success');
+                        snackbar.push(t('settings.billingPage.toastCashfreeOrder', { id: session.order_id }), 'success');
                         if (!session.payment_session_id) return;
                         await new Promise<void>((resolve, reject) => {
                           if (window.Cashfree) {
@@ -601,7 +647,7 @@ export function BillingPlanFoundation() {
                           const script = document.createElement('script');
                           script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
                           script.onload = () => resolve();
-                          script.onerror = () => reject(new Error('Unable to load Cashfree Checkout.'));
+                          script.onerror = () => reject(new Error(t('settings.billingPage.cashfreeLoadFailed')));
                           document.body.appendChild(script);
                         });
                         const cashfree = (
@@ -623,20 +669,20 @@ export function BillingPlanFoundation() {
                   )
                 }
               >
-                Upgrade with Cashfree
+                {t('settings.billingPage.upgradeCashfree')}
               </Button>
             ) : null}
           </>
         )}
         <Link to="/pricing">
-          <Button variant="ghost">View pricing</Button>
+          <Button variant="ghost">{t('settings.billingPage.viewPricing')}</Button>
         </Link>
         <div className="billing-actions-ops">
           <Button
             variant="neutral"
             disabled={bulkReprocessWebhook.isPending}
             onClick={() => {
-              if (!window.confirm('Reprocess up to 50 failed webhook events now?')) {
+              if (!window.confirm(t('settings.billingPage.confirmBulkFailed'))) {
                 return;
               }
               bulkReprocessWebhook.mutate(
@@ -644,7 +690,7 @@ export function BillingPlanFoundation() {
                 {
                   onSuccess: (result) =>
                     snackbar.push(
-                      `Bulk retry completed: ${result.processed}/${result.selected} processed.`,
+                      t('settings.billingPage.bulkRetryDone', { processed: result.processed, selected: result.selected }),
                       result.failed ? 'warning' : 'success',
                     ),
                   onError: (error) => snackbar.push(error.message, 'error'),
@@ -652,13 +698,13 @@ export function BillingPlanFoundation() {
               );
             }}
           >
-            Reprocess failed (bulk)
+            {t('settings.billingPage.reprocessFailedBulk')}
           </Button>
           <Button
             variant="neutral"
             disabled={bulkReprocessWebhook.isPending}
             onClick={() => {
-              if (!window.confirm('Reprocess up to 50 dead-letter webhook events now?')) {
+              if (!window.confirm(t('settings.billingPage.confirmBulkDead'))) {
                 return;
               }
               bulkReprocessWebhook.mutate(
@@ -666,7 +712,7 @@ export function BillingPlanFoundation() {
                 {
                   onSuccess: (result) =>
                     snackbar.push(
-                      `Dead-letter retry: ${result.processed}/${result.selected} processed.`,
+                      t('settings.billingPage.deadRetryDone', { processed: result.processed, selected: result.selected }),
                       result.failed ? 'warning' : 'success',
                     ),
                   onError: (error) => snackbar.push(error.message, 'error'),
@@ -674,35 +720,33 @@ export function BillingPlanFoundation() {
               );
             }}
           >
-            Reprocess dead-letter (bulk)
+            {t('settings.billingPage.reprocessDeadBulk')}
           </Button>
         </div>
       </div>
 
       {!isConfigured ? (
         <p className="billing-section-meta" style={{ fontSize: 14 }}>
-          When a live gateway is ready, set Razorpay (<code>RAZORPAY_KEY_ID</code>, <code>RAZORPAY_KEY_SECRET</code>,{' '}
-          <code>RAZORPAY_WEBHOOK_SECRET</code>) and/or Cashfree (<code>CASHFREE_APP_ID</code>,{' '}
-          <code>CASHFREE_SECRET_KEY</code>) in the backend environment.
+          <Trans i18nKey="settings.billingPage.envNote" components={{ code: <code /> }} />
         </p>
       ) : null}
 
       <div>
         <div className="billing-webhook-toolbar">
-          <h3>Recent webhook events</h3>
+          <h3>{t('settings.billingPage.webhookEventsTitle')}</h3>
           <select
             value={eventFilter}
             onChange={(event) => setEventFilter(event.target.value as 'all' | 'failed' | 'dead_letter')}
           >
-            <option value="all">All</option>
-            <option value="failed">Failed</option>
-            <option value="dead_letter">Dead letter</option>
+            <option value="all">{t('common.all')}</option>
+            <option value="failed">{t('settings.billingPage.filterFailed')}</option>
+            <option value="dead_letter">{t('settings.billingPage.filterDeadLetter')}</option>
           </select>
         </div>
         {webhookEventsQuery.isLoading ? (
-          <p className="billing-section-meta">Loading webhook events…</p>
+          <p className="billing-section-meta">{t('settings.billingPage.loadingEvents')}</p>
         ) : (webhookEventsQuery.data ?? []).length === 0 ? (
-          <p className="billing-section-meta">No webhook events recorded yet.</p>
+          <p className="billing-section-meta">{t('settings.billingPage.noEvents')}</p>
         ) : (
           <div className="billing-webhook-list">
             {(webhookEventsQuery.data ?? []).slice(0, 5).map((event) => (
@@ -712,8 +756,9 @@ export function BillingPlanFoundation() {
                   <p>{event.external_event_id}</p>
                   {typeof event.retry_count === 'number' ? (
                     <p>
-                      Retries: {event.retry_count}
-                      {event.next_retry_at ? ` · next ${formatTimestamp(event.next_retry_at)}` : ''}
+                      {event.next_retry_at
+                        ? t('settings.billingPage.retriesNext', { count: event.retry_count, time: formatTimestamp(event.next_retry_at) })
+                        : t('settings.billingPage.retries', { count: event.retry_count })}
                     </p>
                   ) : null}
                 </div>
@@ -728,7 +773,7 @@ export function BillingPlanFoundation() {
                     }`}
                     style={{ textTransform: 'capitalize' }}
                   >
-                    {event.status}
+                    {t(`settings.billingPage.eventStatus.${event.status}`, { defaultValue: event.status })}
                   </span>
                   {event.status === 'failed' || event.status === 'dead_letter' ? (
                     <Button
@@ -737,16 +782,16 @@ export function BillingPlanFoundation() {
                         reprocessWebhook.mutate(event.id, {
                           onSuccess: (result) => {
                             if (result.reprocessed) {
-                              snackbar.push('Webhook reprocessed.', 'success');
+                              snackbar.push(t('settings.billingPage.webhookReprocessed'), 'success');
                             } else {
-                              snackbar.push(result.error ?? 'Webhook reprocess failed.', 'error');
+                              snackbar.push(result.error ?? t('settings.billingPage.webhookReprocessFailed'), 'error');
                             }
                           },
                           onError: (error) => snackbar.push(error.message, 'error'),
                         })
                       }
                     >
-                      Reprocess
+                      {t('settings.billingPage.reprocess')}
                     </Button>
                   ) : null}
                 </div>

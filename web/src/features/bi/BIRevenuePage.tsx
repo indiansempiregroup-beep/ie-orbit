@@ -1,4 +1,5 @@
 import type { BIRevenueReport, BIShopieRevenue } from '@ie-orbit/sdk';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { formatMoney } from '../../lib/currency';
@@ -17,17 +18,18 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 function AppointieRevenue({ data }: { data: BIRevenueReport }) {
+  const { t } = useTranslation();
   const currency = data.currency;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Appoint" subtitle="Estimated from service list prices × bookings." />
+      <SectionHeading title={t('public.nav.appoint')} subtitle={t('bi.revenueIntroAppoint')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="Estimated revenue" value={formatMoney(data.estimated_revenue ?? 0, currency)} />
-        <StatCard label="Completed revenue" value={formatMoney(data.completed_revenue ?? 0, currency)} />
-        <StatCard label="Avg booking value" value={formatMoney(data.avg_booking_value ?? 0, currency)} />
+        <StatCard label={t('bi.estimatedRevenue')} value={formatMoney(data.estimated_revenue ?? 0, currency)} />
+        <StatCard label={t('bi.completedRevenue')} value={formatMoney(data.completed_revenue ?? 0, currency)} />
+        <StatCard label={t('bi.avgBookingValue')} value={formatMoney(data.avg_booking_value ?? 0, currency)} />
       </div>
       <Card>
-        <h3 style={{ marginTop: 0 }}>Revenue by service</h3>
+        <h3 style={{ marginTop: 0 }}>{t('bi.revenueByService')}</h3>
         <div style={{ display: 'grid', gap: 8 }}>
           {(data.by_service ?? []).length ? (
             (data.by_service ?? []).map((row) => (
@@ -35,14 +37,14 @@ function AppointieRevenue({ data }: { data: BIRevenueReport }) {
                 <div>
                   <div style={{ fontWeight: 600 }}>{row.service_name}</div>
                   <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>
-                    {row.bookings ?? 0} bookings · {row.completed ?? 0} completed
+                    {t('bi.bookingsCompleted', { bookings: row.bookings ?? 0, completed: row.completed ?? 0 })}
                   </div>
                 </div>
                 <span>{formatMoney(row.revenue, currency)}</span>
               </div>
             ))
           ) : (
-            <p style={{ color: 'var(--muted-foreground)' }}>No priced bookings in this period yet.</p>
+            <p style={{ color: 'var(--muted-foreground)' }}>{t('bi.noPricedBookings')}</p>
           )}
         </div>
       </Card>
@@ -51,57 +53,58 @@ function AppointieRevenue({ data }: { data: BIRevenueReport }) {
 }
 
 function ShopieRevenue({ data }: { data: BIShopieRevenue }) {
+  const { t } = useTranslation();
   const currency = data.currency ?? undefined;
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SectionHeading title="Orbit Mart" subtitle="GMV from completed shop orders — POS, pickup, and delivery." />
+      <SectionHeading title={t('public.nav.mart')} subtitle={t('bi.martRevenueSub')} />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-        <StatCard label="GMV" value={formatMoney(data.gmv ?? 0, currency)} />
-        <StatCard label="Avg order value" value={formatMoney(data.avg_order_value ?? 0, currency)} />
-        <StatCard label="Orders" value={data.orders ?? 0} />
-        <StatCard label="Cancelled orders" value={data.cancelled_orders ?? 0} />
+        <StatCard label={t('bi.gmv')} value={formatMoney(data.gmv ?? 0, currency)} />
+        <StatCard label={t('bi.avgOrderValue')} value={formatMoney(data.avg_order_value ?? 0, currency)} />
+        <StatCard label={t('bi.orders')} value={data.orders ?? 0} />
+        <StatCard label={t('bi.cancelledOrders')} value={data.cancelled_orders ?? 0} />
       </div>
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         <Card>
-          <h3 style={{ marginTop: 0 }}>By channel</h3>
+          <h3 style={{ marginTop: 0 }}>{t('bi.byChannel')}</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {(data.by_channel ?? []).length ? (
               (data.by_channel ?? []).map((row) => (
                 <div key={row.channel} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{row.label}</div>
-                    <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{row.orders} orders</div>
+                    <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{t('bi.ordersN', { n: row.orders })}</div>
                   </div>
                   <span>{formatMoney(row.gmv, currency)}</span>
                 </div>
               ))
             ) : (
-              <p style={{ color: 'var(--muted-foreground)' }}>No channel sales in this period yet.</p>
+              <p style={{ color: 'var(--muted-foreground)' }}>{t('bi.noChannelSales')}</p>
             )}
           </div>
         </Card>
         <Card>
-          <h3 style={{ marginTop: 0 }}>By category</h3>
+          <h3 style={{ marginTop: 0 }}>{t('bi.byCategory')}</h3>
           <div style={{ display: 'grid', gap: 8 }}>
             {(data.by_category ?? []).length ? (
               (data.by_category ?? []).map((row) => (
                 <div key={row.category} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{row.label}</div>
-                    <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{row.orders} orders</div>
+                    <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{t('bi.ordersN', { n: row.orders })}</div>
                   </div>
                   <span>{formatMoney(row.gmv, currency)}</span>
                 </div>
               ))
             ) : (
-              <p style={{ color: 'var(--muted-foreground)' }}>No category sales in this period yet.</p>
+              <p style={{ color: 'var(--muted-foreground)' }}>{t('bi.noCategorySales')}</p>
             )}
           </div>
         </Card>
       </div>
       {data.trend?.length ? (
         <Card>
-          <h3 style={{ marginTop: 0 }}>Daily GMV</h3>
+          <h3 style={{ marginTop: 0 }}>{t('bi.dailyGmv')}</h3>
           <TrendChart
             rows={data.trend.map((row) => ({
               day: row.day,
@@ -117,7 +120,8 @@ function ShopieRevenue({ data }: { data: BIShopieRevenue }) {
 }
 
 export function BIRevenuePage() {
-  usePageMeta({ title: 'BI Revenue — Orbit' });
+  const { t } = useTranslation();
+  usePageMeta({ title: `${t('bi.pageRevenue')} — Orbit` });
   const { showAppointie, showShopie } = useBiProductVisibility('revenue');
   const { product, setProduct, showSwitcher } = useBiProductTab(showAppointie, showShopie);
   const revenueQuery = useBIRevenueQuery();
@@ -130,13 +134,13 @@ export function BIRevenuePage() {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card>
-        <h1 style={{ marginTop: 0 }}>BI Revenue</h1>
+        <h1 style={{ marginTop: 0 }}>{t('bi.pageRevenue')}</h1>
         <p style={{ color: 'var(--muted-foreground)', marginBottom: showSwitcher ? 12 : undefined }}>
           {showSwitcher
-            ? 'Appoint uses booking list prices. Mart uses shop GMV.'
+            ? t('bi.revenueIntroSwitch')
             : showShopie
-              ? 'Shop GMV from Orbit Mart orders.'
-              : 'Estimated from service list prices × bookings.'}
+              ? t('bi.revenueIntroMart')
+              : t('bi.revenueIntroAppoint')}
         </p>
         <BiProductTabs
           showAppointie={showAppointie}
@@ -145,13 +149,13 @@ export function BIRevenuePage() {
           onChange={setProduct}
         />
       </Card>
-      {revenueQuery.isLoading && !data ? <Card>Loading revenue…</Card> : null}
+      {revenueQuery.isLoading && !data ? <Card>{t('bi.loadingRevenue')}</Card> : null}
       {product === 'appointie' && showAppointie && appointie ? <AppointieRevenue data={appointie} /> : null}
       {product === 'shopie' && showShopie && shopie ? <ShopieRevenue data={shopie} /> : null}
       {!revenueQuery.isLoading && !appointie && !shopie ? (
         <Card>
           <p style={{ margin: 0, color: 'var(--muted-foreground)' }}>
-            No revenue analytics for your subscribed products in this period yet.
+            {t('bi.revenueEmpty')}
           </p>
         </Card>
       ) : null}

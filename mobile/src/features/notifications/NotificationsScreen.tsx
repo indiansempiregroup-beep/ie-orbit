@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -27,26 +28,21 @@ const iconMap = {
   pet: 'gift',
 } as const;
 
-const STATUS_OPTIONS = [
-  { id: 'all', label: 'All' },
-  { id: 'unread', label: 'Unread' },
-  { id: 'read', label: 'Read' },
+const STATUS_IDS = ['all', 'unread', 'read'] as const;
+const TYPE_IDS = [
+  'all',
+  'booking',
+  'reminder',
+  'order',
+  'return',
+  'payment',
+  'review',
+  'cancel',
+  'pet',
 ] as const;
 
-const TYPE_OPTIONS = [
-  { id: 'all', label: 'All types' },
-  { id: 'booking', label: 'Appointments' },
-  { id: 'reminder', label: 'Reminders' },
-  { id: 'order', label: 'Orders' },
-  { id: 'return', label: 'Returns' },
-  { id: 'payment', label: 'Payments' },
-  { id: 'review', label: 'Reviews' },
-  { id: 'cancel', label: 'Cancellations' },
-  { id: 'pet', label: 'Pets' },
-] as const;
-
-type StatusFilter = (typeof STATUS_OPTIONS)[number]['id'];
-type TypeFilter = (typeof TYPE_OPTIONS)[number]['id'];
+type StatusFilter = (typeof STATUS_IDS)[number];
+type TypeFilter = (typeof TYPE_IDS)[number];
 type FilterDraft = { status: StatusFilter; type: TypeFilter };
 
 const EMPTY_FILTERS: FilterDraft = { status: 'all', type: 'all' };
@@ -60,7 +56,24 @@ type Nav = CompositeNavigationProp<
   NativeStackNavigationProp<RootStackParamList>
 >;
 
+function relativeTimeLabel(
+  isoDate: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  if (!isoDate) return '';
+  const minutes = Math.floor((Date.now() - new Date(isoDate).getTime()) / 60000);
+  if (minutes < 1) return t('customerApp.notifications.justNow');
+  if (minutes < 60) return t('customerApp.notifications.minAgo', { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t('customerApp.notifications.hrAgo', { n: hours });
+  const days = Math.floor(hours / 24);
+  if (days === 1) return t('customerApp.notifications.yesterday');
+  if (days < 7) return t('customerApp.notifications.daysAgo', { n: days });
+  return formatRelativeTime(isoDate);
+}
+
 export function NotificationsScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const { branding } = useBootstrap();
   const { headerPaddingTop } = useScreenInsets();
@@ -73,6 +86,29 @@ export function NotificationsScreen() {
   const [type, setType] = useState<TypeFilter>('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [draft, setDraft] = useState<FilterDraft>(EMPTY_FILTERS);
+
+  const statusOptions = useMemo(
+    () => [
+      { id: 'all' as const, label: t('common.all') },
+      { id: 'unread' as const, label: t('customerApp.notifications.statusUnread') },
+      { id: 'read' as const, label: t('customerApp.notifications.statusRead') },
+    ],
+    [t],
+  );
+  const typeOptions = useMemo(
+    () => [
+      { id: 'all' as const, label: t('customerApp.notifications.typeAll') },
+      { id: 'booking' as const, label: t('customerApp.notifications.typeBooking') },
+      { id: 'reminder' as const, label: t('customerApp.notifications.typeReminder') },
+      { id: 'order' as const, label: t('customerApp.notifications.typeOrder') },
+      { id: 'return' as const, label: t('customerApp.notifications.typeReturn') },
+      { id: 'payment' as const, label: t('customerApp.notifications.typePayment') },
+      { id: 'review' as const, label: t('customerApp.notifications.typeReview') },
+      { id: 'cancel' as const, label: t('customerApp.notifications.typeCancel') },
+      { id: 'pet' as const, label: t('customerApp.notifications.typePet') },
+    ],
+    [t],
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -98,8 +134,8 @@ export function NotificationsScreen() {
   }, [notifications, search, status, type]);
 
   const activeSummary = [
-    status !== 'all' ? STATUS_OPTIONS.find((item) => item.id === status)?.label : null,
-    type !== 'all' ? TYPE_OPTIONS.find((item) => item.id === type)?.label : null,
+    status !== 'all' ? statusOptions.find((item) => item.id === status)?.label : null,
+    type !== 'all' ? typeOptions.find((item) => item.id === type)?.label : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -118,16 +154,16 @@ export function NotificationsScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
-        <Text style={styles.title}>Notifications</Text>
+        <Text style={styles.title}>{t('customerApp.notifications.title')}</Text>
         <Pressable onPress={() => void markAllRead()} disabled={!notifications.some((item) => !item.is_read)}>
-          <Text style={[styles.markRead, { color: primary }]}>Mark all read</Text>
+          <Text style={[styles.markRead, { color: primary }]}>{t('customerApp.notifications.markAllRead')}</Text>
         </Pressable>
       </View>
 
       <SearchFilterToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Search notifications"
+        placeholder={t('customerApp.notifications.searchPlaceholder')}
         primaryColor={primary}
         activeFilterCount={activeFilterCount}
         onOpenFilters={openFilters}
@@ -136,9 +172,13 @@ export function NotificationsScreen() {
         countLabel={
           loading
             ? null
-            : `${visible.length} ${visible.length === 1 ? 'alert' : 'alerts'}${
-                activeFilterCount || search.trim() ? ` of ${notifications.length}` : ''
-              }`
+            : activeFilterCount || search.trim()
+              ? visible.length === 1
+                ? t('customerApp.notifications.alertOneOfTotal', { total: notifications.length })
+                : t('customerApp.notifications.alertManyOfTotal', { n: visible.length, total: notifications.length })
+              : visible.length === 1
+                ? t('customerApp.notifications.alertOne')
+                : t('customerApp.notifications.alertMany', { n: visible.length })
         }
       />
 
@@ -165,13 +205,13 @@ export function NotificationsScreen() {
             icon="bell"
             title={
               notifications.length || search || activeFilterCount
-                ? 'No matching alerts'
-                : 'No notifications yet'
+                ? t('customerApp.notifications.noMatchTitle')
+                : t('customerApp.notifications.noneTitle')
             }
             description={
               notifications.length || search || activeFilterCount
-                ? 'Try another search or clear the filters.'
-                : 'Order, appointment, and shop updates will appear here.'
+                ? t('customerApp.notifications.noMatchDescription')
+                : t('customerApp.notifications.noneDescription')
             }
           />
         ) : null}
@@ -234,11 +274,11 @@ export function NotificationsScreen() {
                 </View>
                 <View style={styles.body}>
                   <View style={styles.titleRow}>
-                    <Text style={styles.rowTitle}>{item.subject || 'Notification'}</Text>
+                    <Text style={styles.rowTitle}>{item.subject || t('customerApp.notifications.fallbackSubject')}</Text>
                     {!item.is_read ? <View style={[styles.dot, { backgroundColor: primary }]} /> : null}
                   </View>
                   <Text style={styles.rowBody}>{item.body || ''}</Text>
-                  <Text style={styles.time}>{formatRelativeTime(item.created_at)}</Text>
+                  <Text style={styles.time}>{relativeTimeLabel(item.created_at, t)}</Text>
                 </View>
               </Pressable>
             );
@@ -251,8 +291,8 @@ export function NotificationsScreen() {
         onClose={() => setFilterOpen(false)}
         primaryColor={primary}
         sections={[
-          { id: 'status', label: 'Status', options: [...STATUS_OPTIONS] },
-          { id: 'type', label: 'Type', options: [...TYPE_OPTIONS] },
+          { id: 'status', label: t('common.status'), options: statusOptions },
+          { id: 'type', label: t('customerApp.notifications.filterType'), options: typeOptions },
         ]}
         values={draft}
         onSelect={(sectionId, optionId) =>

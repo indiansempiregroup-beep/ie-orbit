@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { useBusinessLogo } from '../../hooks/useBusinessLogo';
 import { buildBusinessProfileSections, businessToFormState } from './businessProfileModel';
@@ -12,6 +13,7 @@ const fieldGridStyle = {
 } as const;
 
 export function BusinessProfileView() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const businessQuery = useBusinessProfileQuery();
   const tenantBrandingQuery = useTenantBrandingQuery();
@@ -24,12 +26,12 @@ export function BusinessProfileView() {
   const logoUrl = useBusinessLogo(formState?.logo);
 
   const sections = useMemo(
-    () => (formState ? buildBusinessProfileSections(formState) : []),
-    [formState],
+    () => (formState ? buildBusinessProfileSections(formState, t) : []),
+    [formState, t],
   );
 
   if (businessQuery.isLoading) {
-    return <p>Loading business profile…</p>;
+    return <p>{t('settings.businessView.loading')}</p>;
   }
 
   if (businessQuery.error && !businessQuery.data) {
@@ -37,7 +39,7 @@ export function BusinessProfileView() {
   }
 
   if (!formState) {
-    return <p style={{ color: '#6b7280' }}>Select or create a business to view its profile.</p>;
+    return <p style={{ color: '#6b7280' }}>{t('settings.businessView.empty')}</p>;
   }
 
   return (
@@ -45,15 +47,15 @@ export function BusinessProfileView() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
           <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>
-            Business profile
+            {t('settings.businessProfile')}
           </p>
           <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>{formState.display_name || formState.business_name}</h2>
           <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            Workspace details collected during onboarding. Edit to keep your business information current.
+            {t('settings.businessView.lead')}
           </p>
         </div>
         <Button variant="primary" onClick={() => navigate('/settings/business/edit')}>
-          Edit business profile
+          {t('settings.overviewPage.editBusinessProfile')}
         </Button>
       </div>
 
@@ -65,8 +67,8 @@ export function BusinessProfileView() {
             style={{ width: 72, height: 72, borderRadius: 16, objectFit: 'contain', border: '1px solid #e5e7eb', background: '#fff' }}
           />
           <div>
-            <strong>Logo</strong>
-            <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>Shown in the sidebar and customer-facing surfaces.</p>
+            <strong>{t('settings.businessView.logo')}</strong>
+            <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 13 }}>{t('settings.businessView.logoHint')}</p>
           </div>
         </div>
       ) : null}

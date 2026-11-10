@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -30,43 +31,50 @@ import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { formatMoney } from './posPayment';
+import type { TFunction } from 'i18next';
 import { ArrangeReturnPickupSheet } from './ArrangeReturnPickupSheet';
 
-const RESTOCK_OPTIONS = [
-  { value: '', label: 'All' },
-  { value: 'yes', label: 'Restocked' },
-  { value: 'no', label: 'No restock' },
-];
+function restockOptions(t: TFunction) {
+  return [
+    { value: '', label: t('common.all') },
+    { value: 'yes', label: t('opsApp.shop.returns.restocked') },
+    { value: 'no', label: t('opsApp.shop.returns.noRestock') },
+  ];
+}
 
-const STATUS_OPTIONS = [
-  { value: '', label: 'All' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'awaiting_customer', label: 'Awaiting customer' },
-  { value: 'approved', label: 'Pickup arranged' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'rejected', label: 'Rejected' },
-];
+function statusOptions(t: TFunction) {
+  return [
+    { value: '', label: t('common.all') },
+    { value: 'pending', label: t('shop.returnsPage.statusLabels.pending') },
+    { value: 'awaiting_customer', label: t('opsApp.shop.returns.awaitingCustomer') },
+    { value: 'approved', label: t('shop.returnsPage.statusLabels.pickupArranged') },
+    { value: 'completed', label: t('shop.returnsPage.statusLabels.completed') },
+    { value: 'rejected', label: t('shop.returnsPage.statusLabels.rejected') },
+  ];
+}
 
-function returnMethodLabel(method?: string | null) {
-  if (method === 'dropoff') return 'Drop-off';
-  if (method === 'reverse_pickup') return 'Reverse pickup';
-  if (method === 'instant_pickup') return 'Instant pickup';
-  if (method === 'in_store') return 'In store';
+function returnMethodLabel(method: string | null | undefined, t: TFunction) {
+  if (method === 'dropoff') return t('shop.returnsPage.methods.dropoff');
+  if (method === 'reverse_pickup') return t('shop.returnsPage.methods.reverse_pickup');
+  if (method === 'instant_pickup') return t('shop.returnsPage.methods.instant_pickup');
+  if (method === 'in_store') return t('shop.returnsPage.methods.in_store');
   return '';
 }
 
-function returnStatusLabel(item: ShopReturn) {
+function returnStatusLabel(item: ShopReturn, t: TFunction) {
   const status = String(item.status || '').toLowerCase();
-  if (status === 'completed') return 'Completed';
-  if (status === 'rejected') return 'Rejected';
-  if (status === 'awaiting_customer') return 'Awaiting customer';
+  if (status === 'completed') return t('shop.returnsPage.statusLabels.completed');
+  if (status === 'rejected') return t('shop.returnsPage.statusLabels.rejected');
+  if (status === 'awaiting_customer') return t('opsApp.shop.returns.awaitingCustomer');
   if (status === 'approved' || item.pickup_arranged_at) {
-    return item.return_method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged';
+    return item.return_method === 'instant_pickup'
+      ? t('shop.returnsPage.statusLabels.riderDispatched')
+      : t('shop.returnsPage.statusLabels.pickupArranged');
   }
-  if (item.return_method === 'dropoff') return 'Awaiting drop-off';
-  if (item.return_method === 'instant_pickup') return 'Awaiting dispatch';
-  if (item.return_method === 'reverse_pickup') return 'Awaiting pickup';
-  return status || 'Pending';
+  if (item.return_method === 'dropoff') return t('shop.returnsPage.statusLabels.awaitingDropoff');
+  if (item.return_method === 'instant_pickup') return t('shop.returnsPage.statusLabels.awaitingDispatch');
+  if (item.return_method === 'reverse_pickup') return t('shop.returnsPage.statusLabels.awaitingPickup');
+  return status || t('shop.returnsPage.statusLabels.pending');
 }
 
 function canOpenArrangeSheet(item: ShopReturn) {
@@ -100,6 +108,7 @@ function returnLineSummary(item: ShopReturn): string {
 }
 
 export function ShopReturnsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -142,11 +151,11 @@ export function ShopReturnsScreen() {
       setOrders(ordersRes.data ?? []);
       setReturnDays(String(settingsRes.data?.return_days ?? 0));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load returns');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.returns.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -166,7 +175,7 @@ export function ShopReturnsScreen() {
       if (!term) return true;
       const order = orderMap.get(String(item.order));
       const customerId = item.customer ? String(item.customer) : order?.customer_id;
-      const customer = customerId ? entityLabel(customerMap, customerId, '') : 'walk-in';
+      const customer = customerId ? entityLabel(customerMap, customerId, '') : t('shop.vouchers.walkIn').toLowerCase();
       const products = returnLineSummary(item);
       const haystack = [
         item.return_number,
@@ -175,9 +184,9 @@ export function ShopReturnsScreen() {
         order?.order_number,
         customer,
         products,
-        item.restock ? 'restocked' : 'no restock',
-        returnMethodLabel(item.return_method),
-        returnStatusLabel(item),
+        item.restock ? t('opsApp.shop.returns.restocked') : t('opsApp.shop.returns.noRestock'),
+        returnMethodLabel(item.return_method, t),
+        returnStatusLabel(item, t),
       ]
         .filter(Boolean)
         .join(' ')
@@ -189,7 +198,7 @@ export function ShopReturnsScreen() {
       if (sortBy === 'amount_desc') return Number(b.refund_total ?? 0) - Number(a.refund_total ?? 0);
       return String(b.created_at || '').localeCompare(String(a.created_at || ''));
     });
-  }, [returns, search, restock, statusFilter, sortBy, orderMap, customerMap]);
+  }, [returns, search, restock, statusFilter, sortBy, orderMap, customerMap, t]);
 
   function clearFilters() {
     setSearch('');
@@ -203,14 +212,14 @@ export function ShopReturnsScreen() {
     try {
       if (action === 'receive') {
         await client.shop.receiveReturn(item.id, { business_id: businessId });
-        toast.push('Return received — refund and stock updated.', 'success');
+        toast.push(t('shop.returnsPage.received'), 'success');
       } else {
         await client.shop.rejectReturn(item.id, { business_id: businessId });
-        toast.push('Return rejected.', 'success');
+        toast.push(t('shop.returnsPage.rejected'), 'success');
       }
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't update this return."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.returnsPage.updateFailed')), 'error');
     } finally {
       setActionBusyId(null);
     }
@@ -228,12 +237,12 @@ export function ShopReturnsScreen() {
       setReturnDays(String(response.data?.return_days ?? days));
       toast.push(
         days > 0
-          ? `Return window set to ${days} day${days === 1 ? '' : 's'}.`
-          : 'Return window cleared — no time limit.',
+          ? t('shop.returnsPage.windowSet', { count: days })
+          : t('shop.returnsPage.windowCleared'),
         'success',
       );
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't save return policy."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.returnsPage.policyFailed')), 'error');
     } finally {
       setSavingPolicy(false);
     }
@@ -243,21 +252,21 @@ export function ShopReturnsScreen() {
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <View style={styles.policyCard}>
-          <Text style={styles.policyTitle}>Return policy</Text>
+          <Text style={styles.policyTitle}>{t('shop.returnsPage.policyTitle')}</Text>
           <Text style={styles.policyHint}>
-            Days after purchase or delivery for POS and online returns. 0 = no limit.
+            {t('opsApp.shop.returns.policyHint')}
           </Text>
           <View style={styles.policyRow}>
             <View style={styles.policyInput}>
               <Input
-                label="Return days"
+                label={t('shop.returnsPage.returnDays')}
                 value={returnDays}
                 onChangeText={setReturnDays}
                 keyboardType="number-pad"
               />
             </View>
             <Button
-              label={savingPolicy ? 'Saving…' : 'Save'}
+              label={savingPolicy ? t('common.saving') : t('common.save')}
               loading={savingPolicy}
               onPress={() => void saveReturnPolicy()}
               disabled={savingPolicy}
@@ -271,7 +280,7 @@ export function ShopReturnsScreen() {
             style={styles.searchFlex}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search return #, order, product…"
+            placeholder={t('opsApp.shop.returns.searchPlaceholder')}
           />
           <FilterButton
             count={
@@ -290,19 +299,24 @@ export function ShopReturnsScreen() {
           }}
         >
           <FilterChoiceGroup
-            label="Status"
+            label={t('common.status')}
             value={statusFilter}
-            options={STATUS_OPTIONS}
+            options={statusOptions(t)}
             onChange={setStatusFilter}
           />
-          <FilterChoiceGroup label="Inventory" value={restock} options={RESTOCK_OPTIONS} onChange={setRestock} />
           <FilterChoiceGroup
-            label="Sort"
+            label={t('opsApp.shop.returns.inventory')}
+            value={restock}
+            options={restockOptions(t)}
+            onChange={setRestock}
+          />
+          <FilterChoiceGroup
+            label={t('opsApp.shop.common.sort')}
             value={sortBy}
             options={[
-              { value: 'newest', label: 'Newest' },
-              { value: 'oldest', label: 'Oldest' },
-              { value: 'amount_desc', label: 'Refund high–low' },
+              { value: 'newest', label: t('opsApp.shop.common.newest') },
+              { value: 'oldest', label: t('opsApp.shop.common.oldest') },
+              { value: 'amount_desc', label: t('opsApp.shop.returns.refundHighLow') },
             ]}
             onChange={setSortBy}
           />
@@ -310,18 +324,17 @@ export function ShopReturnsScreen() {
 
         <View style={styles.toolbar}>
           <Text style={styles.count}>
-            {filtered.length} return{filtered.length === 1 ? '' : 's'}
+            {t('opsApp.shop.returns.count', { count: filtered.length })}
           </Text>
           {search || restock || statusFilter ? (
             <Pressable onPress={clearFilters} hitSlop={8}>
-              <Text style={styles.clear}>Clear</Text>
+              <Text style={styles.clear}>{t('common.clear')}</Text>
             </Pressable>
           ) : null}
         </View>
 
         <Text style={styles.hint}>
-          Online returns stay pending until you mark them received. In-store returns can still be processed from an
-          order bill.
+          {t('opsApp.shop.returns.onlineHint')}
         </Text>
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
@@ -337,8 +350,8 @@ export function ShopReturnsScreen() {
             const order = orderMap.get(String(item.order));
             const customerId = item.customer ? String(item.customer) : order?.customer_id;
             const customer = customerId
-              ? entityLabel(customerMap, customerId, 'Customer')
-              : 'Walk-in';
+              ? entityLabel(customerMap, customerId, t('opsApp.shop.common.customer'))
+              : t('shop.vouchers.walkIn');
             const products = returnLineSummary(item);
             const open = returnIsOpen(item);
             const canArrange = canOpenArrangeSheet(item);
@@ -351,18 +364,18 @@ export function ShopReturnsScreen() {
                   order?.order_number,
                   customer,
                   item.created_at ? formatDateTime(item.created_at) : '',
-                  returnMethodLabel(item.return_method),
+                  returnMethodLabel(item.return_method, t),
                   item.status === 'completed'
                     ? item.restock
-                      ? 'Restocked'
-                      : 'No restock'
+                      ? t('opsApp.shop.returns.restocked')
+                      : t('opsApp.shop.returns.noRestock')
                     : null,
                   item.reason,
                   products,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
-                badge={returnStatusLabel(item)}
+                badge={returnStatusLabel(item, t)}
                 badgeKind={
                   item.status === 'completed'
                     ? 'paid'
@@ -381,17 +394,17 @@ export function ShopReturnsScreen() {
                         ...(canArrange
                           ? [
                               {
-                                label: 'Arrange pickup',
+                                label: t('opsApp.shop.returns.arrangePickup'),
                                 onPress: () => setArrangeTarget(item),
                               },
                             ]
                           : []),
                         {
-                          label: busy ? '…' : 'Mark received',
+                          label: busy ? '…' : t('opsApp.shop.returns.markReceived'),
                           onPress: () => void runReturnAction(item, 'receive'),
                         },
                         {
-                          label: busy ? '…' : 'Reject',
+                          label: busy ? '…' : t('opsApp.shop.returns.reject'),
                           onPress: () => void runReturnAction(item, 'reject'),
                           destructive: true,
                         },
@@ -405,11 +418,15 @@ export function ShopReturnsScreen() {
             !loading ? (
               <EmptyState
                 icon="rotate-ccw"
-                title={returns.length ? 'No matching returns' : 'No returns yet'}
+                title={
+                  returns.length
+                    ? t('opsApp.shop.returns.noMatching')
+                    : t('opsApp.shop.returns.noReturnsTitle')
+                }
                 message={
                   returns.length
-                    ? 'Try a different search or filter.'
-                    : 'Process returns from an order’s bill detail.'
+                    ? t('opsApp.shop.returns.tryDifferent')
+                    : t('opsApp.shop.returns.processHint')
                 }
               />
             ) : null

@@ -1,5 +1,6 @@
 import React, { useMemo, useRef } from 'react';
 import { ActivityIndicator, Modal, Platform, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import type { MerchantCashfreeCheckout, MerchantRazorpayCheckout } from '@ie-orbit/sdk';
 import { colors, spacing, typography } from '../../theme/tokens';
@@ -29,6 +30,7 @@ type Props =
     };
 
 export function GatewayCheckoutModal(props: Props) {
+  const { t } = useTranslation();
   const { visible, provider, checkout, onCancel } = props;
   const handled = useRef(false);
 
@@ -53,7 +55,7 @@ export function GatewayCheckoutModal(props: Props) {
           if (!cancelled) props.onSuccess(result);
         }
       } catch (err) {
-        if (!cancelled) onCancel(err instanceof Error ? err.message : 'Payment cancelled.');
+        if (!cancelled) onCancel(err instanceof Error ? err.message : t('customerApp.gateway.cancelled'));
       }
     })();
     return () => {
@@ -71,12 +73,12 @@ export function GatewayCheckoutModal(props: Props) {
       };
       if (data.type === 'dismissed') {
         handled.current = true;
-        onCancel('Payment window closed. Your order is saved — you can pay from order details.');
+        onCancel(t('customerApp.gateway.windowClosed'));
         return;
       }
       if (data.type === 'error') {
         handled.current = true;
-        onCancel(data.message || 'Payment failed.');
+        onCancel(data.message || t('customerApp.gateway.failed'));
         return;
       }
       if (data.type === 'razorpay_success' && provider === 'razorpay' && data.payload) {
@@ -90,7 +92,7 @@ export function GatewayCheckoutModal(props: Props) {
       }
     } catch {
       handled.current = true;
-      onCancel('Unable to read payment result.');
+      onCancel(t('customerApp.gateway.unreadable'));
     }
   }
 
@@ -101,7 +103,7 @@ export function GatewayCheckoutModal(props: Props) {
       <Modal visible transparent animationType="fade">
         <View style={styles.webOverlay}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={styles.webText}>Opening secure payment…</Text>
+          <Text style={styles.webText}>{t('customerApp.gateway.opening')}</Text>
         </View>
       </Modal>
     );

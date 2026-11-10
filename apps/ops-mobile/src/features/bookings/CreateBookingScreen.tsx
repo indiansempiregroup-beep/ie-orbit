@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,7 +24,6 @@ import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from
 import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
-import { requiredMessage } from '../../utils/formValidation';
 import { bumpBookingsListRevision } from '../../utils/bookingsListRefresh';
 import {
   servicesSummaryLabel,
@@ -78,6 +78,7 @@ function RecapRow({
 }
 
 export function CreateBookingScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<RootStackParamList, 'CreateBooking'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
@@ -119,13 +120,13 @@ export function CreateBookingScreen() {
       const key = formatDateKey(day);
       const label =
         offset === 0
-          ? 'Today'
+          ? t('common.today')
           : offset === 1
-            ? 'Tomorrow'
+            ? t('bookings.createMobile.tomorrow')
             : day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
       return { key, label };
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!branches.length) return;
@@ -190,8 +191,8 @@ export function CreateBookingScreen() {
   const serviceSummaryLabel = servicesSummaryLabel(selectedServices, (service) =>
     serviceMap.get(service.id) ?? service.name ?? service.id,
   );
-  const customerName = customerId ? customerMap.get(customerId) ?? 'Customer' : '';
-  const staffName = staffId ? staffMap.get(staffId) ?? 'Staff' : 'Any available';
+  const customerName = customerId ? customerMap.get(customerId) ?? t('bookings.customer') : '';
+  const staffName = staffId ? staffMap.get(staffId) ?? t('bookings.staff') : t('bookings.createMobile.anyAvailable');
 
   const eligibleStaff = useMemo(() => {
     const activeStaff = staff.filter(
@@ -270,12 +271,12 @@ export function CreateBookingScreen() {
       {
         value: '',
         label: selectedServiceIds.length
-          ? `Any available (${eligibleStaff.length} eligible)`
-          : 'Any available',
+          ? t('bookings.createMobile.anyAvailableEligible', { n: eligibleStaff.length })
+          : t('bookings.createMobile.anyAvailable'),
       },
       ...eligibleStaff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
     ],
-    [eligibleStaff, selectedServiceIds.length, staffMap],
+    [eligibleStaff, selectedServiceIds.length, staffMap, t],
   );
   const branchOptions = useMemo(
     () =>
@@ -300,10 +301,10 @@ export function CreateBookingScreen() {
       footer={
         <View style={styles.footerBlock}>
           <Text style={styles.footerRecap} numberOfLines={2}>
-            {recapFooter || 'Choose a customer, services, and a time'}
+            {recapFooter || t('bookings.createMobile.footerHint')}
           </Text>
           <Button
-            label={selectedSlot ? 'Confirm booking' : 'Create booking'}
+            label={selectedSlot ? t('bookings.createMobile.confirmBooking') : t('bookings.create')}
             icon={selectedSlot ? 'check' : 'calendar'}
             loading={loading}
             fullWidth
@@ -311,20 +312,20 @@ export function CreateBookingScreen() {
             onPress={async () => {
               if (!customerId || !selectedServiceIds.length) {
                 setFieldErrors({
-                  ...(!customerId ? { customer: requiredMessage('Customer') } : {}),
-                  ...(!selectedServiceIds.length ? { services: 'Select at least one service.' } : {}),
+                  ...(!customerId ? { customer: t('bookings.createMobile.customerRequired') } : {}),
+                  ...(!selectedServiceIds.length ? { services: t('bookings.selectServiceError') } : {}),
                 });
-                setError('Customer and at least one service are required.');
+                setError(t('bookings.createMobile.customerServiceRequired'));
                 return;
               }
               if (needsOfficePicker && !branchId) {
-                setFieldErrors({ office: 'Select an office for this booking.' });
-                setError('Select an office for this booking.');
+                setFieldErrors({ office: t('bookings.selectOfficeError') });
+                setError(t('bookings.selectOfficeError'));
                 return;
               }
               if (!selectedSlot) {
-                setFieldErrors({ slot: 'Select an available time slot.' });
-                setError('Select an available time slot.');
+                setFieldErrors({ slot: t('bookings.createMobile.slotRequired') });
+                setError(t('bookings.createMobile.slotRequired'));
                 return;
               }
               setFieldErrors({});
@@ -346,14 +347,14 @@ export function CreateBookingScreen() {
                   source: 'operations_dashboard',
                   channel: 'mobile',
                 });
-                toast.push('Booking created.', 'success');
+                toast.push(t('bookings.bookingCreated'), 'success');
                 bumpBookingsListRevision();
                 navigation.replace('BookingDetail', {
                   bookingId: booking.id,
                   initialBooking: booking,
                 });
               } catch (err) {
-                setError(getApiErrorMessage(err, "Couldn't create this booking. Check the details and try again."));
+                setError(getApiErrorMessage(err, t('bookings.createFailed')));
               } finally {
                 setLoading(false);
               }
@@ -362,23 +363,23 @@ export function CreateBookingScreen() {
         </View>
       }
     >
-      <FormHero subtitle="Customer and services first, then pick a time. Notes are optional." />
+      <FormHero subtitle={t('bookings.createMobile.heroSubtitle')} />
 
       {staffHints.length > 0 ? (
         <View style={styles.offerBanner}>
           <IconBadge icon="gift" tone="cyan" size="sm" />
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.offerTitle}>Automation offer</Text>
+            <Text style={styles.offerTitle}>{t('bookings.automationOffer')}</Text>
             {staffHints.map((hint, index) => {
               const pct =
                 hint.discount_type === 'percent' && Number(hint.discount_value) > 0
-                  ? `${hint.discount_value}% off`
+                  ? t('bookings.offPct', { value: hint.discount_value })
                   : hint.discount_type === 'amount' && Number(hint.discount_value) > 0
-                    ? `₹${hint.discount_value} off`
+                    ? t('bookings.createMobile.amountOff', { amount: `₹${hint.discount_value}` })
                     : null;
               return (
                 <Text key={`${hint.label}-${index}`} style={styles.offerBody}>
-                  {[hint.label || hint.workflow_name || 'Special offer', pct, hint.message]
+                  {[hint.label || hint.workflow_name || t('bookings.createMobile.specialOffer'), pct, hint.message]
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>
@@ -391,50 +392,50 @@ export function CreateBookingScreen() {
       <View style={styles.recapCard}>
         <RecapRow
           icon="user"
-          label="Customer"
-          value={customerName || 'Not selected'}
+          label={t('bookings.customer')}
+          value={customerName || t('bookings.createMobile.notSelected')}
           pending={!customerId}
         />
         <RecapRow
           icon="layers"
-          label="Visit"
+          label={t('bookings.createMobile.recapVisit')}
           value={
             selectedServices.length
-              ? `${serviceSummaryLabel}${servicePriceLabel ? ` · ${servicePriceLabel}` : ''} · ${durationMinutes} min`
-              : 'No services yet'
+              ? `${serviceSummaryLabel}${servicePriceLabel ? ` · ${servicePriceLabel}` : ''} · ${t('bookings.minutesShort', { n: durationMinutes })}`
+              : t('bookings.createMobile.noServicesYet')
           }
           pending={!selectedServices.length}
         />
         <RecapRow
           icon="clock"
-          label="When"
-          value={selectedSlot ? recapWhen : `${friendlyDate(date)} · pick a time`}
+          label={t('bookings.when')}
+          value={selectedSlot ? recapWhen : t('bookings.createMobile.pickTime', { date: friendlyDate(date) })}
           pending={!selectedSlot}
         />
         {showStaffPicker ? (
           <RecapRow
             icon="users"
-            label="Staff"
-            value={requiresMultipleSpecialists ? 'Multiple specialists' : staffName}
+            label={t('bookings.staff')}
+            value={requiresMultipleSpecialists ? t('bookings.createMobile.multipleSpecialists') : staffName}
           />
         ) : null}
       </View>
 
       <FormSection
         step={1}
-        title="Who & what"
+        title={t('bookings.createMobile.whoWhat')}
         subtitle={
           showStaffPicker
-            ? 'Customer, services, office, and preferred staff'
-            : 'Customer, services, and office'
+            ? t('bookings.createMobile.whoWhatStaff')
+            : t('bookings.createMobile.whoWhatNoStaff')
         }
       >
         <SelectField
-          label="Customer"
+          label={t('bookings.customer')}
           required
           value={customerId}
           options={customerOptions}
-          placeholder="Search customers"
+          placeholder={t('bookings.createMobile.searchCustomers')}
           onChange={(value) => {
             setCustomerId(value);
             setFieldErrors((current) => ({ ...current, customer: '' }));
@@ -458,7 +459,7 @@ export function CreateBookingScreen() {
 
         {needsOfficePicker ? (
           <SelectField
-            label="Office"
+            label={t('bookings.createMobile.office')}
             required
             value={branchId}
             options={branchOptions}
@@ -476,16 +477,15 @@ export function CreateBookingScreen() {
             <View style={styles.callout}>
               <IconBadge icon="users" tone="cyan" size="sm" />
               <View style={styles.calloutCopy}>
-                <Text style={styles.calloutTitle}>Multiple specialists will be assigned</Text>
+                <Text style={styles.calloutTitle}>{t('bookings.createMobile.multiSpecialistTitle')}</Text>
                 <Text style={styles.hint}>
-                  No single staff member covers all selected services. The system will assign the best
-                  available team for each service.
+                  {t('bookings.createMobile.multiSpecialistBody')}
                 </Text>
               </View>
             </View>
           ) : (
             <SelectField
-              label="Staff"
+              label={t('bookings.staff')}
               optional
               value={staffId}
               options={staffOptions}
@@ -494,10 +494,14 @@ export function CreateBookingScreen() {
                 setSelectedSlot('');
                 setFieldErrors((current) => ({ ...current, slot: '' }));
               }}
-              placeholder={selectedServiceIds.length ? 'Choose eligible staff' : 'Select services first'}
+              placeholder={
+                selectedServiceIds.length
+                  ? t('bookings.createMobile.chooseEligibleStaff')
+                  : t('bookings.createMobile.selectServicesFirst')
+              }
               hint={
                 selectedServiceIds.length && !staffId && eligibleStaff.length > 0
-                  ? 'Any available assigns only among staff who can perform all selected services.'
+                  ? t('bookings.createMobile.anyAvailableHint')
                   : undefined
               }
             />
@@ -508,7 +512,7 @@ export function CreateBookingScreen() {
           <View style={styles.calloutWarn}>
             <IconBadge icon="alert-circle" tone="amber" size="sm" />
             <Text style={styles.calloutWarnText}>
-              No staff is assigned to the selected services. Assign services on the staff profile.
+              {t('bookings.createMobile.noStaffForServices')}
             </Text>
           </View>
         ) : null}
@@ -516,13 +520,13 @@ export function CreateBookingScreen() {
 
       <FormSection
         step={2}
-        title="Date & time"
+        title={t('bookings.createMobile.dateTime')}
         subtitle={
           selectedServices.length > 1
-            ? `Slots for ${serviceSummaryLabel} (${durationMinutes} min total)`
+            ? t('bookings.createMobile.slotsFor', { services: serviceSummaryLabel, minutes: durationMinutes })
             : selectedServices.length === 1
-              ? `Open slots for ${serviceSummaryLabel}`
-              : 'Select services first to load times'
+              ? t('bookings.createMobile.openSlotsFor', { services: serviceSummaryLabel })
+              : t('bookings.createMobile.selectServicesToLoadTimes')
         }
       >
         <View style={styles.quickDates}>
@@ -553,12 +557,12 @@ export function CreateBookingScreen() {
           error={fieldErrors.slot}
           emptyMessage={
             !selectedServiceIds.length
-              ? 'Select at least one service to load available times.'
+              ? t('bookings.createMobile.emptySelectService')
               : staffId
-                ? 'No timeslot available for this staff on this date. Check their weekly schedule or try another day.'
+                ? t('bookings.createMobile.emptyStaff')
                 : requiresMultipleSpecialists
-                  ? 'No timeslot available for this service combination on this date. Try another day.'
-                  : 'No timeslot available. No staff is free for the selected services on this date.'
+                  ? t('bookings.createMobile.emptyCombo')
+                  : t('bookings.createMobile.emptyNone')
           }
         />
         {selectedSlot ? (
@@ -566,23 +570,29 @@ export function CreateBookingScreen() {
             onPress={() => setSelectedSlot('')}
             style={styles.selectedChip}
             accessibilityRole="button"
-            accessibilityLabel="Clear selected time"
+            accessibilityLabel={t('bookings.createMobile.clearSelectedTime')}
           >
             <Feather name="check-circle" size={16} color={colors.primary} />
-            <Text style={styles.selected}>Selected · {formatDateTime(selectedSlot)}</Text>
-            <Text style={styles.clearSlot}>Change</Text>
+            <Text style={styles.selected}>
+              {t('bookings.createMobile.selectedTime', { when: formatDateTime(selectedSlot) })}
+            </Text>
+            <Text style={styles.clearSlot}>{t('bookings.createMobile.change')}</Text>
           </Pressable>
         ) : null}
       </FormSection>
 
-      <FormSection step={3} title="Notes" subtitle="Optional details for the team">
+      <FormSection
+        step={3}
+        title={t('shop.pos.notes')}
+        subtitle={t('bookings.createMobile.notesSubtitle')}
+      >
         <Input
-          label="Notes"
+          label={t('shop.pos.notes')}
           optional
           value={notes}
           onChangeText={setNotes}
           multiline
-          placeholder="Allergies, preferences, or anything the team should know"
+          placeholder={t('bookings.createMobile.notesPlaceholder')}
         />
       </FormSection>
 

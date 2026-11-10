@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
@@ -14,7 +15,39 @@ import {
 import { DeliveryRouteMap } from './DeliveryRouteMap';
 import { SaleInsightChips } from './SaleInsightChips';
 
+type ReturnLabelInput = {
+  status?: string;
+  return_method?: string | null;
+  pickup_arranged_at?: string | null;
+};
+
 export function ShopOrderDetailPage() {
+  const { t } = useTranslation();
+  const td = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.orderDetail.${key}`, options));
+  const tr = (key: string, options?: Record<string, unknown>) =>
+    String(t(`shop.returnsPage.${key}`, options));
+  const returnMethodLabel = (method?: string | null) =>
+    method === 'dropoff' ||
+    method === 'reverse_pickup' ||
+    method === 'instant_pickup' ||
+    method === 'in_store'
+      ? tr(`methods.${method}`)
+      : '';
+  const returnStatusLabel = (item: ReturnLabelInput) => {
+    const value = String(item.status || '').toLowerCase();
+    if (value === 'completed') return tr('statusLabels.completed');
+    if (value === 'rejected') return tr('statusLabels.rejected');
+    if (value === 'approved' || item.pickup_arranged_at) {
+      return item.return_method === 'instant_pickup'
+        ? tr('statusLabels.riderDispatched')
+        : tr('statusLabels.pickupArranged');
+    }
+    if (item.return_method === 'dropoff') return tr('statusLabels.awaitingDropoff');
+    if (item.return_method === 'instant_pickup') return tr('statusLabels.awaitingDispatch');
+    if (item.return_method === 'reverse_pickup') return tr('statusLabels.awaitingPickup');
+    return value || tr('statusLabels.pending');
+  };
   const { orderId = '' } = useParams();
   const client = useApiClient();
   const queryClient = useQueryClient();
@@ -77,7 +110,7 @@ export function ShopOrderDetailPage() {
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, "Couldn't update delivery status. Try again."));
+      setMessage(getApiErrorMessage(error, td('statusUpdateFailed')));
     },
   });
   const simulateDelivery = useMutation({
@@ -93,7 +126,7 @@ export function ShopOrderDetailPage() {
   const shipOrder = useMutation({
     mutationFn: async () => {
       if (shipCarrier !== 'self' && !shipAwb.trim()) {
-        throw new Error('AWB or tracking number is required.');
+        throw new Error(td('awbRequired'));
       }
       const response = await client.shop.shipOrder(orderId, {
         carrier: shipCarrier,
@@ -108,14 +141,14 @@ export function ShopOrderDetailPage() {
       setShipAwb('');
       setMessage(
         shipCarrier === 'self'
-          ? 'Marked out for delivery — you are delivering this order.'
-          : 'Shipment saved — customer can track it now.',
+          ? td('markedOutSelf')
+          : td('shipmentSaved'),
       );
       void order.refetch();
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, "Couldn't save shipment details. Try again."));
+      setMessage(getApiErrorMessage(error, td('shipmentFailed')));
     },
   });
   const deliverySettings = useQuery({
@@ -137,13 +170,13 @@ export function ShopOrderDetailPage() {
     },
     onSuccess: (result) => {
       setMessage(
-        `Booked with Shiprocket. AWB ${result.shipment.tracking_number}. Customer notified.`,
+        td('shiprocketBooked', { awb: result.shipment.tracking_number }),
       );
       void order.refetch();
       void deliveryLive.refetch();
     },
     onError: (error) => {
-      setMessage(getApiErrorMessage(error, "Couldn't book with Shiprocket. Try again."));
+      setMessage(getApiErrorMessage(error, td('shiprocketFailed')));
     },
   });
 
@@ -186,8 +219,8 @@ export function ShopOrderDetailPage() {
     return groups;
   }, [deliveryLive.data]);
 
-  if (order.isLoading) return <p>Loading…</p>;
-  if (order.error || !order.data) return <p role="alert">Order not found.</p>;
+  if (order.isLoading) return <p>{t('common.loading')}</p>;
+  if (order.error || !order.data) return <p role="alert">{td('notFound')}</p>;
 
   const data = order.data;
   const statusLower = String(data.status || '').toLowerCase();
@@ -253,7 +286,7 @@ export function ShopOrderDetailPage() {
       }))
       .filter((line) => line.quantity > 0);
     if (!lines.length) {
-      setMessage('Enter a return quantity for at least one line.');
+      setMessage(td('enterReturnQty'));
       return;
     }
     setMessage(null);
@@ -266,11 +299,11 @@ export function ShopOrderDetailPage() {
         return_method: 'in_store',
         lines,
       });
-      setMessage(`Return ${shopReturn.return_number} completed.`);
+      setMessage(td('returnCompleted', { number: shopReturn.return_number }));
       setQtyByLine({});
       void order.refetch();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Couldn't process this return. Try again.");
+      setMessage(error instanceof Error ? error.message : td('returnFailed'));
     }
   }
 
@@ -284,9 +317,11 @@ export function ShopOrderDetailPage() {
               {shopOrderStatusLabel(data)} ·{' '}
               {data.fulfillment_mode === 'delivery'
                 ? deliveryMethod === 'instant'
-                  ? 'deliver now'
-                  : 'standard delivery'
-                : data.fulfillment_mode}
+                  ? t('shop.orders.deliverNow')
+                  : t('shop.orders.standardDelivery')
+                : t(`shop.orders.modes.${data.fulfillment_mode}`, {
+                    defaultValue: data.fulfillment_mode,
+                  })}
             </div>
             <div style={{ marginTop: 10 }}>
               <SaleInsightChips source={data} currency={data.currency} />
@@ -303,13 +338,13 @@ export function ShopOrderDetailPage() {
                 }}
               >
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>
-                  Customer details
+                  {td('customerDetails')}
                 </div>
                 <Link
                   to={`/customers/${data.customer_id}`}
                   style={{ color: '#2563eb', fontWeight: 600, fontSize: 16, textDecoration: 'none' }}
                 >
-                  {data.customer_name?.trim() || 'View customer profile'}
+                  {data.customer_name?.trim() || td('viewCustomer')}
                 </Link>
                 {data.customer_phone ? (
                   <div style={{ color: '#6b7280', marginTop: 4 }}>{data.customer_phone}</div>
@@ -331,17 +366,17 @@ export function ShopOrderDetailPage() {
                 onClick={() => {
                   void dispatch
                     .mutateAsync()
-                    .then(() => setMessage('Rider requested — live tracking is on.'))
+                    .then(() => setMessage(td('riderRequested')))
                     .catch((error: unknown) =>
-                      setMessage(error instanceof Error ? error.message : "Couldn't request a rider. Try again."),
+                      setMessage(error instanceof Error ? error.message : td('riderFailed')),
                     );
                 }}
               >
                 {dispatch.isPending
-                  ? 'Requesting rider…'
+                  ? td('requestingRider')
                   : data.status === 'delivery_failed'
-                    ? 'Retry dispatch'
-                    : 'Dispatch'}
+                    ? td('retryDispatch')
+                    : td('dispatch')}
               </Button>
             ) : null}
             {data.fulfillment_mode === 'delivery' &&
@@ -357,11 +392,11 @@ export function ShopOrderDetailPage() {
                       void shiprocketBook.mutateAsync();
                     }}
                   >
-                    {shiprocketBook.isPending ? 'Booking…' : 'Book with Shiprocket'}
+                    {shiprocketBook.isPending ? td('booking') : td('bookShiprocket')}
                   </Button>
                 ) : null}
                 <Button type="button" variant={shiprocketConfigured ? 'neutral' : 'primary'} onClick={() => setShipOpen(true)}>
-                  Mark shipped
+                  {td('markShipped')}
                 </Button>
               </>
             ) : null}
@@ -373,12 +408,12 @@ export function ShopOrderDetailPage() {
                 disabled={updateStatus.isPending}
                 onClick={() => updateStatus.mutate('completed')}
               >
-                Mark delivered
+                {t('shop.orders.markDelivered')}
               </Button>
             ) : null}
             <Link to="/shop/billing">
               <Button type="button" variant="neutral">
-                Billing
+                {td('billing')}
               </Button>
             </Link>
             {['confirmed', 'ready', 'completed'].includes(data.status) ? (
@@ -389,24 +424,24 @@ export function ShopOrderDetailPage() {
                 onClick={() => {
                   void createInvoice
                     .mutateAsync()
-                    .then((invoice) => setMessage(`Invoice ${invoice.invoice_number} created.`))
+                    .then((invoice) => setMessage(td('invoiceCreated', { number: invoice.invoice_number })))
                     .catch((error: unknown) =>
-                      setMessage(error instanceof Error ? error.message : "Couldn't create this invoice. Try again."),
+                      setMessage(error instanceof Error ? error.message : td('invoiceFailed')),
                     );
                 }}
               >
-                Create invoice
+                {td('createInvoice')}
               </Button>
             ) : null}
           </div>
         </div>
         {message ? <p role="status">{message}</p> : null}
         <p>
-          Total: {formatMoney(Number(data.total ?? 0), data.currency)}
+          {td('total', { amount: formatMoney(Number(data.total ?? 0), data.currency) })}
         </p>
         {data.coupon_code ? (
           <p>
-            Coupon {data.coupon_code}
+            {td('coupon', { code: data.coupon_code })}
             {data.coupon_name ? ` · ${data.coupon_name}` : ''}
             {Number(data.coupon_discount || 0) > 0
               ? ` − ${formatMoney(Number(data.coupon_discount), data.currency)}`
@@ -420,17 +455,20 @@ export function ShopOrderDetailPage() {
             const gross = Math.round((qty * rate + Number.EPSILON) * 100) / 100;
             return (
               <li key={line.id}>
-                {line.product_name} × {line.quantity} ={' '}
-                {formatMoney(gross, data.currency)}
+                {td('lineItem', {
+                  name: line.product_name,
+                  qty: line.quantity,
+                  amount: formatMoney(gross, data.currency),
+                })}
               </li>
             );
           })}
         </ul>
-        {data.delivery_address ? <p>Delivery: {data.delivery_address}</p> : null}
+        {data.delivery_address ? <p>{td('deliveryAddress', { address: data.delivery_address })}</p> : null}
         {fulfillment?.branch_name ? (
           <p>
-            Fulfilled from: <strong>{fulfillment.branch_name}</strong>
-            {fulfillment.distance_km != null ? ` · ${fulfillment.distance_km} km from customer` : ''}
+            {td('fulfilledFrom')} <strong>{fulfillment.branch_name}</strong>
+            {fulfillment.distance_km != null ? td('distanceFromCustomer', { km: fulfillment.distance_km }) : ''}
           </p>
         ) : null}
         {shortfall.length > 0 ? (
@@ -443,17 +481,21 @@ export function ShopOrderDetailPage() {
               border: '1px solid #fed7aa',
             }}
           >
-            <strong style={{ color: '#b45309' }}>Backorder at this office</strong>
+            <strong style={{ color: '#b45309' }}>{td('backorder')}</strong>
             <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#92400e' }}>
               {shortfall.map((row) => (
                 <li key={row.product_id}>
-                  {row.product_name}: {row.needed} needed, {row.available} in stock
+                  {td('shortfallRow', {
+                    name: row.product_name,
+                    needed: row.needed,
+                    available: row.available,
+                  })}
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
-        {data.notes ? <p>Notes: {data.notes}</p> : null}
+        {data.notes ? <p>{td('notes', { notes: data.notes })}</p> : null}
       </Card>
 
       {deliveryLive.data?.available ? (
@@ -462,10 +504,10 @@ export function ShopOrderDetailPage() {
             <div>
               <div style={{ color: '#6b7280', fontSize: 12, fontWeight: 800, letterSpacing: '.08em' }}>
                 {deliveryLive.data.delivery_method === 'pickup'
-                  ? 'ORDER STATUS'
+                  ? td('liveOrderStatus')
                   : isInstantDelivery
-                    ? 'DELIVERY PARTNER'
-                    : 'STANDARD DELIVERY'}
+                    ? td('liveDeliveryPartner')
+                    : td('liveStandardDelivery')}
               </div>
               <h2 style={{ margin: '4px 0 0', fontSize: 28 }}>{deliveryLive.data.headline}</h2>
               {deliveryLive.data.subtitle ? (
@@ -474,12 +516,12 @@ export function ShopOrderDetailPage() {
               {deliveryLive.data.delivery_method === 'pickup' ? (
                 deliveryLive.data.last_updated ? (
                   <div style={{ marginTop: 6, color: '#6b7280', fontSize: 13 }}>
-                    Updated · {new Date(deliveryLive.data.last_updated).toLocaleString()}
+                    {td('updatedAt', { time: new Date(deliveryLive.data.last_updated).toLocaleString() })}
                   </div>
                 ) : null
               ) : (
                 <div style={{ marginTop: 6, color: deliveryLive.data.stale ? '#b45309' : '#047857', fontSize: 13 }}>
-                  {deliveryLive.data.stale ? 'Location may be stale' : 'Tracking up to date'}
+                  {deliveryLive.data.stale ? td('locationStale') : td('trackingUpToDate')}
                   {deliveryLive.data.last_updated
                     ? ` · ${new Date(deliveryLive.data.last_updated).toLocaleString()}`
                     : ''}
@@ -492,20 +534,20 @@ export function ShopOrderDetailPage() {
             {deliveryLive.data.eta_minutes != null ? (
               <div style={{ minWidth: 100, borderRadius: 14, background: 'var(--muted, #f3f4f6)', padding: '12px 16px', textAlign: 'center' }}>
                 <strong style={{ display: 'block', fontSize: 26 }}>{deliveryLive.data.eta_minutes}</strong>
-                <span style={{ color: '#6b7280', fontSize: 12 }}>min ETA</span>
+                <span style={{ color: '#6b7280', fontSize: 12 }}>{td('minEta')}</span>
               </div>
             ) : null}
           </div>
           {liveRider?.name || liveRider?.phone ? (
             <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--border, #ddd)', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
-                <small style={{ color: '#6b7280' }}>RIDER</small>
-                <strong style={{ display: 'block' }}>{liveRider?.name || 'Assigned rider'}</strong>
+                <small style={{ color: '#6b7280' }}>{td('riderCaps')}</small>
+                <strong style={{ display: 'block' }}>{liveRider?.name || td('assignedRider')}</strong>
                 {liveRider?.vehicle ? <span>{liveRider.vehicle}</span> : null}
               </div>
               {liveRider?.phone && deliveryLive.data.can_call_rider !== false ? (
                 <a href={`tel:${liveRider.phone}`}>
-                  <Button type="button" variant="neutral">Call rider</Button>
+                  <Button type="button" variant="neutral">{td('callRider')}</Button>
                 </a>
               ) : null}
             </div>
@@ -513,7 +555,7 @@ export function ShopOrderDetailPage() {
           {deliveryTrackingUrl ? (
             <p>
               <a href={deliveryTrackingUrl} target="_blank" rel="noreferrer">
-                Open partner tracking ↗
+                {td('openTracking')}
               </a>
             </p>
           ) : null}
@@ -528,9 +570,9 @@ export function ShopOrderDetailPage() {
                 <strong>
                   {group.number == null
                     ? deliveryLive.data.delivery_method === 'pickup'
-                      ? 'Order history'
-                      : 'Order updates'
-                    : `Attempt ${group.number}${group.attempt?.provider ? ` · ${group.attempt.provider}` : ''}`}
+                      ? td('orderHistory')
+                      : td('orderUpdates')
+                    : `${td('attempt', { n: group.number })}${group.attempt?.provider ? ` · ${group.attempt.provider}` : ''}`}
                 </strong>
                 {group.attempt?.reason ? <p style={{ color: '#b42318', margin: '5px 0' }}>{group.attempt.reason}</p> : null}
                 <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
@@ -541,8 +583,8 @@ export function ShopOrderDetailPage() {
                         <strong>{event.label || event.status.replaceAll('_', ' ')}</strong>
                         {event.reason ? <div style={{ color: '#b42318', fontSize: 13 }}>{event.reason}</div> : null}
                         <div style={{ opacity: 0.7, fontSize: 13 }}>
-                          {event.occurred_at ? new Date(event.occurred_at).toLocaleString() : 'Time unavailable'}
-                          {event.eta_minutes != null ? ` · ETA ${event.eta_minutes} min` : ''}
+                          {event.occurred_at ? new Date(event.occurred_at).toLocaleString() : td('timeUnavailable')}
+                          {event.eta_minutes != null ? ` · ${t('shop.orders.etaMinutes', { minutes: event.eta_minutes })}` : ''}
                         </div>
                       </div>
                     </div>
@@ -563,13 +605,13 @@ export function ShopOrderDetailPage() {
                 onClick={() => {
                   void simulateDelivery
                     .mutateAsync()
-                    .then((live) => setMessage(`Mock delivery · ${live.headline}`))
+                    .then((live) => setMessage(td('mockDelivery', { headline: live.headline })))
                     .catch((error: unknown) =>
-                      setMessage(getApiErrorMessage(error, 'Simulation failed.')),
+                      setMessage(getApiErrorMessage(error, td('simulationFailed'))),
                     );
                 }}
               >
-                {simulateDelivery.isPending ? 'Advancing…' : 'Simulate next delivery status'}
+                {simulateDelivery.isPending ? td('advancing') : td('simulateNext')}
               </Button>
             </div>
           ) : null}
@@ -578,15 +620,15 @@ export function ShopOrderDetailPage() {
 
       {canReturn ? (
         <Card>
-          <h2>Return / credit note</h2>
+          <h2>{td('returnCreditNote')}</h2>
           {returnByLabel ? (
-            <p style={{ marginTop: 0, color: '#6b7280' }}>Returns accepted until {returnByLabel}.</p>
+            <p style={{ marginTop: 0, color: '#6b7280' }}>{td('returnsUntil', { date: returnByLabel })}</p>
           ) : null}
           <form onSubmit={processReturn} style={{ display: 'grid', gap: 10 }}>
             {(data.lines ?? []).map((line) => (
               <label key={line.id} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <span style={{ flex: 1 }}>
-                  {line.product_name} (sold {line.quantity})
+                  {td('soldQty', { name: line.product_name, qty: line.quantity })}
                 </span>
                 <input
                   type="number"
@@ -597,16 +639,16 @@ export function ShopOrderDetailPage() {
                     setQtyByLine((current) => ({ ...current, [line.id]: event.target.value }))
                   }
                   style={{ width: 96 }}
-                  placeholder="Qty"
+                  placeholder={td('qtyPlaceholder')}
                 />
               </label>
             ))}
             <label>
-              Reason
+              {td('reason')}
               <input value={reason} onChange={(event) => setReason(event.target.value)} />
             </label>
             <Button type="submit" disabled={createReturn.isPending}>
-              Process return
+              {td('processReturn')}
             </Button>
             {message ? <p role="status">{message}</p> : null}
           </form>
@@ -614,7 +656,7 @@ export function ShopOrderDetailPage() {
       ) : null}
 
       <Card>
-        <h2>Returns on this order</h2>
+        <h2>{td('returnsOnOrder')}</h2>
         {(returns.data ?? []).map((item) => {
           const open =
             item.status === 'pending' ||
@@ -629,8 +671,8 @@ export function ShopOrderDetailPage() {
           return (
             <div key={item.id} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
               <div>
-                {item.return_number} · {item.status}
-                {item.return_method ? ` · ${item.return_method.replace(/_/g, ' ')}` : ''} ·{' '}
+                {item.return_number} · {returnStatusLabel(item)}
+                {returnMethodLabel(item.return_method) ? ` · ${returnMethodLabel(item.return_method)}` : ''} ·{' '}
                 {formatMoney(Number(item.refund_total ?? 0), data.currency)}
               </div>
               {open ? (
@@ -642,18 +684,12 @@ export function ShopOrderDetailPage() {
                       disabled={arrangePickup.isPending}
                       onClick={() =>
                         void (async () => {
-                          const modeRaw = window.prompt(
-                            'Pickup mode: "instant" for rider, or "manual" for courier',
-                            'instant',
-                          );
+                          const modeRaw = window.prompt(td('promptPickupMode'), 'instant');
                           if (modeRaw === null) return;
                           const mode =
                             modeRaw.trim().toLowerCase() === 'manual' ? 'manual' : 'instant';
                           if (mode === 'instant') {
-                            const who = window.prompt(
-                              'Who pays pickup fee? "customer" = they must accept (deduct from refund), blank = shop pays',
-                              '',
-                            );
+                            const who = window.prompt(td('promptWhoPaysPickup'), '');
                             if (who === null) return;
                             await arrangePickup.mutateAsync({
                               returnId: item.id,
@@ -662,16 +698,13 @@ export function ShopOrderDetailPage() {
                                 who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant',
                             });
                           } else {
-                            const who = window.prompt(
-                              'Who pays courier fee? "customer" = they must accept, blank = shop',
-                              '',
-                            );
+                            const who = window.prompt(td('promptWhoPaysCourier'), '');
                             if (who === null) return;
                             const charge_bearer =
                               who.trim().toLowerCase() === 'customer' ? 'customer' : 'merchant';
                             let fee: string | undefined;
                             if (charge_bearer === 'customer') {
-                              const feeRaw = window.prompt('Courier fee to deduct', '0');
+                              const feeRaw = window.prompt(td('promptCourierFee'), '0');
                               if (feeRaw === null) return;
                               fee = feeRaw.trim() || '0';
                             }
@@ -685,7 +718,7 @@ export function ShopOrderDetailPage() {
                         })()
                       }
                     >
-                      Arrange pickup
+                      {td('arrangePickup')}
                     </Button>
                   ) : null}
                   <Button
@@ -694,7 +727,7 @@ export function ShopOrderDetailPage() {
                     disabled={receiveReturn.isPending}
                     onClick={() => void receiveReturn.mutateAsync({ returnId: item.id })}
                   >
-                    Mark received
+                    {td('markReceived')}
                   </Button>
                   <Button
                     type="button"
@@ -702,14 +735,14 @@ export function ShopOrderDetailPage() {
                     disabled={rejectReturn.isPending}
                     onClick={() => void rejectReturn.mutateAsync({ returnId: item.id })}
                   >
-                    Reject
+                    {td('reject')}
                   </Button>
                 </div>
               ) : null}
             </div>
           );
         })}
-        {!returns.data?.length ? <p>No returns yet.</p> : null}
+        {!returns.data?.length ? <p>{td('noReturnsYet')}</p> : null}
       </Card>
 
       {shipOpen ? (
@@ -729,11 +762,11 @@ export function ShopOrderDetailPage() {
         >
           <div onClick={(event: React.MouseEvent) => event.stopPropagation()}>
             <Card style={{ width: '100%', maxWidth: 480 }}>
-            <h2 style={{ marginTop: 0 }}>Ship order</h2>
+            <h2 style={{ marginTop: 0 }}>{td('shipOrder')}</h2>
             <p style={{ color: '#64748b' }}>
               {isSelfDeliveryShip
-                ? 'Deliver this order yourself — no courier AWB needed.'
-                : 'Add courier tracking so customers can follow the shipment.'}
+                ? td('shipSelfHint')
+                : td('shipCourierHint')}
             </p>
             <form
               style={{ display: 'grid', gap: 12 }}
@@ -743,9 +776,9 @@ export function ShopOrderDetailPage() {
               }}
             >
               <label style={{ display: 'grid', gap: 6 }}>
-                How are you sending it?
+                {td('howSending')}
                 <select value={shipCarrier} onChange={(event) => setShipCarrier(event.target.value)}>
-                  <option value="self">Deliver myself</option>
+                  <option value="self">{td('deliverMyself')}</option>
                   <option value="delhivery">Delhivery</option>
                   <option value="bluedart">Blue Dart</option>
                   <option value="dtdc">DTDC</option>
@@ -753,12 +786,12 @@ export function ShopOrderDetailPage() {
                   <option value="shiprocket">Shiprocket</option>
                   <option value="ekart">Ekart</option>
                   <option value="xpressbees">XpressBees</option>
-                  <option value="other">Other</option>
+                  <option value="other">{td('other')}</option>
                 </select>
               </label>
               {!isSelfDeliveryShip ? (
                 <label style={{ display: 'grid', gap: 6 }}>
-                  AWB / tracking number
+                  {td('awbLabel')}
                   <input
                     value={shipAwb}
                     onChange={(event) => setShipAwb(event.target.value)}
@@ -768,7 +801,7 @@ export function ShopOrderDetailPage() {
                 </label>
               ) : null}
               <label style={{ display: 'grid', gap: 6 }}>
-                Estimated delivery (optional)
+                {td('estDelivery')}
                 <input
                   type="date"
                   value={shipEta}
@@ -781,7 +814,7 @@ export function ShopOrderDetailPage() {
                   checked={shipNotify}
                   onChange={(event) => setShipNotify(event.target.checked)}
                 />
-                Notify customer
+                {td('notifyCustomer')}
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Button
@@ -790,13 +823,13 @@ export function ShopOrderDetailPage() {
                   disabled={shipOrder.isPending || (!isSelfDeliveryShip && !shipAwb.trim())}
                 >
                   {shipOrder.isPending
-                    ? 'Saving…'
+                    ? td('saving')
                     : isSelfDeliveryShip
-                      ? 'Start delivery'
-                      : 'Mark shipped'}
+                      ? td('startDelivery')
+                      : td('markShipped')}
                 </Button>
                 <Button type="button" variant="neutral" onClick={() => setShipOpen(false)}>
-                  Cancel
+                  {td('cancel')}
                 </Button>
               </div>
             </form>

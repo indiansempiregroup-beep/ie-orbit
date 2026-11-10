@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import type { Customer, ShopBooksVoucher, ShopOrder, ShopPartyLedgerEntry, ShopSupplier } from '@ie-orbit/sdk';
 import { formatDate, formatTime } from '../../utils/format';
 
@@ -29,6 +30,7 @@ export function orderReturnWindow(
     ShopOrder,
     'status' | 'fulfillment_mode' | 'return_days' | 'return_eligible_until' | 'return_window_open'
   > | null,
+  t?: TFunction,
 ): { days: number; open: boolean; untilLabel: string; summary: string } | null {
   const days = Number(order?.return_days ?? 0);
   if (!order || !Number.isFinite(days) || days <= 0) return null;
@@ -40,14 +42,20 @@ export function orderReturnWindow(
       days,
       open,
       untilLabel: '',
-      summary: `${days}-day return policy`,
+      summary: t ? t('opsApp.shop.saleDetail.returnPolicyDays', { days }) : `${days}-day return policy`,
     };
   }
   return {
     days,
     open,
     untilLabel,
-    summary: open ? `Returns until ${untilLabel}` : `Returns closed ${untilLabel}`,
+    summary: t
+      ? open
+        ? t('opsApp.shop.saleDetail.returnsUntil', { date: untilLabel })
+        : t('opsApp.shop.saleDetail.returnsClosed', { date: untilLabel })
+      : open
+        ? `Returns until ${untilLabel}`
+        : `Returns closed ${untilLabel}`,
   };
 }
 
@@ -69,24 +77,27 @@ export function voucherStatusStyle(status?: string) {
 export function saleInvoiceSourceLabel(
   voucher: ShopBooksVoucher,
   order?: { fulfillment_mode?: string | null } | null,
+  t?: TFunction,
 ): string {
+  const label = (key: string, fallback: string) =>
+    t ? t(`shop.booksInvoiceDrawer.source.${key}`) : fallback;
   const meta =
     voucher.metadata && typeof voucher.metadata === 'object'
       ? (voucher.metadata as Record<string, unknown>)
       : {};
   const source = String(meta.source || '').trim().toLowerCase();
-  if (source === 'booking' || meta.source_booking_id) return 'Booking';
+  if (source === 'booking' || meta.source_booking_id) return label('booking', 'Booking');
 
   const mode = String(order?.fulfillment_mode || meta.fulfillment_mode || meta.channel || '')
     .trim()
     .toLowerCase();
-  if (mode === 'pos') return 'POS';
-  if (mode === 'pickup' || mode === 'online_pickup') return 'Online order · Pickup';
-  if (mode === 'delivery' || mode === 'online_delivery') return 'Online order · Delivery';
+  if (mode === 'pos') return label('pos', 'POS');
+  if (mode === 'pickup' || mode === 'online_pickup') return label('onlinePickup', 'Online order · Pickup');
+  if (mode === 'delivery' || mode === 'online_delivery') return label('onlineDelivery', 'Online order · Delivery');
   // Linked shop order but mode not loaded yet — don't guess POS vs online.
-  if (voucher.linked_order && !order) return 'Shop sale';
-  if (voucher.linked_order) return 'Online order';
-  return 'Books sale';
+  if (voucher.linked_order && !order) return label('shopSale', 'Shop sale');
+  if (voucher.linked_order) return label('onlineOrder', 'Online order');
+  return label('booksSale', 'Books sale');
 }
 
 export function isVoidedVoucher(status?: string) {
@@ -332,14 +343,19 @@ export function voucherPaymentHistory(voucher: ShopBooksVoucher): VoucherPayment
     .filter((row): row is VoucherPaymentRecord => Boolean(row));
 }
 
-export function purchaseSourceLabel(voucher: ShopBooksVoucher): string {
+export function purchaseSourceLabel(voucher: ShopBooksVoucher, t?: TFunction): string {
   const meta = voucherMeta(voucher);
   const scan =
     meta.invoice_scan && typeof meta.invoice_scan === 'object'
       ? (meta.invoice_scan as Record<string, unknown>)
       : null;
-  if (!scan) return 'Purchase bill';
+  if (!scan) return t ? t('opsApp.shop.purchaseDetail.purchaseBill') : 'Purchase bill';
   const number = String(scan.invoice_number || '').trim();
+  if (t) {
+    return number
+      ? t('opsApp.shop.purchaseDetail.scannedNumber', { number })
+      : t('opsApp.shop.purchaseDetail.scannedInvoice');
+  }
   return number ? `Scanned · ${number}` : 'Scanned invoice';
 }
 
@@ -391,4 +407,11 @@ export function formatVoucherDateTime(date?: string | null, timestamp?: string |
   const timeLabel = formatTime(timeSource);
   if (!timeLabel || timeLabel === '—') return dateLabel;
   return `${dateLabel}, ${timeLabel}`;
+}
+
+/** Localised label for a free-form API status (open, pending, cleared, …). Unknown values pass through. */
+export function statusText(status: string | null | undefined, t: TFunction): string {
+  const raw = (status || '').trim();
+  if (!raw) return '';
+  return t(`opsApp.shop.common.status.${raw.toLowerCase()}`, { defaultValue: raw });
 }

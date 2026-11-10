@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -21,11 +22,11 @@ import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatMoney, formatVoucherDate, formatVoucherDateTime, voucherLineProductId } from './shopBooksHelpers';
 
 const STATUS_CHIPS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'sent', label: 'Sent' },
-  { value: 'accepted', label: 'Accepted' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'expired', label: 'Expired' },
+  { value: 'draft', labelKey: 'shop.booksDocDialog.statusDraft' },
+  { value: 'sent', labelKey: 'opsApp.shop.quotationDetail.statusSent' },
+  { value: 'accepted', labelKey: 'opsApp.shop.quotationDetail.statusAccepted' },
+  { value: 'rejected', labelKey: 'opsApp.shop.quotationDetail.statusRejected' },
+  { value: 'expired', labelKey: 'opsApp.shop.quotationDetail.statusExpired' },
 ] as const;
 
 function canEditQuotation(quotation: ShopQuotation | null) {
@@ -67,6 +68,7 @@ export function QuotationDetailModal({
   onConvert?: (quote: ShopQuotation) => void;
   onUpdated?: (quote: ShopQuotation) => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
@@ -111,13 +113,15 @@ export function QuotationDetailModal({
   const status = (localQuote?.status || '').toLowerCase();
   const converted = Boolean(localQuote?.converted_order || status === 'converted');
   const lines = Array.isArray(localQuote?.line_items) ? localQuote.line_items : [];
-  const customerName = localQuote?.customer_name?.trim() || (localQuote?.customer ? 'Customer' : 'No customer');
+  const customerName = localQuote?.customer_name?.trim() || (localQuote?.customer
+      ? t('opsApp.shop.common.customer')
+      : t('opsApp.shop.common.noCustomer'));
 
   const statusLabel = useMemo(() => {
-    if (converted) return 'Converted';
+    if (converted) return t('opsApp.shop.booksDocDetail.badgeConverted');
     const match = STATUS_CHIPS.find((item) => item.value === status);
-    return match?.label || localQuote?.status || 'Draft';
-  }, [converted, status, localQuote?.status]);
+    return match ? t(match.labelKey) : localQuote?.status || t('shop.booksDocDialog.statusDraft');
+  }, [converted, status, localQuote?.status, t]);
 
   async function changeStatus(next: string) {
     if (!client || !localQuote || !editable || next === status || busyStatus) return;
@@ -126,9 +130,16 @@ export function QuotationDetailModal({
       const response = await client.shop.updateQuotation(localQuote.id, { status: next });
       setLocalQuote(response.data);
       onUpdated?.(response.data);
-      toast.push(`Marked ${response.data.quotation_number} as ${next}`, 'success');
+      const nextChip = STATUS_CHIPS.find((item) => item.value === next);
+      toast.push(
+        t('opsApp.shop.booksDocDetail.markedAs', {
+          number: response.data.quotation_number,
+          status: nextChip ? t(nextChip.labelKey) : next,
+        }),
+        'success',
+      );
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't update this quotation."), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.quotationDetail.updateFailed')), 'error');
     } finally {
       setBusyStatus(false);
     }
@@ -163,13 +174,17 @@ export function QuotationDetailModal({
                     localQuote.created_at
                       ? formatVoucherDateTime(localQuote.created_at, localQuote.created_at)
                       : null,
-                    localQuote.valid_until ? `Valid till ${formatVoucherDate(localQuote.valid_until)}` : null,
+                    localQuote.valid_until
+                      ? t('opsApp.shop.quotations.validTill', {
+                          date: formatVoucherDate(localQuote.valid_until),
+                        })
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>
               </View>
-              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel={t('common.close')}>
                 <Feather name="x" size={18} color={colors.primaryForeground} />
               </Pressable>
             </View>
@@ -191,12 +206,12 @@ export function QuotationDetailModal({
 
             {editable ? (
               <>
-                <Text style={styles.section}>Status</Text>
+                <Text style={styles.section}>{t('common.status')}</Text>
                 <View style={styles.chipRow}>
                   {STATUS_CHIPS.map((item) => (
                     <Chip
                       key={item.value}
-                      label={item.label}
+                      label={t(item.labelKey)}
                       active={status === item.value}
                       onPress={() => void changeStatus(item.value)}
                     />
@@ -205,17 +220,21 @@ export function QuotationDetailModal({
               </>
             ) : (
               <Text style={styles.meta}>
-                {converted ? 'This quotation has been converted to a sale.' : `Status: ${statusLabel}`}
+                {converted
+                  ? t('opsApp.shop.quotationDetail.convertedNotice')
+                  : t('opsApp.shop.booksDocDetail.statusLine', { status: statusLabel })}
               </Text>
             )}
 
-            <Text style={styles.section}>Items · {lines.length}</Text>
+            <Text style={styles.section}>
+              {t('opsApp.shop.booksDocDetail.itemsCount', { count: lines.length })}
+            </Text>
             {lines.length === 0 ? (
-              <Text style={styles.meta}>No line items on this quotation.</Text>
+              <Text style={styles.meta}>{t('opsApp.shop.quotationDetail.noLines')}</Text>
             ) : (
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const name = String(line.name || line.product_name || t('shop.booksDocDialog.itemFallback', { n: index + 1 }));
                 const productId = voucherLineProductId(line);
                 const qty = Number(line.quantity ?? line.qty ?? 0);
                 const rate = Number(line.unit_price ?? line.rate ?? 0);
@@ -226,7 +245,7 @@ export function QuotationDetailModal({
                       <Text style={[styles.lineName, productId ? styles.lineNameLink : null]}>{name}</Text>
                       <Text style={styles.meta}>
                         {qty} × {formatMoney(rate)}
-                        {gst ? ` · GST ${gst}%` : ''}
+                        {gst ? ` · ${t('opsApp.shop.booksDocDetail.gstPct', { rate: gst })}` : ''}
                       </Text>
                     </View>
                     <Text style={styles.lineTotal}>{formatMoney(quoteLineTotal(line))}</Text>
@@ -251,7 +270,7 @@ export function QuotationDetailModal({
                       navigation.navigate('ShopProductAdd', { productId });
                     }}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${name}`}
+                    accessibilityLabel={t('opsApp.shop.booksDocDetail.openItem', { name })}
                   >
                     {body}
                   </Pressable>
@@ -261,22 +280,22 @@ export function QuotationDetailModal({
 
             <View style={styles.totals}>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Subtotal</Text>
+                <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.subtotal')}</Text>
                 <Text style={styles.meta}>{formatMoney(localQuote.subtotal)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Tax</Text>
+                <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.tax')}</Text>
                 <Text style={styles.meta}>{formatMoney(localQuote.tax_total)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.payableLabel}>Total</Text>
+                <Text style={styles.payableLabel}>{t('shop.booksInvoiceDrawer.total')}</Text>
                 <Text style={styles.payableValue}>{formatMoney(localQuote.total)}</Text>
               </View>
             </View>
 
             {localQuote.notes ? (
               <>
-                <Text style={styles.section}>Notes</Text>
+                <Text style={styles.section}>{t('opsApp.shop.common.notes')}</Text>
                 <Text style={styles.meta}>{localQuote.notes}</Text>
               </>
             ) : null}
@@ -288,7 +307,7 @@ export function QuotationDetailModal({
                 {onEdit ? (
                   <View style={styles.footerEditBtn}>
                     <Button
-                      label="Edit"
+                      label={t('opsApp.shop.common.edit')}
                       fullWidth
                       icon="edit-2"
                       onPress={() => onEdit(localQuote)}
@@ -298,7 +317,11 @@ export function QuotationDetailModal({
                 {onConvert && convertible ? (
                   <View style={styles.footerConvertBtn}>
                     <Button
-                      label={converting ? 'Converting…' : 'Convert to sale'}
+                      label={
+                        converting
+                          ? t('opsApp.shop.quotations.converting')
+                          : t('shop.booksDocuments.convertToSale')
+                      }
                       variant="outline"
                       fullWidth
                       loading={converting}
@@ -309,7 +332,7 @@ export function QuotationDetailModal({
                 ) : null}
               </View>
             ) : (
-              <Text style={styles.meta}>Converted quotations cannot be edited.</Text>
+              <Text style={styles.meta}>{t('opsApp.shop.quotationDetail.convertedLocked')}</Text>
             )}
           </View>
         </ExpandableSheetView>

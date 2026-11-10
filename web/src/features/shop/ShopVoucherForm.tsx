@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card } from '../../components/Card';
@@ -54,11 +55,12 @@ export function ShopVoucherForm({
   title: string;
   description: string;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
   const isSale = voucherType === 'sale';
-  const partyLabel = isSale ? 'Customer' : 'Supplier';
+  const partyLabel = isSale ? t('shop.voucherForm.customer') : t('shop.voucherForm.supplier');
 
   const customers = useShopCustomers();
   const suppliers = useShopSuppliers();
@@ -150,7 +152,7 @@ export function ShopVoucherForm({
     setMessage(null);
     const validLines = lines.filter((line) => (line.product_id || line.name.trim()) && Number(line.qty) > 0);
     if (!validLines.length) {
-      setMessage('Add at least one line with a product/item and quantity.');
+      setMessage(t('shop.voucherForm.errNoLines'));
       return;
     }
     try {
@@ -189,7 +191,10 @@ export function ShopVoucherForm({
       }
       navigate(`${backTo}?created=${encodeURIComponent(voucher.voucher_number)}`);
     } catch (error) {
-      setMessage(getApiErrorMessage(error, `Couldn't save this ${voucherType}. Try again.`));
+      setMessage(getApiErrorMessage(
+          error,
+          t(isSale ? 'shop.voucherForm.errSaveSale' : 'shop.voucherForm.errSavePurchase'),
+        ));
     }
   }
 
@@ -205,7 +210,7 @@ export function ShopVoucherForm({
           navigate(`${backTo}${number ? `?created=${encodeURIComponent(number)}` : ''}`);
         }}
         target={docActions}
-        title="Sale invoice created"
+        title={t('shop.voucherForm.saleCreated')}
       />
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -214,7 +219,7 @@ export function ShopVoucherForm({
             <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>{description}</p>
           </div>
           <Button type="button" variant="ghost" onClick={() => navigate(backTo)}>
-            Back to list
+            {t('shop.voucherForm.backToList')}
           </Button>
         </div>
       </Card>
@@ -232,7 +237,9 @@ export function ShopVoucherForm({
                 }}
                 style={fieldStyle}
               >
-                <option value="">Cash {isSale ? 'sale' : 'purchase'} (no {partyLabel.toLowerCase()})</option>
+                <option value="">
+                  {isSale ? t('shop.voucherForm.cashSaleNoParty') : t('shop.voucherForm.cashPurchaseNoParty')}
+                </option>
                 {partyOptions.map((party) => (
                   <option key={party.id} value={party.id}>
                     {party.label}
@@ -241,7 +248,7 @@ export function ShopVoucherForm({
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Date</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.date')}</span>
               <input
                 type="date"
                 value={voucherDate}
@@ -250,18 +257,18 @@ export function ShopVoucherForm({
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Payment account</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.paymentAccount')}</span>
               <select value={cashAccountId} onChange={(event) => setCashAccountId(event.target.value)} style={fieldStyle}>
-                <option value="">No payment recorded now</option>
+                <option value="">{t('shop.voucherForm.noPaymentNow')}</option>
                 {(accounts.data ?? []).map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name} ({account.account_type})
+                    {account.name} ({account.account_type === 'cash' ? t('shop.cashBank.cash') : account.account_type === 'bank' ? t('shop.cashBank.bank') : account.account_type})
                   </option>
                 ))}
               </select>
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Amount paid now</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.amountPaidNow')}</span>
               <input
                 type="number"
                 min={0}
@@ -277,7 +284,7 @@ export function ShopVoucherForm({
           {isSale && partyId && loyaltyPrefs.enabled && loyaltyMaxPoints >= loyaltyPrefs.min_redeem_points ? (
             <label style={{ display: 'grid', gap: 6, maxWidth: 280 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
-                Reward points (balance {selectedSaleCustomer?.loyalty_points ?? 0})
+                {t('shop.voucherForm.rewardPoints', { balance: selectedSaleCustomer?.loyalty_points ?? 0 })}
               </span>
               <input
                 type="number"
@@ -287,11 +294,11 @@ export function ShopVoucherForm({
                 onChange={(event) =>
                   setPointsToRedeem(Math.max(0, Math.min(loyaltyMaxPoints, Number(event.target.value) || 0)))
                 }
-                placeholder={`Up to ${loyaltyMaxPoints}`}
+                placeholder={t('shop.voucherForm.pointsUpTo', { max: loyaltyMaxPoints })}
                 style={fieldStyle}
               />
               {loyaltyDiscount > 0 ? (
-                <span style={{ fontSize: 13, color: '#6b7280' }}>Saves {formatMoney(loyaltyDiscount, currency)}</span>
+                <span style={{ fontSize: 13, color: '#6b7280' }}>{t('shop.voucherForm.saves', { amount: formatMoney(loyaltyDiscount, currency) })}</span>
               ) : null}
             </label>
           ) : null}
@@ -303,14 +310,14 @@ export function ShopVoucherForm({
                 checked={isInterstate}
                 onChange={(event) => setIsInterstate(event.target.checked)}
               />
-              Interstate (IGST instead of CGST + SGST)
+              {t('shop.voucherForm.interstate')}
             </label>
             <label style={{ display: 'grid', gap: 6, flex: '1 1 220px' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Place of supply</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.placeOfSupply')}</span>
               <input
                 value={placeOfSupply}
                 onChange={(event) => setPlaceOfSupply(event.target.value)}
-                placeholder="e.g. Maharashtra"
+                placeholder={t('shop.voucherForm.placeOfSupplyPlaceholder')}
                 style={fieldStyle}
               />
             </label>
@@ -318,11 +325,11 @@ export function ShopVoucherForm({
 
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <h3 style={{ margin: 0, fontSize: 15 }}>Line items</h3>
+              <h3 style={{ margin: 0, fontSize: 15 }}>{t('shop.voucherForm.lineItems')}</h3>
               <Button type="button" variant="neutral" onClick={addLine}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Plus size={14} aria-hidden="true" />
-                  Add line
+                  {t('shop.voucherForm.addLine')}
                 </span>
               </Button>
             </div>
@@ -348,7 +355,9 @@ export function ShopVoucherForm({
                       style={fieldStyle}
                     >
                       <option value="">
-                        {line.name ? `Custom: ${line.name}` : 'Select product…'}
+                        {line.name
+                          ? t('shop.voucherForm.customLine', { name: line.name })
+                          : t('shop.voucherForm.selectProduct')}
                       </option>
                       {(products.data ?? []).map((product) => (
                         <option key={product.id} value={product.id}>
@@ -360,11 +369,11 @@ export function ShopVoucherForm({
                       <input
                         value={line.name}
                         onChange={(event) => updateLine(line.key, { name: event.target.value })}
-                        placeholder="Item name"
+                        placeholder={t('shop.voucherForm.itemName')}
                         style={{ ...fieldStyle, gridColumn: '1 / 2', marginTop: -4 }}
                       />
                     ) : (
-                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{line.hsn_sac || 'No HSN'}</span>
+                      <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>{line.hsn_sac || t('shop.voucherForm.noHsn')}</span>
                     )}
                     <input
                       type="number"
@@ -372,7 +381,7 @@ export function ShopVoucherForm({
                       step="0.001"
                       value={line.qty}
                       onChange={(event) => updateLine(line.key, { qty: event.target.value })}
-                      placeholder="Qty"
+                      placeholder={t('shop.voucherForm.qty')}
                       style={fieldStyle}
                     />
                     <input
@@ -381,7 +390,7 @@ export function ShopVoucherForm({
                       step="0.01"
                       value={line.rate}
                       onChange={(event) => updateLine(line.key, { rate: event.target.value })}
-                      placeholder="Rate"
+                      placeholder={t('shop.voucherForm.rate')}
                       style={fieldStyle}
                     />
                     <input
@@ -390,7 +399,7 @@ export function ShopVoucherForm({
                       step="0.01"
                       value={line.discount}
                       onChange={(event) => updateLine(line.key, { discount: event.target.value })}
-                      placeholder="Discount"
+                      placeholder={t('shop.voucherForm.discount')}
                       style={fieldStyle}
                     />
                     <input
@@ -399,7 +408,7 @@ export function ShopVoucherForm({
                       step="0.01"
                       value={line.gst_rate}
                       onChange={(event) => updateLine(line.key, { gst_rate: event.target.value })}
-                      placeholder="GST %"
+                      placeholder={t('shop.voucherForm.gstPercent')}
                       style={fieldStyle}
                     />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -407,7 +416,7 @@ export function ShopVoucherForm({
                       <button
                         type="button"
                         onClick={() => removeLine(line.key)}
-                        aria-label="Remove line"
+                        aria-label={t('shop.voucherForm.removeLineAria')}
                         style={{ border: 'none', background: 'transparent', color: '#b42318', cursor: 'pointer' }}
                       >
                         <Trash2 size={16} />
@@ -418,12 +427,12 @@ export function ShopVoucherForm({
               })}
             </div>
             <div style={{ fontSize: 11, color: 'var(--muted-foreground)', marginTop: 6 }}>
-              Columns: item · qty · rate · discount · GST % · line total
+              {t('shop.voucherForm.columnsHint')}
             </div>
           </div>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Notes</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.notes')}</span>
             <textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
@@ -444,13 +453,13 @@ export function ShopVoucherForm({
             }}
           >
             <span>
-              Taxable: <strong>{formatMoney(totals.taxable, currency)}</strong>
+              {t('shop.voucherForm.taxable')}: <strong>{formatMoney(totals.taxable, currency)}</strong>
             </span>
             <span>
-              GST: <strong>{formatMoney(totals.gst, currency)}</strong>
+              {t('shop.voucherForm.gst')}: <strong>{formatMoney(totals.gst, currency)}</strong>
             </span>
             <span>
-              Total: <strong>{formatMoney(totals.total, currency)}</strong>
+              {t('shop.voucherForm.total')}: <strong>{formatMoney(totals.total, currency)}</strong>
             </span>
           </div>
 
@@ -458,10 +467,12 @@ export function ShopVoucherForm({
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <Button type="submit" variant="primary" disabled={createVoucher.isPending}>
-              {createVoucher.isPending ? 'Saving…' : `Save ${voucherType}`}
+              {createVoucher.isPending
+                ? t('common.saving')
+                : t(isSale ? 'shop.voucherForm.saveSale' : 'shop.voucherForm.savePurchase')}
             </Button>
             <Button type="button" variant="neutral" onClick={() => navigate(backTo)} disabled={createVoucher.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>

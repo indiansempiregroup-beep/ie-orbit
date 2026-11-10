@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Camera, CopyPlus, Plus, Trash2 } from 'lucide-react';
@@ -34,21 +35,6 @@ import {
   type BulkProductRow,
 } from './bulkProducts';
 
-const COLUMN_LABELS: Record<BulkGridColumn, string> = {
-  name: 'Name',
-  barcode: 'Barcode',
-  sku: 'SKU',
-  brand: 'Brand',
-  pack_size: 'Pack size',
-  category: 'Category',
-  price: 'Price',
-  purchase_price: 'Cost',
-  gst_rate: 'GST %',
-  hsn_sac: 'HSN',
-  stock_on_hand: 'Stock',
-  status: 'Status',
-};
-
 const inputStyle: React.CSSProperties = {
   width: '100%',
   minWidth: 0,
@@ -63,6 +49,7 @@ function nextRowId(seed: number) {
 }
 
 export function ShopProductsAddManyPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const workspace = useWorkspace();
   const client = useApiClient();
@@ -203,7 +190,12 @@ export function ShopProductsAddManyPage() {
       });
       return next;
     });
-    snackbar.push(`Pasted ${table.length} row${table.length === 1 ? '' : 's'}.`, 'success');
+    snackbar.push(
+      table.length === 1
+        ? t('shop.addMany.toastPastedOne')
+        : t('shop.addMany.toastPastedMany', { n: table.length }),
+      'success',
+    );
   }
 
   async function importCsv(file: File) {
@@ -212,11 +204,15 @@ export function ShopProductsAddManyPage() {
       assertCsvImport(file.name, text);
       const added = appendPartials(tableToPartialRows(parseDelimitedTable(text)));
       snackbar.push(
-        added ? `Loaded ${added} row${added === 1 ? '' : 's'} from the template.` : 'No product rows found in that file.',
+        added
+          ? added === 1
+            ? t('shop.addMany.toastLoadedOne')
+            : t('shop.addMany.toastLoadedMany', { n: added })
+          : t('shop.addMany.toastNoRows'),
         added ? 'success' : 'error',
       );
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't import that file.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('shop.addMany.errImport'), 'error');
     }
   }
 
@@ -250,12 +246,12 @@ export function ShopProductsAddManyPage() {
         current.map((row) => (row.id === id ? applyEnrichmentToRow({ ...row, barcode: trimmed }, data, defaults) : row)),
       );
       if (data.found && data.name) {
-        snackbar.push(`Filled ${data.name}.`, 'success');
+        snackbar.push(t('shop.addMany.toastFilled', { name: data.name }), 'success');
       } else if (!data.found && !data.name) {
-        snackbar.push(data.message || 'No catalog match. Fill the name and save.', 'info');
+        snackbar.push(data.message || t('shop.addMany.toastNoCatalogMatch'), 'info');
       }
     } catch (error) {
-      updateRow(id, { lookingUp: false, error: error instanceof Error ? error.message : 'Lookup failed.' });
+      updateRow(id, { lookingUp: false, error: error instanceof Error ? error.message : t('shop.addMany.errLookup') });
     }
   }
 
@@ -269,7 +265,7 @@ export function ShopProductsAddManyPage() {
       return;
     }
     if (rows.some((row) => row.barcode.trim() === code)) {
-      snackbar.push('That barcode is already in the list.', 'info');
+      snackbar.push(t('shop.addMany.toastBarcodeDuplicate'), 'info');
       setScanCode('');
       return;
     }
@@ -287,7 +283,7 @@ export function ShopProductsAddManyPage() {
     const code = raw.trim();
     if (!code) return;
     if (rows.some((row) => row.barcode.trim() === code)) {
-      snackbar.push('That barcode is already in the list.', 'info');
+      snackbar.push(t('shop.addMany.toastBarcodeDuplicate'), 'info');
       setScanCode('');
       return;
     }
@@ -298,11 +294,14 @@ export function ShopProductsAddManyPage() {
         applyEnrichmentToRow(emptyBulkRow('scan', defaults), { ...data, code: data.code || code }, defaults),
       ]);
       if (added) {
-        snackbar.push(data.name ? `Added ${data.name}.` : 'Added barcode. Fill the name if needed.', 'success');
+        snackbar.push(
+          data.name ? t('shop.addMany.toastAddedNamed', { name: data.name }) : t('shop.addMany.toastAddedBarcode'),
+          'success',
+        );
       }
       setScanCode('');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : 'Lookup failed.', 'error');
+      snackbar.push(error instanceof Error ? error.message : t('shop.addMany.errLookup'), 'error');
     } finally {
       setScanning(false);
     }
@@ -313,15 +312,15 @@ export function ShopProductsAddManyPage() {
     if (incomplete.length) {
       setRows((current) =>
         current.map((row) =>
-          rowHasContent(row) && !rowIsReady(row) ? { ...row, error: 'Name is required.' } : row,
+          rowHasContent(row) && !rowIsReady(row) ? { ...row, error: t('shop.addMany.errNameRequired') } : row,
         ),
       );
-      snackbar.push('Add a name to every filled row, or clear unused cells.', 'error');
+      snackbar.push(t('shop.addMany.errNameEveryRow'), 'error');
       return;
     }
     const ready = rows.filter(rowIsReady);
     if (!ready.length) {
-      snackbar.push('Add at least one product name.', 'error');
+      snackbar.push(t('shop.addMany.errAddOne'), 'error');
       return;
     }
     setSaving(true);
@@ -350,14 +349,19 @@ export function ShopProductsAddManyPage() {
         });
       }
       if (createdCount && !errorTotal) {
-        snackbar.push(`Added ${createdCount} product${createdCount === 1 ? '' : 's'}.`, 'success');
+        snackbar.push(
+          createdCount === 1
+            ? t('shop.addMany.toastAddedProductsOne')
+            : t('shop.addMany.toastAddedProductsMany', { n: createdCount }),
+          'success',
+        );
       } else if (createdCount) {
-        snackbar.push(`Added ${createdCount}; ${errorTotal} still need a fix.`, 'info');
+        snackbar.push(t('shop.addMany.toastPartial', { created: createdCount, errors: errorTotal }), 'info');
       } else {
-        snackbar.push('Nothing was saved. Fix the row errors and try again.', 'error');
+        snackbar.push(t('shop.addMany.toastNothingSaved'), 'error');
       }
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't save these products. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('shop.addMany.errSave'), 'error');
     } finally {
       setSaving(false);
     }
@@ -365,10 +369,10 @@ export function ShopProductsAddManyPage() {
 
   const currencyOptions = ensureSelectOption(currencySelectOptions, defaults.currency);
   const defaultsSummary = [
-    defaults.gst_rate ? `GST ${defaults.gst_rate}%` : null,
-    defaults.hsn_sac ? `HSN ${defaults.hsn_sac}` : null,
+    defaults.gst_rate ? t('shop.addMany.summaryGst', { rate: defaults.gst_rate }) : null,
+    defaults.hsn_sac ? t('shop.addMany.summaryHsn', { code: defaults.hsn_sac }) : null,
     categoryOptions.find((item) => item.slug === defaults.category)?.label,
-    defaults.status,
+    defaults.status ? t(`shop.products.statuses.${defaults.status}`, { defaultValue: defaults.status }) : null,
     godowns.find((item) => item.id === defaults.godown_id)?.name,
   ]
     .filter(Boolean)
@@ -381,39 +385,39 @@ export function ShopProductsAddManyPage() {
           <div>
             <Link to="/shop/products" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'inherit', textDecoration: 'none', fontSize: 13, opacity: 0.75 }}>
               <ArrowLeft size={14} aria-hidden="true" />
-              Products
+              {t('shop.addMany.products')}
             </Link>
-            <h1 style={{ margin: '8px 0 4px' }}>Add many products</h1>
+            <h1 style={{ margin: '8px 0 4px' }}>{t('shop.addMany.title')}</h1>
             <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-              Type a name, scan a barcode, paste Excel, or import a CSV. A blank row appears as you go.
+              {t('shop.addMany.intro')}
             </p>
           </div>
           <div className="bulk-add__stats">
             <span className={`bulk-add__stat${readyRows.length ? ' is-ready' : ''}`}>
-              <strong>{readyRows.length}</strong> ready
+              <strong>{readyRows.length}</strong> {t('shop.addMany.statReady')}
             </span>
             {incompleteCount ? (
               <span className="bulk-add__stat is-warn">
-                <strong>{incompleteCount}</strong> need a name
+                <strong>{incompleteCount}</strong> {t('shop.addMany.statNeedName')}
               </span>
             ) : null}
             {errorCount ? (
               <span className="bulk-add__stat is-error">
-                <strong>{errorCount}</strong> errors
+                <strong>{errorCount}</strong> {t('shop.addMany.statErrors')}
               </span>
             ) : null}
             <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId || !readyRows.length}>
-              {readyRows.length ? `Save ${readyRows.length}` : 'Save all'}
+              {readyRows.length ? t('shop.addMany.saveCount', { n: readyRows.length }) : t('shop.addMany.saveAll')}
             </Button>
           </div>
         </div>
 
         <button type="button" className="bulk-add__defaults-toggle" onClick={() => setDefaultsOpen((open) => !open)}>
           <span>
-            Shared defaults
-            <small>{defaultsSummary || 'GST, category, status, and godown for new rows'}</small>
+            {t('shop.addMany.sharedDefaults')}
+            <small>{defaultsSummary || t('shop.addMany.sharedDefaultsHint')}</small>
           </span>
-          {defaultsOpen ? 'Hide' : 'Edit'}
+          {defaultsOpen ? t('shop.addMany.hide') : t('shop.addMany.edit')}
         </button>
         <div
           style={{
@@ -424,17 +428,17 @@ export function ShopProductsAddManyPage() {
           }}
         >
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Default GST %</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.defaultGst')}</span>
             <input value={defaults.gst_rate} onChange={(event) => patchDefaults({ gst_rate: event.target.value })} style={inputStyle} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Default HSN</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.defaultHsn')}</span>
             <input value={defaults.hsn_sac} onChange={(event) => patchDefaults({ hsn_sac: event.target.value })} style={inputStyle} />
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Default category</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.defaultCategory')}</span>
             <select value={defaults.category} onChange={(event) => patchDefaults({ category: event.target.value })} style={inputStyle}>
-              <option value="">None</option>
+              <option value="">{t('shop.addMany.none')}</option>
               {categoryOptions.map((item) => (
                 <option key={item.slug} value={item.slug}>
                   {item.label}
@@ -443,7 +447,7 @@ export function ShopProductsAddManyPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Currency</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.currency')}</span>
             <select value={defaults.currency} onChange={(event) => patchDefaults({ currency: event.target.value })} style={inputStyle}>
               {currencyOptions.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -454,9 +458,9 @@ export function ShopProductsAddManyPage() {
           </label>
           {godowns.length ? (
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>Stock godown</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.stockGodown')}</span>
               <select value={defaults.godown_id} onChange={(event) => patchDefaults({ godown_id: event.target.value })} style={inputStyle}>
-                <option value="">Default</option>
+                <option value="">{t('shop.addMany.godownDefault')}</option>
                 {godowns.map((godown) => (
                   <option key={godown.id} value={godown.id}>
                     {godown.name}
@@ -466,16 +470,16 @@ export function ShopProductsAddManyPage() {
             </label>
           ) : null}
           <label style={{ display: 'grid', gap: 4 }}>
-            <span style={{ fontSize: 12, opacity: 0.7 }}>Default status</span>
+            <span style={{ fontSize: 12, opacity: 0.7 }}>{t('shop.addMany.defaultStatus')}</span>
             <select value={defaults.status} onChange={(event) => patchDefaults({ status: event.target.value })} style={inputStyle}>
-              <option value="active">Active</option>
-              <option value="draft">Draft</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">{t('shop.products.statuses.active')}</option>
+              <option value="draft">{t('shop.products.statuses.draft')}</option>
+              <option value="inactive">{t('shop.products.statuses.inactive')}</option>
             </select>
           </label>
         </div>
         <p style={{ margin: '8px 0 0', fontSize: 12, color: '#6b7280' }}>
-          Defaults fill empty cells on new, pasted, and imported rows. Typed values are kept.
+          {t('shop.addMany.defaultsNote')}
         </p>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 16 }}>
@@ -488,12 +492,12 @@ export function ShopProductsAddManyPage() {
                 void handleScan();
               }
             }}
-            placeholder="Scan or paste a barcode, then Enter"
+            placeholder={t('shop.addMany.scanPlaceholder')}
             autoComplete="off"
             style={{ ...inputStyle, flex: '1 1 240px', padding: '10px 12px' }}
           />
           <Button type="button" variant="neutral" onClick={() => void handleScan()} loading={scanning} disabled={!scanCode.trim()}>
-            Add from barcode
+            {t('shop.addMany.addFromBarcode')}
           </Button>
           <Button
             type="button"
@@ -505,19 +509,18 @@ export function ShopProductsAddManyPage() {
           >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Camera size={16} aria-hidden="true" />
-              {cameraOpen && !cameraRowId ? 'Hide camera' : 'Camera'}
+              {cameraOpen && !cameraRowId ? t('shop.addMany.hideCamera') : t('shop.addMany.camera')}
             </span>
           </Button>
           <Button type="button" variant="neutral" onClick={() => fileRef.current?.click()}>
-            Import CSV
+            {t('shop.addMany.importCsv')}
           </Button>
           <Button type="button" variant="ghost" onClick={() => downloadCsvTemplate()}>
-            Download template
+            {t('shop.addMany.downloadTemplate')}
           </Button>
         </div>
         <p style={{ margin: '8px 0 0', fontSize: 12, opacity: 0.7 }}>
-          Template columns match this grid. Fill in Excel, then File → Save As → CSV UTF-8 before importing.
-          Workbooks (.xlsx) are not imported.
+          {t('shop.addMany.templateNote')}
         </p>
         {cameraOpen && !cameraRowId ? (
           <div style={{ marginTop: 12 }}>
@@ -545,7 +548,7 @@ export function ShopProductsAddManyPage() {
 
       {cameraOpen && cameraRowId ? (
         <Card>
-          <p style={{ margin: '0 0 8px', fontSize: 14 }}>Scan a barcode into this row.</p>
+          <p style={{ margin: '0 0 8px', fontSize: 14 }}>{t('shop.addMany.scanIntoRow')}</p>
           <BarcodeCameraPanel
             active
             onClose={() => {
@@ -567,11 +570,11 @@ export function ShopProductsAddManyPage() {
                 <th style={{ padding: '10px 8px', fontSize: 12, fontWeight: 600, color: '#6b7280', width: 36 }}>#</th>
                 {BULK_GRID_COLUMNS.map((column) => (
                   <th key={column} style={{ padding: '10px 8px', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>
-                    {COLUMN_LABELS[column]}
+                    {t(`shop.addMany.columns.${column}`)}
                     {column === 'name' ? ' *' : ''}
                   </th>
                 ))}
-                <th style={{ padding: '10px 8px', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Row</th>
+                <th style={{ padding: '10px 8px', fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{t('shop.addMany.rowColumn')}</th>
                 <th style={{ padding: '10px 8px', width: 88 }} />
               </tr>
             </thead>
@@ -606,7 +609,7 @@ export function ShopProductsAddManyPage() {
                           value={row.category}
                           onChange={(event) => updateRow(row.id, { category: event.target.value })}
                           style={inputStyle}
-                          aria-label="Category"
+                          aria-label={t('shop.addMany.categoryAria')}
                         >
                           <option value="">—</option>
                           {categoryOptions.map((item) => (
@@ -624,12 +627,12 @@ export function ShopProductsAddManyPage() {
                           value={row.status}
                           onChange={(event) => updateRow(row.id, { status: event.target.value })}
                           style={inputStyle}
-                          aria-label="Status"
+                          aria-label={t('shop.addMany.columns.status')}
                         >
-                          <option value="active">Active</option>
-                          <option value="draft">Draft</option>
-                          <option value="inactive">Inactive</option>
-                          <option value="archived">Archived</option>
+                          <option value="active">{t('shop.products.statuses.active')}</option>
+                          <option value="draft">{t('shop.products.statuses.draft')}</option>
+                          <option value="inactive">{t('shop.products.statuses.inactive')}</option>
+                          <option value="archived">{t('shop.products.statuses.archived')}</option>
                         </select>
                       ) : column === 'barcode' ? (
                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -644,7 +647,7 @@ export function ShopProductsAddManyPage() {
                               }
                             }}
                             style={inputStyle}
-                            aria-label="Barcode"
+                            aria-label={t('shop.addMany.barcodeAria')}
                           />
                           <Button
                             type="button"
@@ -653,7 +656,7 @@ export function ShopProductsAddManyPage() {
                               setCameraRowId(row.id);
                               setCameraOpen(true);
                             }}
-                            aria-label="Scan barcode with camera"
+                            aria-label={t('shop.addMany.scanBarcodeCameraAria')}
                             style={{ padding: '8px', minWidth: 36 }}
                           >
                             <Camera size={16} aria-hidden="true" />
@@ -665,7 +668,7 @@ export function ShopProductsAddManyPage() {
                             disabled={!row.barcode.trim() || row.lookingUp}
                             style={{ padding: '8px 8px', whiteSpace: 'nowrap' }}
                           >
-                            {row.lookingUp ? '…' : 'Lookup'}
+                            {row.lookingUp ? '…' : t('shop.addMany.lookup')}
                           </Button>
                         </div>
                       ) : (
@@ -674,7 +677,7 @@ export function ShopProductsAddManyPage() {
                           value={row[column]}
                           onChange={(event) => updateRow(row.id, { [column]: event.target.value })}
                           style={inputStyle}
-                          aria-label={COLUMN_LABELS[column]}
+                          aria-label={t(`shop.addMany.columns.${column}`)}
                         />
                       )}
                     </td>
@@ -685,7 +688,12 @@ export function ShopProductsAddManyPage() {
                         row.error ? ' is-error' : rowIsReady(row) ? ' is-ready' : rowHasContent(row) ? ' is-warn' : ''
                       }`}
                     >
-                      {row.error || (rowIsReady(row) ? 'Ready' : rowHasContent(row) ? 'Needs name' : 'Empty')}
+                      {row.error ||
+                        (rowIsReady(row)
+                          ? t('shop.addMany.rowReady')
+                          : rowHasContent(row)
+                            ? t('shop.addMany.rowNeedsName')
+                            : t('shop.addMany.rowEmpty'))}
                     </span>
                   </td>
                   <td style={{ padding: '4px 6px' }}>
@@ -693,7 +701,7 @@ export function ShopProductsAddManyPage() {
                       <button
                         type="button"
                         onClick={() => duplicateRow(row.id)}
-                        aria-label="Duplicate row"
+                        aria-label={t('shop.addMany.duplicateRowAria')}
                         style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#6b7280' }}
                       >
                         <CopyPlus size={16} />
@@ -701,7 +709,7 @@ export function ShopProductsAddManyPage() {
                       <button
                         type="button"
                         onClick={() => removeRow(row.id)}
-                        aria-label="Delete row"
+                        aria-label={t('shop.addMany.deleteRowAria')}
                         style={{ border: 0, background: 'transparent', cursor: 'pointer', color: '#6b7280' }}
                       >
                         <Trash2 size={16} />
@@ -731,17 +739,21 @@ export function ShopProductsAddManyPage() {
             <Button type="button" variant="neutral" onClick={addEmptyRow}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Plus size={16} aria-hidden="true" />
-                Add row
+                {t('shop.addMany.addRow')}
               </span>
             </Button>
             <span style={{ fontSize: 13, color: '#6b7280' }}>
-              {readyRows.length} ready
-              {incompleteCount ? ` · ${incompleteCount} need a name` : ''}
-              {errorCount ? ` · ${errorCount} errors` : ''}
+              {t('shop.addMany.footerReady', { n: readyRows.length })}
+              {incompleteCount ? ` · ${t('shop.addMany.footerNeedName', { n: incompleteCount })}` : ''}
+              {errorCount ? ` · ${t('shop.addMany.footerErrors', { n: errorCount })}` : ''}
             </span>
           </div>
           <Button type="button" variant="primary" onClick={() => void handleSave()} loading={saving} disabled={!workspace.businessId || !readyRows.length}>
-            {readyRows.length ? `Save ${readyRows.length} product${readyRows.length === 1 ? '' : 's'}` : 'Save all'}
+            {readyRows.length
+              ? readyRows.length === 1
+                ? t('shop.addMany.saveProductsOne')
+                : t('shop.addMany.saveProductsMany', { n: readyRows.length })
+              : t('shop.addMany.saveAll')}
           </Button>
         </div>
       </Card>

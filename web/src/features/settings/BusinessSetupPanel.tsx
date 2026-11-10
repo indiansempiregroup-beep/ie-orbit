@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { BriefcaseBusiness, CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { PRODUCT_CATALOG } from '../../config/products';
@@ -12,6 +13,7 @@ type BusinessSetupPanelProps = {
 };
 
 export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
+  const { t } = useTranslation();
   const createBusiness = useCreateBusiness();
   const snackbar = useSnackbar();
   const [businessName, setBusinessName] = useState('');
@@ -27,7 +29,7 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
 
   async function handleCreateBusiness() {
     if (!isReady) {
-      snackbar.push('Enter both the business name and display name before continuing.', 'warning');
+      snackbar.push(t('settings.businessSetup.bothRequired'), 'warning');
       return;
     }
 
@@ -42,9 +44,9 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
       });
       setBusinessName('');
       setDisplayName('');
-      snackbar.push('Business and product are set up.', 'success');
+      snackbar.push(t('settings.businessSetup.created'), 'success');
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't save business details. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('settings.businessEdit.saveFailed'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -58,24 +60,24 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
             <BriefcaseBusiness size={20} />
           </div>
           <div>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>Business setup</p>
-            <h2 style={{ margin: '4px 0 0', fontSize: 20 }}>Add your first business and product</h2>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>{t('settings.businessSetup.kicker')}</p>
+            <h2 style={{ margin: '4px 0 0', fontSize: 20 }}>{t('settings.businessSetup.title')}</h2>
           </div>
         </div>
 
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            <span style={{ color: '#6b7280', fontSize: 13 }}>Business name</span>
-            <input value={businessName} onChange={(event) => { const value = event.target.value; setBusinessName(value); if (!displayName) setDisplayName(value); }} placeholder="Empire Salon" style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
+            <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessMgmt.businessName')}</span>
+            <input value={businessName} onChange={(event) => { const value = event.target.value; setBusinessName(value); if (!displayName) setDisplayName(value); }} placeholder={t('settings.businessSetup.namePlaceholder')} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            <span style={{ color: '#6b7280', fontSize: 13 }}>Display name</span>
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Empire Salon" style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
+            <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessEdit.displayName')}</span>
+            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t('settings.businessSetup.namePlaceholder')} style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#f8fafc' }} />
           </label>
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <span style={{ color: '#6b7280', fontSize: 13 }}>Select product for this business</span>
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{t('settings.businessSetup.selectProduct')}</span>
           {PRODUCT_CATALOG.map((product) => {
             const isActive = selectedProduct === product.id;
             return (
@@ -84,7 +86,7 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
                   <strong>{product.name}</strong>
                   {isActive ? <CheckCircle2 size={18} color="#1a56db" /> : <ChevronRight size={18} color="#94a3b8" />}
                 </div>
-                <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>{product.description}</p>
+                <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 13 }}>{t(`settings.businessSetup.productDesc.${product.id}`, { defaultValue: product.description })}</p>
               </button>
             );
           })}
@@ -92,12 +94,12 @@ export function BusinessSetupPanel({ show = true }: BusinessSetupPanelProps) {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Button variant="primary" onClick={handleCreateBusiness} disabled={!isReady || isSaving}>
-            {isSaving ? 'Saving…' : 'Create business'}
+            {isSaving ? t('common.saving') : t('settings.businessMgmt.create')}
           </Button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#6b7280', fontSize: 13 }}>
           <Sparkles size={16} color="#10b981" />
-          <span>Each business keeps its own product selection for future pricing.</span>
+          <span>{t('settings.businessSetup.footnote')}</span>
         </div>
       </div>
     </Card>

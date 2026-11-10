@@ -10,6 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImageManipulator from 'expo-image-manipulator';
 import type { ImagePickerAsset } from 'expo-image-picker';
@@ -111,6 +112,7 @@ export function ProductImageCropModal({
   onConfirm,
   canRemoveBackground = false,
 }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
   const [stageSize, setStageSize] = useState({ w: screenW, h: 320 });
@@ -251,7 +253,7 @@ export function ProductImageCropModal({
         { removeBackground: canRemoveBackground && removeBackground },
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't crop the photo. Try again.");
+      setError(err instanceof Error ? err.message : t('opsApp.shop.imageCrop.cropFailed'));
     } finally {
       setBusy(false);
     }
@@ -272,11 +274,25 @@ export function ProductImageCropModal({
     >
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
         <View style={styles.header}>
-          <Pressable onPress={onCancel} hitSlop={12} disabled={busy} style={styles.headerBtn}>
+          <Pressable
+            onPress={onCancel}
+            hitSlop={12}
+            disabled={busy}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close')}
+          >
             <Feather name="x" size={22} color="#fff" />
           </Pressable>
-          <Text style={styles.headerTitle}>Adjust edges</Text>
-          <Pressable onPress={() => void handleUse()} hitSlop={12} disabled={busy} style={styles.headerBtn}>
+          <Text style={styles.headerTitle}>{t('shop.imageCrop.title')}</Text>
+          <Pressable
+            onPress={() => void handleUse()}
+            hitSlop={12}
+            disabled={busy}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('shop.imageCrop.use')}
+          >
             {busy ? <ActivityIndicator color="#fff" /> : <Feather name="check" size={22} color="#fff" />}
           </Pressable>
         </View>
@@ -349,7 +365,7 @@ export function ProductImageCropModal({
 
         <View style={styles.footer}>
           <Text style={styles.footerHint}>
-            Pull any white corner to resize. Drag inside to move.
+            {t('opsApp.shop.imageCrop.hint')}
           </Text>
           {canRemoveBackground ? (
             <Pressable
@@ -362,13 +378,13 @@ export function ProductImageCropModal({
                 size={20}
                 color={removeBackground ? colors.primary : '#94a3b8'}
               />
-              <Text style={styles.toggleLabel}>Remove background</Text>
+              <Text style={styles.toggleLabel}>{t('shop.imageCrop.removeBackground')}</Text>
             </Pressable>
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.footerActions}>
             <Pressable style={styles.footerBtn} onPress={onCancel} disabled={busy}>
-              <Text style={styles.footerBtnText}>Cancel</Text>
+              <Text style={styles.footerBtnText}>{t('common.cancel')}</Text>
             </Pressable>
             <Pressable
               style={[styles.footerBtn, styles.footerBtnPrimary]}
@@ -376,7 +392,7 @@ export function ProductImageCropModal({
               disabled={busy}
             >
               <Text style={[styles.footerBtnText, styles.footerBtnPrimaryText]}>
-                {busy ? 'Cropping…' : 'Use crop'}
+                {busy ? t('opsApp.shop.imageCrop.cropping') : t('shop.imageCrop.use')}
               </Text>
             </Pressable>
           </View>

@@ -1,12 +1,23 @@
+import type { TFunction } from 'i18next';
+
 export function requiredMessage(label: string): string {
   return `${label} is required`;
 }
 
-export function indianMobileError(value: string, required = false): string | null {
+export function indianMobileError(
+  value: string,
+  required = false,
+  t?: TFunction,
+): string | null {
   const compact = value.replace(/[\s-]/g, '');
-  if (!compact) return required ? 'Phone number is required' : null;
+  if (!compact) {
+    if (!required) return null;
+    return t ? t('customerApp.validation.phoneRequired') : 'Phone number is required';
+  }
   if (!/^(\+91)?[6-9]\d{9}$/.test(compact)) {
-    return 'Enter a valid 10-digit Indian mobile number';
+    return t
+      ? t('customerApp.validation.phoneInvalid')
+      : 'Enter a valid 10-digit Indian mobile number';
   }
   return null;
 }

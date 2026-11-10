@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 
 type Props = {
@@ -18,6 +19,7 @@ declare global {
 }
 
 export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastCodeRef = useRef('');
@@ -32,7 +34,7 @@ export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
     async function start() {
       setError(null);
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError('Camera is not available in this browser.');
+        setError(t('shop.barcodeCamera.unavailable'));
         return;
       }
       try {
@@ -45,7 +47,7 @@ export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
         await videoRef.current.play();
 
         if (!window.BarcodeDetector) {
-          setError('Live decode needs BarcodeDetector (Chrome/Edge). Use the scan field or HID wedge.');
+          setError(t('shop.barcodeCamera.needsDetector'));
           return;
         }
         const detector = new window.BarcodeDetector({
@@ -73,7 +75,7 @@ export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
           void tick();
         });
       } catch {
-        setError('Unable to access camera. Check browser permissions.');
+        setError(t('shop.barcodeCamera.accessFailed'));
       }
     }
 
@@ -83,7 +85,7 @@ export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
       if (raf) window.cancelAnimationFrame(raf);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [active, onCode]);
+  }, [active, onCode, t]);
 
   if (!active) return null;
 
@@ -95,9 +97,9 @@ export function BarcodeCameraPanel({ onCode, active, onClose }: Props) {
         playsInline
         style={{ width: '100%', maxHeight: 280, background: '#111', borderRadius: 8 }}
       />
-      {error ? <p role="status">{error}</p> : <p>Point the camera at a barcode.</p>}
+      {error ? <p role="status">{error}</p> : <p>{t('shop.barcodeCamera.pointHint')}</p>}
       <Button type="button" onClick={onClose}>
-        Close camera
+        {t('shop.barcodeCamera.close')}
       </Button>
     </div>
   );

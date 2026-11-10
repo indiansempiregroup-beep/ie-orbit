@@ -287,10 +287,10 @@ export function ShopOrdersScreen() {
               const fulfillmentLabel =
                 String(item.fulfillment_mode).toLowerCase() === 'delivery'
                   ? deliveryMethod === 'instant'
-                    ? 'Deliver now'
-                    : 'Delivery'
+                    ? t('shop.orders.deliverNow', { defaultValue: 'Deliver now' })
+                    : t('shop.orders.modes.delivery', { defaultValue: 'Delivery' })
                   : formatShopOrderFulfillment(item.fulfillment_mode);
-              const returnWindow = orderReturnWindow(item);
+              const returnWindow = orderReturnWindow(item, t);
               return (
                 <Pressable
                   key={item.id}

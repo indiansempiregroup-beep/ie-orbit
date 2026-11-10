@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -44,16 +45,19 @@ import {
   voucherAmount,
   voucherPartyLabel,
 } from './shopBooksHelpers';
+import type { TFunction } from 'i18next';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { getApiErrorMessage } from '../../utils/format';
 
 type NoteKind = 'credit_note' | 'debit_note';
 
-function noteSettlementLabel(voucher: ShopBooksVoucher, kind: NoteKind): string {
-  if (isVoidedVoucher(voucher.status)) return 'Void';
+function noteSettlementLabel(voucher: ShopBooksVoucher, kind: NoteKind, t: TFunction): string {
+  if (isVoidedVoucher(voucher.status)) return t('opsApp.shop.notes.voided');
   const paid = voucherAmount(voucher.amount_paid);
-  if (paid > 0.009) return kind === 'credit_note' ? 'Refunded' : 'Received';
-  return 'Adjusted';
+  if (paid > 0.009) {
+    return kind === 'credit_note' ? t('opsApp.shop.notes.refunded') : t('opsApp.shop.notes.received');
+  }
+  return t('opsApp.shop.notes.adjusted');
 }
 
 function noteSettlementKind(
@@ -76,6 +80,7 @@ function NoteDetailModal({
   onClose: () => void;
   onVoid: (voucher: ShopBooksVoucher) => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
     0.88,
@@ -101,7 +106,7 @@ function NoteDetailModal({
         const res = await client.shop.getVoucher(voucher.id);
         if (!cancelled && res.data) setLocalVoucher(res.data);
       } catch (err) {
-        if (!cancelled) toast.push(getApiErrorMessage(err, 'Unable to load note'), 'error');
+        if (!cancelled) toast.push(getApiErrorMessage(err, t('opsApp.shop.notes.loadNoteFailed')), 'error');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -109,13 +114,13 @@ function NoteDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, voucher?.id, client, toast]);
+  }, [visible, voucher?.id, client, toast, t]);
 
   if (!voucher || !localVoucher) return null;
 
   const voided = isVoidedVoucher(localVoucher.status);
   const settledCash = voucherAmount(localVoucher.amount_paid) > 0.009;
-  const settlement = noteSettlementLabel(localVoucher, noteKind);
+  const settlement = noteSettlementLabel(localVoucher, noteKind, t);
   const lines = Array.isArray(localVoucher.line_items) ? localVoucher.line_items : [];
   const meta =
     localVoucher.metadata && typeof localVoucher.metadata === 'object' ? localVoucher.metadata : {};
@@ -133,7 +138,7 @@ function NoteDetailModal({
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={isCredit ? 'Credit note' : 'Debit note'}
+        title={isCredit ? t('opsApp.shop.notes.creditNote') : t('opsApp.shop.notes.debitNote')}
       />
       <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
         <View style={detailStyles.backdrop}>
@@ -155,7 +160,7 @@ function NoteDetailModal({
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text style={detailStyles.heroKicker}>
                     {[
-                      isCredit ? 'Credit note' : 'Debit note',
+                      isCredit ? t('opsApp.shop.notes.creditNote') : t('opsApp.shop.notes.debitNote'),
                       formatVoucherDateTime(localVoucher.voucher_date, localVoucher.created_at),
                       voucherPartyLabel(localVoucher),
                     ]
@@ -165,7 +170,7 @@ function NoteDetailModal({
                   <Text style={detailStyles.heroAmount}>{formatMoney(localVoucher.total)}</Text>
                   <Text style={detailStyles.heroNumber}>{localVoucher.voucher_number}</Text>
                 </View>
-                <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+                <Pressable style={detailStyles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel={t('opsApp.shop.common.close')}>
                   <Feather name="x" size={18} color={colors.primaryForeground} />
                 </Pressable>
               </View>
@@ -222,17 +227,19 @@ function NoteDetailModal({
               ) : null}
               {!isCredit ? (
                 <Text style={detailStyles.meta}>
-                  Supplier: {localVoucher.supplier_name?.trim() || voucherPartyLabel(localVoucher)}
+                  {t('opsApp.shop.notes.supplierLine', {
+                    name: localVoucher.supplier_name?.trim() || voucherPartyLabel(localVoucher),
+                  })}
                 </Text>
               ) : null}
 
-              <Text style={detailStyles.section}>Line items</Text>
+              <Text style={detailStyles.section}>{t('opsApp.shop.notes.lineItems')}</Text>
               {lines.length === 0 ? (
-                <Text style={detailStyles.meta}>No line items on this note.</Text>
+                <Text style={detailStyles.meta}>{t('opsApp.shop.notes.noLineItems')}</Text>
               ) : (
                 lines.map((raw, index) => {
                   const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                  const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                  const name = String(line.name || line.product_name || t('opsApp.shop.notes.itemN', { n: index + 1 }));
                   const qty = Number(line.qty ?? line.quantity ?? 0);
                   const rate = Number(line.rate ?? line.unit_price ?? 0);
                   const gst = Number(line.gst_rate ?? line.tax_rate ?? 0);
@@ -244,7 +251,9 @@ function NoteDetailModal({
                         <Text style={detailStyles.lineName}>{name}</Text>
                         <Text style={detailStyles.meta}>
                           {qty} × {formatMoney(rate)}
-                          {gst ? ` · GST ${gst}%${inclusive ? ' incl.' : ''}` : ''}
+                          {gst
+                            ? t(inclusive ? 'opsApp.shop.notes.gstLineIncl' : 'opsApp.shop.notes.gstLine', { rate: gst })
+                            : ''}
                         </Text>
                       </View>
                       <Text style={detailStyles.lineTotal}>{formatMoney(lineTotal)}</Text>
@@ -255,46 +264,46 @@ function NoteDetailModal({
 
               <View style={detailStyles.totals}>
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.meta}>Subtotal</Text>
+                  <Text style={detailStyles.meta}>{t('shop.vouchers.summary.subtotal')}</Text>
                   <Text style={detailStyles.meta}>{formatMoney(localVoucher.subtotal)}</Text>
                 </View>
                 {voucherAmount(localVoucher.discount_total) > 0 ? (
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>Discount</Text>
+                    <Text style={detailStyles.meta}>{t('shop.vouchers.summary.discount')}</Text>
                     <Text style={detailStyles.meta}>-{formatMoney(localVoucher.discount_total)}</Text>
                   </View>
                 ) : null}
                 {voucherAmount(localVoucher.igst_total) > 0 ? (
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>IGST</Text>
+                    <Text style={detailStyles.meta}>{t('shop.vouchers.summary.igst')}</Text>
                     <Text style={detailStyles.meta}>{formatMoney(localVoucher.igst_total)}</Text>
                   </View>
                 ) : voucherAmount(localVoucher.cgst_total) > 0 ||
                   voucherAmount(localVoucher.sgst_total) > 0 ? (
                   <>
                     <View style={detailStyles.totalRow}>
-                      <Text style={detailStyles.meta}>CGST</Text>
+                      <Text style={detailStyles.meta}>{t('shop.vouchers.summary.cgst')}</Text>
                       <Text style={detailStyles.meta}>{formatMoney(localVoucher.cgst_total)}</Text>
                     </View>
                     <View style={detailStyles.totalRow}>
-                      <Text style={detailStyles.meta}>SGST</Text>
+                      <Text style={detailStyles.meta}>{t('shop.vouchers.summary.sgst')}</Text>
                       <Text style={detailStyles.meta}>{formatMoney(localVoucher.sgst_total)}</Text>
                     </View>
                   </>
                 ) : (
                   <View style={detailStyles.totalRow}>
-                    <Text style={detailStyles.meta}>GST</Text>
+                    <Text style={detailStyles.meta}>{t('opsApp.shop.notes.gst')}</Text>
                     <Text style={detailStyles.meta}>{formatMoney(localVoucher.tax_total)}</Text>
                   </View>
                 )}
                 <View style={detailStyles.totalRow}>
-                  <Text style={detailStyles.payableLabel}>Note total</Text>
+                  <Text style={detailStyles.payableLabel}>{t('opsApp.shop.notes.noteTotal')}</Text>
                   <Text style={detailStyles.payableValue}>{formatMoney(localVoucher.total)}</Text>
                 </View>
                 {settledCash ? (
                   <View style={detailStyles.totalRow}>
                     <Text style={detailStyles.meta}>
-                      {isCredit ? 'Cash refunded' : 'Cash received'}
+                      {isCredit ? t('opsApp.shop.notes.cashRefunded') : t('opsApp.shop.notes.cashReceived')}
                       {localVoucher.cash_account_name ? ` · ${localVoucher.cash_account_name}` : ''}
                     </Text>
                     <Text style={detailStyles.meta}>{formatMoney(localVoucher.amount_paid)}</Text>
@@ -302,7 +311,7 @@ function NoteDetailModal({
                 ) : (
                   <View style={detailStyles.totalRow}>
                     <Text style={detailStyles.meta}>
-                      {isCredit ? 'Adjusted against receivable' : 'Adjusted against payable'}
+                      {isCredit ? t('opsApp.shop.notes.adjustedReceivable') : t('opsApp.shop.notes.adjustedPayable')}
                     </Text>
                     <Text style={detailStyles.meta}>{formatMoney(localVoucher.total)}</Text>
                   </View>
@@ -311,7 +320,7 @@ function NoteDetailModal({
 
               {localVoucher.notes ? (
                 <>
-                  <Text style={detailStyles.section}>Reason</Text>
+                  <Text style={detailStyles.section}>{t('opsApp.shop.notes.reason')}</Text>
                   <Text style={detailStyles.meta}>{localVoucher.notes}</Text>
                 </>
               ) : null}
@@ -320,7 +329,7 @@ function NoteDetailModal({
             <View style={detailStyles.footer}>
               {businessId && !voided ? (
                 <Button
-                  label="View / Print / Share"
+                  label={t('opsApp.shop.notes.viewPrintShare')}
                   variant="secondary"
                   fullWidth
                   onPress={() =>
@@ -337,13 +346,13 @@ function NoteDetailModal({
               ) : null}
               {!voided ? (
                 <Button
-                  label={isCredit ? 'Void credit note' : 'Void debit note'}
+                  label={isCredit ? t('opsApp.shop.notes.voidCreditNote') : t('opsApp.shop.notes.voidDebitNote')}
                   variant="destructive"
                   fullWidth
                   onPress={() => onVoid(localVoucher)}
                 />
               ) : null}
-              <Button label="Close" variant="outline" fullWidth onPress={onClose} />
+              <Button label={t('opsApp.shop.common.close')} variant="outline" fullWidth onPress={onClose} />
             </View>
           </ExpandableSheetView>
         </View>
@@ -353,6 +362,7 @@ function NoteDetailModal({
 }
 
 export function ShopBooksNotesScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -372,7 +382,11 @@ export function ShopBooksNotesScreen() {
         <Pressable
           onPress={() => navigation.navigate('ShopPos', { mode: noteKind })}
           accessibilityRole="button"
-          accessibilityLabel={noteKind === 'credit_note' ? 'New credit note' : 'New debit note'}
+          accessibilityLabel={
+            noteKind === 'credit_note'
+              ? t('opsApp.shop.notes.newCreditNote')
+              : t('opsApp.shop.notes.newDebitNote')
+          }
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -380,7 +394,7 @@ export function ShopBooksNotesScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, noteKind]);
+  }, [navigation, noteKind, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -390,11 +404,11 @@ export function ShopBooksNotesScreen() {
       const vouchersRes = await client.shop.listVouchers({ business_id: businessId, type: noteKind });
       setVouchers(vouchersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load notes');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.notes.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, noteKind]);
+  }, [businessId, client, noteKind, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -427,33 +441,38 @@ export function ShopBooksNotesScreen() {
       if (paid > 0.009) cash += amount;
       else adjusted += amount;
     }
-    const cashLabel = noteKind === 'credit_note' ? 'Refunded' : 'Cash';
+    const cashLabel =
+      noteKind === 'credit_note' ? t('opsApp.shop.notes.refunded') : t('opsApp.shop.notes.cash');
     return [
-      { label: 'Total', value: formatMoney(total), hint: String(count) },
-      { label: 'Adjusted', value: formatMoney(adjusted) },
+      { label: t('opsApp.shop.documents.total'), value: formatMoney(total), hint: String(count) },
+      { label: t('opsApp.shop.notes.adjusted'), value: formatMoney(adjusted) },
       { label: cashLabel, value: formatMoney(cash), tone: 'paid' as const },
     ];
-  }, [filtered, noteKind]);
+  }, [filtered, noteKind, t]);
 
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
-    Alert.alert('Void note', `Void ${voucher.voucher_number}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(
+      t('opsApp.shop.notes.voidTitle'),
+      t('opsApp.shop.notes.voidConfirm', { number: voucher.voucher_number }),
+      [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Void',
+        text: t('opsApp.shop.notes.void'),
         style: 'destructive',
         onPress: async () => {
           try {
             await client.shop.voidVoucher(voucher.id);
-            toast.push('Note voided', 'success');
+            toast.push(t('opsApp.shop.notes.noteVoided'), 'success');
             setSelected(null);
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : "Couldn't void this note. Try again.", 'error');
+            toast.push(err instanceof Error ? err.message : t('opsApp.shop.notes.voidFailed'), 'error');
           }
         },
       },
-    ]);
+      ],
+    );
   }
 
   return (
@@ -468,7 +487,7 @@ export function ShopBooksNotesScreen() {
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <View style={styles.chipRow}>
           <Chip
-            label="Credit note"
+            label={t('opsApp.shop.notes.creditNote')}
             active={noteKind === 'credit_note'}
             onPress={() => {
               setNoteKind('credit_note');
@@ -476,7 +495,7 @@ export function ShopBooksNotesScreen() {
             }}
           />
           <Chip
-            label="Debit note"
+            label={t('opsApp.shop.notes.debitNote')}
             active={noteKind === 'debit_note'}
             onPress={() => {
               setNoteKind('debit_note');
@@ -485,7 +504,7 @@ export function ShopBooksNotesScreen() {
           />
         </View>
         <VoucherSummaryCards metrics={summaryMetrics} />
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search notes" style={styles.search} />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('opsApp.shop.notes.searchPlaceholder')} style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
@@ -496,14 +515,14 @@ export function ShopBooksNotesScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
             const voided = isVoidedVoucher(item.status);
-            const settlement = noteSettlementLabel(item, noteKind);
+            const settlement = noteSettlementLabel(item, noteKind, t);
             return (
               <BooksDocumentRow
                 title={
                   voucherPartyLabel(item) === '—'
                     ? noteKind === 'credit_note'
-                      ? 'Customer'
-                      : 'Supplier'
+                      ? t('opsApp.shop.common.customer')
+                      : t('opsApp.shop.common.supplier')
                     : voucherPartyLabel(item)
                 }
                 amount={formatMoney(item.total)}
@@ -514,7 +533,7 @@ export function ShopBooksNotesScreen() {
                 iconTone={voided ? 'rose' : noteKind === 'credit_note' ? 'coral' : 'violet'}
                 dimmed={voided}
                 onPress={() => setSelected(item)}
-                actionLabel={!voided ? 'Void' : undefined}
+                actionLabel={!voided ? t('opsApp.shop.notes.void') : undefined}
                 onAction={!voided ? () => void onVoid(item) : undefined}
               />
             );
@@ -525,17 +544,21 @@ export function ShopBooksNotesScreen() {
                 icon="file-minus"
                 title={
                   search
-                    ? 'No matching notes'
+                    ? t('opsApp.shop.notes.noMatching')
                     : noteKind === 'credit_note'
-                      ? 'No credit notes yet'
-                      : 'No debit notes yet'
+                      ? t('opsApp.shop.notes.noCreditYet')
+                      : t('opsApp.shop.notes.noDebitYet')
                 }
                 message={
                   noteKind === 'credit_note'
-                    ? 'Issue credit notes against customer sales for returns or adjustments.'
-                    : 'Issue debit notes against supplier purchases for returns or adjustments.'
+                    ? t('opsApp.shop.notes.creditEmpty')
+                    : t('opsApp.shop.notes.debitEmpty')
                 }
-                actionLabel={noteKind === 'credit_note' ? 'New credit note' : 'New debit note'}
+                actionLabel={
+                  noteKind === 'credit_note'
+                    ? t('opsApp.shop.notes.newCreditNote')
+                    : t('opsApp.shop.notes.newDebitNote')
+                }
                 onAction={() => navigation.navigate('ShopPos', { mode: noteKind })}
               />
             ) : null

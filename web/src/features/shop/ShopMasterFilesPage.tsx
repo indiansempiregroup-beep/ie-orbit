@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,20 +26,17 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 
 type KindMeta = {
   kind: ShopMasterKind;
-  title: string;
-  blurb: string;
   icon: LucideIcon;
-  placeholder: string;
 };
 
 const KINDS: KindMeta[] = [
-  { kind: 'category', title: 'Product categories', blurb: 'Used on products and store filters', icon: Grid3X3, placeholder: 'e.g. Pet food' },
-  { kind: 'brand', title: 'Brands', blurb: 'Reusable brand names on products', icon: Tag, placeholder: 'e.g. Pedigree' },
-  { kind: 'unit', title: 'Units', blurb: 'Pcs, kg, litre, and more', icon: Package, placeholder: 'e.g. Bundle' },
-  { kind: 'expense_category', title: 'Expense categories', blurb: 'Books expense entries', icon: TrendingDown, placeholder: 'e.g. Packaging' },
-  { kind: 'income_category', title: 'Income categories', blurb: 'Other income entries', icon: TrendingUp, placeholder: 'e.g. Commission' },
-  { kind: 'tax_rate', title: 'Tax rates', blurb: 'GST % presets for products', icon: Percent, placeholder: 'e.g. GST 18%' },
-  { kind: 'pet_species', title: 'Pet species', blurb: 'Dog, Cat, and custom species', icon: Heart, placeholder: 'e.g. Hamster' },
+  { kind: 'category', icon: Grid3X3 },
+  { kind: 'brand', icon: Tag },
+  { kind: 'unit', icon: Package },
+  { kind: 'expense_category', icon: TrendingDown },
+  { kind: 'income_category', icon: TrendingUp },
+  { kind: 'tax_rate', icon: Percent },
+  { kind: 'pet_species', icon: Heart },
 ];
 
 const fieldStyle: React.CSSProperties = {
@@ -53,12 +51,13 @@ const fieldStyle: React.CSSProperties = {
 type FilterKey = 'all' | 'active' | 'inactive';
 
 export function ShopMasterFilesPage() {
+  const { t } = useTranslation();
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <div>
-        <h1 style={{ margin: 0 }}>Master Files</h1>
+        <h1 style={{ margin: 0 }}>{t('shop.masterFiles.title')}</h1>
         <p style={{ margin: '8px 0 0', color: '#6b7280', maxWidth: 560, lineHeight: 1.5 }}>
-          Reusable lists for products and books — add once, pick everywhere.
+          {t('shop.masterFiles.subtitle')}
         </p>
       </div>
 
@@ -84,8 +83,8 @@ export function ShopMasterFilesPage() {
                     <Icon size={18} />
                   </div>
                   <div>
-                    <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{item.title}</h3>
-                    <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.45 }}>{item.blurb}</p>
+                    <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{t(`shop.masterFiles.kinds.${item.kind}.title`)}</h3>
+                    <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.45 }}>{t(`shop.masterFiles.kinds.${item.kind}.blurb`)}</p>
                   </div>
                 </div>
               </Card>
@@ -95,12 +94,12 @@ export function ShopMasterFilesPage() {
       </div>
 
       <Card>
-        <h3 style={{ marginTop: 0, marginBottom: 12 }}>Also in your shop</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 12 }}>{t('shop.masterFiles.alsoInShop')}</h3>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { to: '/shop/godowns', label: 'Godowns' },
-            { to: '/shop/books/cash', label: 'Cash & bank' },
-            { to: '/shop/books/parties', label: 'Parties' },
+            { to: '/shop/godowns', label: t('nav.shopGodowns') },
+            { to: '/shop/books/cash', label: t('nav.shopCashBank') },
+            { to: '/shop/books/parties', label: t('nav.shopParties') },
           ].map((item) => (
             <Link
               key={item.to}
@@ -125,15 +124,17 @@ export function ShopMasterFilesPage() {
 }
 
 export function ShopMasterKindPage() {
+  const { t } = useTranslation();
   const { kind = 'category' } = useParams<{ kind: string }>();
-  const meta = KINDS.find((item) => item.kind === kind) || {
-    kind: kind as ShopMasterKind,
-    title: kind,
-    blurb: 'Reusable shop values',
-    icon: Package,
-    placeholder: 'New value',
+  const knownKind = KINDS.find((item) => item.kind === kind);
+  const meta = {
+    title: knownKind ? t(`shop.masterFiles.kinds.${kind}.title`) : kind,
+    blurb: knownKind ? t(`shop.masterFiles.kinds.${kind}.blurb`) : t('shop.masterFiles.fallbackBlurb'),
+    placeholder: knownKind
+      ? t(`shop.masterFiles.kinds.${kind}.placeholder`)
+      : t('shop.masterFiles.fallbackPlaceholder'),
   };
-  const Icon = meta.icon;
+  const Icon = knownKind?.icon ?? Package;
   const client = useApiClient();
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
@@ -170,13 +171,13 @@ export function ShopMasterKindPage() {
       setValue('');
       setFilter('all');
       setSearch('');
-      snackbar.push('Entry added.', 'success');
+      snackbar.push(t('shop.masterFiles.toastAdded'), 'success');
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
       if (kind === 'category') {
         await queryClient.invalidateQueries({ queryKey: ['shop-product-categories', businessId] });
       }
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, t('shop.masterFiles.errSave')), 'error'),
   });
 
   const patchMutation = useMutation({
@@ -185,9 +186,9 @@ export function ShopMasterKindPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
-      snackbar.push('Entry updated.', 'success');
+      snackbar.push(t('shop.masterFiles.toastUpdated'), 'success');
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, t('shop.masterFiles.errSave')), 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -196,9 +197,9 @@ export function ShopMasterKindPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['shop-master', kind, businessId] });
-      snackbar.push('Entry removed.', 'success');
+      snackbar.push(t('shop.masterFiles.toastRemoved'), 'success');
     },
-    onError: (error) => snackbar.push(getApiErrorMessage(error, "Couldn't save this entry. Try again."), 'error'),
+    onError: (error) => snackbar.push(getApiErrorMessage(error, t('shop.masterFiles.errSave')), 'error'),
   });
 
   const rows = useMemo(() => listQuery.data ?? [], [listQuery.data]);
@@ -224,9 +225,9 @@ export function ShopMasterKindPage() {
   }, [filter, rows, search]);
 
   const filters: Array<{ key: FilterKey; label: string; count: number }> = [
-    { key: 'all', label: 'All', count: counts.total },
-    { key: 'active', label: 'Active', count: counts.active },
-    { key: 'inactive', label: 'Hidden', count: counts.inactive },
+    { key: 'all', label: t('shop.masterFiles.filterAll'), count: counts.total },
+    { key: 'active', label: t('common.active'), count: counts.active },
+    { key: 'inactive', label: t('shop.masterFiles.filterHidden'), count: counts.inactive },
   ];
 
   return (
@@ -244,7 +245,7 @@ export function ShopMasterKindPage() {
             gap: 6,
           }}
         >
-          <ArrowLeft size={16} /> Master Files
+          <ArrowLeft size={16} /> {t('shop.masterFiles.title')}
         </Link>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 10 }}>
           <div
@@ -268,9 +269,9 @@ export function ShopMasterKindPage() {
       </div>
 
       <Card>
-        <h3 style={{ marginTop: 0, marginBottom: 4 }}>Add new</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 4 }}>{t('shop.masterFiles.addNew')}</h3>
         <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: 13 }}>
-          Saved values appear in product and books pickers.
+          {t('shop.masterFiles.addNewHint')}
         </p>
         <div
           style={{
@@ -282,7 +283,7 @@ export function ShopMasterKindPage() {
         >
           <label style={{ display: 'grid', gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>
-              {kind === 'tax_rate' ? 'Label' : 'Name'}
+              {kind === 'tax_rate' ? t('shop.masterFiles.label') : t('shop.masterFiles.name')}
             </span>
             <input
               value={label}
@@ -298,7 +299,7 @@ export function ShopMasterKindPage() {
           </label>
           {kind === 'tax_rate' ? (
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Rate %</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{t('shop.masterFiles.ratePercent')}</span>
               <input
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
@@ -312,14 +313,17 @@ export function ShopMasterKindPage() {
             onClick={() => createMutation.mutate()}
             disabled={!label.trim() || createMutation.isPending}
           >
-            {createMutation.isPending ? 'Adding…' : 'Add'}
+            {createMutation.isPending ? t('shop.masterFiles.adding') : t('shop.masterFiles.add')}
           </Button>
         </div>
       </Card>
 
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>Values{counts.total ? ` · ${counts.total}` : ''}</h3>
+          <h3 style={{ margin: 0 }}>
+            {t('shop.masterFiles.values')}
+            {counts.total ? ` · ${counts.total}` : ''}
+          </h3>
         </div>
 
         {rows.length > 0 ? (
@@ -327,7 +331,7 @@ export function ShopMasterKindPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by name"
+              placeholder={t('shop.masterFiles.filterByName')}
               style={fieldStyle}
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -358,12 +362,12 @@ export function ShopMasterKindPage() {
           </div>
         ) : null}
 
-        {listQuery.isLoading ? <p style={{ color: '#6b7280' }}>Loading…</p> : null}
+        {listQuery.isLoading ? <p style={{ color: '#6b7280' }}>{t('common.loading')}</p> : null}
         {!listQuery.isLoading && !rows.length ? (
-          <p style={{ color: '#6b7280', margin: 0 }}>Nothing here yet. Add your first value above.</p>
+          <p style={{ color: '#6b7280', margin: 0 }}>{t('shop.masterFiles.emptyNone')}</p>
         ) : null}
         {!listQuery.isLoading && rows.length > 0 && !visible.length ? (
-          <p style={{ color: '#6b7280', margin: 0 }}>No matches for this search or filter.</p>
+          <p style={{ color: '#6b7280', margin: 0 }}>{t('shop.masterFiles.emptyFiltered')}</p>
         ) : null}
 
         <div style={{ display: 'grid', gap: 0 }}>
@@ -401,8 +405,8 @@ export function ShopMasterKindPage() {
                     {kind === 'tax_rate' && row.value
                       ? `${row.value}%`
                       : row.is_active
-                        ? 'Active'
-                        : 'Hidden from pickers'}
+                        ? t('common.active')
+                        : t('shop.masterFiles.hiddenFromPickers')}
                   </div>
                 </div>
               </div>
@@ -412,24 +416,24 @@ export function ShopMasterKindPage() {
                   variant="neutral"
                   onClick={() => patchMutation.mutate(row)}
                   disabled={patchMutation.isPending}
-                  title={row.is_active ? 'Hide from pickers' : 'Show in pickers'}
+                  title={row.is_active ? t('shop.masterFiles.hideFromPickers') : t('shop.masterFiles.showInPickers')}
                 >
                   {row.is_active ? <EyeOff size={15} /> : <Eye size={15} />}
-                  <span style={{ marginLeft: 6 }}>{row.is_active ? 'Hide' : 'Show'}</span>
+                  <span style={{ marginLeft: 6 }}>{row.is_active ? t('shop.masterFiles.hide') : t('shop.masterFiles.show')}</span>
                 </Button>
                 <Button
                   type="button"
                   variant="neutral"
                   onClick={() => {
-                    if (window.confirm(`Delete “${row.label}”? You can add it again later.`)) {
+                    if (window.confirm(t('shop.masterFiles.confirmDelete', { label: row.label }))) {
                       deleteMutation.mutate(row);
                     }
                   }}
                   disabled={deleteMutation.isPending}
-                  title="Delete"
+                  title={t('shop.masterFiles.delete')}
                 >
                   <Trash2 size={15} />
-                  <span style={{ marginLeft: 6 }}>Delete</span>
+                  <span style={{ marginLeft: 6 }}>{t('shop.masterFiles.delete')}</span>
                 </Button>
               </div>
             </div>

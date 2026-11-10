@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { ShopVoucherList } from './ShopVoucherList';
 
 export function ShopPurchaseListPage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const canScan = useMemo(() => {
@@ -18,10 +20,10 @@ export function ShopPurchaseListPage() {
     <ShopVoucherList
       voucherType="purchase"
       newPath="/shop/books/purchase/new"
-      title="New purchase"
-      emptyLabel="No purchases recorded yet. Add your first supplier bill."
+      title={t('shop.vouchers.newPurchase')}
+      emptyLabel={t('shop.vouchers.emptyPurchase')}
       scanPath={canScan ? '/shop/books/purchase/scan' : undefined}
-      scanLabel="Scan invoice"
+      scanLabel={t('shop.vouchers.scanInvoice')}
     />
   );
 }

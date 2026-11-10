@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -26,7 +27,7 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
 import type { Customer, ShopLoan } from '@ie-orbit/sdk';
-import { customerLabel, formatMoney, formatVoucherDate, formatVoucherDateTime, todayIso } from './shopBooksHelpers';
+import { customerLabel, formatMoney, formatVoucherDate, formatVoucherDateTime, statusText, todayIso } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { BooksDocumentRow } from './BooksDocumentRow';
@@ -34,6 +35,7 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { SearchBar } from '../../components/SearchBar';
 
 export function ShopBooksLoansScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -75,7 +77,7 @@ export function ShopBooksLoansScreen() {
         <Pressable
           onPress={() => (showForm ? closeForm() : setShowForm(true))}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'New loan'}
+          accessibilityLabel={showForm ? t('opsApp.shop.common.close') : t('opsApp.shop.loans.newLoan')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -83,7 +85,7 @@ export function ShopBooksLoansScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm]);
+  }, [navigation, showForm, closeForm, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -97,11 +99,11 @@ export function ShopBooksLoansScreen() {
       setLoans(loansRes.data ?? []);
       setCustomers(customersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load loans');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.loans.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -135,16 +137,16 @@ export function ShopBooksLoansScreen() {
 
   const customerOptions = useMemo(
     () => [
-      { value: '', label: 'No customer' },
+      { value: '', label: t('opsApp.shop.common.noCustomer') },
       ...customers.map((c) => ({ value: c.id, label: customerLabel(c) })),
     ],
-    [customers],
+    [customers, t],
   );
 
   async function submit() {
     if (!client || !businessId) return;
     if (!title.trim() || !(Number(principal) > 0)) {
-      toast.push('Enter title and principal amount', 'error');
+      toast.push(t('opsApp.shop.loans.enterTitlePrincipal'), 'error');
       return;
     }
     setBusy(true);
@@ -159,11 +161,11 @@ export function ShopBooksLoansScreen() {
         start_date: startDate || todayIso(),
         notes: notes.trim() || undefined,
       });
-      toast.push('Loan created', 'success');
+      toast.push(t('opsApp.shop.loans.created'), 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't create this loan. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.loans.createFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -172,7 +174,7 @@ export function ShopBooksLoansScreen() {
   async function onRepay(loan: ShopLoan) {
     if (!client) return;
     if (!(Number(repayAmount) > 0)) {
-      toast.push('Enter repayment amount', 'error');
+      toast.push(t('opsApp.shop.loans.enterRepayment'), 'error');
       return;
     }
     setRepayingId(loan.id);
@@ -181,13 +183,13 @@ export function ShopBooksLoansScreen() {
         amount: repayAmount,
         notes: repayNotes.trim() || undefined,
       });
-      toast.push('Repayment recorded', 'success');
+      toast.push(t('opsApp.shop.loans.repaymentRecorded'), 'success');
       setRepayAmount('');
       setRepayNotes('');
       setExpandedId(null);
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't record this repayment. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.loans.repayFailed'), 'error');
     } finally {
       setRepayingId(null);
     }
@@ -198,7 +200,7 @@ export function ShopBooksLoansScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : 'Create loan'}
+            label={busy ? t('common.saving') : t('opsApp.shop.loans.createLoan')}
             loading={busy}
             fullWidth
             size="lg"
@@ -206,9 +208,9 @@ export function ShopBooksLoansScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>New loan</Text>
+        <Text style={styles.formTitle}>{t('opsApp.shop.loans.newLoan')}</Text>
         <SelectField
-          label="Customer"
+          label={t('opsApp.shop.common.customer')}
           required
           value={customerId}
           options={customerOptions}
@@ -216,34 +218,34 @@ export function ShopBooksLoansScreen() {
           searchable
         />
         <Input
-          label="Title"
+          label={t('opsApp.shop.common.title')}
           required
           value={title}
           onChangeText={setTitle}
-          placeholder="e.g. Working capital"
+          placeholder={t('opsApp.shop.loans.titlePlaceholder')}
         />
         <Input
-          label="Principal"
+          label={t('opsApp.shop.loans.principal')}
           required
           value={principal}
           onChangeText={(value) => setPrincipal(value.replace(/[^0-9.]/g, ''))}
           keyboardType="decimal-pad"
         />
         <Input
-          label="Interest rate %"
+          label={t('opsApp.shop.loans.interestRate')}
           optional
           value={interestRate}
           onChangeText={(value) => setInterestRate(value.replace(/[^0-9.]/g, ''))}
           keyboardType="decimal-pad"
-          placeholder="Optional"
+          placeholder={t('opsApp.shop.common.optional')}
         />
-        <DateField label="Start date" required value={startDate} onChange={setStartDate} allowClear={false} />
+        <DateField label={t('opsApp.shop.loans.startDate')} required value={startDate} onChange={setStartDate} allowClear={false} />
         <Input
-          label="Notes"
+          label={t('opsApp.shop.common.notes')}
           optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes"
+          placeholder={t('opsApp.shop.common.notes')}
           multiline
         />
       </FormScreen>
@@ -255,12 +257,12 @@ export function ShopBooksLoansScreen() {
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <VoucherSummaryCards
           metrics={[
-            { label: 'Outstanding', value: formatMoney(loanSummary.outstanding), tone: 'due' },
-            { label: 'Open', value: String(loanSummary.open) },
-            { label: 'Loans', value: String(loanSummary.count) },
+            { label: t('opsApp.shop.loans.outstanding'), value: formatMoney(loanSummary.outstanding), tone: 'due' },
+            { label: t('opsApp.shop.loans.open'), value: String(loanSummary.open) },
+            { label: t('opsApp.shop.loans.loans'), value: String(loanSummary.count) },
           ]}
         />
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search loans" style={styles.search} />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('opsApp.shop.loans.search')} style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
@@ -271,19 +273,19 @@ export function ShopBooksLoansScreen() {
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl, flexGrow: 1 }}
           renderItem={({ item }) => {
             const expanded = expandedId === item.id;
-            const party = item.customer_name || 'Customer loan';
+            const party = item.customer_name || t('opsApp.shop.loans.customerLoan');
             const balance = Number(item.balance ?? 0);
             return (
               <BooksDocumentRow
                 title={item.title}
                 amount={formatMoney(item.balance)}
                 amountTone={balance > 0.009 ? 'due' : 'paid'}
-                meta={`${party} · Principal ${formatMoney(item.principal)}${item.start_date ? ` · ${formatVoucherDate(item.start_date)}` : item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}`}
-                badge={item.status}
+                meta={`${party} · ${t('opsApp.shop.loans.principalMeta', { amount: formatMoney(item.principal) })}${item.start_date ? ` · ${formatVoucherDate(item.start_date)}` : item.created_at ? ` · ${formatVoucherDateTime(item.created_at, item.created_at)}` : ''}`}
+                badge={statusText(item.status, t)}
                 badgeKind={balance > 0.009 ? 'due' : 'paid'}
                 icon="percent"
                 iconTone={balance > 0.009 ? 'amber' : 'green'}
-                actionLabel={balance > 0.009 ? (expanded ? 'Hide' : 'Repay') : undefined}
+                actionLabel={balance > 0.009 ? (expanded ? t('opsApp.shop.common.hide') : t('opsApp.shop.common.repay')) : undefined}
                 onAction={
                   balance > 0.009
                     ? () => {
@@ -300,7 +302,7 @@ export function ShopBooksLoansScreen() {
                       style={styles.input}
                       value={repayAmount}
                       onChangeText={(value) => setRepayAmount(value.replace(/[^0-9.]/g, ''))}
-                      placeholder="Repayment amount"
+                      placeholder={t('opsApp.shop.loans.repaymentAmount')}
                       keyboardType="decimal-pad"
                       placeholderTextColor={colors.mutedForeground}
                     />
@@ -308,11 +310,11 @@ export function ShopBooksLoansScreen() {
                       style={styles.input}
                       value={repayNotes}
                       onChangeText={setRepayNotes}
-                      placeholder="Notes (optional)"
+                      placeholder={t('opsApp.shop.loans.notesOptional')}
                       placeholderTextColor={colors.mutedForeground}
                     />
                     <Button
-                      label={repayingId === item.id ? 'Saving…' : 'Record repayment'}
+                      label={repayingId === item.id ? t('common.saving') : t('opsApp.shop.loans.recordRepayment')}
                       loading={repayingId === item.id}
                       fullWidth
                       onPress={() => void onRepay(item)}
@@ -326,9 +328,9 @@ export function ShopBooksLoansScreen() {
             !loading ? (
               <EmptyState
                 icon="percent"
-                title="No loans yet"
-                message="Track customer loans and record repayments against the outstanding balance."
-                actionLabel="New loan"
+                title={t('opsApp.shop.loans.emptyTitle')}
+                message={t('opsApp.shop.loans.emptyMessage')}
+                actionLabel={t('opsApp.shop.loans.newLoan')}
                 onAction={() => setShowForm(true)}
               />
             ) : null

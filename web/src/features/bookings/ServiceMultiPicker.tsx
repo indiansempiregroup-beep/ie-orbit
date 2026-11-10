@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Service } from '@ie-orbit/sdk';
 import {
   compactServiceSummary,
@@ -22,6 +23,7 @@ const controlStyle: React.CSSProperties = {
 };
 
 export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }: Props) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const labelFor = nameFor ?? ((service) => service.name ?? service.id);
@@ -49,7 +51,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
   }, [services, selectedIds, search, labelFor]);
 
   const totalDuration = servicesTotalDurationMinutes(selectedServices);
-  const summaryLine = compactServiceSummary(selectedServices, labelFor);
+  const summaryLine = compactServiceSummary(selectedServices, labelFor, t);
 
   function addService(serviceId: string) {
     if (selectedIds.includes(serviceId)) return;
@@ -74,7 +76,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <strong>Visit summary</strong>
+                <strong>{t('bookings.servicePicker.visitSummary')}</strong>
                 <span
                   style={{
                     minWidth: 22,
@@ -99,13 +101,17 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button type="button" onClick={clearAll} style={{ border: 'none', background: 'none', color: '#10b981', cursor: 'pointer', fontWeight: 600 }}>
-                Clear
+                {t('common.clear')}
               </button>
               <button
                 type="button"
                 onClick={() => setSummaryExpanded((value) => !value)}
                 style={{ ...controlStyle, width: 32, height: 32, padding: 0, cursor: 'pointer' }}
-                aria-label={summaryExpanded ? 'Collapse visit summary' : 'Expand visit summary'}
+                aria-label={
+                  summaryExpanded
+                    ? t('bookings.servicePicker.collapse')
+                    : t('bookings.servicePicker.expand')
+                }
               >
                 {summaryExpanded ? '▴' : '▾'}
               </button>
@@ -146,14 +152,14 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
                       {labelFor(service)}
                     </div>
                     <div style={{ color: '#6b7280', fontSize: 12 }}>
-                      {serviceDurationMinutes(service)} min
+                      {t('bookings.servicePicker.minutes', { minutes: serviceDurationMinutes(service) })}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => removeService(service.id)}
                     style={{ border: 'none', background: 'none', color: '#6b7280', cursor: 'pointer' }}
-                    aria-label={`Remove ${labelFor(service)}`}
+                    aria-label={t('bookings.servicePicker.removeAria', { name: labelFor(service) })}
                   >
                     ×
                   </button>
@@ -163,28 +169,34 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
           ) : null}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '1px solid #e5e7eb', color: '#6b7280', fontSize: 13 }}>
-            <span>{totalDuration} min total</span>
+            <span>{t('bookings.servicePicker.totalMinutes', { minutes: totalDuration })}</span>
           </div>
         </div>
       ) : (
         <div style={{ border: '1px dashed #d1d5db', borderRadius: 14, padding: 14, color: '#6b7280', fontSize: 14 }}>
-          Choose services below to build the visit.
+          {t('bookings.servicePicker.chooseBelow')}
         </div>
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
         <span style={{ color: '#6b7280', fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-          {selectedServices.length > 0 ? 'Add another service' : 'Choose services'}
+          {selectedServices.length > 0
+            ? t('bookings.servicePicker.addAnother')
+            : t('bookings.servicePicker.chooseServices')}
         </span>
         {selectedServices.length > 0 ? (
-          <span style={{ color: '#6b7280', fontSize: 12 }}>{browseServices.length} available</span>
+          <span style={{ color: '#6b7280', fontSize: 12 }}>{t('bookings.servicePicker.available', { count: browseServices.length })}</span>
         ) : null}
       </div>
 
       <input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder={selectedServices.length > 0 ? 'Search available services…' : 'Search services…'}
+        placeholder={
+          selectedServices.length > 0
+            ? t('bookings.servicePicker.searchAvailable')
+            : t('bookings.servicePicker.searchServices')
+        }
         style={controlStyle}
       />
 
@@ -192,10 +204,10 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
         {browseServices.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>
             {search
-              ? 'No services match your search.'
+              ? t('bookings.servicePicker.noMatch')
               : selectedServices.length > 0
-                ? 'All services added.'
-                : 'No services available.'}
+                ? t('bookings.servicePicker.allAdded')
+                : t('bookings.servicePicker.noneAvailable')}
           </div>
         ) : (
           browseServices.map((service) => (
@@ -216,7 +228,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
               <span>
                 <strong>{labelFor(service)}</strong>
                 <span style={{ display: 'block', color: '#6b7280', fontSize: 13, marginTop: 2 }}>
-                  {serviceDurationMinutes(service)} min
+                  {t('bookings.servicePicker.minutes', { minutes: serviceDurationMinutes(service) })}
                 </span>
               </span>
               <span style={{ color: '#10b981', fontWeight: 700 }}>+</span>
@@ -227,7 +239,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
 
       {selectedServices.length > 1 ? (
         <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-          Services run in the order you add them ({totalDuration} min combined).
+          {t('bookings.servicePicker.runOrder', { minutes: totalDuration })}
         </p>
       ) : null}
     </div>

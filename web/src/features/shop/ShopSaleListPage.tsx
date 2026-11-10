@@ -1,14 +1,16 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ShopVoucherList } from './ShopVoucherList';
 
 export function ShopSaleListPage() {
+  const { t } = useTranslation();
   return (
     <ShopVoucherList
       voucherType="sale"
       source="pos"
       newPath="/shop/books/sale/new"
-      title="New sale"
-      emptyLabel="No POS sales recorded yet. Open the Sale counter to bill a customer."
+      title={t('shop.vouchers.newSale')}
+      emptyLabel={t('shop.vouchers.emptySale')}
     />
   );
 }

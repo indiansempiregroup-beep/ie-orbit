@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -25,12 +26,13 @@ import { useBootstrap, useBusinessContext } from '../../contexts/BootstrapContex
 import { useToast } from '../../contexts/ToastContext';
 import { colors, radius, spacing, typography } from '../../theme/tokens';
 import { indianMobileError } from '../../utils/formValidation';
-import { ADDRESS_TYPES, toCoordinate, type AddressTypeKey } from './addressUtils';
+import { ADDRESS_TYPES, addressTypeLabel, toCoordinate, type AddressTypeKey } from './addressUtils';
 import type { RootStackParamList } from '../../navigation/types';
 
 type AddressFormRoute = RouteProp<RootStackParamList, 'AddressForm'>;
 
 export function AddressFormScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<AddressFormRoute>();
   const { branding } = useBootstrap();
@@ -70,7 +72,7 @@ export function AddressFormScreen() {
       });
       const found = res.data.find((item) => item.id === addressId);
       if (!found) {
-        setError('This address is no longer available.');
+        setError(t('customerApp.addresses.form.notAvailable'));
         return;
       }
       setLine1(found.line1 || '');
@@ -87,11 +89,11 @@ export function AddressFormScreen() {
       setIsDefault(Boolean(found.is_default));
       setWasDefault(Boolean(found.is_default));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load this address.');
+      setError(err instanceof Error ? err.message : t('customerApp.addresses.form.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [addressId, businessCode, tenantSlug, user?.phone_number]);
+  }, [addressId, businessCode, tenantSlug, user?.phone_number, t]);
 
   useEffect(() => {
     void loadExisting();
@@ -99,14 +101,14 @@ export function AddressFormScreen() {
 
   async function save() {
     if (!line1.trim()) {
-      setLineError('Search for your address or drop a pin on the map.');
+      setLineError(t('customerApp.addresses.form.searchOrPin'));
       return;
     }
     const nextErrors: Record<string, string> = {};
-    if (!line2.trim()) nextErrors.line2 = 'Flat, floor or landmark is required';
-    if (!city.trim()) nextErrors.city = 'City is required';
-    if (!country.trim()) nextErrors.country = 'Country is required';
-    const phoneError = indianMobileError(phone, true);
+    if (!line2.trim()) nextErrors.line2 = t('customerApp.addresses.form.errLine2');
+    if (!city.trim()) nextErrors.city = t('customerApp.addresses.form.errCity');
+    if (!country.trim()) nextErrors.country = t('customerApp.addresses.form.errCountry');
+    const phoneError = indianMobileError(phone, true, t);
     if (phoneError) nextErrors.phone = phoneError;
     if (Object.keys(nextErrors).length) {
       setDetailErrors(nextErrors);
@@ -140,14 +142,17 @@ export function AddressFormScreen() {
             business_code: businessCode,
             ...payload,
           });
-      toast.push(editing ? 'Address details saved.' : 'Address saved.', 'success');
+      toast.push(
+        editing ? t('customerApp.addresses.form.detailsSaved') : t('customerApp.addresses.form.saved'),
+        'success',
+      );
       if (selectOnSave && saved.data?.id) {
         navigation.navigate('Cart', { selectedAddressId: saved.data.id });
         return;
       }
       navigation.goBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save this address. Try again.");
+      setError(err instanceof Error ? err.message : t('customerApp.addresses.form.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -156,7 +161,7 @@ export function AddressFormScreen() {
   if (loading) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Edit address" onBack={() => navigation.goBack()} />
+        <ScreenHeader title={t('customerApp.addresses.form.editTitle')} onBack={() => navigation.goBack()} />
         <View style={styles.loader}>
           <ActivityIndicator color={primary} />
         </View>
@@ -170,7 +175,10 @@ export function AddressFormScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
     >
-      <ScreenHeader title={editing ? 'Edit address' : 'Add a new address'} onBack={() => navigation.goBack()} />
+      <ScreenHeader
+        title={editing ? t('customerApp.addresses.form.editTitle') : t('customerApp.addresses.addNew')}
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.xxxl, gap: spacing.lg }}
@@ -180,8 +188,8 @@ export function AddressFormScreen() {
         <Card style={styles.section}>
           <SectionHead
             icon="map"
-            title="Pin your location"
-            subtitle="Search an address or move the pin — we fill the rest in for you."
+            title={t('customerApp.addresses.form.pinTitle')}
+            subtitle={t('customerApp.addresses.form.pinSubtitle')}
             primaryColor={primary}
           />
           <AddressLocationPicker
@@ -216,12 +224,12 @@ export function AddressFormScreen() {
         </Card>
 
         <Card style={styles.section}>
-          <SectionHead icon="home" title="Address details" primaryColor={primary} />
+          <SectionHead icon="home" title={t('customerApp.addresses.form.detailsTitle')} primaryColor={primary} />
           <Input
-            label="Flat, floor or landmark"
+            label={t('customerApp.addresses.form.line2Label')}
             required
-            hint="Helps the delivery partner reach your door."
-            placeholder="Flat 302, B wing, near City Mall"
+            hint={t('customerApp.addresses.form.line2Hint')}
+            placeholder={t('customerApp.addresses.form.line2Placeholder')}
             value={line2}
             onChangeText={(value) => {
               setLine2(value);
@@ -230,9 +238,9 @@ export function AddressFormScreen() {
             error={detailErrors.line2}
           />
           <Input
-            label="Phone number"
+            label={t('customerApp.addresses.form.phoneLabel')}
             required
-            hint="Delivery partner will call this number for this address."
+            hint={t('customerApp.addresses.form.phoneHint')}
             placeholder="9876543210"
             value={phone}
             onChangeText={(value) => {
@@ -247,9 +255,9 @@ export function AddressFormScreen() {
           <View style={styles.row}>
             <View style={styles.rowItem}>
               <Input
-                label="City"
+                label={t('customerApp.addresses.form.city')}
                 required
-                placeholder="City"
+                placeholder={t('customerApp.addresses.form.city')}
                 value={city}
                 onChangeText={(value) => {
                   setCity(value);
@@ -260,13 +268,13 @@ export function AddressFormScreen() {
               />
             </View>
             <View style={styles.rowItem}>
-              <Input label="State" placeholder="State" value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
+              <Input label={t('customerApp.addresses.form.state')} placeholder={t('customerApp.addresses.form.state')} value={state} onChangeText={setState} editable={!(latitude != null && longitude != null)} />
             </View>
           </View>
           <View style={styles.row}>
             <View style={styles.rowItem}>
               <Input
-                label="Pincode"
+                label={t('customerApp.addresses.form.pincode')}
                 placeholder="400001"
                 value={postalCode}
                 onChangeText={setPostalCode}
@@ -276,9 +284,9 @@ export function AddressFormScreen() {
             </View>
             <View style={styles.rowItem}>
               <Input
-                label="Country"
+                label={t('customerApp.addresses.form.country')}
                 required
-                placeholder="Country"
+                placeholder={t('customerApp.addresses.form.country')}
                 value={country}
                 onChangeText={(value) => {
                   setCountry(value);
@@ -292,7 +300,7 @@ export function AddressFormScreen() {
         </Card>
 
         <Card style={styles.section}>
-          <SectionHead icon="tag" title="Save this address as" primaryColor={primary} />
+          <SectionHead icon="tag" title={t('customerApp.addresses.form.saveAs')} primaryColor={primary} />
           <View style={styles.typeRow}>
             {ADDRESS_TYPES.map((item) => {
               const active = item.key === addressType;
@@ -308,18 +316,18 @@ export function AddressFormScreen() {
                   accessibilityState={{ selected: active }}
                 >
                   <Feather name={item.icon} size={14} color={active ? primary : colors.mutedForeground} />
-                  <Text style={[styles.typeChipText, active ? { color: primary } : null]}>{item.label}</Text>
+                  <Text style={[styles.typeChipText, active ? { color: primary } : null]}>{addressTypeLabel(item.key, t)}</Text>
                 </Pressable>
               );
             })}
           </View>
           <View style={styles.defaultRow}>
             <View style={styles.defaultCopy}>
-              <Text style={styles.defaultTitle}>Make this my default address</Text>
+              <Text style={styles.defaultTitle}>{t('customerApp.addresses.form.makeDefault')}</Text>
               <Text style={styles.defaultSubtitle}>
                 {wasDefault
-                  ? 'This is already your default address.'
-                  : 'It will be pre-selected at checkout.'}
+                  ? t('customerApp.addresses.form.alreadyDefault')
+                  : t('customerApp.addresses.form.preselected')}
               </Text>
             </View>
             <Switch
@@ -335,7 +343,7 @@ export function AddressFormScreen() {
 
       <StickyFooter>
         <Button
-          label={editing ? 'Save changes' : 'Save address'}
+          label={editing ? t('common.saveChanges') : t('customerApp.addresses.form.saveAddress')}
           icon="check"
           size="lg"
           fullWidth

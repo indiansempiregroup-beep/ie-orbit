@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ShopProduct, ShopProductReview } from '@ie-orbit/sdk';
@@ -21,13 +22,14 @@ import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { useCart } from './CartContext';
 import { QtyStepper } from './QtyStepper';
 import { StarRating } from './StarRating';
-import { formatShopMoney, isOutOfStock, shopCategoryKey, shopCategoryLabel, stockLabel } from './shopHelpers';
+import { formatShopMoney, isOutOfStock, shopCategoryKey, shopCategoryLabel } from './shopHelpers';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopProductDetail'>;
 type ReviewSort = 'recent' | 'top';
 
 export function ShopProductDetailScreen({ route, navigation }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { branding } = useBootstrap();
@@ -66,7 +68,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
         setComment(response.data.my_review.comment || '');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Not found');
+      setError(err instanceof Error ? err.message : t('customerApp.productDetail.notFound'));
     }
   }, [businessCode, route.params.productId, tenantSlug]);
 
@@ -91,7 +93,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   }, [businessCode, tenantSlug]);
 
   const cartBtn = (
-    <Pressable onPress={() => navigation.navigate('Cart')} hitSlop={8} accessibilityLabel="Cart">
+    <Pressable onPress={() => navigation.navigate('Cart')} hitSlop={8} accessibilityLabel={t('customerApp.cart.title')}>
       <Feather name="shopping-cart" size={20} color={colors.foreground} />
       {itemCount > 0 ? (
         <View style={styles.headerBadge}>
@@ -104,7 +106,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   if (!product && !error) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Product" onBack={() => navigation.goBack()} right={cartBtn} />
+        <ScreenHeader title={t('customerApp.productDetail.title')} onBack={() => navigation.goBack()} right={cartBtn} />
         <ActivityIndicator color={primary} style={{ marginTop: spacing.xl }} />
       </View>
     );
@@ -113,7 +115,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   if (!product) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Product" onBack={() => navigation.goBack()} right={cartBtn} />
+        <ScreenHeader title={t('customerApp.productDetail.title')} onBack={() => navigation.goBack()} right={cartBtn} />
         <Text style={[styles.error, { padding: spacing.lg }]}>{error}</Text>
       </View>
     );
@@ -122,19 +124,27 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
   const outOfStock = isOutOfStock(product);
   const inCart = quantityFor(product.id);
   const imageUri = resolveMediaUrl(product.image_url);
-  const stock = stockLabel(product);
+  const stockQty = product.stock_on_hand != null ? Number(product.stock_on_hand) : null;
+  const stock =
+    stockQty == null
+      ? ''
+      : !Number.isFinite(stockQty) || stockQty <= 0
+        ? t('customerApp.productDetail.outOfStock')
+        : stockQty <= 5
+          ? t('customerApp.productDetail.onlyLeft', { n: stockQty })
+          : t('customerApp.productDetail.inStock');
   const maxQty = product.stock_on_hand != null ? Math.max(1, Number(product.stock_on_hand)) : undefined;
   const reviews = product.reviews ?? [];
   const ratingCount = product.rating_count ?? reviews.length;
   const ratingAvg = product.rating_avg ?? 0;
   const breakdown = product.rating_breakdown ?? {};
   const facts = [
-    product.brand ? { label: 'Brand', value: product.brand } : null,
+    product.brand ? { label: t('customerApp.productDetail.brand'), value: product.brand } : null,
     shopCategoryKey(product.category)
-      ? { label: 'Category', value: shopCategoryLabel(product.category, product.category_label) }
+      ? { label: t('customerApp.productDetail.category'), value: shopCategoryLabel(product.category, product.category_label) }
       : null,
-    product.pack_size ? { label: 'Pack size', value: product.pack_size } : null,
-    product.sku ? { label: 'SKU', value: product.sku } : null,
+    product.pack_size ? { label: t('customerApp.productDetail.packSize'), value: product.pack_size } : null,
+    product.sku ? { label: t('customerApp.productDetail.sku'), value: product.sku } : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>;
   const visibleReviews = reviews
     .filter((item) => item.id !== product.my_review?.id)
@@ -163,9 +173,9 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
       if (update) await mobileClient.mobile.updateShopProductReview(product.id, body);
       else await mobileClient.mobile.createShopProductReview(product.id, body);
       await load();
-      toast.push(update ? 'Review updated.' : 'Thanks — your review is in.', 'success');
+      toast.push(update ? t('customerApp.productDetail.reviewUpdated') : t('customerApp.bookingDetail.reviewThanks'), 'success');
     } catch (err) {
-      Alert.alert("Couldn't submit review", getApiErrorMessage(err, 'Please try again.'));
+      Alert.alert(t('customerApp.bookingDetail.reviewFailedTitle'), getApiErrorMessage(err, t('customerApp.bookingDetail.tryAgain')));
     } finally {
       setSubmittingReview(false);
     }
@@ -179,7 +189,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
           <Pressable
             onPress={() => setLightboxOpen(true)}
             accessibilityRole="imagebutton"
-            accessibilityLabel="View product photo"
+            accessibilityLabel={t('customerApp.productDetail.viewPhoto')}
           >
             <Image source={{ uri: imageUri }} style={styles.hero} />
           </Pressable>
@@ -196,10 +206,12 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
             <StarRating rating={ratingAvg} size={16} />
             {ratingCount ? (
               <Text style={[styles.ratingText, { color: primary }]}>
-                {ratingAvg.toFixed(1)} out of 5 · {ratingCount} {ratingCount === 1 ? 'rating' : 'ratings'}
+                {ratingCount === 1
+                  ? t('customerApp.productDetail.ratingSummaryOne', { avg: ratingAvg.toFixed(1) })
+                  : t('customerApp.productDetail.ratingSummaryMany', { avg: ratingAvg.toFixed(1), n: ratingCount })}
               </Text>
             ) : (
-              <Text style={styles.ratingText}>No ratings yet</Text>
+              <Text style={styles.ratingText}>{t('customerApp.productDetail.noRatings')}</Text>
             )}
           </View>
           <Text style={[styles.price, { color: primary }]}>{formatShopMoney(product.price, product.currency)}</Text>
@@ -208,7 +220,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
               <Text style={[styles.stockPillText, outOfStock ? styles.stockOut : styles.stockIn]}>{stock}</Text>
             </View>
           ) : null}
-          {inCart > 0 ? <Text style={styles.inCartHint}>{inCart} already in cart</Text> : null}
+          {inCart > 0 ? <Text style={styles.inCartHint}>{t('customerApp.productDetail.inCart', { n: inCart })}</Text> : null}
           {deliveryHint ? (
             <View style={styles.deliveryHint}>
               <Feather name="truck" size={14} color={primary} />
@@ -217,7 +229,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
                 {deliveryHint.detail ? <Text style={styles.deliveryHintDetail}>{deliveryHint.detail}</Text> : null}
                 {deliveryHint.minOrderTotal && Number(deliveryHint.minOrderTotal) > 0 ? (
                   <Text style={styles.deliveryHintDetail}>
-                    Min. order {formatShopMoney(deliveryHint.minOrderTotal, product.currency)}
+                    {t('customerApp.productDetail.minOrder', { amount: formatShopMoney(deliveryHint.minOrderTotal, product.currency) })}
                   </Text>
                 ) : null}
               </View>
@@ -227,7 +239,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 
         {facts.length ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Product information</Text>
+            <Text style={styles.sectionTitle}>{t('customerApp.productDetail.productInfo')}</Text>
             {facts.map((item) => (
               <View key={item.label} style={styles.factRow}>
                 <Text style={styles.factLabel}>{item.label}</Text>
@@ -239,26 +251,30 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 
         {product.description ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About this item</Text>
+            <Text style={styles.sectionTitle}>{t('customerApp.productDetail.aboutItem')}</Text>
             <Text style={styles.description}>{product.description}</Text>
           </View>
         ) : null}
 
         {product.details_html ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Product details</Text>
+            <Text style={styles.sectionTitle}>{t('customerApp.productDetail.productDetails')}</Text>
             <HtmlContent html={product.details_html} />
           </View>
         ) : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Customer reviews</Text>
+          <Text style={styles.sectionTitle}>{t('customerApp.productDetail.customerReviews')}</Text>
           {ratingCount ? (
             <View style={styles.reviewSummary}>
               <View>
                 <Text style={styles.reviewAvg}>{ratingAvg.toFixed(1)}</Text>
                 <StarRating rating={ratingAvg} size={18} />
-                <Text style={styles.meta}>{ratingCount} global {ratingCount === 1 ? 'rating' : 'ratings'}</Text>
+                <Text style={styles.meta}>
+                  {ratingCount === 1
+                    ? t('customerApp.productDetail.globalRatingOne')
+                    : t('customerApp.productDetail.globalRatingMany', { n: ratingCount })}
+                </Text>
               </View>
               <View style={{ flex: 1, gap: 6 }}>
                 {[5, 4, 3, 2, 1].map((star) => {
@@ -267,7 +283,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
                   const active = starFilter === star;
                   return (
                     <Pressable key={star} style={styles.histRow} onPress={() => setStarFilter(active ? null : star)}>
-                      <Text style={[styles.histLabel, active && { color: primary }]}>{star} star</Text>
+                      <Text style={[styles.histLabel, active && { color: primary }]}>{t('customerApp.productDetail.starLabel', { n: star })}</Text>
                       <View style={styles.histTrack}>
                         <View style={[styles.histFill, { width: `${pct}%`, backgroundColor: primary }]} />
                       </View>
@@ -278,7 +294,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
               </View>
             </View>
           ) : (
-            <Text style={styles.meta}>Be the first to review this product.</Text>
+            <Text style={styles.meta}>{t('customerApp.productDetail.beFirst')}</Text>
           )}
 
           <View style={styles.reviewTools}>
@@ -286,24 +302,26 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
               style={[styles.toolChip, reviewSort === 'recent' && { borderColor: primary }]}
               onPress={() => setReviewSort('recent')}
             >
-              <Text style={styles.toolChipText}>Most recent</Text>
+              <Text style={styles.toolChipText}>{t('customerApp.productDetail.mostRecent')}</Text>
             </Pressable>
             <Pressable
               style={[styles.toolChip, reviewSort === 'top' && { borderColor: primary }]}
               onPress={() => setReviewSort('top')}
             >
-              <Text style={styles.toolChipText}>Top rated</Text>
+              <Text style={styles.toolChipText}>{t('customerApp.productDetail.topRated')}</Text>
             </Pressable>
             {starFilter ? (
               <Pressable onPress={() => setStarFilter(null)}>
-                <Text style={[styles.clearFilters, { color: primary }]}>Clear {starFilter}★</Text>
+                <Text style={[styles.clearFilters, { color: primary }]}>
+                  {t('customerApp.productDetail.clearStar', { n: starFilter })}
+                </Text>
               </Pressable>
             ) : null}
           </View>
 
           {product.my_review ? (
             <Card style={styles.reviewCard}>
-              <Text style={styles.reviewYou}>Your review</Text>
+              <Text style={styles.reviewYou}>{t('customerApp.productDetail.yourReview')}</Text>
               <StarRating rating={product.my_review.rating} size={14} />
               {product.my_review.title ? <Text style={styles.reviewTitle}>{product.my_review.title}</Text> : null}
               {product.my_review.comment ? <Text style={styles.reviewBody}>{product.my_review.comment}</Text> : null}
@@ -320,24 +338,29 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 
           {product.can_review || product.my_review ? (
             <Card style={styles.writeCard}>
-              <Text style={styles.writeTitle}>{product.my_review ? 'Edit your review' : 'Write a customer review'}</Text>
+              <Text style={styles.writeTitle}>{product.my_review ? t('customerApp.productDetail.editYourReview') : t('customerApp.productDetail.writeReview')}</Text>
               {product.has_purchased ? (
-                <Text style={styles.verifiedHint}>Verified purchase</Text>
+                <Text style={styles.verifiedHint}>{t('customerApp.productDetail.verifiedPurchase')}</Text>
               ) : (
-                <Text style={styles.meta}>Reviews from verified buyers are marked after a completed order.</Text>
+                <Text style={styles.meta}>{t('customerApp.productDetail.verifiedHint')}</Text>
               )}
               <StarRating rating={rating} size={28} interactive onChange={setRating} />
-              <Input label="Headline" value={title} onChangeText={setTitle} placeholder="What's most important to know?" />
               <Input
-                label="Written review"
+                label={t('customerApp.productDetail.headline')}
+                value={title}
+                onChangeText={setTitle}
+                placeholder={t('customerApp.productDetail.headlinePlaceholder')}
+              />
+              <Input
+                label={t('customerApp.productDetail.writtenReview')}
                 value={comment}
                 onChangeText={setComment}
-                placeholder="What did you like or dislike?"
+                placeholder={t('customerApp.productDetail.writtenPlaceholder')}
                 multiline
                 style={{ minHeight: 88, textAlignVertical: 'top' }}
               />
               <Button
-                label={product.my_review ? 'Update review' : 'Submit review'}
+                label={product.my_review ? t('customerApp.productDetail.updateReview') : t('customerApp.bookingDetail.submitReview')}
                 fullWidth
                 loading={submittingReview}
                 primaryColor={primary}
@@ -345,7 +368,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
               />
             </Card>
           ) : !user ? (
-            <Text style={styles.meta}>Sign in to write a review.</Text>
+            <Text style={styles.meta}>{t('customerApp.productDetail.signInToReview')}</Text>
           ) : null}
         </View>
       </ScrollView>
@@ -354,15 +377,15 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
         {added ? (
           <Pressable style={styles.addedBanner} onPress={() => navigation.navigate('Cart')}>
             <Feather name="check-circle" size={16} color={colors.success} />
-            <Text style={styles.addedText}>Added to cart</Text>
-            <Text style={[styles.viewCart, { color: primary }]}>View cart</Text>
+            <Text style={styles.addedText}>{t('customerApp.productDetail.addedToCart')}</Text>
+            <Text style={[styles.viewCart, { color: primary }]}>{t('customerApp.productDetail.viewCart')}</Text>
           </Pressable>
         ) : null}
         <View style={styles.footerRow}>
           <QtyStepper value={qty} min={1} max={maxQty} onChange={setQty} primaryColor={primary} />
           <View style={styles.footerActions}>
             <Button
-              label={outOfStock ? 'Out of stock' : 'Add to cart'}
+              label={outOfStock ? t('customerApp.productDetail.outOfStock') : t('customerApp.productDetail.addToCart')}
               icon="shopping-cart"
               variant="outline"
               disabled={outOfStock}
@@ -370,7 +393,7 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
               style={styles.footerBtn}
             />
             <Button
-              label="Buy now"
+              label={t('customerApp.productDetail.buyNow')}
               icon="arrow-right"
               primaryColor={primary}
               disabled={outOfStock}
@@ -392,13 +415,14 @@ export function ShopProductDetailScreen({ route, navigation }: Props) {
 }
 
 function ReviewCard({ review }: { review: ShopProductReview }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.reviewCard}>
       <View style={styles.reviewHead}>
         <Text style={styles.reviewer}>{review.reviewer_name}</Text>
         <StarRating rating={review.rating} size={13} />
       </View>
-      {review.verified_purchase ? <Text style={styles.verified}>Verified purchase</Text> : null}
+      {review.verified_purchase ? <Text style={styles.verified}>{t('customerApp.productDetail.verifiedPurchase')}</Text> : null}
       {review.title ? <Text style={styles.reviewTitle}>{review.title}</Text> : null}
       {review.comment ? <Text style={styles.reviewBody}>{review.comment}</Text> : null}
       {review.created_at ? <Text style={styles.reviewDate}>{formatDateTime(review.created_at)}</Text> : null}

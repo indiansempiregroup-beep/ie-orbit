@@ -3,6 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { DesktopPage } from '../../components/DesktopPage';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { Card } from '../../components/ui/Card';
@@ -51,14 +53,14 @@ function resolveProduct(showAppointie: boolean, showShopie: boolean, preferred: 
 
 const TAB_META: Record<
   Tab,
-  { label: string; icon: keyof typeof Feather.glyphMap; hint: string }
+  { labelKey: string; icon: keyof typeof Feather.glyphMap; hintKey: string }
 > = {
-  overview: { label: 'Overview', icon: 'pie-chart', hint: 'Snapshot' },
-  profit: { label: 'Profit', icon: 'trending-up', hint: 'Margins' },
-  growth: { label: 'Growth', icon: 'users', hint: 'Customers' },
-  revenue: { label: 'Revenue', icon: 'dollar-sign', hint: 'Earnings' },
-  forecast: { label: 'Forecast', icon: 'activity', hint: 'Next 30 days' },
-  reports: { label: 'Reports', icon: 'file-text', hint: 'Operations' },
+  overview: { labelKey: 'bi.overview', icon: 'pie-chart', hintKey: 'bi.mobile.hintOverview' },
+  profit: { labelKey: 'bi.profit', icon: 'trending-up', hintKey: 'bi.mobile.hintProfit' },
+  growth: { labelKey: 'bi.growth', icon: 'users', hintKey: 'bi.mobile.hintGrowth' },
+  revenue: { labelKey: 'bi.revenue', icon: 'dollar-sign', hintKey: 'bi.mobile.hintRevenue' },
+  forecast: { labelKey: 'bi.forecast', icon: 'activity', hintKey: 'bi.mobile.hintForecast' },
+  reports: { labelKey: 'bi.reports', icon: 'file-text', hintKey: 'bi.mobile.hintReports' },
 };
 
 function biFeatureAllowed(allowed: Set<string>, feature: string) {
@@ -76,6 +78,7 @@ function BiProductSwitch({
   value: ProductKey;
   onChange: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   if (!(showAppointie && showShopie)) return null;
   return (
     <View style={styles.productTrack}>
@@ -107,10 +110,10 @@ function pct(value?: number | null) {
   return `${Math.round(value * 100)}%`;
 }
 
-function changeLabel(value?: number | null) {
+function changeLabel(value: number | null | undefined, t: TFunction) {
   if (value == null) return undefined;
   const prefix = value > 0 ? '+' : '';
-  return `${prefix}${value}% vs prior`;
+  return t('bi.changeVsPrior', { value: `${prefix}${value}` });
 }
 
 function money(amount?: number | null, currency?: string | null) {
@@ -135,6 +138,7 @@ function appointieFromOverview(data: ReturnType<typeof useBIOverview>['data']) {
 }
 
 export function BIScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<RootStackParamList, 'BI'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { activeBusiness } = useWorkspace();
@@ -234,15 +238,15 @@ export function BIScreen() {
         {tabLocked ? (
           <Card style={styles.lockCard}>
             <Text style={styles.lockTitle}>
-              {tab === 'profit' ? 'Profit is not on this plan' : `${TAB_META[tab].label} is on Pro`}
+              {tab === 'profit'
+                ? t('bi.mobile.profitLockedTitle')
+                : t('bi.mobile.proTitle', { tab: t(TAB_META[tab].labelKey) })}
             </Text>
             <Text style={styles.lockMeta}>
-              {tab === 'profit'
-                ? 'Profit analytics is not included in your current plan.'
-                : 'This BI tab is not included in your current plan. Upgrade to unlock Growth, Revenue, Forecast, and Reports.'}
+              {tab === 'profit' ? t('bi.mobile.profitLockedBody') : t('bi.mobile.proBody')}
             </Text>
             <Pressable style={styles.lockCta} onPress={() => navigation.navigate('ProductSettings')}>
-              <Text style={styles.lockCtaText}>Upgrade plan</Text>
+              <Text style={styles.lockCtaText}>{t('bi.mobile.upgradePlan')}</Text>
             </Pressable>
           </Card>
         ) : null}
@@ -328,8 +332,10 @@ function BITabBar({
   onChange: (tab: Tab) => void;
   staffFilter?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const buttons = tabs.map((key) => {
     const meta = TAB_META[key];
+    const tabLabel = t(meta.labelKey);
     const locked = !biFeatureAllowed(allowed, key);
     const selected = active === key;
     return (
@@ -338,7 +344,7 @@ function BITabBar({
         onPress={() => onChange(key)}
         accessibilityRole="tab"
         accessibilityState={{ selected, disabled: false }}
-        accessibilityLabel={locked ? `${meta.label}, Pro` : meta.label}
+        accessibilityLabel={locked ? t('bi.mobile.tabLockedA11y', { label: tabLabel }) : tabLabel}
         style={({ pressed }) => [
           styles.tabBtn,
           isDesktop && styles.tabBtnDesktop,
@@ -353,12 +359,12 @@ function BITabBar({
         <View style={styles.tabCopy}>
           <View style={styles.tabLabelRow}>
             <Text style={[styles.tabLabel, selected && styles.tabLabelActive]} numberOfLines={1}>
-              {meta.label}
+              {tabLabel}
             </Text>
             {locked ? <Feather name="lock" size={11} color={selected ? colors.primaryForeground : colors.mutedForeground} /> : null}
           </View>
           <Text style={[styles.tabHint, selected && styles.tabHintActive]} numberOfLines={1}>
-            {locked ? 'Pro' : meta.hint}
+            {locked ? t('bi.pro') : t(meta.hintKey)}
           </Text>
         </View>
       </Pressable>
@@ -407,59 +413,6 @@ function profitPresetRange(preset: '7d' | '30d' | 'mtd'): { from: string; to: st
   }
   return { from: isoDate(from), to: isoDate(to) };
 }
-
-const PROFIT_CHANNEL_LABELS: Record<string, string> = {
-  pos: 'POS',
-  online_pickup: 'Pickup',
-  online_delivery: 'Delivery',
-};
-
-const PROFIT_HELP = {
-  kept:
-    'Sell price minus what you paid for the stock (after discounts), then net of returns and cancelled bills. GST is shown separately — it is not subtracted from this number.',
-  paid:
-    'Total money customers paid you in this period, after any discounts on the bill. This is sales — not yet your profit.',
-  discounts:
-    'How much you reduced prices for customers. Higher discounts mean customers paid less, so you keep less profit.',
-  returns:
-    'Profit you lost because customers returned items. Counted against the original sale day so profit history stays complete.',
-  stockCash:
-    'How much cash is tied up in products still sitting on your shelf, based on what you paid for them.',
-  losing:
-    'How many products you sold for less than what they cost you. Raise the sell price, stop selling them, or buy cheaper.',
-  stockCost: 'What you paid for the products that were sold in this period (purchase / average cost).',
-  cancels: 'Profit that disappeared when bills were cancelled.',
-  potential: 'If everything currently in stock sells at list price, roughly how much profit you could make.',
-  gstCollected:
-    'Output GST on sales in this period. This is tax you collected for the government — not your profit.',
-  gstRemit:
-    'Approximate GST to pay the government. Currently equals GST collected; purchase input credit (ITC) is not deducted yet.',
-  bestDay: 'The weekday when you earned the most profit in this period — useful for staffing and stocking.',
-  bestChannel: 'Where you made the most profit: shop counter (POS), pickup, or delivery.',
-  orders: 'How many customer bills were completed (cancelled bills are excluded). The hint shows average profit per completed bill.',
-  rupeePie:
-    'Shows where sale money went: what stock cost you, what you kept as profit, discounts you gave, and returns/cancels.',
-  profitTrend: 'Your daily profit over time. Rising line means you are making more; falling means less.',
-  makingMoney: 'Products that made you the most profit. Stock more of these and promote them.',
-  channelPie: 'Splits your profit across POS, pickup, and delivery so you can see which channel earns more.',
-  categoryPie: 'Splits your profit by product category so you know which kinds of products earn more.',
-  weekdayBars: 'Compares profit across Mon–Sun. Helps you plan staff and stock for busy days.',
-  losingList: 'Products sold below cost. Fix the sell price or purchase cost, or stop selling them.',
-  priceGaps:
-    'Catalog sell price vs what you paid — even for items not sold yet. Bigger gap usually means better profit room.',
-  loyalty:
-    'Reward points you give customers when they buy, and points they use later to pay less. This section shows activity in the selected dates.',
-  loyaltyGiven: 'Points added to customer accounts in this period — usually earned on purchases.',
-  loyaltyUsed: 'Points customers spent in this period to reduce their bill.',
-  loyaltyNet:
-    'Given minus used. Positive means customers still hold more points from this period than they spent.',
-  loyaltyMoneyGiven:
-    'Bill amount you waived because customers redeemed reward points. This money is already taken out of sale profit.',
-  loyaltyRowPoints:
-    'Reward points on this sale or booking. Green (+) means you gave points; amber (−) means the customer used points to pay less.',
-  loyaltyRowProfit:
-    'Sell price minus stock cost after discounts (including reward points used). GST is separate. Not shown for bookings.',
-} as const;
 
 function loyaltyPointParts(row: {
   points_delta: number;
@@ -510,6 +463,7 @@ function LoyaltyPagination({
   const currentPage = Math.min(totalPages, Math.floor(Math.max(0, offset) / Math.max(1, pageSize)) + 1);
   const from = total === 0 ? 0 : offset + 1;
   const to = Math.min(offset + pageSize, total);
+  const { t } = useTranslation();
   const pages = useMemo(() => buildPageList(currentPage, totalPages), [currentPage, totalPages]);
   const go = (page: number) => onPageChange((Math.min(totalPages, Math.max(1, page)) - 1) * pageSize);
 
@@ -517,7 +471,7 @@ function LoyaltyPagination({
     <View style={styles.pager}>
       <View style={styles.pagerMetaRow}>
         <Text style={styles.rowMeta}>
-          {from}–{to} of {total}
+          {t('bi.pagination.range', { from, to, total, label: t('bi.pagination.entries') })}
         </Text>
         <View style={styles.pagerSizeRow}>
           {LOYALTY_PAGE_SIZES.map((size) => (
@@ -601,7 +555,50 @@ function BIProfitTab({
   const client = useOpsClient();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { businessId, activeBusiness } = useWorkspace();
+  const { t } = useTranslation();
   const currency = activeBusiness?.currency || 'INR';
+  const PROFIT_HELP = useMemo(
+    () => ({
+      kept: t('bi.profitHelp.kept'),
+      paid: t('bi.profitHelp.paid'),
+      discounts: t('bi.profitHelp.discounts'),
+      returns: t('bi.profitHelp.returns'),
+      stockCash: t('bi.profitHelp.stockCash'),
+      losing: t('bi.profitHelp.losing'),
+      stockCost: t('bi.profitHelp.stockCost'),
+      cancels: t('bi.profitHelp.cancels'),
+      potential: t('bi.profitHelp.potential'),
+      gstCollected: t('bi.profitHelp.gstCollected'),
+      gstRemit: t('bi.profitHelp.gstRemit'),
+      bestDay: t('bi.profitHelp.bestDay'),
+      bestChannel: t('bi.profitHelp.bestChannel'),
+      orders: t('bi.profitHelp.orders'),
+      rupeePie: t('bi.profitHelp.rupeePie'),
+      profitTrend: t('bi.profitHelp.profitTrend'),
+      makingMoney: t('bi.profitHelp.makingMoney'),
+      channelPie: t('bi.profitHelp.channelPie'),
+      categoryPie: t('bi.profitHelp.categoryPie'),
+      weekdayBars: t('bi.profitHelp.weekdayBars'),
+      losingList: t('bi.profitHelp.losingList'),
+      priceGaps: t('bi.profitHelp.priceGaps'),
+      loyalty: t('bi.profitHelp.loyalty'),
+      loyaltyGiven: t('bi.profitHelp.loyaltyGiven'),
+      loyaltyUsed: t('bi.profitHelp.loyaltyUsed'),
+      loyaltyNet: t('bi.profitHelp.loyaltyNet'),
+      loyaltyMoneyGiven: t('bi.profitHelp.loyaltyMoneyGiven'),
+      loyaltyRowPoints: t('bi.profitHelp.loyaltyRowPoints'),
+      loyaltyRowProfit: t('bi.profitHelp.loyaltyRowProfit'),
+    }),
+    [t],
+  );
+  const profitChannelLabel = (key: string) =>
+    key === 'pos'
+      ? t('bi.profitChannelPos')
+      : key === 'online_pickup'
+        ? t('bi.profitChannelPickup')
+        : key === 'online_delivery'
+          ? t('bi.profitChannelDelivery')
+          : key;
   const initialRange = useMemo(() => profitPresetRange('30d'), []);
   const [dateFrom, setDateFrom] = useState(initialRange.from);
   const [dateTo, setDateTo] = useState(initialRange.to);
@@ -841,7 +838,7 @@ function BIProfitTab({
       }
       await Promise.all(jobs);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load profit insights');
+      setError(err instanceof Error ? err.message : t('bi.mobile.profitLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -860,6 +857,7 @@ function BIProfitTab({
     showAppointie,
     showShopie,
     staffId,
+    t,
   ]);
 
   useEffect(() => {
@@ -881,7 +879,7 @@ function BIProfitTab({
 
   if (loading && !summary) return <ScreenState loading />;
   if (error) {
-    return <ScreenState error={error} actionLabel="Retry" onAction={() => void load()} />;
+    return <ScreenState error={error} actionLabel={t('common.retry')} onAction={() => void load()} />;
   }
 
   const profitTrend = series.map((row) => ({
@@ -892,7 +890,7 @@ function BIProfitTab({
     .map((row, index) => {
       const tones = Object.values(iconTones);
       return {
-        label: PROFIT_CHANNEL_LABELS[row.channel] || row.channel,
+        label: profitChannelLabel(row.channel),
         value: Math.max(0, Number(row.gross_profit) || 0),
         color: tones[index % tones.length].foreground,
       };
@@ -925,12 +923,12 @@ function BIProfitTab({
     .filter((row) => row.value > 0);
   const loyaltyMix = [
     {
-      label: 'Given',
+      label: t('bi.mobile.pointsGiven'),
       value: Math.max(0, Number(loyalty?.points_earned) || 0),
       color: iconTones.green.foreground,
     },
     {
-      label: 'Used',
+      label: t('bi.mobile.pointsUsed'),
       value: Math.max(0, Number(loyalty?.points_redeemed) || 0),
       color: iconTones.amber.foreground,
     },
@@ -939,13 +937,13 @@ function BIProfitTab({
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>Profit</Text>
+        <Text style={styles.heroTitle}>{t('bi.profit')}</Text>
         <Text style={styles.heroHint}>
           {showAppointie && showShopie
-            ? 'Appoint booking earnings and Mart stock margins stay in their own dashboards. Owner-only.'
+            ? t('bi.profitIntroSwitch')
             : showShopie
-              ? 'What you earned, what stock cost, and what ate into profit. Owner-only.'
-              : 'Booking earnings from Orbit Appoint. Owner-only.'}
+              ? t('bi.profitIntroMart')
+              : t('bi.profitIntroAppoint')}
         </Text>
       </View>
       <BiProductSwitch
@@ -959,9 +957,9 @@ function BIProfitTab({
         <View style={styles.profitChipRow}>
           {(
             [
-              ['7d', '7d'],
-              ['30d', '30d'],
-              ['mtd', 'MTD'],
+              ['7d', t('bi.profitPreset7d')],
+              ['30d', t('bi.profitPreset30d')],
+              ['mtd', t('bi.profitPresetMtd')],
             ] as const
           ).map(([key, label]) => (
             <Pressable
@@ -981,65 +979,74 @@ function BIProfitTab({
       {product === 'appointie' && showAppointie && appointieProfit ? (
         <>
           <Text style={styles.section}>Orbit Appoint</Text>
-          <Text style={styles.heroHint}>Service booking earnings only — not shop stock margins.</Text>
-          <InsightPanel title="What stands out" insights={appointieProfit.insights ?? []} />
+          <Text style={styles.heroHint}>{t('bi.profitAppointSub')}</Text>
+          <InsightPanel title={t('bi.whatStandsOut')} insights={appointieProfit.insights ?? []} />
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Estimated"
+              label={t('bi.profitEstEarnings')}
               value={money(appointieProfit.estimated_revenue, currency)}
               hint={
                 appointieProfit.comparison?.revenue_change_pct != null
-                  ? `${appointieProfit.comparison.revenue_change_pct > 0 ? '+' : ''}${appointieProfit.comparison.revenue_change_pct}% vs last`
-                  : 'All bookings this period'
+                  ? t('bi.profitVsLastPeriod', {
+                      delta: `${appointieProfit.comparison.revenue_change_pct > 0 ? '+' : ''}${appointieProfit.comparison.revenue_change_pct}%`,
+                    })
+                  : t('bi.mobile.allBookingsPeriod')
               }
               icon="trending-up"
               iconTone="green"
             />
             <StatTile
-              label="Completed"
+              label={t('bi.profitCompletedEarnings')}
               value={money(appointieProfit.completed_revenue, currency)}
-              hint="Visits you finished"
+              hint={t('bi.mobile.visitsFinished')}
               icon="check-circle"
               iconTone="green"
             />
             <StatTile
-              label="Still open"
+              label={t('bi.profitStillOpen')}
               value={money(appointieProfit.open_revenue, currency)}
-              hint="Not completed yet"
+              hint={t('bi.mobile.notCompletedYet')}
               icon="clock"
               iconTone="blue"
             />
             <StatTile
-              label="Lost"
+              label={t('bi.profitLostToCancels')}
               value={money(appointieProfit.lost_total, currency)}
-              hint="Cancels and no-shows"
+              hint={t('bi.profitLostSplit', {
+                cancelled: money(appointieProfit.lost_cancelled ?? 0, currency),
+                noShows: money(appointieProfit.lost_no_shows ?? 0, currency),
+              })}
               icon="slash"
               iconTone="rose"
             />
             <StatTile
-              label="Bookings"
+              label={t('bi.bookings')}
               value={String(appointieProfit.bookings ?? 0)}
-              hint={`${pct(appointieProfit.completion_rate)} completed`}
+              hint={t('bi.mobile.pctCompleted', { pct: pct(appointieProfit.completion_rate) })}
               icon="calendar"
               iconTone="blue"
             />
             <StatTile
-              label="Avg booking"
+              label={t('bi.profitAvgBooking')}
               value={money(appointieProfit.avg_booking_value, currency)}
               icon="tag"
               iconTone="amber"
             />
             <StatTile
-              label="Best day"
+              label={t('bi.profitBestDay')}
               value={appointieProfit.busiest_day || '—'}
-              hint={appointieProfit.busiest_hour ? `Peak ${appointieProfit.busiest_hour}` : undefined}
+              hint={
+                appointieProfit.busiest_hour
+                  ? t('bi.profitPeakAround', { hour: appointieProfit.busiest_hour })
+                  : undefined
+              }
               icon="sun"
               iconTone="amber"
             />
           </TileGrid>
           <ChartGrid>
             {(appointieProfit.series ?? []).length > 1 ? (
-              <ChartCard title="Earnings trend" subtitle="Estimated booking earnings">
+              <ChartCard title={t('bi.profitIsEarningsUp')} subtitle={t('bi.profitDayByDayEst')}>
                 <LineAreaChart
                   data={fillDailySeries(
                     (appointieProfit.series ?? []).map((row) => ({
@@ -1054,10 +1061,10 @@ function BIProfitTab({
               </ChartCard>
             ) : null}
             {(appointieProfit.by_service ?? []).some((row) => Number(row.revenue) > 0) ? (
-              <ChartCard title="By service" subtitle="Estimated earnings">
+              <ChartCard title={t('bi.profitEarningsByService')} subtitle={t('bi.profitEstEarnings')}>
                 <DonutChart
                   data={(appointieProfit.by_service ?? []).slice(0, 6).map((row, index) => ({
-                    label: row.service_name || 'Service',
+                    label: row.service_name || t('bi.mobile.serviceFallback'),
                     value: Number(row.revenue) || 0,
                     color: Object.values(iconTones)[index % Object.values(iconTones).length].foreground,
                   }))}
@@ -1067,7 +1074,7 @@ function BIProfitTab({
               </ChartCard>
             ) : null}
             {(appointieProfit.by_weekday ?? []).some((row) => Number(row.revenue ?? row.total) > 0) ? (
-              <ChartCard title="Weekday earnings" subtitle="Hover a bar for the amount">
+              <ChartCard title={t('bi.profitWhichWeekday')} subtitle={t('bi.mobile.hoverBarAmount')}>
                 <BarChart
                   data={(appointieProfit.by_weekday ?? []).map((row) => ({
                     label: (row.weekday_name || '').slice(0, 3),
@@ -1080,51 +1087,51 @@ function BIProfitTab({
             ) : null}
           </ChartGrid>
           <Card style={styles.panel}>
-            <Text style={styles.panelTitle}>Services that brought in bookings</Text>
-            <Text style={styles.heroHint}>
-              List price of appointments for each service — not shop sales. Includes open and cancelled bookings.
-            </Text>
+            <Text style={styles.panelTitle}>{t('bi.profitServicesBrought')}</Text>
+            <Text style={styles.heroHint}>{t('bi.profitServiceNote')}</Text>
             {(appointieProfit.by_service ?? []).slice(0, 6).map((row) => (
               <View key={row.service_id} style={styles.rowLine}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{row.service_name}</Text>
                   <Text style={styles.rowMeta}>
-                    {row.bookings ?? 0} booked · {row.completed ?? 0} finished
+                    {t('bi.profitBookedFinished', { booked: row.bookings ?? 0, finished: row.completed ?? 0 })}
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.rowValue}>{money(row.revenue, currency)}</Text>
-                  <Text style={styles.rowMeta}>booked value</Text>
+                  <Text style={styles.rowMeta}>{t('bi.profitBookedValue')}</Text>
                 </View>
               </View>
             ))}
             {!(appointieProfit.by_service ?? []).length ? (
-              <Text style={styles.rowMeta}>No priced bookings in this period yet.</Text>
+              <Text style={styles.rowMeta}>{t('bi.noPricedBookings')}</Text>
             ) : null}
           </Card>
           <Card style={styles.panel}>
-            <Text style={styles.panelTitle}>Who finished the visits</Text>
-            <Text style={styles.heroHint}>
-              List price of finished visits assigned to each person — not salary or commission.
-            </Text>
+            <Text style={styles.panelTitle}>{t('bi.profitWhoFinished')}</Text>
+            <Text style={styles.heroHint}>{t('bi.profitStaffNote')}</Text>
             {(appointieProfit.by_staff ?? []).slice(0, 6).map((row) => (
               <View key={row.staff_id} style={styles.rowLine}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowTitle}>{row.staff_name}</Text>
                   <Text style={styles.rowMeta}>
-                    {row.completed ?? 0} finished · {row.cancelled ?? 0} cancelled
+                    {t('bi.profitFinishedCancelledNoShow', {
+                      completed: row.completed ?? 0,
+                      cancelled: row.cancelled ?? 0,
+                      noShows: row.no_shows ?? 0,
+                    })}
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.rowValue}>{money(row.revenue, currency)}</Text>
                   <Text style={styles.rowMeta}>
-                    from {row.completed ?? 0} finished visit{row.completed === 1 ? '' : 's'}
+                    {t('bi.profitFromFinished', { n: row.completed ?? 0 })}
                   </Text>
                 </View>
               </View>
             ))}
             {!(appointieProfit.by_staff ?? []).length ? (
-              <Text style={styles.rowMeta}>No staff booking activity yet.</Text>
+              <Text style={styles.rowMeta}>{t('bi.profitNoStaffActivity')}</Text>
             ) : null}
           </Card>
         </>
@@ -1132,16 +1139,16 @@ function BIProfitTab({
 
       {product === 'shopie' && showShopie ? <Text style={styles.section}>Orbit Mart</Text> : null}
       {product === 'shopie' && showShopie ? (
-        <Text style={styles.heroHint}>What you earned, what stock cost, and what ate into profit.</Text>
+        <Text style={styles.heroHint}>{t('bi.profitMartSub')}</Text>
       ) : null}
 
       {product === 'shopie' && showShopie ? <View style={styles.profitChipRow}>
         {(
           [
-            ['all', 'All'],
-            ['pos', 'POS'],
-            ['online_pickup', 'Pickup'],
-            ['online_delivery', 'Delivery'],
+            ['all', t('common.all')],
+            ['pos', t('bi.profitChannelPos')],
+            ['online_pickup', t('bi.profitChannelPickup')],
+            ['online_delivery', t('bi.profitChannelDelivery')],
           ] as const
         ).map(([key, label]) => (
           <Pressable
@@ -1159,138 +1166,142 @@ function BIProfitTab({
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search product / SKU"
+          placeholder={t('bi.mobile.searchProductSku')}
           placeholderTextColor={colors.mutedForeground}
           style={styles.profitSearchInput}
           returnKeyType="search"
           onSubmitEditing={() => setAppliedSearch(search.trim())}
         />
         <Pressable style={styles.profitChip} onPress={() => setAppliedSearch(search.trim())}>
-          <Text style={styles.profitChipText}>Search</Text>
+          <Text style={styles.profitChipText}>{t('common.search')}</Text>
         </Pressable>
       </View> : null}
 
       {product === 'shopie' && showShopie && summary ? (
         <TileGrid gap={spacing.md}>
           <StatTile
-            label="Money you kept"
+            label={t('bi.profitKeptLabel')}
             help={PROFIT_HELP.kept}
             value={money(summary.kept_profit ?? summary.gross_profit, currency)}
             hint={
               comparison?.profit_delta_percent
-                ? `${Number(comparison.profit_delta_percent) > 0 ? '+' : ''}${comparison.profit_delta_percent}% vs last period`
-                : 'After returns and cancels'
+                ? t('bi.profitVsLastPeriod', {
+                    delta: `${Number(comparison.profit_delta_percent) > 0 ? '+' : ''}${comparison.profit_delta_percent}%`,
+                  })
+                : t('bi.profitKeptHint')
             }
             icon="shield"
             iconTone="green"
           />
           <StatTile
-            label="Customers paid"
+            label={t('bi.profitPaidLabel')}
             help={PROFIT_HELP.paid}
             value={money(summary.sales_revenue, currency)}
             hint={
               comparison?.revenue_delta_percent
-                ? `${Number(comparison.revenue_delta_percent) > 0 ? '+' : ''}${comparison.revenue_delta_percent}% vs last period`
-                : 'Sales after discounts'
+                ? t('bi.profitVsLastPeriod', {
+                    delta: `${Number(comparison.revenue_delta_percent) > 0 ? '+' : ''}${comparison.revenue_delta_percent}%`,
+                  })
+                : t('bi.profitPaidHint')
             }
             icon="trending-up"
             iconTone="blue"
           />
           <StatTile
-            label="Discounts given"
+            label={t('bi.profitDiscountsLabel')}
             help={PROFIT_HELP.discounts}
             value={money(summary.discounts_total || '0', currency)}
-            hint="Money you took off bills"
+            hint={t('bi.profitDiscountsHint')}
             icon="tag"
             iconTone="amber"
           />
           <StatTile
-            label="Lost on returns"
+            label={t('bi.profitReturnsLabel')}
             help={PROFIT_HELP.returns}
             value={money(summary.returns_profit || '0', currency)}
-            hint="Profit given back on returns"
+            hint={t('bi.profitReturnsHint')}
             icon="rotate-ccw"
             iconTone="coral"
           />
           <StatTile
-            label="Cash in stock"
+            label={t('bi.profitStockCashLabel')}
             help={PROFIT_HELP.stockCash}
             value={money(summary.inventory_at_cost, currency)}
             hint={
               summary.inventory_days_cover
-                ? `~${summary.inventory_days_cover} days of stock left`
-                : 'What you paid for shelf stock'
+                ? t('bi.profitStockCashHintDays', { days: summary.inventory_days_cover })
+                : t('bi.profitStockCashHint')
             }
             icon="package"
             iconTone="navy"
           />
           <StatTile
-            label="Losing money"
+            label={t('bi.profitLosingLabel')}
             help={PROFIT_HELP.losing}
             value={String(summary.loss_maker_count ?? 0)}
-            hint={summary.loss_maker_count ? 'Products sold below cost' : 'None right now'}
+            hint={summary.loss_maker_count ? t('bi.profitLosingHintSome') : t('bi.profitLosingHintNone')}
             icon="alert-triangle"
             iconTone={summary.loss_maker_count ? 'coral' : 'green'}
           />
           <StatTile
-            label="Stock cost sold"
+            label={t('bi.profitStockCostLabel')}
             help={PROFIT_HELP.stockCost}
             value={money(summary.sales_cogs, currency)}
-            hint="What sold items cost you"
+            hint={t('bi.profitStockCostHint')}
             icon="archive"
             iconTone="blue"
           />
           <StatTile
-            label="GST collected"
+            label={t('bi.profitGstCollectedLabel')}
             help={PROFIT_HELP.gstCollected}
             value={money(summary.gst_collected || '0', currency)}
-            hint="Output tax — not your profit"
+            hint={t('bi.profitGstCollectedHint')}
             icon="percent"
             iconTone="blue"
           />
           <StatTile
-            label="GST to remit"
+            label={t('bi.profitGstRemitLabel')}
             help={PROFIT_HELP.gstRemit}
             value={money(summary.gst_to_remit || summary.gst_collected || '0', currency)}
-            hint="Approx; ITC not deducted yet"
+            hint={t('bi.profitGstRemitHint')}
             icon="file-text"
             iconTone="amber"
           />
           <StatTile
-            label="Cancelled bills"
+            label={t('bi.profitCancelledBills')}
             help={PROFIT_HELP.cancels}
             value={money(summary.cancels_profit || '0', currency)}
-            hint="Profit cancelled with orders"
+            hint={t('bi.profitCancelledBillsHint')}
             icon="x-circle"
             iconTone="coral"
           />
           <StatTile
-            label="If stock sells"
+            label={t('bi.profitIfAllSells')}
             help={PROFIT_HELP.potential}
             value={money(summary.potential_profit, currency)}
-            hint="Possible profit at list price"
+            hint={t('bi.profitIfAllSellsHint')}
             icon="package"
             iconTone="navy"
           />
           <StatTile
-            label="Best day"
+            label={t('bi.profitBestSellingDay')}
             help={PROFIT_HELP.bestDay}
             value={summary.best_weekday || '—'}
             icon="calendar"
             iconTone="amber"
           />
           <StatTile
-            label="Best channel"
+            label={t('bi.profitBestChannel')}
             help={PROFIT_HELP.bestChannel}
-            value={PROFIT_CHANNEL_LABELS[summary.best_channel || ''] || summary.best_channel || '—'}
+            value={profitChannelLabel(summary.best_channel || '') || '—'}
             icon="shopping-bag"
             iconTone="blue"
           />
           <StatTile
-            label="Orders"
+            label={t('bi.orders')}
             help={PROFIT_HELP.orders}
             value={String(summary.order_count ?? 0)}
-            hint={`~${money(summary.avg_order_profit || '0', currency)} profit / bill`}
+            hint={t('bi.profitProfitPerBill', { amount: money(summary.avg_order_profit || '0', currency) })}
             icon="file-text"
             iconTone="cyan"
           />
@@ -1301,7 +1312,7 @@ function BIProfitTab({
       <>
       {narrative.length ? (
         <Card style={styles.panel}>
-          <Text style={styles.panelTitle}>What to notice</Text>
+          <Text style={styles.panelTitle}>{t('bi.profitWhatToNotice')}</Text>
           {narrative.map((item) => (
             <View key={`${item.title}-${item.detail}`} style={styles.insightBlock}>
               <Text
@@ -1322,15 +1333,15 @@ function BIProfitTab({
       <ChartGrid>
         {rupeePie.length ? (
           <ChartCard
-            title="Where your money went"
-            subtitle="Stock cost · profit · discounts · returns"
+            title={t('bi.profitWhereMoneyWent')}
+            subtitle={t('bi.profitWhereMoneySub')}
             help={PROFIT_HELP.rupeePie}
           >
-            <DonutChart data={rupeePie} centerLabel="split" formatValue={formatAxisValue} />
+            <DonutChart data={rupeePie} centerLabel={t('bi.profitCenterSplit')} formatValue={formatAxisValue} />
           </ChartCard>
         ) : null}
         {profitTrend.length > 1 ? (
-          <ChartCard title="Is profit going up?" subtitle="Day-by-day profit" help={PROFIT_HELP.profitTrend}>
+          <ChartCard title={t('bi.profitIsProfitUp')} subtitle={t('bi.profitDayByDayProfit')} help={PROFIT_HELP.profitTrend}>
             <LineAreaChart
               data={profitTrend}
               color={iconTones.green.foreground}
@@ -1340,7 +1351,7 @@ function BIProfitTab({
           </ChartCard>
         ) : null}
         {topProductBars.some((row) => row.value > 0) ? (
-          <ChartCard title="Making you money" subtitle="Stock more of these" help={PROFIT_HELP.makingMoney}>
+          <ChartCard title={t('bi.profitProductsMaking')} subtitle={t('bi.profitStockMore')} help={PROFIT_HELP.makingMoney}>
             <BarChart
               data={topProductBars}
               color={iconTones.cyan.foreground}
@@ -1350,17 +1361,17 @@ function BIProfitTab({
           </ChartCard>
         ) : null}
         {channelDonut.length ? (
-          <ChartCard title="Sales by channel" subtitle="Where profit came from" help={PROFIT_HELP.channelPie}>
-            <DonutChart data={channelDonut} centerLabel="profit" formatValue={formatAxisValue} />
+          <ChartCard title={t('bi.profitSalesByChannel')} subtitle={t('bi.mobile.whereProfitCame')} help={PROFIT_HELP.channelPie}>
+            <DonutChart data={channelDonut} centerLabel={t('bi.profitCenterProfit')} formatValue={formatAxisValue} />
           </ChartCard>
         ) : null}
         {categoryDonut.length ? (
-          <ChartCard title="Sales by category" subtitle="Which categories earn" help={PROFIT_HELP.categoryPie}>
-            <DonutChart data={categoryDonut} centerLabel="profit" formatValue={formatAxisValue} />
+          <ChartCard title={t('bi.profitSalesByCategory')} subtitle={t('bi.mobile.whichCategoriesEarn')} help={PROFIT_HELP.categoryPie}>
+            <DonutChart data={categoryDonut} centerLabel={t('bi.profitCenterProfit')} formatValue={formatAxisValue} />
           </ChartCard>
         ) : null}
         {weekdayBars.some((row) => row.value > 0) ? (
-          <ChartCard title="Which weekday earns more" subtitle="Bar by day" help={PROFIT_HELP.weekdayBars}>
+          <ChartCard title={t('bi.profitWhichWeekday')} subtitle={t('bi.mobile.barByDay')} help={PROFIT_HELP.weekdayBars}>
             <BarChart
               data={weekdayBars}
               color={iconTones.blue.foreground}
@@ -1373,49 +1384,49 @@ function BIProfitTab({
 
       <Card style={styles.panel}>
         <View style={styles.panelTitleRow}>
-          <Text style={styles.panelTitle}>Products making you money</Text>
+          <Text style={styles.panelTitle}>{t('bi.profitProductsMaking')}</Text>
           <Pressable
             hitSlop={10}
-            onPress={() => setPanelHelp({ title: 'Products making you money', body: PROFIT_HELP.makingMoney })}
+            onPress={() => setPanelHelp({ title: t('bi.profitProductsMaking'), body: PROFIT_HELP.makingMoney })}
             style={styles.panelHelpBtn}
           >
             <Text style={styles.panelHelpBtnText}>?</Text>
           </Pressable>
         </View>
-        <Text style={styles.rowMeta}>Stock more / push these</Text>
+        <Text style={styles.rowMeta}>{t('bi.profitStockMore')}</Text>
         {topSold.map((row) => (
           <View key={row.product_id} style={styles.rowLine}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{row.name}</Text>
               <Text style={styles.rowMeta}>
-                {row.units_sold} sold
-                {row.margin_percent ? ` · you keep ${row.margin_percent}%` : ''}
+                {t('bi.profitUnitsSold', { n: row.units_sold })}
+                {row.margin_percent ? ` · ${t('bi.profitYouKeepPct', { pct: row.margin_percent })}` : ''}
               </Text>
             </View>
             <Text style={styles.rowValue}>{money(row.gross_profit, currency)}</Text>
           </View>
         ))}
-        {!topSold.length ? <Text style={styles.rowMeta}>No sales profit yet.</Text> : null}
+        {!topSold.length ? <Text style={styles.rowMeta}>{t('bi.profitNoSalesProfit')}</Text> : null}
       </Card>
 
       <Card style={styles.panel}>
         <View style={styles.panelTitleRow}>
-          <Text style={styles.panelTitle}>Products losing money</Text>
+          <Text style={styles.panelTitle}>{t('bi.profitLosingLabel')}</Text>
           <Pressable
             hitSlop={10}
-            onPress={() => setPanelHelp({ title: 'Products losing money', body: PROFIT_HELP.losingList })}
+            onPress={() => setPanelHelp({ title: t('bi.profitLosingLabel'), body: PROFIT_HELP.losingList })}
             style={styles.panelHelpBtn}
           >
             <Text style={styles.panelHelpBtnText}>?</Text>
           </Pressable>
         </View>
-        <Text style={styles.rowMeta}>Sell price below what you paid</Text>
+        <Text style={styles.rowMeta}>{t('bi.profitLosingSub')}</Text>
         {lossMakers.map((row) => (
           <View key={row.product_id} style={styles.rowLine}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{row.name}</Text>
               <Text style={styles.rowMeta}>
-                {row.units_sold} sold · stock cost {money(row.cogs, currency)}
+                {t('bi.profitSoldStockCost', { n: row.units_sold, amount: money(row.cogs, currency) })}
               </Text>
             </View>
             <Text style={[styles.rowValue, { color: colors.destructive }]}>
@@ -1423,34 +1434,37 @@ function BIProfitTab({
             </Text>
           </View>
         ))}
-        {!lossMakers.length ? <Text style={styles.rowMeta}>None right now — good.</Text> : null}
+        {!lossMakers.length ? <Text style={styles.rowMeta}>{t('bi.profitNoneRightNow')}</Text> : null}
       </Card>
 
       <Card style={styles.panel}>
         <View style={styles.panelTitleRow}>
-          <Text style={styles.panelTitle}>Best price gaps</Text>
+          <Text style={styles.panelTitle}>{t('bi.profitPriceGaps')}</Text>
           <Pressable
             hitSlop={10}
-            onPress={() => setPanelHelp({ title: 'Best price gaps', body: PROFIT_HELP.priceGaps })}
+            onPress={() => setPanelHelp({ title: t('bi.profitPriceGaps'), body: PROFIT_HELP.priceGaps })}
             style={styles.panelHelpBtn}
           >
             <Text style={styles.panelHelpBtnText}>?</Text>
           </Pressable>
         </View>
-        <Text style={styles.rowMeta}>Sell price vs what you paid</Text>
+        <Text style={styles.rowMeta}>{t('bi.profitPriceGapsSub')}</Text>
         {topMargins.map((row) => (
           <View key={row.product_id} style={styles.rowLine}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{row.name}</Text>
               <Text style={styles.rowMeta}>
-                Sell {money(row.price, currency)} · Cost {money(row.avg_cost || row.purchase_price, currency)}
+                {t('bi.profitSellCost', {
+                  sell: money(row.price, currency),
+                  cost: money(row.avg_cost || row.purchase_price, currency),
+                })}
               </Text>
             </View>
             <Text style={styles.rowValue}>{row.margin_percent}%</Text>
           </View>
         ))}
         {!topMargins.length ? (
-          <Text style={styles.rowMeta}>Add purchase price on products to see this.</Text>
+          <Text style={styles.rowMeta}>{t('bi.profitAddPurchasePrice')}</Text>
         ) : null}
       </Card>
 
@@ -1458,25 +1472,25 @@ function BIProfitTab({
         <View style={styles.panelTitleRow}>
           <View style={{ flex: 1 }}>
             <View style={styles.panelTitleRow}>
-              <Text style={styles.panelTitle}>Reward points</Text>
+              <Text style={styles.panelTitle}>{t('bi.profitRewardPoints')}</Text>
               <Pressable
                 hitSlop={10}
-                onPress={() => setPanelHelp({ title: 'Reward points', body: PROFIT_HELP.loyalty })}
+                onPress={() => setPanelHelp({ title: t('bi.profitRewardPoints'), body: PROFIT_HELP.loyalty })}
                 style={styles.panelHelpBtn}
               >
                 <Text style={styles.panelHelpBtnText}>?</Text>
               </Pressable>
             </View>
-            <Text style={styles.rowMeta}>Points you give on sales · points customers use to pay less</Text>
+            <Text style={styles.rowMeta}>{t('bi.profitRewardSub')}</Text>
           </View>
           <Pressable style={styles.profitChip} onPress={() => navigation.navigate('ShopLoyalty')}>
-            <Text style={styles.profitChipText}>Full activity</Text>
+            <Text style={styles.profitChipText}>{t('bi.profitFullActivity')}</Text>
           </Pressable>
         </View>
 
         {!loyaltyEnabled ? (
           <Text style={[styles.rowMeta, { color: colors.warning }]}>
-            Reward points are off for this business. Turn them on in product settings.
+            {t('bi.profitRewardsOff')}
           </Text>
         ) : null}
 
@@ -1484,67 +1498,65 @@ function BIProfitTab({
           <>
             <TileGrid gap={spacing.sm}>
               <StatTile
-                label="Points you gave"
+                label={t('bi.profitPointsGave')}
                 help={PROFIT_HELP.loyaltyGiven}
                 value={String(loyalty.points_earned)}
-                hint="Added to customers"
+                hint={t('bi.profitPointsGaveHint')}
                 icon="gift"
                 iconTone="green"
               />
               <StatTile
-                label="Customers used"
+                label={t('bi.profitPointsUsed')}
                 help={PROFIT_HELP.loyaltyUsed}
                 value={String(loyalty.points_redeemed)}
-                hint="Taken off bills"
+                hint={t('bi.profitPointsUsedHint')}
                 icon="tag"
                 iconTone="amber"
               />
               <StatTile
-                label="Still with customers"
+                label={t('bi.profitStillWithCustomers')}
                 help={PROFIT_HELP.loyaltyNet}
                 value={String(loyalty.net_points)}
-                hint={
-                  loyalty.net_points >= 0
-                    ? 'More given than used'
-                    : 'Used more than given'
-                }
+                hint={loyalty.net_points >= 0 ? t('bi.profitMoreGiven') : t('bi.profitMoreUsed')}
                 icon="users"
                 iconTone="cyan"
               />
               <StatTile
-                label="Times moved"
+                label={t('bi.profitTimesMoved')}
                 value={String(loyalty.entry_count ?? loyaltyLedger.length)}
-                hint="Give + use events"
+                hint={t('bi.profitGiveUseEvents')}
                 icon="activity"
                 iconTone="blue"
               />
               <StatTile
-                label="Money given as rewards"
+                label={t('bi.profitMoneyAsRewards')}
                 help={PROFIT_HELP.loyaltyMoneyGiven}
                 value={money(Number(loyalty.redeem_discount_total || 0), currency)}
-                hint="Taken off bills when points used"
+                hint={t('bi.profitMoneyAsRewardsHint')}
                 icon="tag"
                 iconTone="amber"
               />
             </TileGrid>
 
             {loyaltyMix.length ? (
-              <ChartCard title="Given vs used" subtitle="How reward points moved">
-                <DonutChart data={loyaltyMix} centerLabel="points" formatValue={formatAxisValue} />
+              <ChartCard title={t('bi.profitGivenVsUsed')} subtitle={t('bi.mobile.pointsMovedSub')}>
+                <DonutChart data={loyaltyMix} centerLabel={t('bi.profitCenterPoints')} formatValue={formatAxisValue} />
               </ChartCard>
             ) : null}
 
-            <Text style={[styles.panelTitle, { marginTop: spacing.xs }]}>All point activity</Text>
+            <Text style={[styles.panelTitle, { marginTop: spacing.xs }]}>{t('bi.profitAllPointActivity')}</Text>
             <Text style={styles.rowMeta}>
-              {loyaltyTotal} entr{loyaltyTotal === 1 ? 'y' : 'ies'} · tap invoice/customer to open
+              {loyaltyTotal === 1
+                ? t('bi.mobile.entriesTapOne')
+                : t('bi.mobile.entriesTapMany', { n: loyaltyTotal })}
             </Text>
 
             <View style={styles.profitChipRow}>
               {(
                 [
-                  ['all', 'All'],
-                  ['given', 'Given'],
-                  ['used', 'Used'],
+                  ['all', t('common.all')],
+                  ['given', t('bi.mobile.pointsGiven')],
+                  ['used', t('bi.mobile.pointsUsed')],
                 ] as const
               ).map(([key, label]) => (
                 <Pressable
@@ -1571,7 +1583,7 @@ function BIProfitTab({
               <TextInput
                 value={loyaltyQ}
                 onChangeText={setLoyaltyQ}
-                placeholder="Search customer / reason"
+                placeholder={t('bi.profitCustomerOrReason')}
                 placeholderTextColor={colors.mutedForeground}
                 style={styles.profitSearchInput}
                 returnKeyType="search"
@@ -1587,7 +1599,7 @@ function BIProfitTab({
                   setLoyaltyOffset(0);
                 }}
               >
-                <Text style={styles.profitChipText}>Search</Text>
+                <Text style={styles.profitChipText}>{t('common.search')}</Text>
               </Pressable>
             </View>
 
@@ -1598,13 +1610,13 @@ function BIProfitTab({
               const onlineOrderId = String(row.linked_order_id || row.order_id || '').trim();
               const recordLabel =
                 row.record_kind === 'order'
-                  ? `${sourceLabel || 'Shop invoice'} ${row.order_number || row.record_label || ''}`.trim()
+                  ? `${sourceLabel || t('bi.profitShopInvoice')} ${row.order_number || row.record_label || ''}`.trim()
                   : row.record_kind === 'booking'
-                    ? `Booking ${row.booking_number || row.record_label || ''}`.trim()
+                    ? t('bi.profitBookingRecord', { ref: row.booking_number || row.record_label || '' }).trim()
                     : row.record_kind === 'voucher'
                       ? row.voucher_type === 'purchase'
-                        ? `Books purchase ${row.voucher_number || ''}`.trim()
-                        : `${sourceLabel || 'Books sale'} ${row.voucher_number || ''}`.trim()
+                        ? t('bi.profitBooksPurchase', { ref: row.voucher_number || '' }).trim()
+                        : `${sourceLabel || t('bi.profitBooksSale')} ${row.voucher_number || ''}`.trim()
                       : '';
               const canOpenRecord = Boolean(
                 (isOnlineOrder && onlineOrderId) ||
@@ -1634,13 +1646,13 @@ function BIProfitTab({
                       }
                     >
                       <Text style={[styles.rowTitle, row.customer_id ? styles.linkText : null]}>
-                        {row.customer_name || 'Customer'}
+                        {row.customer_name || t('bi.profitColCustomer')}
                       </Text>
                     </Pressable>
                     <Text style={styles.rowMeta}>
                       {bothPoints
-                        ? 'Points given and used'
-                        : row.reason || row.entry_type || 'Points update'}
+                        ? t('bi.profitPointsGivenAndUsed')
+                        : row.reason || row.entry_type || t('bi.profitPointsUpdate')}
                       {row.created_at
                         ? ` · ${new Date(row.created_at).toLocaleString(undefined, {
                             month: 'short',
@@ -1680,7 +1692,7 @@ function BIProfitTab({
                   </View>
                   <View style={styles.loyaltyRightCol}>
                     <LoyaltyMetricTile
-                      label="Points"
+                      label={t('bi.profitPoints')}
                       icon="gift"
                       iconTone={bothPoints ? 'violet' : redeemed > 0 && earned <= 0 ? 'amber' : 'green'}
                       tone={bothPoints ? 'neutral' : redeemed > 0 && earned <= 0 ? 'warning' : 'positive'}
@@ -1704,7 +1716,7 @@ function BIProfitTab({
                     />
                     {profitText ? (
                       <LoyaltyMetricTile
-                        label="Profit"
+                        label={t('bi.profit')}
                         icon="trending-up"
                         iconTone={profitPositive ? 'green' : 'rose'}
                         tone={profitPositive ? 'positive' : 'negative'}
@@ -1726,7 +1738,7 @@ function BIProfitTab({
               );
             })}
             {!loyaltyLedger.length ? (
-              <Text style={styles.rowMeta}>No point movements match these filters.</Text>
+              <Text style={styles.rowMeta}>{t('bi.profitNoMovements')}</Text>
             ) : null}
 
             {loyaltyTotal > 0 ? (
@@ -1743,7 +1755,7 @@ function BIProfitTab({
             ) : null}
           </>
         ) : loyaltyEnabled ? (
-          <Text style={styles.rowMeta}>No reward points activity yet.</Text>
+          <Text style={styles.rowMeta}>{t('bi.profitNoRewardsYet')}</Text>
         ) : null}
       </Card>
       </>
@@ -1779,6 +1791,7 @@ function BIOverview({
   product?: ProductKey;
   onProductChange?: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   const showAppointiePane = product === 'appointie' && showAppointie;
   const showShopiePane = product === 'shopie' && showShopie;
@@ -1813,12 +1826,12 @@ function BIOverview({
       summary.bookings - (summary.completed ?? 0) - (summary.cancelled ?? 0) - (summary.no_shows ?? 0),
     );
     return [
-      { label: 'Completed', value: summary.completed ?? 0, color: iconTones.green.foreground },
-      { label: 'Cancelled', value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
-      { label: 'No-show', value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
-      { label: 'Open', value: other, color: iconTones.blue.foreground },
+      { label: t('bi.completed'), value: summary.completed ?? 0, color: iconTones.green.foreground },
+      { label: t('bi.cancelled'), value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
+      { label: t('bi.mobile.statusNoShow'), value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
+      { label: t('bi.profitOpen'), value: other, color: iconTones.blue.foreground },
     ].filter((slice) => slice.value > 0);
-  }, [summary]);
+  }, [summary, t]);
   const serviceMix = useMemo(() => {
     const palette = [
       iconTones.blue.foreground,
@@ -1831,11 +1844,11 @@ function BIOverview({
       .filter((row) => Number(row.revenue) > 0)
       .slice(0, 5)
       .map((row, index) => ({
-        label: row.service_name || 'Service',
+        label: row.service_name || t('bookings.service'),
         value: Number(row.revenue),
         color: palette[index % palette.length],
       }));
-  }, [appointieBundle?.revenue?.by_service]);
+  }, [appointieBundle?.revenue?.by_service, t]);
   const staffBars = useMemo(
     () =>
       (appointieBundle?.operations?.by_staff ?? []).slice(0, 7).map((row, index) => ({
@@ -1848,11 +1861,11 @@ function BIOverview({
   const orderMix = useMemo(() => {
     if (!shopie) return [];
     return [
-      { label: 'Orders', value: shopie.orders, color: iconTones.green.foreground },
-      { label: 'Cancelled', value: shopie.cancelled_orders, color: iconTones.rose.foreground },
-      { label: 'Returns', value: shopie.returns, color: iconTones.coral.foreground },
+      { label: t('bi.orders'), value: shopie.orders, color: iconTones.green.foreground },
+      { label: t('bi.cancelled'), value: shopie.cancelled_orders, color: iconTones.rose.foreground },
+      { label: t('bi.returns'), value: shopie.returns, color: iconTones.coral.foreground },
     ].filter((slice) => slice.value > 0);
-  }, [shopie]);
+  }, [shopie, t]);
   const highlights = useMemo(
     () =>
       showAppointiePane
@@ -1866,10 +1879,11 @@ function BIOverview({
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>Last 30 days</Text>
+        <Text style={styles.heroTitle}>{t('nav.last30Days')}</Text>
         <Text style={styles.heroHint}>
-          Hover or tap a chart to see the exact count
-          {showAppointie && showShopie ? '. Switch between Orbit Appoint and Orbit Mart.' : '.'}
+          {showAppointie && showShopie
+            ? t('bi.mobile.tapChartHintSwitch')
+            : t('bi.mobile.tapChartHint')}
         </Text>
       </View>
       <BiProductSwitch
@@ -1883,30 +1897,34 @@ function BIOverview({
         <>
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Bookings"
+              label={t('bi.bookings')}
               value={String(summary?.bookings ?? 0)}
-              hint={changeLabel(comparison?.bookings_change_pct)}
+              hint={changeLabel(comparison?.bookings_change_pct, t)}
               icon="calendar"
               iconTone="blue"
             />
             <StatTile
-              label="Est. revenue"
+              label={t('bi.mobile.estRevenue')}
               value={money(appointieBundle.revenue?.estimated_revenue, currency)}
-              hint={changeLabel(comparison?.revenue_change_pct)}
+              hint={changeLabel(comparison?.revenue_change_pct, t)}
               icon="trending-up"
               iconTone="green"
             />
             <StatTile
-              label="Completed"
+              label={t('bi.completed')}
               value={String(summary?.completed ?? 0)}
               hint={pct(summary?.completion_rate)}
               icon="check-circle"
               iconTone="green"
             />
             <StatTile
-              label="Avg / day"
+              label={t('bi.mobile.avgPerDay')}
               value={String(summary?.avg_bookings_per_day ?? 0)}
-              hint={appointieBundle.operations?.busiest_day ? `Peak ${appointieBundle.operations.busiest_day}` : undefined}
+              hint={
+                appointieBundle.operations?.busiest_day
+                  ? t('bi.mobile.peakDay', { day: appointieBundle.operations.busiest_day })
+                  : undefined
+              }
               icon="activity"
               iconTone="violet"
             />
@@ -1918,16 +1936,16 @@ function BIOverview({
         <>
           {showAppointie && showShopie ? <Text style={styles.section}>Orbit Mart</Text> : null}
           <TileGrid gap={spacing.md}>
-            <StatTile label="Orders" value={String(shopie.orders)} icon="shopping-bag" iconTone="green" />
-            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
+            <StatTile label={t('bi.orders')} value={String(shopie.orders)} icon="shopping-bag" iconTone="green" />
+            <StatTile label={t('bi.gmv')} value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
             <StatTile
-              label="Avg order"
+              label={t('bi.mobile.avgOrder')}
               value={money(shopie.avg_order_value, shopie.currency)}
               icon="tag"
               iconTone="amber"
             />
             <StatTile
-              label="Returns"
+              label={t('bi.returns')}
               value={String(shopie.returns)}
               hint={pct(shopie.return_rate)}
               icon="rotate-ccw"
@@ -1938,25 +1956,25 @@ function BIOverview({
       ) : null}
 
       <InsightPanel
-        title="What stands out"
-        subtitle="Signals from the last 30 days — what to act on next."
+        title={t('bi.whatStandsOut')}
+        subtitle={t('bi.mobile.insightsSub')}
         insights={highlights}
       />
 
       {showAppointiePane && data?.forecast ? (
         <ChartCard
-          title={`Next ${data.forecast.horizon_days ?? 30} days`}
-          subtitle={data.forecast.note || 'Projected from the recent booking pace.'}
+          title={t('bi.nextDays', { days: data.forecast.horizon_days ?? 30 })}
+          subtitle={data.forecast.note || t('bi.projectedFromPace')}
         >
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Projected bookings"
+              label={t('bi.projectedBookings')}
               value={String(data.forecast.projected_bookings ?? 0)}
               icon="calendar"
               iconTone="blue"
             />
             <StatTile
-              label="Projected revenue"
+              label={t('bi.projectedRevenue')}
               value={money(data.forecast.projected_revenue, data.forecast.currency ?? currency)}
               icon="trending-up"
               iconTone="green"
@@ -1968,30 +1986,37 @@ function BIOverview({
       {showAppointiePane && appointieBundle ? (
         <>
           {bookingTrend.some((row) => row.value > 0) ? (
-            <ChartCard title="Bookings over time" subtitle="Daily volume · hover a day for the count">
-              <LineAreaChart data={bookingTrend} color={iconTones.blue.foreground} unit="bookings" />
+            <ChartCard
+              title={t('bi.mobile.bookingsOverTime')}
+              subtitle={t('bi.mobile.bookingsOverTimeSub')}
+            >
+              <LineAreaChart
+                data={bookingTrend}
+                color={iconTones.blue.foreground}
+                unit={t('bi.mobile.unitBookings')}
+              />
             </ChartCard>
           ) : null}
 
           <ChartGrid>
             {bookingMix.length ? (
-              <ChartCard title="Booking mix" subtitle="Outcomes this period">
-                <DonutChart data={bookingMix} centerLabel="bookings" />
+              <ChartCard title={t('bi.mobile.bookingMix')} subtitle={t('bi.mobile.bookingMixSub')}>
+                <DonutChart data={bookingMix} centerLabel={t('bi.mobile.unitBookings')} />
               </ChartCard>
             ) : null}
             {weekdayBars.some((row) => row.value > 0) ? (
-              <ChartCard title="Demand by weekday" subtitle="Plan staffing around busy days">
-                <BarChart data={weekdayBars} unit="bookings" />
+              <ChartCard title={t('bi.demandByWeekday')} subtitle={t('bi.mobile.demandSub')}>
+                <BarChart data={weekdayBars} unit={t('bi.mobile.unitBookings')} />
               </ChartCard>
             ) : null}
             {serviceMix.length ? (
-              <ChartCard title="Revenue by service" subtitle="Top services">
-                <DonutChart data={serviceMix} centerLabel={currency || 'rev'} formatValue={formatAxisValue} />
+              <ChartCard title={t('bi.revenueByService')} subtitle={t('bi.mobile.revenueByServiceSub')}>
+                <DonutChart data={serviceMix} centerLabel={currency || t('bi.mobile.unitRevenueShort')} formatValue={formatAxisValue} />
               </ChartCard>
             ) : null}
             {staffBars.length ? (
-              <ChartCard title="Top staff" subtitle="Bookings this period">
-                <BarChart data={staffBars} unit="bookings" />
+              <ChartCard title={t('bi.topStaff')} subtitle={t('bi.mobile.topStaffSub')}>
+                <BarChart data={staffBars} unit={t('bi.mobile.unitBookings')} />
               </ChartCard>
             ) : null}
           </ChartGrid>
@@ -2001,7 +2026,7 @@ function BIOverview({
       {showShopiePane && shopie ? (
         <>
           {gmvTrend.some((row) => row.value > 0) ? (
-            <ChartCard title="Sales (GMV)" subtitle="Daily sales · hover a day for the amount">
+            <ChartCard title={t('bi.mobile.salesGmv')} subtitle={t('bi.mobile.salesGmvSub')}>
               <LineAreaChart
                 data={gmvTrend}
                 color={iconTones.green.foreground}
@@ -2011,29 +2036,32 @@ function BIOverview({
             </ChartCard>
           ) : null}
           {orderMix.length ? (
-            <ChartCard title="Order mix" subtitle="Orders, cancellations, and returns">
-              <DonutChart data={orderMix} centerLabel="orders" />
+            <ChartCard title={t('bi.mobile.orderMix')} subtitle={t('bi.mobile.orderMixSub')}>
+              <DonutChart data={orderMix} centerLabel={t('bi.mobile.unitOrders')} />
             </ChartCard>
           ) : null}
         </>
       ) : null}
 
       {showShopiePane && pets ? (
-        <ChartCard title="Pets pack" subtitle={`${pets.birthdays_next_7d} birthdays in 7 days`}>
+        <ChartCard
+          title={t('dashboard.petsPack')}
+          subtitle={t('bi.mobile.birthdaysIn7d', { n: pets.birthdays_next_7d })}
+        >
           <DonutChart
             data={[
-              { label: 'With photo', value: pets.with_photo, color: iconTones.rose.foreground },
-              { label: 'No photo', value: Math.max(0, pets.total - pets.with_photo), color: colors.muted },
+              { label: t('bi.mobile.withPhoto'), value: pets.with_photo, color: iconTones.rose.foreground },
+              { label: t('bi.mobile.noPhoto'), value: Math.max(0, pets.total - pets.with_photo), color: colors.muted },
             ]}
             centerValue={String(pets.total)}
-            centerLabel="pets"
+            centerLabel={t('bi.mobile.unitPets')}
           />
         </ChartCard>
       ) : null}
 
       {!appointieBundle && !shopie && !pets ? (
         <Card>
-          <Text style={styles.empty}>No analytics sections available for your subscribed products yet.</Text>
+          <Text style={styles.empty}>{t('bi.overviewEmpty')}</Text>
         </Card>
       ) : null}
     </View>
@@ -2055,13 +2083,14 @@ function BIGrowth({
   product?: ProductKey;
   onProductChange?: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
   const appointie = data?.appointie ?? (showAppointie && data?.new_customers != null ? data : null);
   const shopie = data?.shopie ?? null;
   const appointieMix = [
-    { label: 'New', value: appointie?.new_customers ?? 0, color: iconTones.cyan.foreground },
-    { label: 'Returning', value: appointie?.returning_customers ?? 0, color: iconTones.violet.foreground },
+    { label: t('common.new'), value: appointie?.new_customers ?? 0, color: iconTones.cyan.foreground },
+    { label: t('bi.returning'), value: appointie?.returning_customers ?? 0, color: iconTones.violet.foreground },
   ].filter((slice) => slice.value > 0);
   const appointieBars = (appointie?.top_customers ?? []).slice(0, 7).map((row, index) => ({
     label: row.customer_name.split(' ')[0] || row.customer_name,
@@ -2069,8 +2098,8 @@ function BIGrowth({
     highlight: index === 0,
   }));
   const shopieMix = [
-    { label: 'New', value: shopie?.new_customers ?? 0, color: iconTones.cyan.foreground },
-    { label: 'Returning', value: shopie?.returning_customers ?? 0, color: iconTones.violet.foreground },
+    { label: t('common.new'), value: shopie?.new_customers ?? 0, color: iconTones.cyan.foreground },
+    { label: t('bi.returning'), value: shopie?.returning_customers ?? 0, color: iconTones.violet.foreground },
   ].filter((slice) => slice.value > 0);
   const shopieBars = (shopie?.top_customers ?? []).slice(0, 7).map((row, index) => ({
     label: row.customer_name.split(' ')[0] || row.customer_name,
@@ -2081,11 +2110,11 @@ function BIGrowth({
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>Customer growth</Text>
+        <Text style={styles.heroTitle}>{t('bi.pageGrowth')}</Text>
         <Text style={styles.heroHint}>
           {showAppointie && showShopie
-            ? 'Switch between Orbit Appoint bookings and Orbit Mart shoppers.'
-            : 'Who is coming back this period.'}
+            ? t('bi.mobile.growthSwitchHint')
+            : t('bi.mobile.growthWhoComingBack')}
         </Text>
       </View>
       <BiProductSwitch
@@ -2098,20 +2127,23 @@ function BIGrowth({
         <>
           <Text style={styles.section}>Orbit Appoint</Text>
           <TileGrid gap={spacing.md}>
-            <StatTile label="New" value={String(appointie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
-            <StatTile label="Returning" value={String(appointie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
-            <StatTile label="Repeat rate" value={pct(appointie.repeat_rate)} icon="repeat" iconTone="green" />
-            <StatTile label="Avg visits" value={String(appointie.avg_visits_per_customer ?? 0)} icon="layers" iconTone="blue" />
+            <StatTile label={t('common.new')} value={String(appointie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
+            <StatTile label={t('bi.returning')} value={String(appointie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
+            <StatTile label={t('bi.repeatRate')} value={pct(appointie.repeat_rate)} icon="repeat" iconTone="green" />
+            <StatTile label={t('bi.mobile.avgVisits')} value={String(appointie.avg_visits_per_customer ?? 0)} icon="layers" iconTone="blue" />
           </TileGrid>
           <ChartGrid>
             {appointieMix.length ? (
-              <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
-                <DonutChart data={appointieMix} centerLabel="customers" />
+              <ChartCard title={t('bi.mobile.newVsReturning')} subtitle={t('bi.mobile.hoverSliceHint')}>
+                <DonutChart data={appointieMix} centerLabel={t('bi.mobile.unitCustomers')} />
               </ChartCard>
             ) : null}
             {appointieBars.length ? (
-              <ChartCard title="Most active customers" subtitle="Bookings this period">
-                <BarChart data={appointieBars} unit="bookings" />
+              <ChartCard
+                title={t('bi.mostActiveCustomers')}
+                subtitle={t('bi.mobile.mostActiveBookingsSub')}
+              >
+                <BarChart data={appointieBars} unit={t('bi.mobile.unitBookings')} />
               </ChartCard>
             ) : null}
           </ChartGrid>
@@ -2121,20 +2153,23 @@ function BIGrowth({
         <>
           <Text style={styles.section}>Orbit Mart</Text>
           <TileGrid gap={spacing.md}>
-            <StatTile label="New" value={String(shopie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
-            <StatTile label="Returning" value={String(shopie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
-            <StatTile label="Repeat rate" value={pct(shopie.repeat_rate)} icon="repeat" iconTone="green" />
-            <StatTile label="Avg orders" value={String(shopie.avg_orders_per_customer ?? 0)} icon="layers" iconTone="blue" />
+            <StatTile label={t('common.new')} value={String(shopie.new_customers ?? 0)} icon="user-plus" iconTone="cyan" />
+            <StatTile label={t('bi.returning')} value={String(shopie.returning_customers ?? 0)} icon="refresh-cw" iconTone="violet" />
+            <StatTile label={t('bi.repeatRate')} value={pct(shopie.repeat_rate)} icon="repeat" iconTone="green" />
+            <StatTile label={t('bi.mobile.avgOrders')} value={String(shopie.avg_orders_per_customer ?? 0)} icon="layers" iconTone="blue" />
           </TileGrid>
           <ChartGrid>
             {shopieMix.length ? (
-              <ChartCard title="New vs returning" subtitle="Hover a slice for the count">
-                <DonutChart data={shopieMix} centerLabel="shoppers" />
+              <ChartCard title={t('bi.mobile.newVsReturning')} subtitle={t('bi.mobile.hoverSliceHint')}>
+                <DonutChart data={shopieMix} centerLabel={t('bi.mobile.unitShoppers')} />
               </ChartCard>
             ) : null}
             {shopieBars.length ? (
-              <ChartCard title="Most active shoppers" subtitle="Orders this period">
-                <BarChart data={shopieBars} unit="orders" />
+              <ChartCard
+                title={t('bi.mostActiveShoppers')}
+                subtitle={t('bi.mobile.mostActiveOrdersSub')}
+              >
+                <BarChart data={shopieBars} unit={t('bi.mobile.unitOrders')} />
               </ChartCard>
             ) : null}
           </ChartGrid>
@@ -2142,7 +2177,7 @@ function BIGrowth({
       ) : null}
       {!appointie && !shopie ? (
         <Card>
-          <Text style={styles.empty}>No customer activity in this period yet.</Text>
+          <Text style={styles.empty}>{t('bi.mobile.noCustomerActivityShort')}</Text>
         </Card>
       ) : null}
     </View>
@@ -2164,6 +2199,7 @@ function BIRevenue({
   product?: ProductKey;
   onProductChange?: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
   const appointie = data?.appointie ?? (showAppointie && data?.estimated_revenue != null ? data : null);
@@ -2180,12 +2216,12 @@ function BIRevenue({
     .filter((row) => Number(row.revenue) > 0)
     .slice(0, 6)
     .map((row, index) => ({
-      label: row.service_name || 'Service',
+      label: row.service_name || t('bi.mobile.serviceFallback'),
       value: Number(row.revenue),
       color: palette[index % palette.length],
     }));
   const bars = (appointie?.by_service ?? []).slice(0, 7).map((row, index) => ({
-    label: (row.service_name || 'Service').slice(0, 10),
+    label: (row.service_name || t('bi.mobile.serviceFallback')).slice(0, 10),
     value: Number(row.revenue),
     highlight: index === 0,
   }));
@@ -2203,13 +2239,13 @@ function BIRevenue({
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>Revenue</Text>
+        <Text style={styles.heroTitle}>{t('bi.revenue')}</Text>
         <Text style={styles.heroHint}>
           {showAppointie && showShopie
-            ? 'Appoint uses booking prices. Mart uses shop GMV.'
+            ? t('bi.revenueIntroSwitch')
             : showShopie
-              ? 'Shop GMV from Orbit Mart orders.'
-              : 'Estimated from service list prices × bookings.'}
+              ? t('bi.revenueIntroMart')
+              : t('bi.revenueIntroAppoint')}
         </Text>
       </View>
       <BiProductSwitch
@@ -2223,19 +2259,19 @@ function BIRevenue({
           <Text style={styles.section}>Orbit Appoint</Text>
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Estimated"
+              label={t('bi.estimatedRevenue')}
               value={money(appointie.estimated_revenue, appointie.currency)}
               icon="dollar-sign"
               iconTone="green"
             />
             <StatTile
-              label="Completed"
+              label={t('bi.completedRevenue')}
               value={money(appointie.completed_revenue, appointie.currency)}
               icon="check-circle"
               iconTone="green"
             />
             <StatTile
-              label="Avg booking"
+              label={t('bi.avgBookingValue')}
               value={money(appointie.avg_booking_value, appointie.currency)}
               icon="tag"
               iconTone="amber"
@@ -2243,12 +2279,12 @@ function BIRevenue({
           </TileGrid>
           <ChartGrid>
             {mix.length ? (
-              <ChartCard title="Mix by service" subtitle="Hover a slice for the amount">
-                <DonutChart data={mix} centerLabel={appointie.currency || 'rev'} formatValue={formatAxisValue} />
+              <ChartCard title={t('bi.revenueByService')} subtitle={t('bi.mobile.hoverSliceAmount')}>
+                <DonutChart data={mix} centerLabel={appointie.currency || t('bi.mobile.unitRevenueShort')} formatValue={formatAxisValue} />
               </ChartCard>
             ) : null}
             {bars.length ? (
-              <ChartCard title="Top services" subtitle="Estimated revenue">
+              <ChartCard title={t('bi.mobile.topServices')} subtitle={t('bi.estimatedRevenue')}>
                 <BarChart data={bars} formatValue={formatAxisValue} unit={appointie.currency} />
               </ChartCard>
             ) : null}
@@ -2259,26 +2295,26 @@ function BIRevenue({
         <>
           <Text style={styles.section}>Orbit Mart</Text>
           <TileGrid gap={spacing.md}>
-            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
+            <StatTile label={t('bi.gmv')} value={money(shopie.gmv, shopie.currency)} icon="dollar-sign" iconTone="green" />
             <StatTile
-              label="Avg order"
+              label={t('bi.mobile.avgOrder')}
               value={money(shopie.avg_order_value, shopie.currency)}
               icon="tag"
               iconTone="amber"
             />
-            <StatTile label="Orders" value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
+            <StatTile label={t('bi.orders')} value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
           </TileGrid>
           <ChartGrid>
             {channelBars.length ? (
-              <ChartCard title="By channel" subtitle="Hover a bar for GMV">
+              <ChartCard title={t('bi.byChannel')} subtitle={t('bi.mobile.hoverBarGmv')}>
                 <BarChart data={channelBars} formatValue={formatAxisValue} unit={shopie.currency ?? undefined} />
               </ChartCard>
             ) : null}
             {categoryMix.length ? (
-              <ChartCard title="By category" subtitle="Hover a slice for GMV">
+              <ChartCard title={t('bi.byCategory')} subtitle={t('bi.mobile.hoverSliceGmv')}>
                 <DonutChart
                   data={categoryMix}
-                  centerLabel={shopie.currency || 'gmv'}
+                  centerLabel={shopie.currency || t('bi.gmv')}
                   formatValue={formatAxisValue}
                 />
               </ChartCard>
@@ -2309,37 +2345,40 @@ function BIForecast({
   product?: ProductKey;
   onProductChange?: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
   const appointie = data?.appointie ?? (showAppointie && data?.projected_bookings != null ? data : null);
   const shopie = data?.shopie ?? null;
   const bookingCompare = [
-    { label: 'Last 30d', value: recentBookings ?? appointie?.based_on_bookings ?? 0 },
-    { label: 'Next 30d', value: appointie?.projected_bookings ?? 0, highlight: true },
+    { label: t('bi.mobile.last30d'), value: recentBookings ?? appointie?.based_on_bookings ?? 0 },
+    { label: t('bi.mobile.next30d'), value: appointie?.projected_bookings ?? 0, highlight: true },
   ];
   const appointieRevenue = [
-    { label: 'Avg / day', value: Number(appointie?.avg_daily_revenue ?? 0) },
-    { label: 'Projected', value: Number(appointie?.projected_revenue ?? 0), highlight: true },
+    { label: t('bi.mobile.avgPerDay'), value: Number(appointie?.avg_daily_revenue ?? 0) },
+    { label: t('bi.mobile.projected'), value: Number(appointie?.projected_revenue ?? 0), highlight: true },
   ];
   const orderCompare = [
-    { label: 'Last 30d', value: recentOrders ?? shopie?.based_on_orders ?? 0 },
-    { label: 'Next 30d', value: shopie?.projected_orders ?? 0, highlight: true },
+    { label: t('bi.mobile.last30d'), value: recentOrders ?? shopie?.based_on_orders ?? 0 },
+    { label: t('bi.mobile.next30d'), value: shopie?.projected_orders ?? 0, highlight: true },
   ];
   const shopieRevenue = [
-    { label: 'Avg / day', value: Number(shopie?.avg_daily_revenue ?? 0) },
-    { label: 'Projected', value: Number(shopie?.projected_revenue ?? 0), highlight: true },
+    { label: t('bi.mobile.avgPerDay'), value: Number(shopie?.avg_daily_revenue ?? 0) },
+    { label: t('bi.mobile.projected'), value: Number(shopie?.projected_revenue ?? 0), highlight: true },
   ];
 
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>{`Next ${appointie?.horizon_days ?? shopie?.horizon_days ?? 30} days`}</Text>
+        <Text style={styles.heroTitle}>
+          {t('bi.nextDays', { days: appointie?.horizon_days ?? shopie?.horizon_days ?? 30 })}
+        </Text>
         <Text style={styles.heroHint}>
           {showAppointie && showShopie
-            ? 'Appoint projects bookings. Mart projects orders and GMV.'
+            ? t('bi.forecastIntroSwitch')
             : showShopie
-              ? 'Next 30 days from recent shop order pace.'
-              : 'Next 30 days from recent booking pace.'}
+              ? t('bi.forecastIntroMart')
+              : t('bi.forecastIntroAppoint')}
         </Text>
       </View>
       <BiProductSwitch
@@ -2353,39 +2392,42 @@ function BIForecast({
           <Text style={styles.section}>Orbit Appoint</Text>
           <Text style={styles.heroHint}>
             {appointie.note ||
-              `Based on the last ${appointie.based_on_days ?? 30} days (${appointie.based_on_bookings ?? 0} bookings).`}
+              t('bi.mobile.basedOnBookings', {
+                days: appointie.based_on_days ?? 30,
+                n: appointie.based_on_bookings ?? 0,
+              })}
           </Text>
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Projected bookings"
+              label={t('bi.projectedBookings')}
               value={String(appointie.projected_bookings ?? 0)}
               icon="calendar"
               iconTone="blue"
             />
             <StatTile
-              label="Projected revenue"
+              label={t('bi.projectedRevenue')}
               value={money(appointie.projected_revenue, appointie.currency)}
               icon="dollar-sign"
               iconTone="green"
             />
             <StatTile
-              label="Avg daily bookings"
+              label={t('bi.avgDailyBookings')}
               value={String(appointie.avg_daily_bookings ?? 0)}
               icon="activity"
               iconTone="violet"
             />
             <StatTile
-              label="Avg daily revenue"
+              label={t('bi.avgDailyRevenue')}
               value={money(appointie.avg_daily_revenue, appointie.currency)}
               icon="trending-up"
               iconTone="green"
             />
           </TileGrid>
           <ChartGrid>
-            <ChartCard title="Bookings outlook" subtitle="Hover a bar for the count">
-              <BarChart data={bookingCompare} unit="bookings" />
+            <ChartCard title={t('bi.mobile.bookingsOutlook')} subtitle={t('bi.mobile.hoverBarCount')}>
+              <BarChart data={bookingCompare} unit={t('bi.mobile.unitBookings')} />
             </ChartCard>
-            <ChartCard title="Revenue outlook" subtitle="Hover a bar for the amount">
+            <ChartCard title={t('bi.mobile.revenueOutlook')} subtitle={t('bi.mobile.hoverBarAmount')}>
               <BarChart data={appointieRevenue} formatValue={formatAxisValue} unit={appointie.currency} />
             </ChartCard>
           </ChartGrid>
@@ -2396,39 +2438,42 @@ function BIForecast({
           <Text style={styles.section}>Orbit Mart</Text>
           <Text style={styles.heroHint}>
             {shopie.note ||
-              `Based on the last ${shopie.based_on_days ?? 30} days (${shopie.based_on_orders ?? 0} orders).`}
+              t('bi.mobile.basedOnOrders', {
+                days: shopie.based_on_days ?? 30,
+                n: shopie.based_on_orders ?? 0,
+              })}
           </Text>
           <TileGrid gap={spacing.md}>
             <StatTile
-              label="Projected orders"
+              label={t('bi.projectedOrders')}
               value={String(shopie.projected_orders ?? 0)}
               icon="shopping-bag"
               iconTone="blue"
             />
             <StatTile
-              label="Projected GMV"
+              label={t('bi.projectedGmv')}
               value={money(shopie.projected_revenue, shopie.currency)}
               icon="dollar-sign"
               iconTone="green"
             />
             <StatTile
-              label="Avg daily orders"
+              label={t('bi.avgDailyOrders')}
               value={String(shopie.avg_daily_orders ?? 0)}
               icon="activity"
               iconTone="violet"
             />
             <StatTile
-              label="Avg daily GMV"
+              label={t('bi.avgDailyGmv')}
               value={money(shopie.avg_daily_revenue, shopie.currency)}
               icon="trending-up"
               iconTone="green"
             />
           </TileGrid>
           <ChartGrid>
-            <ChartCard title="Orders outlook" subtitle="Hover a bar for the count">
-              <BarChart data={orderCompare} unit="orders" />
+            <ChartCard title={t('bi.mobile.ordersOutlook')} subtitle={t('bi.mobile.hoverBarCount')}>
+              <BarChart data={orderCompare} unit={t('bi.mobile.unitOrders')} />
             </ChartCard>
-            <ChartCard title="GMV outlook" subtitle="Hover a bar for the amount">
+            <ChartCard title={t('bi.mobile.gmvOutlook')} subtitle={t('bi.mobile.hoverBarAmount')}>
               <BarChart data={shopieRevenue} formatValue={formatAxisValue} unit={shopie.currency} />
             </ChartCard>
           </ChartGrid>
@@ -2453,6 +2498,7 @@ function BIReports({
   product?: ProductKey;
   onProductChange?: (next: ProductKey) => void;
 }) {
+  const { t } = useTranslation();
   const product = resolveProduct(showAppointie, showShopie, preferredProduct);
   if (loading && !data) return <ScreenState loading />;
   const appointie = data?.appointie ?? (showAppointie && data?.summary && data?.revenue ? data : null);
@@ -2461,9 +2507,9 @@ function BIReports({
   const trend = fillDailySeries((appointie?.trends?.rows ?? []).map((row) => ({ day: row.day, value: row.total })));
   const mix = summary
     ? [
-        { label: 'Completed', value: summary.completed ?? 0, color: iconTones.green.foreground },
-        { label: 'Cancelled', value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
-        { label: 'No-show', value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
+        { label: t('bi.completed'), value: summary.completed ?? 0, color: iconTones.green.foreground },
+        { label: t('bi.cancelled'), value: summary.cancelled ?? 0, color: iconTones.rose.foreground },
+        { label: t('bi.mobile.statusNoShow'), value: summary.no_shows ?? 0, color: iconTones.coral.foreground },
       ].filter((slice) => slice.value > 0)
     : [];
   const shopieTrend = fillDailySeries((shopie?.trend ?? []).map((row) => ({ day: row.day, value: row.orders })));
@@ -2471,11 +2517,11 @@ function BIReports({
   return (
     <View style={styles.stack}>
       <View>
-        <Text style={styles.heroTitle}>Operations report</Text>
+        <Text style={styles.heroTitle}>{t('bi.reports')}</Text>
         <Text style={styles.heroHint}>
           {showAppointie && showShopie
-            ? 'Combined summary for the last 30 days. Switch between Orbit Appoint and Orbit Mart.'
-            : 'Combined summary for the last 30 days.'}
+            ? t('bi.reportsIntroSwitch')
+            : t('bi.reportsIntro')}
         </Text>
       </View>
       <BiProductSwitch
@@ -2488,29 +2534,29 @@ function BIReports({
         <>
           <Text style={styles.section}>Orbit Appoint</Text>
           <TileGrid gap={spacing.md}>
-            <StatTile label="Bookings" value={String(summary?.bookings ?? 0)} icon="calendar" iconTone="blue" />
-            <StatTile label="Completion" value={pct(summary?.completion_rate)} icon="check-circle" iconTone="green" />
+            <StatTile label={t('bi.bookings')} value={String(summary?.bookings ?? 0)} icon="calendar" iconTone="blue" />
+            <StatTile label={t('bi.profitCompletion')} value={pct(summary?.completion_rate)} icon="check-circle" iconTone="green" />
             <StatTile
-              label="Est. revenue"
+              label={t('bi.mobile.estRevenue')}
               value={money(appointie.revenue?.estimated_revenue, appointie.revenue?.currency)}
               icon="trending-up"
               iconTone="green"
             />
-            <StatTile label="Repeat rate" value={pct(appointie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
+            <StatTile label={t('bi.repeatRate')} value={pct(appointie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
           </TileGrid>
           <InsightPanel
-            title="Insights"
-            subtitle="What this report is telling you — and what to do about it."
+            title={t('bi.mobile.insightsTitle')}
+            subtitle={t('bi.mobile.reportInsightsSub')}
             insights={appointie.insights ?? []}
           />
           {trend.some((row) => row.value > 0) ? (
-            <ChartCard title="Daily trend" subtitle="Hover a day for the booking count">
-              <LineAreaChart data={trend} color={iconTones.blue.foreground} unit="bookings" />
+            <ChartCard title={t('bi.mobile.dailyTrend')} subtitle={t('bi.mobile.hoverDayBookingCount')}>
+              <LineAreaChart data={trend} color={iconTones.blue.foreground} unit={t('bi.mobile.unitBookings')} />
             </ChartCard>
           ) : null}
           {mix.length ? (
-            <ChartCard title="Outcomes" subtitle="Hover a slice for the count">
-              <DonutChart data={mix} centerLabel="bookings" />
+            <ChartCard title={t('bi.profitOutcomes')} subtitle={t('bi.mobile.hoverSliceHint')}>
+              <DonutChart data={mix} centerLabel={t('bi.mobile.unitBookings')} />
             </ChartCard>
           ) : null}
         </>
@@ -2519,24 +2565,24 @@ function BIReports({
         <>
           <Text style={styles.section}>Orbit Mart</Text>
           <TileGrid gap={spacing.md}>
-            <StatTile label="Orders" value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
-            <StatTile label="GMV" value={money(shopie.gmv, shopie.currency)} icon="trending-up" iconTone="green" />
+            <StatTile label={t('bi.orders')} value={String(shopie.orders ?? 0)} icon="shopping-bag" iconTone="blue" />
+            <StatTile label={t('bi.gmv')} value={money(shopie.gmv, shopie.currency)} icon="trending-up" iconTone="green" />
             <StatTile
-              label="Avg order"
+              label={t('bi.mobile.avgOrder')}
               value={money(shopie.avg_order_value, shopie.currency)}
               icon="tag"
               iconTone="amber"
             />
-            <StatTile label="Repeat rate" value={pct(shopie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
+            <StatTile label={t('bi.repeatRate')} value={pct(shopie.growth?.repeat_rate)} icon="repeat" iconTone="violet" />
           </TileGrid>
           <InsightPanel
-            title="Commerce insights"
-            subtitle="What shop activity is telling you."
+            title={t('bi.commerceInsights')}
+            subtitle={t('bi.mobile.commerceInsightsSub')}
             insights={shopie.insights ?? []}
           />
           {shopieTrend.some((row) => row.value > 0) ? (
-            <ChartCard title="Order trend" subtitle="Hover a day for the order count">
-              <LineAreaChart data={shopieTrend} color={iconTones.green.foreground} unit="orders" />
+            <ChartCard title={t('bi.orderTrend')} subtitle={t('bi.mobile.hoverDayOrderCount')}>
+              <LineAreaChart data={shopieTrend} color={iconTones.green.foreground} unit={t('bi.mobile.unitOrders')} />
             </ChartCard>
           ) : null}
         </>

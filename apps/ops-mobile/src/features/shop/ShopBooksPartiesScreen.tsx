@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +33,7 @@ import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { emailFieldError } from '../../utils/emailValidation';
+import type { TFunction } from 'i18next';
 import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
@@ -39,24 +41,30 @@ import { shareCsv, toCsv } from '../../utils/shareCsv';
 
 const INVOICE_PAGE_SIZE = 20;
 
-const INVOICE_TYPES = [
-  { value: '', label: 'All types' },
-  { value: 'purchase', label: 'Purchase' },
-  { value: 'debit_note', label: 'Debit note' },
-  { value: 'payment_out', label: 'Payment' },
-] as const;
+function invoiceTypes(t: TFunction) {
+  return [
+    { value: '', label: t('shop.parties.allTypes') },
+    { value: 'purchase', label: t('shop.parties.types.purchase') },
+    { value: 'debit_note', label: t('shop.parties.types.debit_note') },
+    { value: 'payment_out', label: t('shop.parties.types.payment_out') },
+  ];
+}
 
-const INVOICE_STATUSES = [
-  { value: '', label: 'Any status' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'void', label: 'Void' },
-] as const;
+function invoiceStatuses(t: TFunction) {
+  return [
+    { value: '', label: t('shop.parties.anyStatus') },
+    { value: 'confirmed', label: t('shop.parties.confirmed') },
+    { value: 'void', label: t('shop.parties.void') },
+  ];
+}
 
-const INVOICE_PAYMENTS = [
-  { value: '', label: 'Any payment' },
-  { value: 'due', label: 'Due' },
-  { value: 'paid', label: 'Paid' },
-] as const;
+function invoicePayments(t: TFunction) {
+  return [
+    { value: '', label: t('shop.parties.anyPayment') },
+    { value: 'due', label: t('shop.parties.due') },
+    { value: 'paid', label: t('shop.parties.paid') },
+  ];
+}
 
 function formFromSupplier(supplier: ShopSupplier): SupplierForm {
   return {
@@ -94,9 +102,13 @@ function invoiceMatches(
     .includes(term);
 }
 
-function invoiceTypeLabel(value?: string) {
+function invoiceTypeLabel(value: string | undefined, t: TFunction) {
   const key = (value || '').toLowerCase();
-  return INVOICE_TYPES.find((item) => item.value === key)?.label || key.replace(/_/g, ' ') || 'Bill';
+  return (
+    invoiceTypes(t).find((item) => item.value === key)?.label ||
+    key.replace(/_/g, ' ') ||
+    t('opsApp.shop.parties.billFallback')
+  );
 }
 
 type SupplierForm = {
@@ -122,6 +134,7 @@ const EMPTY_FORM: SupplierForm = {
 };
 
 export function ShopBooksPartiesScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -189,7 +202,13 @@ export function ShopBooksPartiesScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: showForm ? (editingId ? 'Edit supplier' : 'Add supplier') : selected ? selected.name : 'Suppliers',
+      title: showForm
+        ? editingId
+          ? t('shop.parties.editSupplier')
+          : t('shop.parties.addSupplier')
+        : selected
+          ? selected.name
+          : t('shop.parties.tabSuppliers'),
       headerLeft: () => (
         <Pressable
           onPress={() => {
@@ -198,7 +217,13 @@ export function ShopBooksPartiesScreen() {
             else navigation.goBack();
           }}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : selected ? 'Back to suppliers' : 'Go back'}
+          accessibilityLabel={
+            showForm
+              ? t('common.close')
+              : selected
+                ? t('opsApp.shop.parties.backToSuppliers')
+                : t('common.back')
+          }
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -214,7 +239,7 @@ export function ShopBooksPartiesScreen() {
                 else openCreate();
               }}
               accessibilityRole="button"
-              accessibilityLabel={selected ? 'Edit supplier' : 'Add supplier'}
+              accessibilityLabel={selected ? t('shop.parties.editSupplier') : t('shop.parties.addSupplier')}
               hitSlop={8}
               style={styles.headerBtn}
             >
@@ -222,7 +247,7 @@ export function ShopBooksPartiesScreen() {
             </Pressable>
           ),
     });
-  }, [navigation, showForm, closeForm, editingId, selected, openCreate, openEdit]);
+  }, [navigation, showForm, closeForm, editingId, selected, openCreate, openEdit, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -232,11 +257,11 @@ export function ShopBooksPartiesScreen() {
       const response = await client.shop.listSuppliers({ business_id: businessId });
       setSuppliers(response.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load suppliers');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.parties.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -265,7 +290,7 @@ export function ShopBooksPartiesScreen() {
   async function saveSupplier() {
     if (!client || !businessId) return;
     const nextErrors: Record<string, string> = {};
-    if (!form.name.trim()) nextErrors.name = requiredMessage('Supplier name');
+    if (!form.name.trim()) nextErrors.name = requiredMessage(t('shop.parties.supplierName'));
     const phoneError = indianMobileError(form.phone, false);
     if (phoneError) nextErrors.phone = phoneError;
     const emailError = emailFieldError(form.email, false);
@@ -293,13 +318,13 @@ export function ShopBooksPartiesScreen() {
       const response = editingId
         ? await client.shop.updateSupplier(editingId, payload)
         : await client.shop.createSupplier({ business_id: businessId, ...payload });
-      toast.push(editingId ? 'Supplier updated' : 'Supplier added', 'success');
+      toast.push(editingId ? t('shop.parties.supplierSaved') : t('shop.parties.supplierAdded'), 'success');
       if (selected && response.data.id === selected.id) setSelected(response.data);
       closeForm();
       await load();
     } catch (err) {
       toast.push(
-        getApiErrorMessage(err, editingId ? "Couldn't update this supplier. Try again." : "Couldn't add this supplier. Try again."),
+        getApiErrorMessage(err, t('shop.parties.saveFailed')),
         'error',
       );
     } finally {
@@ -326,12 +351,12 @@ export function ShopBooksPartiesScreen() {
         setInvoices((current) => (cursor ? [...current, ...page] : page));
         setInvoiceCursor(response.meta?.pagination?.next_cursor ?? null);
       } catch (err) {
-        toast.push(getApiErrorMessage(err, "Couldn't load this supplier's invoices."), 'error');
+        toast.push(getApiErrorMessage(err, t('shop.parties.loadInvoicesFailed')), 'error');
       } finally {
         setInvoicesLoading(false);
       }
     },
-    [businessId, client, invoiceFrom, invoiceStatus, invoiceTo, invoiceType, selected, toast],
+    [businessId, client, invoiceFrom, invoiceStatus, invoiceTo, invoiceType, selected, toast, t],
   );
 
   useEffect(() => {
@@ -370,7 +395,7 @@ export function ShopBooksPartiesScreen() {
         matched.map((voucher) => [
           voucher.voucher_number,
           voucher.voucher_date || '',
-          invoiceTypeLabel(voucher.voucher_type),
+          invoiceTypeLabel(voucher.voucher_type, t),
           voucher.status,
           voucher.total,
           voucher.amount_paid ?? 0,
@@ -381,7 +406,7 @@ export function ShopBooksPartiesScreen() {
       const slug = selected.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'supplier';
       await shareCsv(`${slug}-invoices.csv`, csv);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't export these invoices."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.parties.exportFailed')), 'error');
     } finally {
       setExporting(false);
     }
@@ -396,7 +421,7 @@ export function ShopBooksPartiesScreen() {
       const response = await client.shop.partyStatement({ business_id: businessId, kind: 'supplier', id: supplier.id });
       setStatement(response.data);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to load statement'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.parties.statementFailed')), 'error');
     } finally {
       setStatementLoading(false);
     }
@@ -407,7 +432,13 @@ export function ShopBooksPartiesScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : editingId ? 'Update supplier' : 'Save supplier'}
+            label={
+              busy
+                ? t('shop.parties.saving')
+                : editingId
+                  ? t('shop.parties.updateSupplier')
+                  : t('shop.parties.saveSupplier')
+            }
             loading={busy}
             fullWidth
             size="lg"
@@ -415,16 +446,16 @@ export function ShopBooksPartiesScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>{editingId ? 'Edit supplier' : 'Add supplier'}</Text>
+        <Text style={styles.formTitle}>{editingId ? t('shop.parties.editSupplier') : t('shop.parties.addSupplier')}</Text>
         <Input
-          label="Supplier name"
+          label={t('shop.parties.supplierName')}
           required
           value={form.name}
           onChangeText={(value) => setField('name', value)}
           error={fieldErrors.name}
         />
         <Input
-          label="Phone"
+          label={t('shop.parties.phone')}
           optional
           value={form.phone}
           onChangeText={(value) => setField('phone', value)}
@@ -432,7 +463,7 @@ export function ShopBooksPartiesScreen() {
           error={fieldErrors.phone}
         />
         <Input
-          label="Email"
+          label={t('shop.parties.email')}
           optional
           value={form.email}
           onChangeText={(value) => setField('email', value)}
@@ -441,7 +472,7 @@ export function ShopBooksPartiesScreen() {
           error={fieldErrors.email}
         />
         <Input
-          label="GSTIN"
+          label={t('shop.parties.gstin')}
           optional
           value={form.gstin}
           onChangeText={(value) => setField('gstin', normalizeGstin(value))}
@@ -450,27 +481,27 @@ export function ShopBooksPartiesScreen() {
           error={fieldErrors.gstin}
         />
         <Input
-          label="Billing state"
+          label={t('shop.parties.billingState')}
           optional
           value={form.billingState}
           onChangeText={(value) => setField('billingState', value)}
         />
         <Input
-          label="Billing address"
+          label={t('shop.parties.billingAddress')}
           optional
           value={form.billingAddress}
           onChangeText={(value) => setField('billingAddress', value)}
           multiline
         />
         <Input
-          label="Credit limit"
+          label={t('shop.parties.creditLimit')}
           optional
           value={form.creditLimit}
           onChangeText={(value) => setField('creditLimit', value.replace(/[^0-9.]/g, ''))}
           keyboardType="decimal-pad"
         />
         <Input
-          label="Opening balance"
+          label={t('shop.parties.openingBalance')}
           optional
           value={form.openingBalance}
           onChangeText={(value) => setField('openingBalance', value.replace(/[^0-9.-]/g, ''))}
@@ -503,16 +534,20 @@ export function ShopBooksPartiesScreen() {
         <View style={[styles.screen, { paddingTop: spacing.md }]}>
           <VoucherSummaryCards
             metrics={[
-              { label: 'Bills', value: String(visibleInvoices.length) },
-              { label: 'Due on page', value: formatMoney(dueTotal), tone: dueTotal > 0 ? 'due' : 'paid' },
+              { label: t('opsApp.shop.parties.bills'), value: String(visibleInvoices.length) },
+              { label: t('opsApp.shop.parties.dueOnPage'), value: formatMoney(dueTotal), tone: dueTotal > 0 ? 'due' : 'paid' },
               {
-                label: 'Closing',
+                label: t('shop.parties.closingBalance'),
                 value: statement ? formatMoney(statement.closing_balance) : '—',
               },
             ]}
           />
           <Text style={styles.meta}>
-            {[selected.phone || 'No phone', selected.email, selected.gstin ? `GSTIN ${selected.gstin}` : '']
+            {[
+              selected.phone || t('shop.parties.noPhone'),
+              selected.email,
+              selected.gstin ? t('opsApp.shop.parties.gstinInline', { value: selected.gstin }) : '',
+            ]
               .filter(Boolean)
               .join(' · ')}
           </Text>
@@ -521,14 +556,14 @@ export function ShopBooksPartiesScreen() {
               style={styles.searchFlex}
               value={invoiceSearch}
               onChangeText={setInvoiceSearch}
-              placeholder="Search bills"
+              placeholder={t('shop.vouchers.searchBills')}
             />
             <FilterButton count={invoiceFilterCount} onPress={() => setFiltersOpen(true)} />
             <Pressable
               onPress={() => void exportInvoices()}
               disabled={exporting}
               accessibilityRole="button"
-              accessibilityLabel="Export invoices"
+              accessibilityLabel={t('shop.parties.exportInvoices')}
               style={styles.headerBtn}
             >
               <Feather name="download" size={18} color={colors.primary} />
@@ -536,7 +571,7 @@ export function ShopBooksPartiesScreen() {
           </View>
           {invoiceFilterCount || invoiceSearch.trim() ? (
             <Pressable onPress={clearInvoiceFilters} hitSlop={8} style={styles.resetRow}>
-              <Text style={styles.clear}>Clear search & filters</Text>
+              <Text style={styles.clear}>{t('shop.vouchers.clearFilters')}</Text>
             </Pressable>
           ) : null}
           <FilterSheet
@@ -545,29 +580,29 @@ export function ShopBooksPartiesScreen() {
             onReset={clearInvoiceFilters}
           >
             <FilterChoiceGroup
-              label="Type"
+              label={t('shop.reportsPage.filterType')}
               value={invoiceType}
-              options={INVOICE_TYPES.map((option) => ({ value: option.value, label: option.label }))}
+              options={invoiceTypes(t)}
               onChange={setInvoiceType}
             />
             <FilterChoiceGroup
-              label="Status"
+              label={t('common.status')}
               value={invoiceStatus}
-              options={INVOICE_STATUSES.map((option) => ({ value: option.value, label: option.label }))}
+              options={invoiceStatuses(t)}
               onChange={setInvoiceStatus}
             />
             <FilterChoiceGroup
-              label="Payment"
+              label={t('shop.vouchers.paymentFilter')}
               value={invoicePayment}
-              options={INVOICE_PAYMENTS.map((option) => ({ value: option.value, label: option.label }))}
+              options={invoicePayments(t)}
               onChange={setInvoicePayment}
             />
             <View style={styles.dateRow}>
               <View style={styles.dateField}>
-                <DateField label="From" optional value={invoiceFrom} onChange={setInvoiceFrom} allowClear />
+                <DateField label={t('common.from')} optional value={invoiceFrom} onChange={setInvoiceFrom} allowClear />
               </View>
               <View style={styles.dateField}>
-                <DateField label="To" optional value={invoiceTo} onChange={setInvoiceTo} allowClear />
+                <DateField label={t('common.to')} optional value={invoiceTo} onChange={setInvoiceTo} allowClear />
               </View>
             </View>
           </FilterSheet>
@@ -586,8 +621,8 @@ export function ShopBooksPartiesScreen() {
                 <BooksDocumentRow
                   title={item.voucher_number}
                   amount={formatMoney(item.total)}
-                  meta={`${invoiceTypeLabel(item.voucher_type)} · ${formatVoucherDateTime(item.voucher_date, item.created_at)}`}
-                  badge={isVoid ? 'Void' : due > 0.009 ? 'Due' : 'Paid'}
+                  meta={`${invoiceTypeLabel(item.voucher_type, t)} · ${formatVoucherDateTime(item.voucher_date, item.created_at)}`}
+                  badge={isVoid ? t('shop.parties.void') : due > 0.009 ? t('shop.parties.due') : t('shop.parties.paid')}
                   badgeKind={isVoid ? 'neutral' : due > 0.009 ? 'due' : 'paid'}
                   icon="file-text"
                   iconTone={isVoid ? 'navy' : due > 0.009 ? 'amber' : 'green'}
@@ -603,11 +638,11 @@ export function ShopBooksPartiesScreen() {
               !invoicesLoading ? (
                 <EmptyState
                   icon="file-text"
-                  title={invoices.length ? 'No invoices match these filters' : 'No invoices yet'}
+                  title={invoices.length ? t('shop.parties.noInvoices') : t('opsApp.shop.parties.noInvoicesYet')}
                   message={
                     invoices.length
-                      ? 'Try another type, status, or date.'
-                      : 'Purchase bills, debit notes, and payments for this supplier show up here.'
+                      ? t('opsApp.shop.parties.tryAnother')
+                      : t('opsApp.shop.parties.invoicesHint')
                   }
                 />
               ) : null
@@ -615,7 +650,7 @@ export function ShopBooksPartiesScreen() {
             ListFooterComponent={
               invoiceCursor ? (
                 <Button
-                  label={invoicesLoading ? 'Loading…' : 'Load more'}
+                  label={invoicesLoading ? t('common.loading') : t('shop.parties.loadMore')}
                   variant="outline"
                   loading={invoicesLoading}
                   onPress={() => void loadInvoices(invoiceCursor)}
@@ -633,11 +668,11 @@ export function ShopBooksPartiesScreen() {
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <VoucherSummaryCards
           metrics={[
-            { label: 'Suppliers', value: String(filtered.length) },
-            { label: 'All', value: String(suppliers.length) },
+            { label: t('shop.parties.tabSuppliers'), value: String(filtered.length) },
+            { label: t('common.all'), value: String(suppliers.length) },
           ]}
         />
-        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder="Search suppliers" />
+        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder={t('shop.parties.searchSuppliers')} />
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <FlatList
@@ -650,17 +685,21 @@ export function ShopBooksPartiesScreen() {
             return (
               <BooksDocumentRow
                 title={supplierLabel(item)}
-                meta={[item.phone || 'No phone', item.email, item.gstin ? `GSTIN ${item.gstin}` : '']
+                meta={[
+                  item.phone || t('shop.parties.noPhone'),
+                  item.email,
+                  item.gstin ? t('opsApp.shop.parties.gstinInline', { value: item.gstin }) : '',
+                ]
                   .filter(Boolean)
                   .join(' · ')}
-                badge="Open"
+                badge={t('opsApp.shop.parties.open')}
                 icon="truck"
                 iconTone="navy"
                 onPress={() => {
                   openSupplier(item);
                   void loadStatement(item);
                 }}
-                extraActions={[{ label: 'Edit', icon: 'edit-2', onPress: () => openEdit(item) }]}
+                extraActions={[{ label: t('opsApp.shop.common.edit'), icon: 'edit-2', onPress: () => openEdit(item) }]}
               />
             );
           }}
@@ -668,9 +707,9 @@ export function ShopBooksPartiesScreen() {
             !loading ? (
               <EmptyState
                 icon="users"
-                title="No suppliers yet"
-                message="Add vendors to track purchase balances and statements."
-                actionLabel="Add supplier"
+                title={t('opsApp.shop.parties.noSuppliersTitle')}
+                message={t('opsApp.shop.parties.noSuppliersHint')}
+                actionLabel={t('shop.parties.addSupplier')}
                 onAction={openCreate}
               />
             ) : null

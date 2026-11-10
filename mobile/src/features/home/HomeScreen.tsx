@@ -3,6 +3,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { CompositeNavigationProp, useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -78,6 +79,7 @@ function announcementTone(severity?: string) {
 }
 
 export function HomeScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<HomeNavigation>();
   const homeFocused = useIsFocused();
   const { user } = useAuth();
@@ -88,7 +90,7 @@ export function HomeScreen() {
   const primary = branding?.primaryColor ?? colors.primary;
   const secondary = branding?.secondaryColor ?? '#1E40AF';
   const { showBooking, showShop } = customerAppFeatures(bootstrap?.features);
-  const appName = bootstrap?.business.display_name ?? branding?.appName ?? 'us';
+  const appName = bootstrap?.business.display_name ?? branding?.appName ?? t('customerApp.home.fallbackAppName');
 
   const [services, setServices] = useState<MobileDiscoverService[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -104,7 +106,7 @@ export function HomeScreen() {
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const { bookings, loading: bookingsLoading, reload: reloadBookings } = useMobileBookings();
   const { unreadCount, reload: reloadNotifications } = useMobileNotifications();
-  const displayName = user?.first_name || user?.full_name || 'there';
+  const displayName = user?.first_name || user?.full_name || t('customerApp.home.fallbackName');
 
   const loadCatalog = useCallback(async () => {
     if (!tenantSlug || !businessCode) return;
@@ -227,7 +229,7 @@ export function HomeScreen() {
           {loyaltyEnabled ? (
             <Pressable style={styles.pointsChip} onPress={() => navigation.navigate('Profile')}>
               <Feather name="award" size={14} color="#fff" />
-              <Text style={styles.pointsChipText}>{loyaltyPoints} pts</Text>
+              <Text style={styles.pointsChipText}>{t('customerApp.home.pointsShort', { n: loyaltyPoints })}</Text>
             </Pressable>
           ) : null}
           <Pressable style={styles.bell} onPress={() => navigation.navigate('Alerts')}>
@@ -252,7 +254,7 @@ export function HomeScreen() {
                 onPress={() => navigation.navigate('BookingDetail', { bookingId: nextBooking.id })}
               >
                 <View style={styles.nextHeaderRow}>
-                  <Text style={styles.nextLabel}>Next appointment</Text>
+                  <Text style={styles.nextLabel}>{t('customerApp.home.nextAppointment')}</Text>
                   {nextTiming?.label ? (
                     <View style={styles.nextTimingChip}>
                       <Feather
@@ -275,16 +277,18 @@ export function HomeScreen() {
                     </Text>
                     <Text style={styles.nextHint}>
                       {bookingTimeRangeLabel(nextBooking.start_at, nextBooking.end_at)}
-                      {nextBooking.duration_minutes ? ` · ${nextBooking.duration_minutes} min` : ''}
+                      {nextBooking.duration_minutes
+                        ? ` · ${t('bookings.minutesShort', { n: nextBooking.duration_minutes })}`
+                        : ''}
                     </Text>
                     {nextBooking.branch?.display_name ? (
                       <Text style={styles.nextHint} numberOfLines={1}>
-                        at {nextBooking.branch.display_name}
+                        {t('customerApp.home.atBranch', { branch: nextBooking.branch.display_name })}
                       </Text>
                     ) : null}
                     {nextStaffLabel ? (
                       <Text style={styles.nextHint} numberOfLines={2}>
-                        with {nextStaffLabel}
+                        {t('customerApp.home.withStaff', { staff: nextStaffLabel })}
                       </Text>
                     ) : null}
                   </View>
@@ -293,11 +297,11 @@ export function HomeScreen() {
               </Pressable>
             ) : (
               <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Book')}>
-                <Text style={styles.nextLabel}>Next appointment</Text>
+                <Text style={styles.nextLabel}>{t('customerApp.home.nextAppointment')}</Text>
                 <View style={styles.nextMain}>
                   <View style={styles.nextCopy}>
-                    <Text style={styles.nextTitle}>No upcoming bookings</Text>
-                    <Text style={styles.nextHint}>Book your next visit in a few taps</Text>
+                    <Text style={styles.nextTitle}>{t('customerApp.home.noUpcoming')}</Text>
+                    <Text style={styles.nextHint}>{t('customerApp.home.bookNextVisit')}</Text>
                   </View>
                   <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
                 </View>
@@ -305,22 +309,22 @@ export function HomeScreen() {
             )
           ) : showShop ? (
             <Pressable style={styles.nextCard} onPress={() => navigation.navigate('Shop')}>
-              <Text style={styles.nextLabel}>Shop {appName}</Text>
+              <Text style={styles.nextLabel}>{t('customerApp.home.shopApp', { name: appName })}</Text>
               <View style={styles.nextMain}>
                 <View style={styles.nextCopy}>
-                  <Text style={styles.nextTitle}>Order in a few taps</Text>
-                  <Text style={styles.nextHint}>Browse products and keep your receipts in the app</Text>
+                  <Text style={styles.nextTitle}>{t('customerApp.home.orderInTaps')}</Text>
+                  <Text style={styles.nextHint}>{t('customerApp.home.browseProducts')}</Text>
                 </View>
                 <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
               </View>
             </Pressable>
           ) : (
             <Pressable style={styles.nextCard} onPress={() => navigation.navigate('HelpSupport')}>
-              <Text style={styles.nextLabel}>Welcome</Text>
+              <Text style={styles.nextLabel}>{t('customerApp.home.welcome')}</Text>
               <View style={styles.nextMain}>
                 <View style={styles.nextCopy}>
                   <Text style={styles.nextTitle}>{appName}</Text>
-                  <Text style={styles.nextHint}>Reach the team any time from Help & Support</Text>
+                  <Text style={styles.nextHint}>{t('customerApp.home.reachTeam')}</Text>
                 </View>
                 <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.7)" />
               </View>
@@ -332,7 +336,7 @@ export function HomeScreen() {
           ads={ads}
           playing={homeFocused}
           fallbackColors={[primary, secondary]}
-          ctaLabel={showShop ? 'Shop now' : 'Learn more'}
+          ctaLabel={showShop ? t('customerApp.home.shopNow') : t('customerApp.home.learnMore')}
           onPressAd={(ad) =>
             openPromoAd(
               ad,
@@ -349,9 +353,9 @@ export function HomeScreen() {
               <Feather name="gift" size={18} color={primary} />
             </View>
             <View style={styles.inviteBody}>
-              <Text style={styles.inviteTitle}>Invite a friend</Text>
+              <Text style={styles.inviteTitle}>{t('customerApp.home.inviteFriend')}</Text>
               <Text style={styles.inviteSubtitle}>
-                Share your code and earn {bootstrap.referral.points_per_referral} reward points
+                {t('customerApp.home.inviteSubtitle', { points: bootstrap.referral.points_per_referral })}
               </Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
@@ -376,10 +380,10 @@ export function HomeScreen() {
         {showBooking && moreUpcoming.length ? (
           <>
             <SectionHeader
-              title="Also coming up"
+              title={t('customerApp.home.alsoComingUp')}
               action={
                 <Pressable onPress={() => navigation.navigate('BookingHistory')}>
-                  <Text style={[styles.link, { color: primary }]}>See all</Text>
+                  <Text style={[styles.link, { color: primary }]}>{t('customerApp.home.seeAll')}</Text>
                 </Pressable>
               }
             />
@@ -403,10 +407,10 @@ export function HomeScreen() {
         {showBooking ? (
           <>
             <SectionHeader
-              title="Popular services"
+              title={t('customerApp.home.popularServices')}
               action={
                 <Pressable onPress={() => navigation.navigate('Services')}>
-                  <Text style={[styles.link, { color: primary }]}>See all</Text>
+                  <Text style={[styles.link, { color: primary }]}>{t('customerApp.home.seeAll')}</Text>
                 </Pressable>
               }
             />
@@ -433,14 +437,16 @@ export function HomeScreen() {
                     {service.name}
                   </Text>
                   <Text style={styles.serviceMeta}>
-                    {service.duration_minutes} min · {formatMoney(Number(service.price), service.currency)}
+                    {t('bookings.minutesShort', { n: service.duration_minutes })} · {formatMoney(Number(service.price), service.currency)}
                   </Text>
                 </Pressable>
               ))}
               {!featuredServices.length ? (
                 <View style={styles.serviceCard}>
                   <Text style={styles.serviceMeta}>
-                    {catalogLoading ? 'Loading services...' : 'Services will appear here once loaded.'}
+                    {catalogLoading
+                      ? t('customerApp.home.loadingServices')
+                      : t('customerApp.home.servicesPlaceholder')}
                   </Text>
                 </View>
               ) : null}
@@ -451,10 +457,10 @@ export function HomeScreen() {
         {showShop ? (
           <>
             <SectionHeader
-              title="Featured products"
+              title={t('customerApp.home.featuredProducts')}
               action={
                 <Pressable onPress={() => navigation.navigate('Shop')}>
-                  <Text style={[styles.link, { color: primary }]}>See all</Text>
+                  <Text style={[styles.link, { color: primary }]}>{t('customerApp.home.seeAll')}</Text>
                 </Pressable>
               }
             />
@@ -488,7 +494,9 @@ export function HomeScreen() {
               {!featuredProducts.length ? (
                 <View style={styles.serviceCard}>
                   <Text style={styles.serviceMeta}>
-                    {catalogLoading ? 'Loading products...' : 'Products will appear here once loaded.'}
+                    {catalogLoading
+                      ? t('customerApp.home.loadingProducts')
+                      : t('customerApp.home.productsPlaceholder')}
                   </Text>
                 </View>
               ) : null}
@@ -499,11 +507,11 @@ export function HomeScreen() {
         {showBooking ? (
           <>
             <SectionHeader
-              title="Recent appointments"
+              title={t('customerApp.home.recentAppointments')}
               action={
                 recentBookings.length ? (
                   <Pressable onPress={() => navigation.navigate('BookingHistory')} hitSlop={8}>
-                    <Text style={[styles.link, { color: primary }]}>See all</Text>
+                    <Text style={[styles.link, { color: primary }]}>{t('customerApp.home.seeAll')}</Text>
                   </Pressable>
                 ) : undefined
               }
@@ -545,7 +553,7 @@ export function HomeScreen() {
                   >
                     <Feather name="rotate-ccw" size={14} color={primary} />
                     <Text style={[styles.repeatText, { color: primary }]} numberOfLines={1}>
-                      Book {rebookTarget.service_name} again
+                      {t('customerApp.home.bookAgain', { service: rebookTarget.service_name })}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -555,18 +563,18 @@ export function HomeScreen() {
                 <View style={[styles.emptyIcon, { backgroundColor: `${primary}12` }]}>
                   <Feather name="calendar" size={18} color={primary} />
                 </View>
-                <Text style={styles.emptyTitle}>{nextBooking ? 'No past visits yet' : 'No past appointments'}</Text>
+                <Text style={styles.emptyTitle}>{nextBooking ? t('customerApp.home.noPastVisits') : t('customerApp.home.noPastAppointments')}</Text>
                 <Text style={styles.emptyText}>
                   {nextBooking
-                    ? 'Once your upcoming appointment is done, it will appear here for easy rebooking.'
-                    : 'Visit us once and your history lands here, so you can rebook in a tap.'}
+                    ? t('customerApp.home.afterUpcomingDone')
+                    : t('customerApp.home.visitOnce')}
                 </Text>
                 {!nextBooking ? (
                   <Pressable
                     style={[styles.emptyCta, { backgroundColor: primary }]}
                     onPress={() => navigation.navigate('Book')}
                   >
-                    <Text style={styles.emptyCtaText}>Book your first visit</Text>
+                    <Text style={styles.emptyCtaText}>{t('customerApp.home.bookFirstVisit')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -584,11 +592,13 @@ export function HomeScreen() {
                 }
               >
                 <View style={styles.activeShipmentHead}>
-                  <Text style={[styles.activeShipmentEyebrow, { color: primary }]}>ACTIVE DELIVERY</Text>
-                  <Text style={[styles.trackAction, { color: primary }]}>Track</Text>
+                  <Text style={[styles.activeShipmentEyebrow, { color: primary }]}>
+                    {t('customerApp.home.activeDelivery')}
+                  </Text>
+                  <Text style={[styles.trackAction, { color: primary }]}>{t('customerApp.home.track')}</Text>
                 </View>
                 <Text style={styles.activeShipmentTitle}>
-                  Order #{activeDeliveryOrder.order_number}
+                  {t('customerApp.home.orderNumber', { number: activeDeliveryOrder.order_number })}
                 </Text>
                 <Text style={styles.sampleMeta}>
                   {shopOrderDeliverySummary(activeDeliveryOrder)?.statusLabel}
@@ -600,11 +610,11 @@ export function HomeScreen() {
               </Pressable>
             ) : null}
             <SectionHeader
-              title="Recent orders"
+              title={t('customerApp.home.recentOrders')}
               action={
                 orders.length ? (
                   <Pressable onPress={() => navigation.navigate('ShopOrderHistory')} hitSlop={8}>
-                    <Text style={[styles.link, { color: primary }]}>See all</Text>
+                    <Text style={[styles.link, { color: primary }]}>{t('customerApp.home.seeAll')}</Text>
                   </Pressable>
                 ) : undefined
               }
@@ -652,17 +662,25 @@ export function HomeScreen() {
                         </View>
                         <Text style={styles.sampleMeta} numberOfLines={1}>
                           {formatShopOrderPlaced(order.created_at)}
-                          {itemCount ? ` · ${itemCount} item${itemCount === 1 ? '' : 's'}` : ''}
+                          {itemCount
+                            ? ` · ${
+                                itemCount === 1
+                                  ? t('customerApp.home.itemsOne')
+                                  : t('customerApp.home.itemsMany', { n: itemCount })
+                              }`
+                            : ''}
                         </Text>
                         <View style={styles.orderStatusRow}>
                           <View style={[styles.statusPill, { backgroundColor: tone.bg }]}>
                             <View style={[styles.statusDot, { backgroundColor: tone.dot }]} />
                             <Text style={[styles.statusText, { color: tone.text }]} numberOfLines={1}>
                               {deliverySummary?.statusLabel || headline.title}
-                              {deliverySummary?.etaLabel ? ` · ETA ${deliverySummary.etaLabel}` : ''}
+                              {deliverySummary?.etaLabel
+                                ? ` · ${t('customerApp.home.etaShort', { eta: deliverySummary.etaLabel })}`
+                                : ''}
                             </Text>
                           </View>
-                          {unpaid ? <Text style={styles.unpaidHint}>Payment due</Text> : null}
+                          {unpaid ? <Text style={styles.unpaidHint}>{t('customerApp.home.paymentDue')}</Text> : null}
                         </View>
                       </View>
                       {deliverySummary?.active ? (
@@ -679,15 +697,15 @@ export function HomeScreen() {
                 <View style={[styles.emptyIcon, { backgroundColor: `${primary}12` }]}>
                   <Feather name="shopping-bag" size={18} color={primary} />
                 </View>
-                <Text style={styles.emptyTitle}>No orders yet</Text>
+                <Text style={styles.emptyTitle}>{t('customerApp.home.noOrders')}</Text>
                 <Text style={styles.emptyText}>
-                  Your purchases and receipts stay here, ready to reorder any time.
+                  {t('customerApp.home.noOrdersHint')}
                 </Text>
                 <Pressable
                   style={[styles.emptyCta, { backgroundColor: primary }]}
                   onPress={() => navigation.navigate('Shop')}
                 >
-                  <Text style={styles.emptyCtaText}>Start shopping</Text>
+                  <Text style={styles.emptyCtaText}>{t('customerApp.home.startShopping')}</Text>
                 </Pressable>
               </View>
             )}

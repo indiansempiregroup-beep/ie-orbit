@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import QRCode from 'react-native-qrcode-svg';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -130,6 +131,7 @@ function ProductThumb({ uri, size = 72 }: { uri?: string | null; size?: number }
 }
 
 function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: string }) {
+  const { t } = useTranslation();
   const isPickup = live.delivery_method === 'pickup';
   const isCourier =
     !isPickup &&
@@ -162,7 +164,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
   const trackingUrl = live.tracking_url || activeAttempt?.tracking_url;
   const shipment = live.shipment;
   const failureReason = live.subtitle || activeAttempt?.reason;
-  const headline = String(live.headline || (isPickup ? 'Order update' : 'Delivery update')).replace(
+  const headline = String(live.headline || (isPickup ? t('customerApp.orderDetail.trackOrderUpdate') : t('customerApp.orderDetail.trackDeliveryUpdate'))).replace(
     /\s*·\s*\d+\s*min(?:utes?)?$/i,
     '',
   );
@@ -172,7 +174,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
     ['delivered', 'completed'].includes(String(live.partner_status || '').toLowerCase()) ||
     ['delivered', 'completed'].includes(String(live.order_status || '').toLowerCase());
   const trackingTitle = delivered
-    ? headline || (isPickup ? 'Picked up' : 'Delivered')
+    ? headline || (isPickup ? t('customerApp.orderDetail.pickedUp') : t('customerApp.orderDetail.delivered'))
     : isCourier && promiseLabel
       ? promiseLabel
       : headline;
@@ -204,7 +206,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
             <Text style={styles.eventLabel}>{event.label || event.status.replace(/_/g, ' ')}</Text>
             <View style={styles.eventMetaRow}>
               {event.occurred_at ? <Text style={styles.meta}>{formatDateTime(event.occurred_at)}</Text> : null}
-              {event.eta_minutes != null ? <Text style={styles.meta}>ETA {event.eta_minutes} min</Text> : null}
+              {event.eta_minutes != null ? <Text style={styles.meta}>{t('customerApp.orderDetail.etaMin', { n: event.eta_minutes })}</Text> : null}
             </View>
             {event.reason ? <Text style={styles.eventReason}>{event.reason}</Text> : null}
           </View>
@@ -220,42 +222,46 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
         <View style={{ flex: 1 }}>
           <Text style={styles.trackingEyebrow}>
             {isPickup
-              ? 'ORDER STATUS'
+              ? t('customerApp.orderDetail.eyebrowOrder')
               : live.terminal
-                ? 'DELIVERY STATUS'
+                ? t('customerApp.orderDetail.eyebrowDelivery')
                 : isCourier
-                  ? 'SHIPMENT STATUS'
-                  : 'LIVE DELIVERY'}
+                  ? t('customerApp.orderDetail.eyebrowShipment')
+                  : t('customerApp.orderDetail.eyebrowLive')}
           </Text>
           <Text style={styles.trackingTitle}>{trackingTitle}</Text>
           {isCourier && shipment?.carrier_label && !delivered ? (
-            <Text style={styles.trackingSubtitle}>Shipped with {shipment.carrier_label}</Text>
+            <Text style={styles.trackingSubtitle}>
+              {t('customerApp.orderDetail.shippedWith', { carrier: shipment.carrier_label })}
+            </Text>
           ) : null}
           {failureReason ? <Text style={styles.trackingSubtitle}>{failureReason}</Text> : null}
           <Text style={[styles.updatedText, !isPickup && live.stale && styles.staleText]}>
             {isPickup
               ? live.last_updated
-                ? `Updated ${formatDateTime(live.last_updated)}`
-                : 'Waiting for an update'
+                ? t('customerApp.orderDetail.updatedAt', { time: formatDateTime(live.last_updated) })
+                : t('customerApp.orderDetail.waitingForUpdate')
               : live.stale
-                ? `Location may be outdated${live.last_updated ? ` · Updated ${formatDateTime(live.last_updated)}` : ''}`
+                ? live.last_updated
+                  ? t('customerApp.orderDetail.locationOutdatedUpdated', { time: formatDateTime(live.last_updated) })
+                  : t('customerApp.orderDetail.locationOutdated')
                 : live.last_updated
-                  ? `Updated ${formatDateTime(live.last_updated)}`
-                  : 'Waiting for an update'}
+                  ? t('customerApp.orderDetail.updatedAt', { time: formatDateTime(live.last_updated) })
+                  : t('customerApp.orderDetail.waitingForUpdate')}
           </Text>
         </View>
       </View>
       {isCourier && shipment?.tracking_number ? (
         <View style={styles.awbRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.awbLabel}>Tracking ID</Text>
+            <Text style={styles.awbLabel}>{t('customerApp.orderDetail.trackingId')}</Text>
             <Text style={styles.awbValue}>{shipment.tracking_number}</Text>
           </View>
           <Pressable
             onPress={() => void Clipboard.setStringAsync(shipment.tracking_number || '')}
             style={styles.copyButton}
           >
-            <Text style={{ color: primary, fontWeight: '700' }}>Copy</Text>
+            <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.orderDetail.copy')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -263,9 +269,11 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
         <View style={[styles.etaBox, { backgroundColor: `${primary}12` }]}>
           <Feather name="clock" size={20} color={primary} />
           <View>
-            <Text style={styles.etaLabel}>ESTIMATED ARRIVAL</Text>
+            <Text style={styles.etaLabel}>{t('customerApp.orderDetail.estimatedArrival')}</Text>
             <Text style={[styles.etaValue, { color: primary }]}>
-              {live.eta_minutes != null ? `${live.eta_minutes} min` : 'Updating'}
+              {live.eta_minutes != null
+                ? t('bookings.minutesShort', { n: live.eta_minutes })
+                : t('customerApp.orderDetail.updating')}
             </Text>
           </View>
         </View>
@@ -281,8 +289,8 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
             </View>
           )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.riderName}>{rider.name || 'Delivery rider'}</Text>
-            <Text style={styles.meta}>{rider.vehicle || 'Your delivery partner'}</Text>
+            <Text style={styles.riderName}>{rider.name || t('customerApp.orderDetail.deliveryRider')}</Text>
+            <Text style={styles.meta}>{rider.vehicle || t('customerApp.orderDetail.yourDeliveryPartner')}</Text>
             {rider.phone ? <Text style={styles.riderPhone}>{rider.phone}</Text> : null}
           </View>
           {live.can_call_rider && rider.phone ? (
@@ -291,7 +299,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
               onPress={() => Linking.openURL(`tel:${rider.phone}`)}
             >
               <Feather name="phone" size={16} color={primary} />
-              <Text style={{ color: primary, fontWeight: '700' }}>Call</Text>
+              <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.orderDetail.call')}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -300,16 +308,18 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
         <Pressable style={styles.trackingLink} onPress={() => Linking.openURL(trackingUrl)}>
           <Feather name="external-link" size={16} color={primary} />
           <Text style={[styles.trackingLinkText, { color: primary }]}>
-            {isCourier ? `Track on ${shipment?.carrier_label || 'carrier'}` : 'Open carrier tracking'}
+            {isCourier
+              ? t('customerApp.orderDetail.trackOnCarrier', { carrier: shipment?.carrier_label || t('customerApp.orderDetail.carrierFallback') })
+              : t('customerApp.orderDetail.openCarrierTracking')}
           </Text>
         </Pressable>
       ) : null}
       {orderEvents.length || attemptNumbers.length ? (
         <View style={styles.historySection}>
-          <Text style={styles.historyTitle}>{isPickup ? 'Order history' : 'Delivery journey'}</Text>
+          <Text style={styles.historyTitle}>{isPickup ? t('customerApp.orderDetail.orderHistory') : t('customerApp.orderDetail.deliveryJourney')}</Text>
           {orderEvents.length ? (
             <View style={styles.attemptSection}>
-              <Text style={styles.attemptTitle}>{isPickup ? 'Updates' : 'Order updates'}</Text>
+              <Text style={styles.attemptTitle}>{isPickup ? t('customerApp.orderDetail.updates') : t('customerApp.orderDetail.orderUpdates')}</Text>
               {renderEvents(orderEvents)}
             </View>
           ) : null}
@@ -320,9 +330,11 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
             return (
               <View key={attemptNumber} style={styles.attemptSection}>
                 <View style={styles.attemptHeader}>
-                  <Text style={styles.attemptTitle}>Delivery attempt {attemptNumber}</Text>
+                  <Text style={styles.attemptTitle}>
+                    {t('customerApp.orderDetail.deliveryAttempt', { n: attemptNumber })}
+                  </Text>
                   <Text style={[styles.attemptStatus, isActive && { color: primary }]}>
-                    {isActive ? 'Current' : String(attempt?.status || '').replace(/_/g, ' ')}
+                    {isActive ? t('customerApp.orderDetail.current') : String(attempt?.status || '').replace(/_/g, ' ')}
                   </Text>
                 </View>
                 {attempt?.provider ? <Text style={styles.meta}>{attempt.provider}</Text> : null}
@@ -338,6 +350,7 @@ function DeliveryTracker({ live, primary }: { live: ShopDeliveryLive; primary: s
 }
 
 export function ShopOrderDetailScreen({ route }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { token } = useAuth();
@@ -395,8 +408,8 @@ export function ShopOrderDetailScreen({ route }: Props) {
             err instanceof Error
               ? err.message
               : fulfillment === 'pickup'
-                ? 'Unable to load order history.'
-                : 'Unable to load live delivery updates.',
+                ? t('customerApp.orderDetail.unableToLoadHistory')
+                : t('customerApp.orderDetail.unableToLoadLive'),
           );
         }
       } else {
@@ -414,7 +427,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
         setReturns([]);
       }
     } catch (err) {
-      setOrderError(err instanceof Error ? err.message : 'Unable to load this order.');
+      setOrderError(err instanceof Error ? err.message : t('customerApp.orderDetail.unableToLoad'));
     } finally {
       setRefreshing(false);
     }
@@ -452,7 +465,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
           }
         })
         .catch((err) =>
-          setDeliveryError(err instanceof Error ? err.message : 'Unable to refresh live delivery updates.'),
+          setDeliveryError(err instanceof Error ? err.message : t('customerApp.orderDetail.unableToRefreshLive')),
         );
     }, 60000);
     return () => clearInterval(timer);
@@ -549,7 +562,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       await WebBrowser.openBrowserAsync(url);
     } catch {
       const can = await Linking.canOpenURL(url);
-      if (!can) throw new Error('Cannot open invoice link on this device');
+      if (!can) throw new Error(t('customerApp.bookingDetail.invoiceCannotOpenDevice'));
       await Linking.openURL(url);
     }
   }
@@ -559,17 +572,17 @@ export function ShopOrderDetailScreen({ route }: Props) {
     try {
       const invoice = await fetchOrderInvoice();
       if (!invoice?.available) {
-        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        toast.push(invoice?.reason || t('customerApp.bookingDetail.invoiceNotAvailable'), 'error');
         return;
       }
       const url = invoiceViewUrl(invoice);
       if (!url) {
-        toast.push('Could not open tax invoice.', 'error');
+        toast.push(t('customerApp.bookingDetail.invoiceOpenFailed'), 'error');
         return;
       }
       await openInvoiceUrl(url);
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Could not open tax invoice.', 'error');
+      toast.push(err instanceof Error ? err.message : t('customerApp.bookingDetail.invoiceOpenFailed'), 'error');
     } finally {
       setInvoiceBusy(false);
     }
@@ -580,19 +593,19 @@ export function ShopOrderDetailScreen({ route }: Props) {
     try {
       const invoice = await fetchOrderInvoice();
       if (!invoice?.available) {
-        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        toast.push(invoice?.reason || t('customerApp.bookingDetail.invoiceNotAvailable'), 'error');
         return;
       }
       const url = invoiceViewUrl(invoice);
       const text = String(invoice.message || '').trim();
       const message = text.includes('http') ? text : [text, url].filter(Boolean).join('\n');
       if (!message) {
-        toast.push('Could not prepare invoice share link.', 'error');
+        toast.push(t('customerApp.bookingDetail.invoiceShareLinkFailed'), 'error');
         return;
       }
       await Share.share({ message, url: url || undefined });
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Could not share tax invoice.', 'error');
+      toast.push(err instanceof Error ? err.message : t('customerApp.bookingDetail.invoiceShareFailed'), 'error');
     } finally {
       setInvoiceBusy(false);
     }
@@ -603,13 +616,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Allow camera access to capture the payment screenshot.');
+          Alert.alert(t('customerApp.cart.permissionNeeded'), t('customerApp.cart.cameraPermission'));
           return;
         }
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert('Permission needed', 'Allow photo library access to upload a screenshot.');
+          Alert.alert(t('customerApp.cart.permissionNeeded'), t('customerApp.cart.libraryPermission'));
           return;
         }
       }
@@ -640,7 +653,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       body: form,
     });
     const json = await res.json();
-    if (!res.ok) throw new Error(json?.error?.message || 'Upload failed');
+    if (!res.ok) throw new Error(json?.error?.message || t('customerApp.cart.uploadFailed'));
     const mediaId = String(json?.data?.media_id || '').trim();
     const uploaded =
       String(json?.data?.payment_proof_url || '').trim() ||
@@ -654,19 +667,19 @@ export function ShopOrderDetailScreen({ route }: Props) {
       void uploadProof('library').catch((e) => setMessage(String(e)));
       return;
     }
-    Alert.alert('Payment screenshot', 'Capture the UPI success screen after you pay.', [
-      { text: 'Take photo', onPress: () => void uploadProof('camera').catch((e) => setMessage(String(e))) },
+    Alert.alert(t('customerApp.cart.paymentScreenshotTitle'), t('customerApp.cart.paymentScreenshotBody'), [
+      { text: t('customerApp.cart.takePhoto'), onPress: () => void uploadProof('camera').catch((e) => setMessage(String(e))) },
       {
-        text: Platform.OS === 'ios' ? 'Photo Library' : 'Gallery',
+        text: Platform.OS === 'ios' ? t('customerApp.cart.photoLibrary') : t('customerApp.cart.gallery'),
         onPress: () => void uploadProof('library').catch((e) => setMessage(String(e))),
       },
-      { text: 'Cancel', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
   async function claimPayment() {
     if (utr.trim().length < 6 && !proofUrl) {
-      setPaymentError('Enter a UTR of at least 6 characters or upload a payment screenshot.');
+      setPaymentError(t('customerApp.orderDetail.enterUtr'));
       return;
     }
     setPaymentError('');
@@ -679,10 +692,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
         upi_utr: utr,
         payment_proof_url: proofUrl || undefined,
       });
-      setMessage('Payment submitted for confirmation.');
+      setMessage(t('customerApp.orderDetail.paymentSubmitted'));
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't claim this payment. Try again.");
+      setMessage(err instanceof Error ? err.message : t('customerApp.orderDetail.claimFailed'));
     } finally {
       setBusy(false);
     }
@@ -710,17 +723,17 @@ export function ShopOrderDetailScreen({ route }: Props) {
         setGatewayModal({ provider: 'cashfree', checkout });
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't start payment. Try again.");
+      setMessage(err instanceof Error ? err.message : t('customerApp.orderDetail.startPaymentFailed'));
     } finally {
       setBusy(false);
     }
   }
 
   function confirmCancel() {
-    Alert.alert('Cancel order', 'Are you sure you want to cancel this order?', [
-      { text: 'Keep order', style: 'cancel' },
+    Alert.alert(t('customerApp.orderDetail.cancelOrder'), t('customerApp.orderDetail.cancelOrderConfirm'), [
+      { text: t('customerApp.orderDetail.keepOrder'), style: 'cancel' },
       {
-        text: 'Cancel order',
+        text: t('customerApp.orderDetail.cancelOrder'),
         style: 'destructive',
         onPress: () => void cancelOrder(),
       },
@@ -736,7 +749,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       });
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't cancel. Try again.");
+      setMessage(err instanceof Error ? err.message : t('customerApp.orderDetail.cancelFailed'));
     } finally {
       setBusy(false);
     }
@@ -745,14 +758,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
   if (!order || !headline || !tone) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader title="Order details" onBack={() => navigation.goBack()} />
+        <ScreenHeader title={t('customerApp.orderDetail.title')} onBack={() => navigation.goBack()} />
         {orderError ? (
           <View style={styles.loadError}>
             <Feather name="alert-circle" size={24} color={colors.destructive} />
-            <Text style={styles.loadErrorTitle}>Couldn’t load your order</Text>
+            <Text style={styles.loadErrorTitle}>{t('customerApp.orderDetail.loadErrorTitle')}</Text>
             <Text style={styles.loadErrorText}>{orderError}</Text>
             <Pressable style={[styles.retryButton, { backgroundColor: primary }]} onPress={() => void load()}>
-              <Text style={styles.buttonText}>Try again</Text>
+              <Text style={styles.buttonText}>{t('customerApp.orderDetail.tryAgain')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -822,7 +835,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
       }))
       .filter((row) => row.quantity > 0);
     if (!lines.length) {
-      setMessage('Choose at least one item to return.');
+      setMessage(t('customerApp.orderDetail.chooseOneItem'));
       return;
     }
     setBusy(true);
@@ -842,15 +855,22 @@ export function ShopOrderDetailScreen({ route }: Props) {
       setReturnMethod('dropoff');
       const how =
         returnMethod === 'dropoff'
-          ? 'Drop the items at the shop. Refund is issued after they confirm receipt.'
-          : 'The shop will arrange pickup (courier or rider). Refund is issued after they receive the items.';
+          ? t('customerApp.orderDetail.returnHowDropoff')
+          : t('customerApp.orderDetail.returnHowPickup');
       setMessage(
-        `Return ${response.data.return_number} submitted (${formatShopMoney(response.data.refund_total, response.data.currency || currentOrder.currency)}). ${how}`,
+        t('customerApp.orderDetail.returnSubmittedDetail', {
+          number: response.data.return_number,
+          amount: formatShopMoney(
+            response.data.refund_total,
+            response.data.currency || currentOrder.currency,
+          ),
+          how,
+        }),
       );
-      toast.push(`Return ${response.data.return_number} submitted.`, 'success');
+      toast.push(t('customerApp.orderDetail.returnSubmitted', { number: response.data.return_number }), 'success');
       await load();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't submit this return. Try again.");
+      setMessage(err instanceof Error ? err.message : t('customerApp.orderDetail.returnSubmitFailed'));
     } finally {
       setBusy(false);
     }
@@ -858,7 +878,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Order details" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('customerApp.orderDetail.title')} onBack={() => navigation.goBack()} />
       <RefreshableScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + 48, gap: spacing.md }}
@@ -876,14 +896,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
           <View style={[styles.confirmBanner, { borderColor: `${primary}44`, backgroundColor: `${primary}10` }]}>
             <Feather name="check-circle" size={20} color={primary} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.confirmTitle}>Order placed</Text>
+              <Text style={styles.confirmTitle}>{t('customerApp.orderDetail.orderPlaced')}</Text>
               <Text style={styles.confirmText}>
                 #{order.order_number}
                 {unpaidOnline
-                  ? ' · Complete payment below to confirm your order.'
+                  ? t('customerApp.orderDetail.placedPayBelow')
                   : fulfillmentMode === 'pickup'
-                    ? ' · We will update you when it is ready for pickup.'
-                    : ' · We will update you when it ships.'}
+                    ? t('customerApp.orderDetail.placedReadyPickup')
+                    : t('customerApp.orderDetail.placedWillShip')}
               </Text>
               {order.metadata &&
               typeof order.metadata === 'object' &&
@@ -932,11 +952,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {String(order.fulfillment_mode).toLowerCase() === 'delivery' && deliveryError ? (
           <View style={styles.deliveryError}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.deliveryErrorTitle}>Live tracking is unavailable</Text>
+              <Text style={styles.deliveryErrorTitle}>{t('customerApp.orderDetail.liveTrackingUnavailable')}</Text>
               <Text style={styles.meta}>{deliveryError}</Text>
             </View>
             <Pressable style={[styles.errorRetry, { borderColor: primary }]} onPress={() => void load('refresh')}>
-              <Text style={{ color: primary, fontWeight: '700' }}>Retry</Text>
+              <Text style={{ color: primary, fontWeight: '700' }}>{t('common.retry')}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -978,7 +998,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.section}>Items</Text>
+          <Text style={styles.section}>{t('customerApp.orderDetail.items')}</Text>
           {(order.lines ?? []).map((line) => {
             const returned = alreadyReturned[line.id] || 0;
             const returnedAt = returnedAtByLine[line.id];
@@ -994,11 +1014,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   {line.product_name}
                 </Text>
                 <Text style={styles.itemMeta}>
-                  Qty {formatShopQty(line.quantity)} · {formatShopMoney(line.unit_price, order.currency)} each
+                  {t('customerApp.orderDetail.qtyEach', {
+                    qty: formatShopQty(line.quantity),
+                    price: formatShopMoney(line.unit_price, order.currency),
+                  })}
                 </Text>
                 {returned > 0 ? (
                   <Text style={[styles.itemMeta, { color: colors.warning }]}>
-                    Returned {formatShopQty(returned)}
+                    {t('customerApp.orderDetail.returnedQty', { qty: formatShopQty(returned) })}
                     {returnedAt ? ` · ${formatShopDateTime(returnedAt)}` : ''}
                   </Text>
                 ) : null}
@@ -1014,7 +1037,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
         <View style={styles.card}>
           <Text style={styles.section}>
-            {isDelivery ? 'Delivery address' : isPos ? 'Purchase' : 'Pickup details'}
+            {isDelivery ? t('customerApp.orderDetail.deliveryAddress') : isPos ? t('customerApp.orderDetail.purchase') : t('customerApp.orderDetail.pickupDetails')}
           </Text>
           <View style={styles.infoRow}>
             <Feather
@@ -1024,22 +1047,24 @@ export function ShopOrderDetailScreen({ route }: Props) {
             />
             <Text style={styles.infoText}>
               {isDelivery
-                ? order.delivery_address || 'Address on file'
+                ? order.delivery_address || t('customerApp.orderDetail.addressOnFile')
                 : isPos
-                  ? `${shopFulfillmentLabel(order.fulfillment_mode)} · ${business?.display_name || business?.business_name || 'Shop counter'}`
+                  ? `${shopFulfillmentLabel(order.fulfillment_mode)} · ${business?.display_name || business?.business_name || t('customerApp.orderDetail.shopCounter')}`
                   : pickupAddress || shopFulfillmentLabel(order.fulfillment_mode)}
             </Text>
           </View>
-          {meta.deliveryZone ? <Text style={styles.meta}>Zone · {meta.deliveryZone}</Text> : null}
+          {meta.deliveryZone ? <Text style={styles.meta}>{t('customerApp.orderDetail.zoneLine', { zone: meta.deliveryZone })}</Text> : null}
           {isDelivery && meta.deliveryMethod ? (
             <Text style={styles.meta}>
-              {meta.deliveryMethod === 'instant' ? 'Deliver now · rider after packing' : 'Standard delivery'}
+              {meta.deliveryMethod === 'instant'
+                ? t('customerApp.orderDetail.deliverNowRider')
+                : t('customerApp.cart.standardDelivery')}
             </Text>
           ) : null}
           {!isPos && slotLabel ? (
             <View style={styles.infoRow}>
               <Feather name="clock" size={16} color={primary} />
-              <Text style={styles.infoText}>Preferred {slotLabel}</Text>
+              <Text style={styles.infoText}>{t('customerApp.orderDetail.preferredSlot', { slot: slotLabel })}</Text>
             </View>
           ) : null}
           {meta.fulfillmentNote ? <Text style={styles.meta}>{meta.fulfillmentNote}</Text> : null}
@@ -1047,15 +1072,15 @@ export function ShopOrderDetailScreen({ route }: Props) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.section}>Payment</Text>
+          <Text style={styles.section}>{t('customerApp.cart.payment')}</Text>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Method</Text>
+            <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.method')}</Text>
             <Text style={styles.summaryValue}>
               {shopPaymentMethodLabel(order.payment_method, order.fulfillment_mode)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Status</Text>
+            <Text style={styles.summaryLabel}>{t('common.status')}</Text>
             <Text
               style={[
                 styles.summaryValue,
@@ -1071,7 +1096,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
           </View>
           {order.upi_utr ? (
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>UTR / reference</Text>
+              <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.utrReference')}</Text>
               <Text style={styles.summaryValue}>{order.upi_utr}</Text>
             </View>
           ) : null}
@@ -1082,37 +1107,38 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 setLightboxMode('view');
                 setProofLightboxOpen(true);
               }}
-              accessibilityLabel="View payment screenshot"
+              accessibilityLabel={t('customerApp.orderDetail.viewScreenshotA11y')}
             >
-              <Text style={{ color: primary, fontWeight: '700' }}>View screenshot</Text>
+              <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.orderDetail.viewScreenshot')}</Text>
             </Pressable>
           ) : null}
         </View>
 
         {cashOnHandover && !isPos ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Cash payment</Text>
+            <Text style={styles.section}>{t('customerApp.orderDetail.cashPayment')}</Text>
             <Text style={styles.meta}>
-              You will pay {formatShopMoney(order.total, order.currency)} in cash when you{' '}
-              {isDelivery ? 'receive' : 'collect'} your order.
+              {isDelivery
+                ? t('customerApp.orderDetail.cashWhenReceive', { amount: formatShopMoney(order.total, order.currency) })
+                : t('customerApp.orderDetail.cashWhenCollect', { amount: formatShopMoney(order.total, order.currency) })}
             </Text>
           </View>
         ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.section}>Bill summary</Text>
+          <Text style={styles.section}>{t('customerApp.cart.billSummary')}</Text>
           {bill ? (
             <>
               {bill.invoiceType === 'B2B' || bill.customerGstin || bill.booksVoucherNumber ? (
                 <Text style={styles.meta}>
                   {bill.invoiceType || 'B2C'}
                   {bill.customerGstin ? ` · GSTIN ${bill.customerGstin}` : ''}
-                  {bill.placeOfSupply ? ` · Place of supply ${bill.placeOfSupply}` : ''}
+                  {bill.placeOfSupply ? t('customerApp.orderDetail.placeOfSupply', { place: bill.placeOfSupply }) : ''}
                   {bill.booksVoucherNumber ? ` · ${bill.booksVoucherNumber}` : ''}
                 </Text>
               ) : null}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Items</Text>
+                <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.items')}</Text>
                 <Text style={styles.summaryValue}>
                   {formatShopMoney(bill.merchandiseGross, order.currency)}
                 </Text>
@@ -1120,13 +1146,13 @@ export function ShopOrderDetailScreen({ route }: Props) {
               {bill.lineDiscountTotal > 0 ? (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Product discount</Text>
+                    <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.productDiscount')}</Text>
                     <Text style={[styles.summaryValue, { color: colors.success }]}>
                       −{formatShopMoney(bill.lineDiscountTotal, order.currency)}
                     </Text>
                   </View>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subtotal</Text>
+                    <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.subtotal')}</Text>
                     <Text style={styles.summaryValue}>
                       {formatShopMoney(bill.merchandiseAfterLineDiscount, order.currency)}
                     </Text>
@@ -1135,7 +1161,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
               ) : null}
               {bill.billDiscount > 0 ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Bill discount</Text>
+                  <Text style={styles.summaryLabel}>{t('customerApp.cart.billDiscount')}</Text>
                   <Text style={[styles.summaryValue, { color: colors.success }]}>
                     −{formatShopMoney(bill.billDiscount, order.currency)}
                   </Text>
@@ -1144,7 +1170,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
               {bill.couponDiscount > 0 ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Coupon{bill.couponCode ? ` ${bill.couponCode}` : ''}
+                    {bill.couponCode
+                      ? t('customerApp.cart.couponCode', { code: bill.couponCode })
+                      : t('customerApp.cart.coupon')}
                   </Text>
                   <Text style={[styles.summaryValue, { color: colors.success }]}>
                     −{formatShopMoney(bill.couponDiscount, order.currency)}
@@ -1154,7 +1182,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
               {bill.rewardDiscount > 0 || bill.rewardPoints > 0 ? (
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Points used{bill.rewardPoints > 0 ? ` (${bill.rewardPoints})` : ''}
+                    {bill.rewardPoints > 0
+                      ? t('customerApp.orderDetail.pointsUsedN', { n: bill.rewardPoints })
+                      : t('customerApp.orderDetail.pointsUsed')}
                   </Text>
                   <Text style={[styles.summaryValue, { color: colors.success }]}>
                     −{formatShopMoney(bill.rewardDiscount, order.currency)}
@@ -1162,14 +1192,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 </View>
               ) : null}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Taxable</Text>
+                <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.taxable')}</Text>
                 <Text style={styles.summaryValue}>
                   {formatShopMoney(bill.taxableSubtotal, order.currency)}
                 </Text>
               </View>
               {bill.deliveryFee > 0 ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Delivery</Text>
+                  <Text style={styles.summaryLabel}>{t('customerApp.cart.delivery')}</Text>
                   <Text style={styles.summaryValue}>
                     {formatShopMoney(bill.deliveryFee, order.currency)}
                   </Text>
@@ -1201,14 +1231,14 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 )
               ) : (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Tax</Text>
+                  <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.tax')}</Text>
                   <Text style={styles.summaryValue}>
                     {formatShopMoney(bill.taxTotal, order.currency)}
                   </Text>
                 </View>
               )}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalLabel}>{t('customerApp.booking.total')}</Text>
                 <Text style={styles.totalValue}>{formatShopMoney(bill.total, order.currency)}</Text>
               </View>
               {loyaltyLine ? (
@@ -1218,12 +1248,12 @@ export function ShopOrderDetailScreen({ route }: Props) {
               ) : null}
               {bill.paymentLabel ? (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Payment</Text>
+                  <Text style={styles.summaryLabel}>{t('customerApp.cart.payment')}</Text>
                   <Text style={styles.summaryValue}>{bill.paymentLabel}</Text>
                 </View>
               ) : null}
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Received</Text>
+                <Text style={styles.summaryLabel}>{t('customerApp.orderDetail.received')}</Text>
                 <Text style={styles.summaryValue}>
                   {formatShopMoney(bill.amountPaid, order.currency)}
                 </Text>
@@ -1232,7 +1262,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 <Text
                   style={[styles.summaryLabel, bill.amountDue > 0 && { color: colors.warning }]}
                 >
-                  Balance due
+                  {t('customerApp.orderDetail.balanceDue')}
                 </Text>
                 <Text
                   style={[
@@ -1245,14 +1275,18 @@ export function ShopOrderDetailScreen({ route }: Props) {
               </View>
             </>
           ) : null}
-          <Text style={styles.placedAt}>Placed {formatDateTime(order.created_at)}</Text>
+          <Text style={styles.placedAt}>
+            {t('customerApp.orderDetail.placedAt', { time: formatDateTime(order.created_at) })}
+          </Text>
         </View>
 
         {invoiceVoucherId ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Tax invoice</Text>
+            <Text style={styles.section}>{t('customerApp.bookingDetail.taxInvoice')}</Text>
             <Text style={styles.meta}>
-              {invoiceNumber ? `Invoice ${invoiceNumber}` : 'GST tax invoice for this order'}
+              {invoiceNumber
+                ? t('customerApp.bookingDetail.invoiceNumber', { number: invoiceNumber })
+                : t('customerApp.orderDetail.gstInvoiceOrder')}
             </Text>
             <View style={styles.invoiceActionsRow}>
               <Pressable
@@ -1265,7 +1299,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 disabled={invoiceBusy}
                 onPress={() => void viewInvoice()}
               >
-                <Text style={styles.buttonText}>{invoiceBusy ? 'Opening…' : 'View invoice'}</Text>
+                <Text style={styles.buttonText}>{invoiceBusy ? t('customerApp.bookingDetail.opening') : t('customerApp.bookingDetail.viewInvoice')}</Text>
               </Pressable>
               <Pressable
                 style={[
@@ -1277,67 +1311,67 @@ export function ShopOrderDetailScreen({ route }: Props) {
                 disabled={invoiceBusy}
                 onPress={() => void shareInvoice()}
               >
-                <Text style={{ color: primary, fontWeight: '700' }}>Share</Text>
+                <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.bookingDetail.share')}</Text>
               </Pressable>
             </View>
           </View>
         ) : showInvoicePending ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Tax invoice</Text>
+            <Text style={styles.section}>{t('customerApp.bookingDetail.taxInvoice')}</Text>
             <Text style={styles.meta}>
-              Tax invoice will appear here after the shop confirms and posts this order.
+              {t('customerApp.orderDetail.invoiceAfterShopPosts')}
             </Text>
           </View>
         ) : null}
 
         {needsGatewayPayment ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Pay online</Text>
+            <Text style={styles.section}>{t('customerApp.cart.payOnline')}</Text>
             <Text style={styles.meta}>
-              Complete secure checkout for {formatShopMoney(order.total, order.currency)}.
+              {t('customerApp.orderDetail.secureCheckoutFor', { amount: formatShopMoney(order.total, order.currency) })}
             </Text>
             <Pressable
               style={[styles.button, { backgroundColor: primary }]}
               disabled={busy}
               onPress={() => void payOnlineNow()}
             >
-              <Text style={styles.buttonText}>{busy ? 'Opening…' : 'Pay now'}</Text>
+              <Text style={styles.buttonText}>{busy ? t('customerApp.bookingDetail.opening') : t('customerApp.orderDetail.payNow')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {showQr ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Pay with UPI</Text>
+            <Text style={styles.section}>{t('customerApp.cart.payWithUpi')}</Text>
             <View style={styles.upiSteps}>
-              <Text style={styles.upiStepsTitle}>How to pay</Text>
-              <Text style={styles.upiStepItem}>1. Scan the QR and pay the exact amount in your UPI app</Text>
+              <Text style={styles.upiStepsTitle}>{t('customerApp.cart.howToPay')}</Text>
+              <Text style={styles.upiStepItem}>{t('customerApp.orderDetail.qrStep1')}</Text>
               <Text style={styles.upiStepItem}>
-                2. After payment succeeds, take a screenshot of the confirmation
+                {t('customerApp.orderDetail.qrStep2')}
               </Text>
               <Text style={styles.upiStepItem}>
-                3. Upload that screenshot below (UTR optional), then submit for confirmation
+                {t('customerApp.orderDetail.qrStep3')}
               </Text>
             </View>
             <View style={styles.qrWrap}>
               <QRCode value={order.upi_pay_url || ''} size={180} />
-              <Text style={styles.meta}>Scan with any UPI app — amount is locked.</Text>
+              <Text style={styles.meta}>{t('customerApp.orderDetail.scanAmountLocked')}</Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
             </View>
-            <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
+            <Text style={[styles.section, { marginTop: spacing.md }]}>{t('customerApp.orderDetail.ivePaid')}</Text>
             <Text style={styles.meta}>
-              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+              {t('customerApp.cart.afterPayUploadHint')}
             </Text>
             <Input
-              label="UTR / UPI reference"
+              label={t('customerApp.cart.utrLabel')}
               value={utr}
               onChangeText={(value) => {
                 setUtr(value);
                 if (paymentError) setPaymentError('');
               }}
-              placeholder="UTR / UPI reference"
+              placeholder={t('customerApp.cart.utrLabel')}
               autoCapitalize="characters"
               error={paymentError || undefined}
             />
@@ -1346,7 +1380,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
               onPress={pickProofSource}
             >
               <Text style={{ color: primary, fontWeight: '700' }}>
-                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
+                {proofUrl ? t('customerApp.orderDetail.changeScreenshot') : t('customerApp.orderDetail.takeUploadScreenshot')}
               </Text>
             </Pressable>
             {proofUrl ? (
@@ -1355,7 +1389,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   setLightboxMode('claim');
                   setProofLightboxOpen(true);
                 }}
-                accessibilityLabel="View payment screenshot"
+                accessibilityLabel={t('customerApp.orderDetail.viewScreenshotA11y')}
               >
                 <Image source={{ uri: proofUrl }} style={styles.proof} />
               </Pressable>
@@ -1365,43 +1399,43 @@ export function ShopOrderDetailScreen({ route }: Props) {
               disabled={busy}
               onPress={() => void claimPayment()}
             >
-              <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>
+              <Text style={styles.buttonText}>{busy ? t('customerApp.orderDetail.submitting') : t('customerApp.orderDetail.submitForConfirmation')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {staticQrUrl ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Pay with UPI</Text>
+            <Text style={styles.section}>{t('customerApp.cart.payWithUpi')}</Text>
             <View style={styles.upiSteps}>
-              <Text style={styles.upiStepsTitle}>How to pay</Text>
-              <Text style={styles.upiStepItem}>1. Scan the shop QR and pay the exact amount in your UPI app</Text>
+              <Text style={styles.upiStepsTitle}>{t('customerApp.cart.howToPay')}</Text>
+              <Text style={styles.upiStepItem}>{t('customerApp.orderDetail.qrStep1Shop')}</Text>
               <Text style={styles.upiStepItem}>
-                2. After payment succeeds, take a screenshot of the confirmation
+                {t('customerApp.orderDetail.qrStep2')}
               </Text>
               <Text style={styles.upiStepItem}>
-                3. Upload that screenshot below (UTR optional), then submit for confirmation
+                {t('customerApp.orderDetail.qrStep3')}
               </Text>
             </View>
             <View style={styles.qrWrap}>
               <Image source={{ uri: staticQrUrl }} style={styles.staticQr} />
-              <Text style={styles.meta}>Scan the shop QR — pay the exact amount.</Text>
+              <Text style={styles.meta}>{t('customerApp.orderDetail.scanShopQr')}</Text>
               {bootstrap?.business?.upi_vpa ? (
                 <Text style={styles.vpa}>{bootstrap.business.upi_vpa}</Text>
               ) : null}
             </View>
-            <Text style={[styles.section, { marginTop: spacing.md }]}>I’ve paid</Text>
+            <Text style={[styles.section, { marginTop: spacing.md }]}>{t('customerApp.orderDetail.ivePaid')}</Text>
             <Text style={styles.meta}>
-              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+              {t('customerApp.cart.afterPayUploadHint')}
             </Text>
             <Input
-              label="UTR / UPI reference"
+              label={t('customerApp.cart.utrLabel')}
               value={utr}
               onChangeText={(value) => {
                 setUtr(value);
                 if (paymentError) setPaymentError('');
               }}
-              placeholder="UTR / UPI reference"
+              placeholder={t('customerApp.cart.utrLabel')}
               autoCapitalize="characters"
               error={paymentError || undefined}
             />
@@ -1410,7 +1444,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
               onPress={pickProofSource}
             >
               <Text style={{ color: primary, fontWeight: '700' }}>
-                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
+                {proofUrl ? t('customerApp.orderDetail.changeScreenshot') : t('customerApp.orderDetail.takeUploadScreenshot')}
               </Text>
             </Pressable>
             {proofUrl ? (
@@ -1419,7 +1453,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   setLightboxMode('claim');
                   setProofLightboxOpen(true);
                 }}
-                accessibilityLabel="View payment screenshot"
+                accessibilityLabel={t('customerApp.orderDetail.viewScreenshotA11y')}
               >
                 <Image source={{ uri: proofUrl }} style={styles.proof} />
               </Pressable>
@@ -1429,35 +1463,35 @@ export function ShopOrderDetailScreen({ route }: Props) {
               disabled={busy}
               onPress={() => void claimPayment()}
             >
-              <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>
+              <Text style={styles.buttonText}>{busy ? t('customerApp.orderDetail.submitting') : t('customerApp.orderDetail.submitForConfirmation')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {needsAppPayment && !showQr && !staticQrUrl ? (
           <View style={styles.card}>
-            <Text style={styles.section}>I’ve paid</Text>
+            <Text style={styles.section}>{t('customerApp.orderDetail.ivePaid')}</Text>
             <View style={styles.upiSteps}>
-              <Text style={styles.upiStepsTitle}>How to finish payment</Text>
-              <Text style={styles.upiStepItem}>1. Pay the shop with UPI for the exact order amount</Text>
+              <Text style={styles.upiStepsTitle}>{t('customerApp.orderDetail.howToFinish')}</Text>
+              <Text style={styles.upiStepItem}>{t('customerApp.orderDetail.qrStep1Manual')}</Text>
               <Text style={styles.upiStepItem}>
-                2. After payment succeeds, take a screenshot of the confirmation
+                {t('customerApp.orderDetail.qrStep2')}
               </Text>
               <Text style={styles.upiStepItem}>
-                3. Upload that screenshot below (UTR optional), then submit for confirmation
+                {t('customerApp.orderDetail.qrStep3')}
               </Text>
             </View>
             <Text style={styles.meta}>
-              After you pay, upload the UPI confirmation screenshot below so the shop can verify it.
+              {t('customerApp.cart.afterPayUploadHint')}
             </Text>
             <Input
-              label="UTR / UPI reference"
+              label={t('customerApp.cart.utrLabel')}
               value={utr}
               onChangeText={(value) => {
                 setUtr(value);
                 if (paymentError) setPaymentError('');
               }}
-              placeholder="UTR / UPI reference"
+              placeholder={t('customerApp.cart.utrLabel')}
               autoCapitalize="characters"
               error={paymentError || undefined}
             />
@@ -1466,7 +1500,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
               onPress={pickProofSource}
             >
               <Text style={{ color: primary, fontWeight: '700' }}>
-                {proofUrl ? 'Change payment screenshot' : 'Take / upload payment screenshot'}
+                {proofUrl ? t('customerApp.orderDetail.changeScreenshot') : t('customerApp.orderDetail.takeUploadScreenshot')}
               </Text>
             </Pressable>
             {proofUrl ? (
@@ -1475,7 +1509,7 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   setLightboxMode('claim');
                   setProofLightboxOpen(true);
                 }}
-                accessibilityLabel="View payment screenshot"
+                accessibilityLabel={t('customerApp.orderDetail.viewScreenshotA11y')}
               >
                 <Image source={{ uri: proofUrl }} style={styles.proof} />
               </Pressable>
@@ -1485,43 +1519,47 @@ export function ShopOrderDetailScreen({ route }: Props) {
               disabled={busy}
               onPress={() => void claimPayment()}
             >
-              <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit for confirmation'}</Text>
+              <Text style={styles.buttonText}>{busy ? t('customerApp.orderDetail.submitting') : t('customerApp.orderDetail.submitForConfirmation')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {paymentStatus === 'awaiting_confirmation' ? (
           <View style={[styles.card, { backgroundColor: '#FFFBEB' }]}>
-            <Text style={[styles.section, { color: colors.warning }]}>Awaiting confirmation</Text>
+            <Text style={[styles.section, { color: colors.warning }]}>
+              {t('customerApp.orderDetail.awaitingConfirmation')}
+            </Text>
             <Text style={styles.meta}>
-              The shop is confirming your payment
-              {order.upi_utr ? ` · UTR ${order.upi_utr}` : ''}
-              {submittedProofUri ? ' · screenshot attached' : ''}.
+              {t('customerApp.orderDetail.awaitingBody', {
+                extras: `${order.upi_utr ? t('customerApp.orderDetail.awaitingUtr', { utr: order.upi_utr }) : ''}${submittedProofUri ? t('customerApp.orderDetail.awaitingScreenshot') : ''}`,
+              })}
             </Text>
           </View>
         ) : null}
 
         {canCancel ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Cancel items</Text>
+            <Text style={styles.section}>{t('customerApp.orderDetail.cancelItems')}</Text>
             <Text style={styles.policyText}>
-              This order is not confirmed yet, so you can cancel any item by cancelling the order. After the shop
-              confirms it, cancellation is closed and you can return items only once they are delivered or picked up.
+              {t('customerApp.orderDetail.cancelPolicy')}
             </Text>
             <Pressable style={styles.cancelBtn} disabled={busy} onPress={confirmCancel}>
-              <Text style={styles.cancelText}>Cancel order</Text>
+              <Text style={styles.cancelText}>{t('customerApp.orderDetail.cancelOrder')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {!canCancel && !delivered && String(order.status).toLowerCase() !== 'cancelled' ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Returns</Text>
+            <Text style={styles.section}>{t('customerApp.orderDetail.returns')}</Text>
             <Text style={styles.policyText}>
-              Returns open after this order is {String(order.fulfillment_mode).toLowerCase() === 'delivery' ? 'delivered' : 'picked up'}.
-              Until then the shop is preparing it, so items cannot be cancelled or returned from the app.
+              {String(order.fulfillment_mode).toLowerCase() === 'delivery'
+                ? t('customerApp.orderDetail.returnsOpenDelivered')
+                : t('customerApp.orderDetail.returnsOpenPickedUp')}
               {returnDays > 0
-                ? ` After that, returns are accepted for ${returnDays} day${returnDays === 1 ? '' : 's'}.`
+                ? returnDays === 1
+                  ? t('customerApp.orderDetail.returnsAfterOneDay')
+                  : t('customerApp.orderDetail.returnsAfterDays', { n: returnDays })
                 : ''}
             </Text>
           </View>
@@ -1529,11 +1567,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
 
         {!isPos && delivered && !returnWindowOpen && returnableLines.length > 0 && !returns.length ? (
           <View style={styles.card}>
-            <Text style={styles.section}>Returns</Text>
+            <Text style={styles.section}>{t('customerApp.orderDetail.returns')}</Text>
             <Text style={styles.policyText}>
               {returnByLabel
-                ? `The return window for this order ended on ${returnByLabel}.`
-                : 'The return window for this order has ended.'}
+                ? t('customerApp.orderDetail.returnWindowEndedOn', { date: returnByLabel })
+                : t('customerApp.orderDetail.returnWindowEnded')}
             </Text>
           </View>
         ) : null}
@@ -1541,35 +1579,36 @@ export function ShopOrderDetailScreen({ route }: Props) {
         {!isPos && (canReturn || returns.length) ? (
           <View style={styles.card}>
             <View style={styles.returnHeader}>
-              <Text style={styles.section}>Returns & refund</Text>
+              <Text style={styles.section}>{t('customerApp.orderDetail.returnsAndRefund')}</Text>
               {canReturn && !returnMode ? (
                 <Pressable style={[styles.returnStartBtn, { backgroundColor: primary }]} onPress={() => setReturnMode(true)}>
-                  <Text style={styles.returnStartText}>Return items</Text>
+                  <Text style={styles.returnStartText}>{t('customerApp.orderDetail.returnItems')}</Text>
                 </Pressable>
               ) : null}
             </View>
             {canReturn && !returnMode ? (
               <Text style={styles.policyText}>
                 {returnByLabel
-                  ? `Returns are accepted until ${returnByLabel}. Drop items at the shop or request a pickup — refund is issued after the shop receives them.`
-                  : 'Drop items at the shop or request a pickup. Refund is issued after the shop receives the items.'}
+                  ? t('customerApp.orderDetail.returnsAcceptedUntilPolicy', { date: returnByLabel })
+                  : t('customerApp.orderDetail.returnsPolicyNoDate')}
               </Text>
             ) : null}
             {returnMode && returnByLabel ? (
-              <Text style={styles.meta}>Returns accepted until {returnByLabel}</Text>
+              <Text style={styles.meta}>
+                {t('customerApp.orderDetail.returnsAcceptedUntil', { date: returnByLabel })}
+              </Text>
             ) : null}
             {returnMode ? (
               <View style={{ gap: 12 }}>
                 <Text style={styles.meta}>
-                  Choose quantities and how you will return the items. Refund is issued only after the shop marks them
-                  received.
+                  {t('customerApp.orderDetail.returnChooseQty')}
                 </Text>
-                <Text style={styles.itemName}>How will you return?</Text>
+                <Text style={styles.itemName}>{t('customerApp.orderDetail.howReturn')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {(
                     [
-                      { id: 'dropoff' as const, label: 'Drop off at shop' },
-                      { id: 'reverse_pickup' as const, label: 'Request pickup' },
+                      { id: 'dropoff' as const, label: t('customerApp.orderDetail.dropOffAtShop') },
+                      { id: 'reverse_pickup' as const, label: t('customerApp.orderDetail.requestPickup') },
                     ] as const
                   ).map((option) => {
                     const selected = returnMethod === option.id;
@@ -1599,7 +1638,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
                     <View key={row.line.id} style={styles.returnLine}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.itemName}>{row.line.product_name}</Text>
-                        <Text style={styles.itemMeta}>Returnable {formatShopQty(row.remaining)}</Text>
+                        <Text style={styles.itemMeta}>
+                          {t('customerApp.orderDetail.returnableQty', { qty: formatShopQty(row.remaining) })}
+                        </Text>
                       </View>
                       <View style={styles.qtyRow}>
                         <Pressable
@@ -1633,18 +1674,20 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   style={styles.input}
                   value={reason}
                   onChangeText={setReason}
-                  placeholder="Reason (optional)"
+                  placeholder={t('customerApp.orderDetail.reasonOptional')}
                   placeholderTextColor={colors.mutedForeground}
                 />
                 <View style={styles.refundBox}>
-                  <Text style={styles.itemTotal}>Refund {formatShopMoney(selectedRefund, order.currency)}</Text>
+                  <Text style={styles.itemTotal}>
+                    {t('customerApp.orderDetail.refundAmount', { amount: formatShopMoney(selectedRefund, order.currency) })}
+                  </Text>
                   {selectedRefund > 0 ? (
                     <>
                       <Text style={styles.refundTitle}>{refundPlan.title}</Text>
                       <Text style={styles.policyText}>{refundPlan.body}</Text>
                     </>
                   ) : (
-                    <Text style={styles.meta}>Select a quantity to see the refund amount.</Text>
+                    <Text style={styles.meta}>{t('customerApp.orderDetail.selectQtyForRefund')}</Text>
                   )}
                 </View>
                 <Pressable
@@ -1652,10 +1695,10 @@ export function ShopOrderDetailScreen({ route }: Props) {
                   disabled={busy || selectedRefund <= 0}
                   onPress={() => void submitReturn()}
                 >
-                  <Text style={styles.buttonText}>{busy ? 'Submitting…' : 'Submit return'}</Text>
+                  <Text style={styles.buttonText}>{busy ? t('customerApp.orderDetail.submitting') : t('customerApp.orderDetail.submitReturn')}</Text>
                 </Pressable>
                 <Pressable onPress={() => setReturnMode(false)}>
-                  <Text style={[styles.meta, { textAlign: 'center' }]}>Not now</Text>
+                  <Text style={[styles.meta, { textAlign: 'center' }]}>{t('customerApp.orderDetail.notNow')}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1670,9 +1713,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
                     <Text style={styles.itemName}>{item.return_number}</Text>
                     <Text style={styles.itemMeta}>
                       {item.created_at ? `${formatShopDateTime(item.created_at)} · ` : ''}
-                      {shopReturnStatusLabel(item)}
-                      {shopReturnMethodLabel(item.return_method)
-                        ? ` · ${shopReturnMethodLabel(item.return_method)}`
+                      {shopReturnStatusLabel(item, t)}
+                      {shopReturnMethodLabel(item.return_method, t)
+                        ? ` · ${shopReturnMethodLabel(item.return_method, t)}`
                         : ''}
                       {' · '}
                       {formatShopMoney(item.refund_total, item.currency || order.currency)}
@@ -1695,9 +1738,9 @@ export function ShopOrderDetailScreen({ route }: Props) {
         <ImageLightbox
           uri={lightboxUri}
           visible
-          title="Payment screenshot"
+          title={t('customerApp.cart.paymentScreenshotTitle')}
           onClose={() => setProofLightboxOpen(false)}
-          replaceLabel={lightboxMode === 'claim' ? 'Change screenshot' : undefined}
+          replaceLabel={lightboxMode === 'claim' ? t('customerApp.orderDetail.changeScreenshotLightbox') : undefined}
           onReplace={
             lightboxMode === 'claim'
               ? () => {
@@ -1723,11 +1766,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
               result: payload,
             })
               .then(() => {
-                toast.push('Payment received.', 'success');
+                toast.push(t('customerApp.cart.paymentReceived'), 'success');
                 return load();
               })
               .catch((err) =>
-                setMessage(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details."),
+                setMessage(err instanceof Error ? err.message : t('customerApp.cart.verifyFailed')),
               );
           }}
           onCancel={(msg) => {
@@ -1750,11 +1793,11 @@ export function ShopOrderDetailScreen({ route }: Props) {
               result: payload,
             })
               .then(() => {
-                toast.push('Payment received.', 'success');
+                toast.push(t('customerApp.cart.paymentReceived'), 'success');
                 return load();
               })
               .catch((err) =>
-                setMessage(err instanceof Error ? err.message : "We couldn't verify the payment. Try again or pay from order details."),
+                setMessage(err instanceof Error ? err.message : t('customerApp.cart.verifyFailed')),
               );
           }}
           onCancel={(msg) => {

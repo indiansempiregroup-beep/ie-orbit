@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -47,6 +48,7 @@ export function PurchaseInvoiceDetailModal({
   onPaid?: (voucher: ShopBooksVoucher) => Promise<void> | void;
   onVoid?: (voucher: ShopBooksVoucher) => void;
 }) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { lift, driven, onSheetLayout, sheetMotionStyle, handleProps } = useExpandableSheet(
@@ -92,11 +94,11 @@ export function PurchaseInvoiceDetailModal({
         return list[0]?.id ?? '';
       });
     } catch (err) {
-      toast.push(getApiErrorMessage(err, 'Unable to load cash accounts'), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.purchaseDetail.accountsLoadFailed')), 'error');
     } finally {
       setLoadingAccounts(false);
     }
-  }, [client, businessId, visible, voucher?.cash_account, toast]);
+  }, [client, businessId, visible, voucher?.cash_account, toast, t]);
 
   useEffect(() => {
     if (!visible) return;
@@ -110,7 +112,7 @@ export function PurchaseInvoiceDetailModal({
   const displayTotal = localVoucher ? voucherDisplayTotal(localVoucher) : 0;
   const lines = Array.isArray(localVoucher?.line_items) ? localVoucher.line_items : [];
   const payments = localVoucher ? voucherPaymentHistory(localVoucher) : [];
-  const sourceLabel = localVoucher ? purchaseSourceLabel(localVoucher) : 'Purchase bill';
+  const sourceLabel = localVoucher ? purchaseSourceLabel(localVoucher, t) : t('opsApp.shop.purchaseDetail.purchaseBill');
   const parsedAmount = Number(payAmount.replace(/[^0-9.]/g, ''));
   const canSubmitPay =
     !voided &&
@@ -126,14 +128,14 @@ export function PurchaseInvoiceDetailModal({
     const cgst = Number(localVoucher.cgst_total ?? 0);
     const sgst = Number(localVoucher.sgst_total ?? 0);
     const igst = Number(localVoucher.igst_total ?? 0);
-    if (cgst) rows.push({ label: 'CGST', value: cgst });
-    if (sgst) rows.push({ label: 'SGST', value: sgst });
-    if (igst) rows.push({ label: 'IGST', value: igst });
+    if (cgst) rows.push({ label: t('shop.vouchers.summary.cgst'), value: cgst });
+    if (sgst) rows.push({ label: t('shop.vouchers.summary.sgst'), value: sgst });
+    if (igst) rows.push({ label: t('shop.vouchers.summary.igst'), value: igst });
     if (!rows.length && Number(localVoucher.tax_total ?? 0)) {
-      rows.push({ label: 'Tax', value: Number(localVoucher.tax_total) });
+      rows.push({ label: t('shop.vouchers.summary.tax'), value: Number(localVoucher.tax_total) });
     }
     return rows;
-  }, [localVoucher]);
+  }, [localVoucher, t]);
 
   async function submitPayment() {
     if (!client || !localVoucher || !canSubmitPay) return;
@@ -149,13 +151,16 @@ export function PurchaseInvoiceDetailModal({
       setPayAmount(nextDue > 0 ? nextDue.toFixed(2) : '');
       toast.push(
         nextDue <= 0.009
-          ? `${response.data.voucher_number} marked paid`
-          : `Recorded ${formatMoney(parsedAmount)} on ${response.data.voucher_number}`,
+          ? t('shop.purchasePay.markedPaid', { number: response.data.voucher_number })
+          : t('shop.purchasePay.recorded', {
+              amount: formatMoney(parsedAmount),
+              number: response.data.voucher_number,
+            }),
         'success',
       );
       await onPaid?.(response.data);
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't record that payment. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.purchasePay.payFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -194,7 +199,7 @@ export function PurchaseInvoiceDetailModal({
                     .join(' · ')}
                 </Text>
               </View>
-              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel="Close">
+              <Pressable style={styles.heroClose} onPress={onClose} hitSlop={8} accessibilityLabel={t('common.close')}>
                 <Feather name="x" size={18} color={colors.primaryForeground} />
               </Pressable>
             </View>
@@ -214,7 +219,11 @@ export function PurchaseInvoiceDetailModal({
                     { color: voided ? '#b91c1c' : paid ? '#047857' : '#92400e' },
                   ]}
                 >
-                  {voided ? 'Void' : paid ? 'Paid' : `To pay ${formatMoney(balance)}`}
+                  {voided
+                    ? t('opsApp.shop.purchaseDetail.void')
+                    : paid
+                      ? t('shop.voucherDetail.paidStatus')
+                      : t('shop.voucherDetail.toPayAmount', { amount: formatMoney(balance) })}
                 </Text>
               </View>
               {localVoucher.cash_account_name ? (
@@ -229,12 +238,12 @@ export function PurchaseInvoiceDetailModal({
 
           <View style={styles.payStrip}>
             <View style={styles.payCell}>
-              <Text style={styles.payLabel}>Paid</Text>
+              <Text style={styles.payLabel}>{t('shop.booksInvoiceDrawer.paid')}</Text>
               <Text style={styles.payValue}>{formatMoney(displayPaid)}</Text>
             </View>
             <View style={styles.payDivider} />
             <View style={styles.payCell}>
-              <Text style={styles.payLabel}>To pay</Text>
+              <Text style={styles.payLabel}>{t('opsApp.shop.purchaseDetail.toPay')}</Text>
               <Text style={[styles.payValue, balance > 0 && { color: colors.warning }]}>
                 {formatMoney(balance)}
               </Text>
@@ -246,13 +255,15 @@ export function PurchaseInvoiceDetailModal({
             contentContainerStyle={styles.stack}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={styles.section}>Items · {lines.length}</Text>
+            <Text style={styles.section}>
+              {t('opsApp.shop.booksDocDetail.itemsCount', { count: lines.length })}
+            </Text>
             {lines.length === 0 ? (
-              <Text style={styles.meta}>No line items on this bill.</Text>
+              <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.noLines')}</Text>
             ) : (
               lines.map((raw, index) => {
                 const line = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-                const name = String(line.name || line.product_name || `Item ${index + 1}`);
+                const name = String(line.name || line.product_name || t('shop.booksDocDialog.itemFallback', { n: index + 1 }));
                 const productId = voucherLineProductId(line);
                 const qty = Number(line.qty ?? line.quantity ?? 0);
                 const rate = Number(line.rate ?? line.unit_price ?? 0);
@@ -265,7 +276,11 @@ export function PurchaseInvoiceDetailModal({
                       <Text style={[styles.lineName, productId ? styles.lineNameLink : null]}>{name}</Text>
                       <Text style={styles.meta}>
                         {qty} × {formatMoney(rate)}
-                        {gst ? ` · GST ${gst}%${inclusive ? ' incl.' : ''}` : ''}
+                        {gst
+                          ? ` · ${t('opsApp.shop.booksDocDetail.gstPct', { rate: gst })}${
+                              inclusive ? ` ${t('opsApp.shop.purchaseDetail.inclShort')}` : ''
+                            }`
+                          : ''}
                       </Text>
                     </View>
                     <Text style={styles.lineTotal}>{formatMoney(lineTotal)}</Text>
@@ -290,7 +305,7 @@ export function PurchaseInvoiceDetailModal({
                       navigation.navigate('ShopProductAdd', { productId });
                     }}
                     accessibilityRole="link"
-                    accessibilityLabel={`Open ${name}`}
+                    accessibilityLabel={t('opsApp.shop.booksDocDetail.openItem', { name })}
                   >
                     {body}
                   </Pressable>
@@ -300,7 +315,7 @@ export function PurchaseInvoiceDetailModal({
 
             <View style={styles.totals}>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Taxable</Text>
+                <Text style={styles.meta}>{t('shop.vouchers.summary.taxable')}</Text>
                 <Text style={styles.meta}>{formatMoney(localVoucher.subtotal)}</Text>
               </View>
               {gstRows.map((row) => (
@@ -310,16 +325,16 @@ export function PurchaseInvoiceDetailModal({
                 </View>
               ))}
               <View style={styles.totalRow}>
-                <Text style={styles.payableLabel}>Bill total</Text>
+                <Text style={styles.payableLabel}>{t('opsApp.shop.purchaseDetail.billTotal')}</Text>
                 <Text style={styles.payableValue}>{formatMoney(displayTotal)}</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.meta}>Paid</Text>
+                <Text style={styles.meta}>{t('shop.booksInvoiceDrawer.paid')}</Text>
                 <Text style={styles.meta}>{formatMoney(displayPaid)}</Text>
               </View>
               {balance > 0.009 ? (
                 <View style={styles.totalRow}>
-                  <Text style={styles.dueLabel}>Balance due</Text>
+                  <Text style={styles.dueLabel}>{t('shop.vouchers.summary.balanceDue')}</Text>
                   <Text style={styles.dueValue}>{formatMoney(balance)}</Text>
                 </View>
               ) : null}
@@ -327,7 +342,7 @@ export function PurchaseInvoiceDetailModal({
 
             {payments.length ? (
               <>
-                <Text style={styles.section}>Payments</Text>
+                <Text style={styles.section}>{t('opsApp.shop.purchaseDetail.payments')}</Text>
                 {payments.map((payment, index) => (
                   <View key={`${payment.at}-${index}`} style={styles.historyCard}>
                     <Text style={styles.lineName}>{formatMoney(payment.amount)}</Text>
@@ -347,22 +362,22 @@ export function PurchaseInvoiceDetailModal({
 
             {localVoucher.notes ? (
               <>
-                <Text style={styles.section}>Notes</Text>
+                <Text style={styles.section}>{t('opsApp.shop.common.notes')}</Text>
                 <Text style={styles.meta}>{localVoucher.notes}</Text>
               </>
             ) : null}
 
             {payMode ? (
               <View style={styles.payBox}>
-                <Text style={styles.lineName}>Record payment</Text>
+                <Text style={styles.lineName}>{t('shop.purchasePay.title')}</Text>
                 <Input
-                  label="Amount"
+                  label={t('shop.purchasePay.amount')}
                   value={payAmount}
                   onChangeText={(value) => setPayAmount(value.replace(/[^0-9.]/g, ''))}
                   keyboardType="decimal-pad"
-                  hint={`Due ${formatMoney(balance)}`}
+                  hint={t('opsApp.shop.purchaseDetail.dueHint', { amount: formatMoney(balance) })}
                 />
-                <Text style={styles.accountLabel}>Pay from</Text>
+                <Text style={styles.accountLabel}>{t('shop.purchasePay.payFrom')}</Text>
                 {loadingAccounts ? <ActivityIndicator color={colors.primary} /> : null}
                 <View style={styles.accountRow}>
                   {accounts.map((account) => {
@@ -381,7 +396,7 @@ export function PurchaseInvoiceDetailModal({
                   })}
                 </View>
                 {!accounts.length && !loadingAccounts ? (
-                  <Text style={styles.meta}>Add a cash or bank account in Books → Cash first.</Text>
+                  <Text style={styles.meta}>{t('opsApp.shop.purchaseDetail.addAccountFirst')}</Text>
                 ) : null}
               </View>
             ) : null}
@@ -392,7 +407,7 @@ export function PurchaseInvoiceDetailModal({
               <View style={styles.footerPrimaryRow}>
                 <View style={{ flex: 1 }}>
                   <Button
-                    label="Cancel"
+                    label={t('common.cancel')}
                     variant="outline"
                     fullWidth
                     disabled={busy}
@@ -401,7 +416,11 @@ export function PurchaseInvoiceDetailModal({
                 </View>
                 <View style={{ flex: 1.5 }}>
                   <Button
-                    label={busy ? 'Recording…' : `Pay ${formatMoney(parsedAmount || balance)}`}
+                    label={
+                      busy
+                        ? t('shop.purchasePay.recording')
+                        : t('shop.purchasePay.pay', { amount: formatMoney(parsedAmount || balance) })
+                    }
                     loading={busy}
                     fullWidth
                     disabled={!canSubmitPay || busy}
@@ -413,13 +432,13 @@ export function PurchaseInvoiceDetailModal({
               <View style={styles.footerPrimaryRow}>
                 {!voided && balance > 0.009 ? (
                   <View style={styles.footerPayBtn}>
-                    <Button label="Record payment" fullWidth onPress={() => setPayMode(true)} />
+                    <Button label={t('shop.purchasePay.title')} fullWidth onPress={() => setPayMode(true)} />
                   </View>
                 ) : null}
                 {onVoid && !voided ? (
                   <View style={styles.footerVoidBtn}>
                     <Button
-                      label="Void"
+                      label={t('opsApp.shop.purchaseDetail.void')}
                       variant="outline"
                       fullWidth
                       icon="slash"
@@ -428,7 +447,11 @@ export function PurchaseInvoiceDetailModal({
                   </View>
                 ) : (
                   <Text style={styles.meta}>
-                    {voided ? 'This purchase is voided.' : paid ? 'This bill is fully paid.' : ''}
+                    {voided
+                      ? t('opsApp.shop.purchaseDetail.purchaseVoided')
+                      : paid
+                        ? t('opsApp.shop.purchaseDetail.billPaid')
+                        : ''}
                   </Text>
                 )}
               </View>

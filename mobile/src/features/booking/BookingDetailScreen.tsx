@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import * as WebBrowser from 'expo-web-browser';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -55,6 +56,7 @@ function resolveBookingProofUrl(booking: MobileBooking): string {
 }
 
 export function BookingDetailScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'BookingDetail'>>();
   const { branding, bootstrap } = useBootstrap();
@@ -152,9 +154,12 @@ export function BookingDetailScreen() {
             }
           : current,
       );
-      toast.push('Thanks — your review is in.', 'success');
+      toast.push(t('customerApp.bookingDetail.reviewThanks'), 'success');
     } catch (err) {
-      Alert.alert("Couldn't submit review", err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert(
+        t('customerApp.bookingDetail.reviewFailedTitle'),
+        err instanceof Error ? err.message : t('customerApp.bookingDetail.tryAgain'),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -186,8 +191,8 @@ export function BookingDetailScreen() {
     setSelectedSlot('');
     if (!openSlots.length) {
       Alert.alert(
-        'No timeslot available',
-        response.data.message || 'No timeslot available for this date. Try another day.',
+        t('customerApp.bookingDetail.noSlotTitle'),
+        response.data.message || t('customerApp.booking.noSlots'),
       );
     }
   }
@@ -195,7 +200,7 @@ export function BookingDetailScreen() {
   async function onReschedule() {
     if (!booking || !tenantSlug || !businessCode) return;
     if (!selectedSlot) {
-      setSlotError('Select an available time slot.');
+      setSlotError(t('customerApp.bookingDetail.selectSlot'));
       return;
     }
     setSlotError('');
@@ -209,9 +214,12 @@ export function BookingDetailScreen() {
       });
       setBooking(response.data);
       setRescheduleMode(false);
-      toast.push('Appointment updated.', 'success');
+      toast.push(t('customerApp.bookingDetail.appointmentUpdated'), 'success');
     } catch (err) {
-      Alert.alert("Couldn't reschedule", err instanceof Error ? err.message : 'Please try again.');
+      Alert.alert(
+        t('customerApp.bookingDetail.rescheduleFailedTitle'),
+        err instanceof Error ? err.message : t('customerApp.bookingDetail.tryAgain'),
+      );
     } finally {
       setActionLoading(false);
     }
@@ -219,10 +227,10 @@ export function BookingDetailScreen() {
 
   async function onCancel() {
     if (!booking || !tenantSlug || !businessCode) return;
-    Alert.alert('Cancel appointment', 'Are you sure you want to cancel this booking?', [
-      { text: 'Keep', style: 'cancel' },
+    Alert.alert(t('customerApp.bookingDetail.cancelTitle'), t('customerApp.bookingDetail.cancelConfirm'), [
+      { text: t('customerApp.bookingDetail.keep'), style: 'cancel' },
       {
-        text: 'Cancel booking',
+        text: t('customerApp.bookingDetail.cancelBooking'),
         style: 'destructive',
         onPress: async () => {
           setActionLoading(true);
@@ -234,7 +242,10 @@ export function BookingDetailScreen() {
             });
             setBooking(response.data);
           } catch (err) {
-            Alert.alert("Couldn't cancel", err instanceof Error ? err.message : 'Please try again.');
+            Alert.alert(
+              t('customerApp.bookingDetail.cancelFailedTitle'),
+              err instanceof Error ? err.message : t('customerApp.bookingDetail.tryAgain'),
+            );
           } finally {
             setActionLoading(false);
           }
@@ -270,7 +281,7 @@ export function BookingDetailScreen() {
       await WebBrowser.openBrowserAsync(url);
     } catch {
       const can = await Linking.canOpenURL(url);
-      if (!can) throw new Error('Cannot open invoice link on this device');
+      if (!can) throw new Error(t('customerApp.bookingDetail.invoiceCannotOpenDevice'));
       await Linking.openURL(url);
     }
   }
@@ -280,19 +291,19 @@ export function BookingDetailScreen() {
     try {
       const invoice = await fetchBookingInvoice();
       if (!invoice?.available) {
-        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        toast.push(invoice?.reason || t('customerApp.bookingDetail.invoiceNotAvailable'), 'error');
         return;
       }
       const url = invoiceViewUrl(invoice);
       if (!url) {
-        toast.push('Could not open tax invoice.', 'error');
+        toast.push(t('customerApp.bookingDetail.invoiceOpenFailed'), 'error');
         return;
       }
       await openInvoiceUrl(url);
       // Refresh booking so books_voucher_id appears after lazy post.
       await loadBooking();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Could not open tax invoice.', 'error');
+      toast.push(err instanceof Error ? err.message : t('customerApp.bookingDetail.invoiceOpenFailed'), 'error');
     } finally {
       setInvoiceBusy(false);
     }
@@ -303,20 +314,20 @@ export function BookingDetailScreen() {
     try {
       const invoice = await fetchBookingInvoice();
       if (!invoice?.available) {
-        toast.push(invoice?.reason || 'Tax invoice is not available yet.', 'error');
+        toast.push(invoice?.reason || t('customerApp.bookingDetail.invoiceNotAvailable'), 'error');
         return;
       }
       const url = invoiceViewUrl(invoice);
       const text = String(invoice.message || '').trim();
       const message = text.includes('http') ? text : [text, url].filter(Boolean).join('\n');
       if (!message) {
-        toast.push('Could not prepare invoice share link.', 'error');
+        toast.push(t('customerApp.bookingDetail.invoiceShareLinkFailed'), 'error');
         return;
       }
       await Share.share({ message, url: url || undefined });
       await loadBooking();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Could not share tax invoice.', 'error');
+      toast.push(err instanceof Error ? err.message : t('customerApp.bookingDetail.invoiceShareFailed'), 'error');
     } finally {
       setInvoiceBusy(false);
     }
@@ -324,7 +335,7 @@ export function BookingDetailScreen() {
 
   if (loading && !booking) {
     return (
-      <ProfileMenuScreen title="Appointment" onBack={() => navigation.goBack()} primaryColor={primary}>
+      <ProfileMenuScreen title={t('customerApp.booking.appointment')} onBack={() => navigation.goBack()} primaryColor={primary}>
         <ActivityIndicator color={primary} />
       </ProfileMenuScreen>
     );
@@ -333,13 +344,13 @@ export function BookingDetailScreen() {
   if (!booking) {
     return (
       <ProfileMenuScreen
-        title="Appointment"
+        title={t('customerApp.booking.appointment')}
         onBack={() => navigation.goBack()}
         primaryColor={primary}
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-        <Text style={styles.empty}>Booking not found.</Text>
+        <Text style={styles.empty}>{t('customerApp.bookingDetail.notFound')}</Text>
       </ProfileMenuScreen>
     );
   }
@@ -388,7 +399,10 @@ export function BookingDetailScreen() {
   const paymentMethodLabel = (() => {
     const method = String(booking.payment_method || '').trim().toLowerCase();
     if (!method) return '';
-    if (method === 'borrow') return 'Credit';
+    if (method === 'borrow') return t('bookings.methodCredit');
+    if (method === 'cash') return t('bookings.methodCash');
+    if (method === 'upi') return t('bookings.methodUpi');
+    if (method === 'card') return t('bookings.methodCard');
     return method.charAt(0).toUpperCase() + method.slice(1);
   })();
   const fullyReversed = pointsReversed > 0 && remainingEarned <= 0;
@@ -400,24 +414,24 @@ export function BookingDetailScreen() {
         ? pointsPending
         : pointsRedeemed;
   const highlightTitle = fullyReversed
-    ? 'Points reversed'
+    ? t('customerApp.bookingDetail.pointsReversed')
     : pointsEarned > 0
-      ? 'Rewards unlocked'
+      ? t('customerApp.bookingDetail.rewardsUnlocked')
       : pointsPending > 0
-        ? 'Earn on this visit'
+        ? t('customerApp.bookingDetail.earnOnVisit')
         : pointsRedeemed > 0
-          ? 'Rewards applied'
-          : 'Reward points';
+          ? t('customerApp.bookingDetail.rewardsApplied')
+          : t('customerApp.booking.rewardPoints');
   const highlightSubtitle = fullyReversed
-    ? reversalReason || 'These points were taken back after cancel or refund.'
+    ? reversalReason || t('customerApp.bookingDetail.reversedSubtitle')
     : pointsEarned > 0
       ? pointsReversed > 0
-        ? `${remainingEarned} pts still on your balance.`
-        : 'Added to your balance after this appointment was completed.'
+        ? t('customerApp.bookingDetail.stillOnBalance', { n: remainingEarned })
+        : t('customerApp.bookingDetail.addedAfterComplete')
       : pointsPending > 0
-        ? 'Complete your visit to credit these points to your balance.'
+        ? t('customerApp.bookingDetail.completeToCredit')
         : pointsRedeemed > 0
-          ? 'You saved with reward points on this booking.'
+          ? t('customerApp.bookingDetail.savedWithPoints')
           : '';
   const bannerAccent = fullyReversed ? '#BE123C' : primary;
 
@@ -425,7 +439,7 @@ export function BookingDetailScreen() {
     canManage && !rescheduleMode ? (
       <View style={styles.footerRow}>
         <Button
-          label="Reschedule"
+          label={t('customerApp.bookingDetail.reschedule')}
           icon="calendar"
           fullWidth
           primaryColor={primary}
@@ -433,7 +447,7 @@ export function BookingDetailScreen() {
           onPress={() => setRescheduleMode(true)}
         />
         <Button
-          label="Cancel"
+          label={t('common.cancel')}
           icon="x-circle"
           variant="destructive"
           loading={actionLoading}
@@ -445,7 +459,7 @@ export function BookingDetailScreen() {
     ) : rescheduleMode ? (
       <View style={styles.footerRow}>
         <Button
-          label="Back"
+          label={t('common.back')}
           icon="arrow-left"
           variant="outline"
           fullWidth
@@ -453,7 +467,7 @@ export function BookingDetailScreen() {
           onPress={() => setRescheduleMode(false)}
         />
         <Button
-          label="Confirm"
+          label={t('customerApp.bookingDetail.confirm')}
           icon="check"
           fullWidth
           loading={actionLoading}
@@ -466,7 +480,7 @@ export function BookingDetailScreen() {
 
   return (
     <ProfileMenuScreen
-      title="Appointment"
+      title={t('customerApp.booking.appointment')}
       onBack={() => navigation.goBack()}
       primaryColor={primary}
       refreshing={refreshing}
@@ -478,54 +492,59 @@ export function BookingDetailScreen() {
           <Text style={styles.service}>{serviceName}</Text>
           <Badge status={mapBookingStatus(booking.status)} />
         </View>
-        <DetailRow label="Reference" value={`#${booking.booking_number}`} />
-        <DetailRow label="Starts" value={formatDateTime(booking.start_at)} />
-        {booking.end_at ? <DetailRow label="Ends" value={formatDateTime(booking.end_at)} /> : null}
-        <DetailRow label="Duration" value={`${booking.duration_minutes} minutes`} />
+        <DetailRow label={t('customerApp.booking.reference')} value={`#${booking.booking_number}`} />
+        <DetailRow label={t('customerApp.bookingDetail.starts')} value={formatDateTime(booking.start_at)} />
+        {booking.end_at ? <DetailRow label={t('customerApp.bookingDetail.ends')} value={formatDateTime(booking.end_at)} /> : null}
+        <DetailRow
+          label={t('customerApp.bookingDetail.duration')}
+          value={t('customerApp.bookingDetail.durationMinutes', { n: booking.duration_minutes })}
+        />
         {booking.items && booking.items.length > 0 ? (
           <View style={styles.itemsBlock}>
-            <Text style={styles.itemsLabel}>Services</Text>
+            <Text style={styles.itemsLabel}>{t('customerApp.booking.services')}</Text>
             {booking.items.map((item) => {
               const lineAmount = Number(item.price_snapshot) || 0;
               return (
                 <View key={item.id} style={styles.itemRow}>
                   <View style={styles.itemTitleRow}>
-                    <Text style={styles.itemName}>{item.service_name || 'Service'}</Text>
+                    <Text style={styles.itemName}>{item.service_name || t('customerApp.bookingDetail.serviceFallback')}</Text>
                     {lineAmount > 0 ? (
                       <Text style={styles.itemPrice}>{formatMoney(lineAmount, currency)}</Text>
                     ) : null}
                   </View>
                   <Text style={styles.itemMeta}>
-                    {formatTime(item.start_at)} · {item.duration_minutes} min
-                    {item.staff_name ? ` · with ${item.staff_name}` : ''}
+                    {formatTime(item.start_at)} · {t('bookings.minutesShort', { n: item.duration_minutes })}
+                    {item.staff_name
+                      ? ` · ${t('customerApp.home.withStaff', { staff: item.staff_name })}`
+                      : ''}
                   </Text>
                 </View>
               );
             })}
           </View>
         ) : null}
-        {showStaffSummary ? <DetailRow label="Staff" value={staffLabel} /> : null}
-        {amountLabel !== '—' ? <DetailRow label="Amount" value={amountLabel} /> : null}
+        {showStaffSummary ? <DetailRow label={t('customerApp.bookingDetail.staff')} value={staffLabel} /> : null}
+        {amountLabel !== '—' ? <DetailRow label={t('customerApp.bookingDetail.amount')} value={amountLabel} /> : null}
         <DetailRow
-          label="Payment"
+          label={t('customerApp.booking.payment')}
           value={
             paymentMethodLabel
               ? paymentMethodLabel
               : booking.payment_mode === 'pay_at_venue' || !booking.payment_mode
-                ? 'Pay at venue'
+                ? t('customerApp.booking.payAtVenue')
                 : booking.payment_mode
           }
         />
         {paymentProofUri ? (
           <View style={styles.proofBlock}>
-            <Text style={styles.section}>Payment proof</Text>
-            <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel="View payment proof">
+            <Text style={styles.section}>{t('customerApp.bookingDetail.paymentProof')}</Text>
+            <Pressable onPress={() => setProofLightboxOpen(true)} accessibilityLabel={t('customerApp.bookingDetail.viewPaymentProof')}>
               <Image source={{ uri: paymentProofUri }} style={styles.proofImage} resizeMode="cover" />
             </Pressable>
-            <Text style={styles.locationAddress}>Tap to view full size</Text>
+            <Text style={styles.locationAddress}>{t('customerApp.bookingDetail.tapFullSize')}</Text>
           </View>
         ) : null}
-        {booking.notes ? <DetailRow label="Notes" value={booking.notes} multiline /> : null}
+        {booking.notes ? <DetailRow label={t('customerApp.booking.notes')} value={booking.notes} multiline /> : null}
       </Card>
 
       {showLoyaltyCard ? (
@@ -547,7 +566,7 @@ export function BookingDetailScreen() {
               <Text style={styles.loyaltyPoints}>
                 {fullyReversed ? '−' : '+'}
                 {highlightPoints}{' '}
-                <Text style={styles.loyaltyPointsUnit}>pts</Text>
+                <Text style={styles.loyaltyPointsUnit}>{t('customerApp.bookingDetail.ptsUnit')}</Text>
               </Text>
             ) : null}
             {highlightSubtitle ? <Text style={styles.loyaltySubtitle}>{highlightSubtitle}</Text> : null}
@@ -559,31 +578,35 @@ export function BookingDetailScreen() {
               <View style={styles.loyaltyMetaRow}>
                 {pointsEarned > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: '#ECFDF5' }]}>
-                    <Text style={[styles.loyaltyChipText, { color: '#047857' }]}>Earned +{pointsEarned}</Text>
+                    <Text style={[styles.loyaltyChipText, { color: '#047857' }]}>
+                      {t('customerApp.bookingDetail.chipEarned', { n: pointsEarned })}
+                    </Text>
                   </View>
                 ) : pointsPending > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: '#FEF3C7' }]}>
                     <Text style={[styles.loyaltyChipText, { color: '#B45309' }]}>
-                      Will earn +{pointsPending}
+                      {t('customerApp.bookingDetail.chipWillEarn', { n: pointsPending })}
                     </Text>
                   </View>
                 ) : null}
                 {pointsRedeemed > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: withAlpha(primary, 0.12) }]}>
-                    <Text style={[styles.loyaltyChipText, { color: primary }]}>Used {pointsRedeemed} pts</Text>
+                    <Text style={[styles.loyaltyChipText, { color: primary }]}>
+                      {t('customerApp.bookingDetail.chipUsed', { n: pointsRedeemed })}
+                    </Text>
                   </View>
                 ) : null}
                 {pointsDiscount > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: '#ECFDF5' }]}>
                     <Text style={[styles.loyaltyChipText, { color: '#047857' }]}>
-                      Saved {formatMoney(pointsDiscount, loyaltyCurrency)}
+                      {t('customerApp.bookingDetail.chipSaved', { amount: formatMoney(pointsDiscount, loyaltyCurrency) })}
                     </Text>
                   </View>
                 ) : null}
                 {pointsReversed > 0 ? (
                   <View style={[styles.loyaltyChip, { backgroundColor: '#FFE4E6' }]}>
                     <Text style={[styles.loyaltyChipText, { color: '#BE123C' }]}>
-                      Reversed −{pointsReversed}
+                      {t('customerApp.bookingDetail.chipReversed', { n: pointsReversed })}
                     </Text>
                   </View>
                 ) : null}
@@ -595,13 +618,13 @@ export function BookingDetailScreen() {
 
       {invoiceVoucherId || booking.status === 'completed' ? (
         <Card>
-          <Text style={styles.section}>Tax invoice</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.taxInvoice')}</Text>
           <Text style={styles.locationAddress}>
             {invoiceVoucherId
               ? invoiceNumber
-                ? `Invoice ${invoiceNumber}`
-                : 'GST tax invoice for this appointment'
-              : 'Generating your tax invoice… Tap View to open it.'}
+                ? t('customerApp.bookingDetail.invoiceNumber', { number: invoiceNumber })
+                : t('customerApp.bookingDetail.gstInvoice')
+              : t('customerApp.bookingDetail.invoiceGenerating')}
           </Text>
           <View style={styles.invoiceActionsRow}>
             <Pressable
@@ -615,7 +638,7 @@ export function BookingDetailScreen() {
               onPress={() => void viewInvoice()}
             >
               <Text style={styles.invoiceActionPrimaryText}>
-                {invoiceBusy ? 'Opening…' : 'View invoice'}
+                {invoiceBusy ? t('customerApp.bookingDetail.opening') : t('customerApp.bookingDetail.viewInvoice')}
               </Text>
             </Pressable>
             <Pressable
@@ -628,22 +651,22 @@ export function BookingDetailScreen() {
               disabled={invoiceBusy}
               onPress={() => void shareInvoice()}
             >
-              <Text style={{ color: primary, fontWeight: '700' }}>Share</Text>
+              <Text style={{ color: primary, fontWeight: '700' }}>{t('customerApp.bookingDetail.share')}</Text>
             </Pressable>
           </View>
         </Card>
       ) : showInvoicePending ? (
         <Card>
-          <Text style={styles.section}>Tax invoice</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.taxInvoice')}</Text>
           <Text style={styles.locationAddress}>
-            Tax invoice will appear here after this appointment is completed.
+            {t('customerApp.bookingDetail.invoiceAfterComplete')}
           </Text>
         </Card>
       ) : null}
 
       {booking.branch?.display_name || booking.branch?.formatted_address || hasVisitActions ? (
         <Card>
-          <Text style={styles.section}>Visit location</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.visitLocation')}</Text>
           {booking.branch?.display_name ? (
             <View style={styles.locationRow}>
               <Feather name="map-pin" size={16} color={primary} />
@@ -665,19 +688,19 @@ export function BookingDetailScreen() {
 
       {review ? (
         <Card>
-          <Text style={styles.section}>Your review</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.yourReview')}</Text>
           <Text style={[styles.ratingStars, { color: primary }]}>
             {'★'.repeat(review.rating)}
             {'☆'.repeat(5 - review.rating)}
           </Text>
-          <Text style={styles.reviewComment}>{review.comment?.trim() || 'No written comment.'}</Text>
+          <Text style={styles.reviewComment}>{review.comment?.trim() || t('customerApp.bookingDetail.noComment')}</Text>
           {review.created_at ? <Text style={styles.reviewMeta}>{formatDateTime(review.created_at)}</Text> : null}
         </Card>
       ) : null}
 
       {booking.status === 'completed' && !review ? (
         <Card>
-          <Text style={styles.section}>Leave a review</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.leaveReview')}</Text>
           <View style={styles.reviewForm}>
             <View style={styles.stars}>
               {[1, 2, 3, 4, 5].map((value) => (
@@ -689,17 +712,17 @@ export function BookingDetailScreen() {
               ))}
             </View>
             <Input
-              label="Comment (optional)"
+              label={t('customerApp.bookingDetail.commentOptional')}
               value={reviewComment}
               onChangeText={setReviewComment}
-              placeholder="How was your visit?"
+              placeholder={t('customerApp.bookingDetail.howWasVisit')}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
               style={styles.reviewInput}
             />
             <Button
-              label="Submit review"
+              label={t('customerApp.bookingDetail.submitReview')}
               icon="send"
               fullWidth
               loading={actionLoading}
@@ -712,10 +735,10 @@ export function BookingDetailScreen() {
 
       {rescheduleMode ? (
         <Card>
-          <Text style={styles.section}>Pick a new date & time</Text>
+          <Text style={styles.section}>{t('customerApp.bookingDetail.pickNewDateTime')}</Text>
           <CalendarPicker value={date} onChange={setDate} primaryColor={primary} />
           <Button
-            label="Load available times"
+            label={t('customerApp.bookingDetail.loadTimes')}
             icon="clock"
             variant="outline"
             fullWidth
@@ -741,7 +764,7 @@ export function BookingDetailScreen() {
       <ImageLightbox
         uri={paymentProofUri || null}
         visible={proofLightboxOpen}
-        title="Payment proof"
+        title={t('customerApp.bookingDetail.paymentProof')}
         onClose={() => setProofLightboxOpen(false)}
       />
     </ProfileMenuScreen>

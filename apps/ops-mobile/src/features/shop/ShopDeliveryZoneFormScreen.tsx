@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FormScreen } from '../../components/FormScreen';
@@ -45,6 +46,7 @@ function splitCsv(value: string): string[] {
 }
 
 export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
+  const { t } = useTranslation();
   const zoneId = route.params?.zoneId;
   const isEditing = Boolean(zoneId);
   const client = useOpsClient();
@@ -63,7 +65,7 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
       const response = await client.shop.listDeliveryZones({ business_id: businessId });
       const zone = response.data.find((row) => row.id === zoneId);
       if (!zone) {
-        setError('Delivery zone not found.');
+        setError(t('opsApp.shop.zones.notFound'));
         return;
       }
       setForm({
@@ -78,11 +80,11 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
         enabled: zone.enabled !== false,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load zone');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.zones.zoneLoadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, zoneId]);
+  }, [businessId, client, zoneId, t]);
 
   useEffect(() => {
     if (isEditing) void load();
@@ -94,8 +96,8 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
 
   async function save() {
     if (!client || !businessId || !form.name.trim()) {
-      setError('Zone name is required');
-      toast.push('Zone name is required', 'error');
+      setError(t('opsApp.shop.zones.nameRequired'));
+      toast.push(t('opsApp.shop.zones.nameRequired'), 'error');
       return;
     }
     setSaving(true);
@@ -115,14 +117,14 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
     try {
       if (zoneId) {
         await client.shop.patchDeliveryZone(zoneId, payload);
-        toast.push('Delivery zone saved.', 'success');
+        toast.push(t('shop.deliveryZones.toastSaved'), 'success');
       } else {
         await client.shop.createDeliveryZone(payload);
-        toast.push('Delivery zone added.', 'success');
+        toast.push(t('shop.deliveryZones.toastAdded'), 'success');
       }
       navigation.goBack();
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Couldn't save this delivery zone. Try again.";
+      const text = err instanceof Error ? err.message : t('shop.deliveryZones.errSave');
       setError(text);
       toast.push(text, 'error');
     } finally {
@@ -136,7 +138,13 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
     <FormScreen
       footer={
         <Button
-          label={saving ? 'Saving…' : isEditing ? 'Update zone' : 'Save zone'}
+          label={
+            saving
+              ? t('common.saving')
+              : isEditing
+                ? t('shop.deliveryZones.updateZone')
+                : t('shop.deliveryZones.saveZone')
+          }
           icon="save"
           loading={saving}
           fullWidth
@@ -145,68 +153,67 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
         />
       }
     >
-      <Text style={styles.formTitle}>{isEditing ? 'Edit delivery zone' : 'Add delivery zone'}</Text>
+      <Text style={styles.formTitle}>{isEditing ? t('shop.deliveryZones.editZone') : t('shop.deliveryZones.addDeliveryZone')}</Text>
       <Text style={styles.help}>
-        Match checkout addresses by city name and/or postal prefix. Fee is added when the zone matches. Deliver now
-        appears only in zones where it is explicitly allowed.
+        {t('opsApp.shop.zones.formHelp')}
       </Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Input
-        label="Zone name"
+        label={t('shop.deliveryZones.zoneName')}
         required
         value={form.name}
         onChangeText={(value) => setField('name', value)}
-        placeholder="e.g. Nashik city"
-        error={!form.name.trim() && error === 'Zone name is required' ? error : undefined}
+        placeholder={t('shop.deliveryZones.zoneNamePlaceholder')}
+        error={!form.name.trim() && error === t('opsApp.shop.zones.nameRequired') ? error : undefined}
       />
       <Input
-        label="Cities"
+        label={t('opsApp.shop.zones.cities')}
         optional
         value={form.cities}
         onChangeText={(value) => setField('cities', value)}
         placeholder="Nashik, Nasik"
-        hint="Comma-separated"
+        hint={t('opsApp.shop.zones.commaSeparated')}
       />
       <Input
-        label="Postal prefixes"
+        label={t('opsApp.shop.zones.postalPrefixes')}
         optional
         value={form.prefixes}
         onChangeText={(value) => setField('prefixes', value)}
         placeholder="422"
-        hint="Comma-separated"
+        hint={t('opsApp.shop.zones.commaSeparated')}
       />
       <Input
-        label="Delivery fee"
+        label={t('shop.deliveryZones.deliveryFee')}
         required
         value={form.fee}
         onChangeText={(value) => setField('fee', value)}
         keyboardType="decimal-pad"
       />
       <Input
-        label="Minimum order"
+        label={t('shop.deliveryZones.minimumOrder')}
         optional
         value={form.minOrder}
         onChangeText={(value) => setField('minOrder', value)}
         keyboardType="decimal-pad"
       />
       <Input
-        label="Notes"
+        label={t('shop.deliveryZones.notes')}
         optional
         value={form.notes}
         onChangeText={(value) => setField('notes', value)}
-        placeholder="Optional"
+        placeholder={t('shop.godowns.optional')}
         multiline
       />
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Same-day delivery</Text>
+        <Text style={styles.switchLabel}>{t('shop.deliveryZones.sameDayDelivery')}</Text>
         <Switch value={form.sameDay} onValueChange={(value) => setField('sameDay', value)} />
       </View>
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Allow Deliver now</Text>
+        <Text style={styles.switchLabel}>{t('shop.deliveryZones.allowDeliverNow')}</Text>
         <Switch value={form.instantDelivery} onValueChange={(value) => setField('instantDelivery', value)} />
       </View>
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Enabled</Text>
+        <Text style={styles.switchLabel}>{t('shop.deliveryZones.enabled')}</Text>
         <Switch value={form.enabled} onValueChange={(value) => setField('enabled', value)} />
       </View>
     </FormScreen>

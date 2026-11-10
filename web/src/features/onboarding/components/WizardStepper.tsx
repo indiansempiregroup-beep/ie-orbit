@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { RegisterWizardStepId } from '../../../config/onboarding';
 import { REGISTER_WIZARD_VISIBLE_STEPS } from '../../../config/onboarding';
 
@@ -7,13 +8,14 @@ type WizardStepperProps = {
 };
 
 export function WizardStepper({ currentStep }: WizardStepperProps) {
+  const { t } = useTranslation();
   const displayStep = currentStep === 'provision' ? 'review' : currentStep;
   const currentIndex = REGISTER_WIZARD_VISIBLE_STEPS.findIndex((step) => step.id === displayStep);
   const stepCount = REGISTER_WIZARD_VISIBLE_STEPS.length;
   const progressIndex = currentStep === 'provision' ? stepCount : currentIndex + 1;
 
   return (
-    <nav aria-label="Registration progress" className="wizard-stepper">
+    <nav aria-label={t('register.progressAria')} className="wizard-stepper">
       <ol className="wizard-stepper-list">
         {REGISTER_WIZARD_VISIBLE_STEPS.map((step, index) => {
           const isComplete = index < currentIndex || currentStep === 'provision';
@@ -27,7 +29,7 @@ export function WizardStepper({ currentStep }: WizardStepperProps) {
               <span className="wizard-stepper-index" aria-hidden="true">
                 {index + 1}
               </span>
-              <span className="wizard-stepper-label">{step.label}</span>
+              <span className="wizard-stepper-label">{t(`register.steps.${step.id}`, { defaultValue: step.label })}</span>
             </li>
           );
         })}
@@ -38,7 +40,7 @@ export function WizardStepper({ currentStep }: WizardStepperProps) {
         aria-valuemin={0}
         aria-valuemax={stepCount}
         aria-valuenow={progressIndex}
-        aria-label={`Step ${progressIndex} of ${stepCount}`}
+        aria-label={t('register.stepOf', { current: progressIndex, total: stepCount })}
         style={
           {
             '--wizard-progress': `${(progressIndex / stepCount) * 100}%`,

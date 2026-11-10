@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { ShopBooksVoucher } from '@ie-orbit/sdk';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { Select } from '../../components/Select';
@@ -21,6 +22,7 @@ export function PurchasePayForm({
   voucher: ShopBooksVoucher;
   onPaid?: (updated: ShopBooksVoucher) => void;
 }) {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const snackbar = useSnackbar();
   const currency = workspace.activeBusiness?.currency;
@@ -58,15 +60,15 @@ export function PurchasePayForm({
   async function submit() {
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      snackbar.push('Enter a payment amount.', 'error');
+      snackbar.push(t('shop.purchasePay.enterAmount'), 'error');
       return;
     }
     if (parsed > due + 0.009) {
-      snackbar.push('Amount cannot exceed the balance due.', 'error');
+      snackbar.push(t('shop.purchasePay.exceedsDue'), 'error');
       return;
     }
     if (!accountId) {
-      snackbar.push('Select a cash or bank account.', 'error');
+      snackbar.push(t('shop.purchasePay.selectAccount'), 'error');
       return;
     }
     try {
@@ -76,13 +78,13 @@ export function PurchasePayForm({
       });
       snackbar.push(
         dueAmount(updated) <= 0.009
-          ? `${updated.voucher_number} marked paid.`
-          : `Recorded ${formatMoney(parsed, currency)} on ${updated.voucher_number}.`,
+          ? t('shop.purchasePay.markedPaid', { number: updated.voucher_number })
+          : t('shop.purchasePay.recorded', { amount: formatMoney(parsed, currency), number: updated.voucher_number }),
         'success',
       );
       onPaid?.(updated);
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't record that payment. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.purchasePay.payFailed')), 'error');
     }
   }
 
@@ -97,24 +99,24 @@ export function PurchasePayForm({
         background: 'var(--muted, #f8fafc)',
       }}
     >
-      <strong style={{ fontSize: 14 }}>Record payment</strong>
+      <strong style={{ fontSize: 14 }}>{t('shop.purchasePay.title')}</strong>
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'minmax(120px, 1fr) minmax(180px, 1.4fr)' }}>
         <Input
-          label="Amount"
+          label={t('shop.purchasePay.amount')}
           value={amount}
           onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))}
           inputMode="decimal"
         />
         <Select
-          label="Pay from"
+          label={t('shop.purchasePay.payFrom')}
           value={accountId}
           onChange={(event) => setAccountId(event.target.value)}
-          options={[{ value: '', label: 'Select account' }, ...options]}
+          options={[{ value: '', label: t('shop.purchasePay.selectAccountOption') }, ...options]}
         />
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button type="button" onClick={() => void submit()} disabled={payVoucher.isPending || !options.length}>
-          {payVoucher.isPending ? 'Recording…' : `Pay ${formatMoney(Number(amount) || due, currency)}`}
+          {payVoucher.isPending ? t('shop.purchasePay.recording') : t('shop.purchasePay.pay', { amount: formatMoney(Number(amount) || due, currency) })}
         </Button>
       </div>
     </div>

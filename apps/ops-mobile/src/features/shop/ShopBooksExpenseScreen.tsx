@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -57,6 +58,7 @@ const FALLBACK_INCOME_CATEGORIES = ['Interest', 'Commission', 'Rent income', 'Sc
 type EntryKind = 'expense' | 'other_income';
 
 export function ShopBooksExpenseScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -112,12 +114,15 @@ export function ShopBooksExpenseScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: listKind === 'expense' ? 'Expense' : 'Other income',
+      title:
+        listKind === 'expense'
+          ? t('shop.expense.expenseBadge')
+          : t('shop.reportsPage.voucherTypes.other_income'),
       headerRight: () => (
         <Pressable
           onPress={() => (showForm ? closeForm() : setShowForm(true))}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'New entry'}
+          accessibilityLabel={showForm ? t('common.close') : t('opsApp.shop.expense.newEntry')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -125,7 +130,7 @@ export function ShopBooksExpenseScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, listKind]);
+  }, [navigation, showForm, closeForm, listKind, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -172,22 +177,30 @@ export function ShopBooksExpenseScreen() {
 
   const categoryOptions = useMemo(() => {
     const source = entryKind === 'expense' ? expenseCats : incomeCats;
-    return source.map((value) => ({ value, label: value }));
-  }, [entryKind]);
+    return source.map((value) => ({
+      value,
+      label: t(`opsApp.shop.expense.cat.${value.trim().toLowerCase().replace(/\s+/g, '_')}`, {
+        defaultValue: value,
+      }),
+    }));
+  }, [entryKind, expenseCats, incomeCats, t]);
 
   const accountOptions = useMemo(
     () => [
-      { value: '', label: entryKind === 'expense' ? 'Not paid yet' : 'Not received yet' },
-      ...accounts.map((account) => ({ value: account.id, label: `${account.name} (${account.account_type})` })),
+      { value: '', label: entryKind === 'expense' ? t('opsApp.shop.expense.notPaidYet') : t('opsApp.shop.expense.notReceivedYet') },
+      ...accounts.map((account) => ({
+        value: account.id,
+        label: `${account.name} (${t(`shop.cashBank.${account.account_type}`, { defaultValue: account.account_type })})`,
+      })),
     ],
-    [accounts, entryKind],
+    [accounts, entryKind, t],
   );
 
   async function submit() {
     if (!client || !businessId) return;
     const numeric = Number(amount);
     if (!category.trim() || !numeric || numeric <= 0) {
-      toast.push('Enter a category and amount', 'error');
+      toast.push(t('opsApp.shop.expense.enterCategoryAmount'), 'error');
       return;
     }
     setBusy(true);
@@ -202,14 +215,16 @@ export function ShopBooksExpenseScreen() {
         notes: notes.trim() || undefined,
       });
       toast.push(
-        `${entryKind === 'expense' ? 'Expense' : 'Other income'} ${response.data.voucher_number} recorded`,
+        entryKind === 'expense'
+          ? t('shop.expense.toastRecorded', { number: response.data.voucher_number })
+          : t('opsApp.shop.expense.incomeRecorded', { number: response.data.voucher_number }),
         'success',
       );
       setListKind(entryKind);
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't record this entry. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.expense.errRecordEntry'), 'error');
     } finally {
       setBusy(false);
     }
@@ -217,23 +232,27 @@ export function ShopBooksExpenseScreen() {
 
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
-    const label = voucher.voucher_type === 'other_income' ? 'other income' : 'expense';
-    Alert.alert(`Void ${label}`, `Void this ${label}? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
+    const isIncomeEntry = voucher.voucher_type === 'other_income';
+    Alert.alert(
+      isIncomeEntry ? t('opsApp.shop.expense.voidIncomeTitle') : t('opsApp.shop.expense.voidExpenseTitle'),
+      isIncomeEntry ? t('opsApp.shop.expense.voidIncomeBody') : t('opsApp.shop.expense.voidExpenseBody'),
+      [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Void',
+        text: t('opsApp.shop.sale.void'),
         style: 'destructive',
         onPress: async () => {
           try {
             await client.shop.voidVoucher(voucher.id);
-            toast.push('Entry voided', 'success');
+            toast.push(t('opsApp.shop.expense.entryVoided'), 'success');
             await load();
           } catch (err) {
-            toast.push(err instanceof Error ? err.message : "Couldn't void this entry. Try again.", 'error');
+            toast.push(err instanceof Error ? err.message : t('opsApp.shop.expense.voidFailed'), 'error');
           }
         },
       },
-    ]);
+      ],
+    );
   }
 
   if (showForm) {
@@ -241,7 +260,13 @@ export function ShopBooksExpenseScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : entryKind === 'expense' ? 'Record expense' : 'Record income'}
+            label={
+              busy
+                ? t('common.saving')
+                : entryKind === 'expense'
+                  ? t('opsApp.shop.expense.recordExpense')
+                  : t('opsApp.shop.expense.recordIncome')
+            }
             loading={busy}
             fullWidth
             size="lg"
@@ -251,13 +276,17 @@ export function ShopBooksExpenseScreen() {
       >
         <FormHero
           icon={entryKind === 'expense' ? 'credit-card' : 'trending-up'}
-          title={entryKind === 'expense' ? 'New expense' : 'Other income'}
-          subtitle="Record the amount, account, date, and supporting notes."
+          title={
+            entryKind === 'expense'
+              ? t('opsApp.shop.expense.newExpense')
+              : t('shop.reportsPage.voucherTypes.other_income')
+          }
+          subtitle={t('opsApp.shop.expense.heroSubtitle')}
         />
 
         <View style={styles.chipRow}>
           <Chip
-            label="Expense"
+            label={t('shop.expense.expenseBadge')}
             active={entryKind === 'expense'}
             onPress={() => {
               setEntryKind('expense');
@@ -265,7 +294,7 @@ export function ShopBooksExpenseScreen() {
             }}
           />
           <Chip
-            label="Other income"
+            label={t('shop.reportsPage.voucherTypes.other_income')}
             active={entryKind === 'other_income'}
             onPress={() => {
               setEntryKind('other_income');
@@ -275,46 +304,54 @@ export function ShopBooksExpenseScreen() {
         </View>
 
         <SelectField
-          label="Category"
+          label={t('shop.expense.category')}
           required
           value={category}
           options={categoryOptions}
           onChange={setCategory}
-          placeholder="Choose or type below"
+          placeholder={t('opsApp.shop.expense.chooseOrType')}
         />
         <Input
-          label="Category name"
+          label={t('opsApp.shop.expense.categoryName')}
           required
           value={category}
           onChangeText={setCategory}
-          placeholder={entryKind === 'expense' ? 'Category (e.g. Rent)' : 'Category (e.g. Interest)'}
+          placeholder={
+            entryKind === 'expense'
+              ? t('opsApp.shop.expense.categoryPlaceholderExpense')
+              : t('opsApp.shop.expense.categoryPlaceholderIncome')
+          }
         />
 
         <Input
-          label="Amount"
+          label={t('shop.expense.amount')}
           required
           value={amount}
           onChangeText={(value) => setAmount(value.replace(/[^0-9.]/g, ''))}
-          placeholder="Amount"
+          placeholder={t('shop.expense.amount')}
           keyboardType="decimal-pad"
         />
 
         <SelectField
-          label={entryKind === 'expense' ? 'Paid from' : 'Received into'}
+          label={
+            entryKind === 'expense'
+              ? t('opsApp.shop.expense.paidFrom')
+              : t('opsApp.shop.expense.receivedInto')
+          }
           required
           value={cashAccountId}
           options={accountOptions}
           onChange={setCashAccountId}
         />
 
-        <DateField label="Date" required value={voucherDate} onChange={setVoucherDate} allowClear={false} />
+        <DateField label={t('shop.expense.date')} required value={voucherDate} onChange={setVoucherDate} allowClear={false} />
 
         <Input
-          label="Notes"
+          label={t('shop.expense.notes')}
           optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes (optional)"
+          placeholder={t('opsApp.shop.expense.notesOptional')}
           multiline
         />
       </FormScreen>
@@ -325,9 +362,9 @@ export function ShopBooksExpenseScreen() {
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <View style={styles.chipRow}>
-          <Chip label="Expense" active={listKind === 'expense'} onPress={() => setListKind('expense')} />
+          <Chip label={t('shop.expense.expenseBadge')} active={listKind === 'expense'} onPress={() => setListKind('expense')} />
           <Chip
-            label="Other income"
+            label={t('shop.reportsPage.voucherTypes.other_income')}
             active={listKind === 'other_income'}
             onPress={() => setListKind('other_income')}
           />
@@ -337,7 +374,11 @@ export function ShopBooksExpenseScreen() {
           style={styles.search}
           value={search}
           onChangeText={setSearch}
-          placeholder={listKind === 'expense' ? 'Search expenses' : 'Search income'}
+          placeholder={
+            listKind === 'expense'
+              ? t('shop.expense.searchPlaceholder')
+              : t('opsApp.shop.expense.searchIncome')
+          }
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
@@ -355,12 +396,18 @@ export function ShopBooksExpenseScreen() {
                 title={item.notes?.trim() || item.voucher_number}
                 amount={formatMoney(item.total)}
                 meta={`${item.voucher_number}${item.cash_account_name ? ` · ${item.cash_account_name}` : ''}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
-                badge={voided ? 'Void' : isIncome ? 'Income' : 'Expense'}
+                badge={
+                  voided
+                    ? t('shop.expense.voidStatus')
+                    : isIncome
+                      ? t('opsApp.shop.expense.incomeBadge')
+                      : t('shop.expense.expenseBadge')
+                }
                 badgeKind={voided ? 'void' : isIncome ? 'paid' : 'neutral'}
                 icon={isIncome ? 'trending-up' : 'credit-card'}
                 iconTone={voided ? 'rose' : isIncome ? 'green' : 'navy'}
                 dimmed={voided}
-                actionLabel={!voided ? 'Void' : undefined}
+                actionLabel={!voided ? t('shop.expense.voidAction') : undefined}
                 onAction={!voided ? () => void onVoid(item) : undefined}
               />
             );
@@ -369,13 +416,21 @@ export function ShopBooksExpenseScreen() {
             !loading ? (
               <EmptyState
                 icon={listKind === 'expense' ? 'credit-card' : 'trending-up'}
-                title={listKind === 'expense' ? 'No expenses yet' : 'No other income yet'}
+                title={
+                  listKind === 'expense'
+                    ? t('opsApp.shop.expense.noExpensesTitle')
+                    : t('opsApp.shop.expense.noIncomeTitle')
+                }
                 message={
                   listKind === 'expense'
-                    ? 'Track rent, utilities, and day-to-day costs.'
-                    : 'Record interest, commission, and other non-sale income.'
+                    ? t('opsApp.shop.expense.expenseHint')
+                    : t('opsApp.shop.expense.incomeHint')
                 }
-                actionLabel={listKind === 'expense' ? 'Record expense' : 'Record income'}
+                actionLabel={
+                  listKind === 'expense'
+                    ? t('opsApp.shop.expense.recordExpense')
+                    : t('opsApp.shop.expense.recordIncome')
+                }
                 onAction={() => {
                   setEntryKind(listKind);
                   setShowForm(true);

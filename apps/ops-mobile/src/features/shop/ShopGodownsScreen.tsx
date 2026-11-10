@@ -1,4 +1,6 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -78,7 +80,7 @@ function buildInsights(godowns: ShopGodown[], products: ShopProduct[]) {
         const threshold = asNumber(row.low_stock_threshold);
         return {
           product: row.product,
-          name: row.product_name || 'Item',
+          name: row.product_name || '',
           sku: row.sku || '',
           qty,
           value: qty * asNumber(row.price),
@@ -130,7 +132,7 @@ function buildInsights(godowns: ShopGodown[], products: ShopProduct[]) {
   };
 }
 
-function transferSummary(transfer: ShopStockTransfer): string {
+function transferSummary(transfer: ShopStockTransfer, t: TFunction): string {
   const lines = Array.isArray(transfer.line_items) ? transfer.line_items : [];
   const names = lines
     .map((raw) => {
@@ -141,12 +143,13 @@ function transferSummary(transfer: ShopStockTransfer): string {
       return `${name} × ${formatQty(row.quantity)}`;
     })
     .filter(Boolean);
-  if (!names.length) return transfer.status || 'Completed';
+  if (!names.length) return transfer.status || t('shop.returnsPage.statusLabels.completed');
   if (names.length === 1) return names[0];
-  return `${names[0]} · +${names.length - 1} more`;
+  return `${names[0]} · ${t('shop.godowns.moreCount', { n: names.length - 1 })}`;
 }
 
 export function ShopGodownsScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -237,7 +240,7 @@ export function ShopGodownsScreen() {
             <Pressable
               onPress={() => openTransfer()}
               accessibilityRole="button"
-              accessibilityLabel="New transfer"
+              accessibilityLabel={t('opsApp.shop.godowns.newTransfer')}
               hitSlop={8}
               style={styles.headerBtn}
             >
@@ -246,7 +249,7 @@ export function ShopGodownsScreen() {
             <Pressable
               onPress={() => setMode('godown')}
               accessibilityRole="button"
-              accessibilityLabel="New godown"
+              accessibilityLabel={t('opsApp.shop.godowns.newGodown')}
               hitSlop={8}
               style={styles.headerBtn}
             >
@@ -257,7 +260,7 @@ export function ShopGodownsScreen() {
           <Pressable
             onPress={closeForm}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={t('common.close')}
             hitSlop={8}
             style={styles.headerBtn}
           >
@@ -265,7 +268,7 @@ export function ShopGodownsScreen() {
           </Pressable>
         ),
     });
-  }, [navigation, mode, closeForm, openTransfer]);
+  }, [navigation, mode, closeForm, openTransfer, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -281,11 +284,11 @@ export function ShopGodownsScreen() {
       setTransfers((transfersRes.data ?? []).slice(0, 8));
       setProducts(productsRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load godowns');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.godowns.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -321,11 +324,11 @@ export function ShopGodownsScreen() {
   async function submitGodown() {
     if (!client || !businessId) return;
     if (!name.trim()) {
-      toast.push('Enter a godown name', 'error');
+      toast.push(t('opsApp.shop.godowns.enterName'), 'error');
       return;
     }
     if (!addressLine1.trim() || latitude == null || longitude == null) {
-      toast.push('Search and confirm the godown address on the map', 'error');
+      toast.push(t('shop.godowns.errAddress'), 'error');
       return;
     }
     setBusy(true);
@@ -347,15 +350,15 @@ export function ShopGodownsScreen() {
       };
       if (editingId) {
         await client.shop.patchGodown(editingId, payload);
-        toast.push('Godown details saved.', 'success');
+        toast.push(t('shop.godowns.toastSaved'), 'success');
       } else {
         await client.shop.createGodown(payload);
-        toast.push('Godown added.', 'success');
+        toast.push(t('shop.godowns.toastAdded'), 'success');
       }
       closeForm();
       await load();
     } catch (err) {
-      const fallback = "Couldn't save this godown. Try again.";
+      const fallback = t('shop.godowns.errSave');
       toast.push(err instanceof Error ? err.message : fallback, 'error');
     } finally {
       setBusy(false);
@@ -365,15 +368,15 @@ export function ShopGodownsScreen() {
   async function submitTransfer() {
     if (!client || !businessId) return;
     if (!fromGodownId || !toGodownId) {
-      toast.push('Select from and to godowns', 'error');
+      toast.push(t('shop.godowns.errSelectFromTo'), 'error');
       return;
     }
     if (fromGodownId === toGodownId) {
-      toast.push('From and to godowns must differ', 'error');
+      toast.push(t('shop.godowns.errSameGodown'), 'error');
       return;
     }
     if (!productId || !(Number(qty) > 0)) {
-      toast.push('Select a product and quantity', 'error');
+      toast.push(t('shop.godowns.errSelectProductQty'), 'error');
       return;
     }
     setBusy(true);
@@ -385,11 +388,11 @@ export function ShopGodownsScreen() {
         transfer_date: todayIso(),
         lines: [{ product_id: productId, quantity: qty }],
       });
-      toast.push(`Transfer ${response.data.transfer_number} created`, 'success');
+      toast.push(t('shop.godowns.toastTransferCreated', { number: response.data.transfer_number }), 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't create this transfer. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('shop.godowns.errTransfer'), 'error');
     } finally {
       setBusy(false);
     }
@@ -401,7 +404,13 @@ export function ShopGodownsScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : editingId ? 'Save changes' : 'Create godown'}
+            label={
+              busy
+                ? t('common.saving')
+                : editingId
+                  ? t('common.saveChanges')
+                  : t('shop.godowns.createGodown')
+            }
             loading={busy}
             fullWidth
             size="lg"
@@ -409,13 +418,13 @@ export function ShopGodownsScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>{editingId ? 'Edit godown' : 'New godown'}</Text>
+        <Text style={styles.formTitle}>{editingId ? t('shop.godowns.editGodown') : t('opsApp.shop.godowns.newGodown')}</Text>
         <Input
-          label="Name"
+          label={t('shop.godowns.name')}
           required
           value={name}
           onChangeText={setName}
-          placeholder="Main warehouse"
+          placeholder={t('shop.godowns.namePlaceholder')}
         />
         <AddressLocationPicker
           required
@@ -440,22 +449,22 @@ export function ShopGodownsScreen() {
           }}
         />
         <Input
-          label="Flat, floor, building or landmark"
+          label={t('shop.godowns.line2')}
           optional
-          placeholder="Bay 3, near loading dock"
+          placeholder={t('shop.godowns.line2Placeholder')}
           value={addressLine2}
           onChangeText={setAddressLine2}
         />
         <FieldRow>
           <Input
-            label="City"
+            label={t('shop.godowns.city')}
             optional
             value={city}
             onChangeText={setCity}
             editable={!(latitude != null && longitude != null)}
           />
           <Input
-            label="State"
+            label={t('shop.godowns.state')}
             optional
             value={state}
             onChangeText={setState}
@@ -464,14 +473,14 @@ export function ShopGodownsScreen() {
         </FieldRow>
         <FieldRow>
           <Input
-            label="Country"
+            label={t('shop.godowns.country')}
             optional
             value={country}
             onChangeText={setCountry}
             editable={!(latitude != null && longitude != null)}
           />
           <Input
-            label="Postal code"
+            label={t('shop.godowns.postalCode')}
             optional
             value={postalCode}
             onChangeText={setPostalCode}
@@ -479,23 +488,23 @@ export function ShopGodownsScreen() {
           />
         </FieldRow>
         <Input
-          label="Pickup phone"
+          label={t('shop.godowns.pickupPhone')}
           optional
           value={phoneNumber}
           onChangeText={setPhoneNumber}
-          placeholder="Optional"
+          placeholder={t('shop.godowns.optional')}
           keyboardType="phone-pad"
         />
         <Input
-          label="Code"
+          label={t('shop.godowns.code')}
           optional
           value={code}
           onChangeText={setCode}
-          placeholder="Optional code"
+          placeholder={t('opsApp.shop.godowns.optionalCode')}
           autoCapitalize="characters"
         />
         <View style={styles.switchRow}>
-          <Text style={styles.label}>Default godown</Text>
+          <Text style={styles.label}>{t('shop.godowns.defaultGodown')}</Text>
           <Switch
             value={isDefault}
             onValueChange={setIsDefault}
@@ -507,8 +516,8 @@ export function ShopGodownsScreen() {
         </View>
         <Text style={styles.hint}>
           {lockedDefault
-            ? 'POS and online orders sell from this godown. Mark another godown as default to move them.'
-            : 'POS and online orders deduct stock from the default godown.'}
+            ? t('shop.godowns.lockedDefaultHint')
+            : t('shop.godowns.defaultHint')}
         </Text>
       </FormScreen>
     );
@@ -519,7 +528,7 @@ export function ShopGodownsScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : 'Create stock transfer'}
+            label={busy ? t('common.saving') : t('shop.godowns.createTransfer')}
             loading={busy}
             fullWidth
             size="lg"
@@ -527,34 +536,34 @@ export function ShopGodownsScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>Stock transfer</Text>
+        <Text style={styles.formTitle}>{t('shop.godowns.stockTransfer')}</Text>
         <SelectField
-          label="From godown"
+          label={t('shop.godowns.fromGodown')}
           required
           value={fromGodownId}
           options={godownOptions}
           onChange={setFromGodownId}
-          placeholder="Select godown"
+          placeholder={t('shop.godowns.selectGodown')}
         />
         <SelectField
-          label="To godown"
+          label={t('shop.godowns.toGodown')}
           required
           value={toGodownId}
           options={godownOptions}
           onChange={setToGodownId}
-          placeholder="Select godown"
+          placeholder={t('shop.godowns.selectGodown')}
         />
         <SelectField
-          label="Product"
+          label={t('shop.godowns.product')}
           required
           value={productId}
           options={productOptions}
           onChange={setProductId}
           searchable
-          placeholder="Choose product"
+          placeholder={t('shop.godowns.chooseProduct')}
         />
         <Input
-          label="Quantity"
+          label={t('shop.godowns.quantity')}
           required
           value={qty}
           onChangeText={(value) => setQty(value.replace(/[^0-9.]/g, ''))}
@@ -570,20 +579,18 @@ export function ShopGodownsScreen() {
         <>
           <VoucherSummaryCards
             metrics={[
-              { label: 'Locations', value: String(godowns.length), hint: insights.defaultLocation ? insights.defaultLocation.godown.name : undefined },
-              { label: 'Units', value: formatQty(insights.totalUnits), hint: `${insights.uniqueSkuCount} SKUs` },
-              { label: 'Value', value: formatMoney(insights.totalValue), tone: insights.totalValue > 0 ? 'paid' : undefined },
+              { label: t('opsApp.shop.godowns.locations'), value: String(godowns.length), hint: insights.defaultLocation ? insights.defaultLocation.godown.name : undefined },
+              { label: t('opsApp.shop.godowns.units'), value: formatQty(insights.totalUnits), hint: t('shop.godowns.skuCount', { n: insights.uniqueSkuCount }) },
+              { label: t('opsApp.shop.godowns.value'), value: formatMoney(insights.totalValue), tone: insights.totalValue > 0 ? 'paid' : undefined },
             ]}
           />
 
           <View style={styles.note}>
             <Feather name="info" size={14} color={colors.primary} />
             <Text style={styles.noteText}>
-              POS and online orders sell from{' '}
-              <Text style={styles.noteStrong}>
-                {insights.defaultLocation?.godown.name || 'the default godown'}
-              </Text>
-              . Transfer stock there before the counter runs dry.
+              {t('opsApp.shop.godowns.note', {
+                name: insights.defaultLocation?.godown.name || t('opsApp.shop.godowns.defaultFallback'),
+              })}
             </Text>
           </View>
 
@@ -593,8 +600,7 @@ export function ShopGodownsScreen() {
                 <View style={[styles.alert, styles.alertWarn]}>
                   <Feather name="alert-triangle" size={15} color={colors.warning} />
                   <Text style={styles.alertText}>
-                    {insights.lowAtDefault} SKU{insights.lowAtDefault === 1 ? '' : 's'} low at the
-                    default godown — POS may start failing soon.
+                    {t('opsApp.shop.godowns.alertLow', { count: insights.lowAtDefault })}
                   </Text>
                 </View>
               ) : null}
@@ -602,8 +608,7 @@ export function ShopGodownsScreen() {
                 <View style={styles.alert}>
                   <Feather name="home" size={15} color={colors.mutedForeground} />
                   <Text style={styles.alertText}>
-                    {insights.emptyCount} location{insights.emptyCount === 1 ? '' : 's'} have no
-                    stock yet.
+                    {t('opsApp.shop.godowns.alertEmpty', { count: insights.emptyCount })}
                   </Text>
                 </View>
               ) : null}
@@ -611,8 +616,7 @@ export function ShopGodownsScreen() {
                 <View style={[styles.alert, styles.alertWarn]}>
                   <Feather name="layers" size={15} color={colors.warning} />
                   <Text style={styles.alertText}>
-                    {insights.unmappedCount} catalog SKU{insights.unmappedCount === 1 ? '' : 's'} still
-                    have stock that is not sitting in a godown.
+                    {t('opsApp.shop.godowns.alertUnmapped', { count: insights.unmappedCount })}
                   </Text>
                 </View>
               ) : null}
@@ -621,7 +625,7 @@ export function ShopGodownsScreen() {
 
           {insights.locations.length > 1 && insights.totalUnits > 0 ? (
             <View style={styles.mixCard}>
-              <Text style={styles.sectionTitle}>Stock mix</Text>
+              <Text style={styles.sectionTitle}>{t('opsApp.shop.godowns.stockMix')}</Text>
               <View style={styles.mixTrack}>
                 {insights.locations
                   .filter((row) => row.share > 0)
@@ -654,7 +658,7 @@ export function ShopGodownsScreen() {
 
           {transfers.length ? (
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>Recent transfers</Text>
+              <Text style={styles.sectionTitle}>{t('shop.godowns.recentTransfers')}</Text>
               <GroupedList>
                 {transfers.map((transfer) => (
                   <View key={transfer.id} style={styles.transferRow}>
@@ -663,10 +667,10 @@ export function ShopGodownsScreen() {
                     </View>
                     <View style={styles.transferCopy}>
                       <Text style={styles.name} numberOfLines={1}>
-                        {transfer.from_godown_name || 'From'} → {transfer.to_godown_name || 'To'}
+                        {transfer.from_godown_name || t('shop.godowns.from')} → {transfer.to_godown_name || t('shop.godowns.to')}
                       </Text>
                       <Text style={styles.meta} numberOfLines={1}>
-                        {transferSummary(transfer)}
+                        {transferSummary(transfer, t)}
                         {transfer.transfer_date || transfer.created_at
                           ? ` · ${formatVoucherDateTime(transfer.transfer_date, transfer.created_at)}`
                           : ''}
@@ -682,18 +686,18 @@ export function ShopGodownsScreen() {
           <SearchBar
             value={query}
             onChangeText={setQuery}
-            placeholder="Search location or product"
+            placeholder={t('shop.godowns.searchPlaceholder')}
             style={styles.searchBar}
           />
           <View style={styles.chips}>
-            <Chip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
-            <Chip label="With stock" active={filter === 'stocked'} onPress={() => setFilter('stocked')} />
-            <Chip label="Empty" active={filter === 'empty'} onPress={() => setFilter('empty')} />
+            <Chip label={t('common.all')} active={filter === 'all'} onPress={() => setFilter('all')} />
+            <Chip label={t('opsApp.shop.godowns.withStock')} active={filter === 'stocked'} onPress={() => setFilter('stocked')} />
+            <Chip label={t('opsApp.shop.godowns.empty')} active={filter === 'empty'} onPress={() => setFilter('empty')} />
           </View>
-          <Text style={styles.sectionTitle}>Godowns</Text>
+          <Text style={styles.sectionTitle}>{t('opsApp.shop.godowns.title')}</Text>
         </>
       ) : (
-        <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>Godowns</Text>
+        <Text style={[styles.sectionTitle, { marginBottom: spacing.sm }]}>{t('opsApp.shop.godowns.title')}</Text>
       )}
     </View>
   );
@@ -717,18 +721,24 @@ export function ShopGodownsScreen() {
               <BooksDocumentRow
                 title={item.godown.name}
                 amount={item.value > 0 ? formatMoney(item.value) : undefined}
-                meta={`${item.godown.code ? `Code ${item.godown.code} · ` : ''}${item.skuCount} SKU${item.skuCount === 1 ? '' : 's'} · ${formatQty(item.units)} units`}
-                badge={item.godown.is_default ? 'Default · POS' : item.lowStock > 0 ? `${item.lowStock} low` : undefined}
+                meta={`${item.godown.code ? `${t('opsApp.shop.godowns.codePrefix', { code: item.godown.code })} · ` : ''}${t('shop.godowns.skuCount', { n: item.skuCount })} · ${t('opsApp.shop.godowns.unitsCount', { count: formatQty(item.units) })}`}
+                badge={
+                  item.godown.is_default
+                    ? t('shop.godowns.defaultPosSuffix')
+                    : item.lowStock > 0
+                      ? t('opsApp.shop.godowns.lowBadge', { count: item.lowStock })
+                      : undefined
+                }
                 badgeKind={item.lowStock > 0 ? 'due' : item.godown.is_default ? 'paid' : 'neutral'}
                 icon="home"
                 iconTone={item.lowStock > 0 ? 'amber' : item.godown.is_default ? 'navy' : 'green'}
                 onPress={() => setExpandedId(expanded ? null : item.godown.id)}
                 extraActions={[
-                  { label: 'Send', onPress: () => openTransfer(item.godown.id) },
-                  { label: 'Receive', onPress: () => openTransfer(undefined, item.godown.id) },
+                  { label: t('shop.godowns.send'), onPress: () => openTransfer(item.godown.id) },
+                  { label: t('shop.godowns.receive'), onPress: () => openTransfer(undefined, item.godown.id) },
                   ...(item.godown.branch
                     ? []
-                    : [{ label: 'Edit', onPress: () => openEdit(item.godown) }]),
+                    : [{ label: t('shop.godowns.edit'), onPress: () => openEdit(item.godown) }]),
                 ]}
               >
                 {preview.length ? (
@@ -737,12 +747,12 @@ export function ShopGodownsScreen() {
                       <View key={line.product} style={styles.stockLine}>
                         <View style={styles.stockCopy}>
                           <Text style={styles.stockName} numberOfLines={1}>
-                            {line.name}
+                            {line.name || t('shop.godowns.item')}
                           </Text>
                           <Text style={styles.meta} numberOfLines={1}>
                             {line.sku ? `${line.sku} · ` : ''}
                             {formatMoney(line.value)}
-                            {line.low ? ' · Low' : ''}
+                            {line.low ? ` · ${t('opsApp.shop.godowns.low')}` : ''}
                           </Text>
                         </View>
                         <Text style={[styles.stockQty, line.low && styles.stockQtyLow]}>
@@ -751,14 +761,14 @@ export function ShopGodownsScreen() {
                       </View>
                     ))}
                     {!expanded && item.lines.length > 3 ? (
-                      <Text style={styles.more}>+{item.lines.length - 3} more items</Text>
+                      <Text style={styles.more}>{t('opsApp.shop.godowns.moreItems', { n: item.lines.length - 3 })}</Text>
                     ) : null}
                     {expanded && item.lines.length > 12 ? (
-                      <Text style={styles.more}>Showing top 12 by value</Text>
+                      <Text style={styles.more}>{t('opsApp.shop.godowns.showingTop')}</Text>
                     ) : null}
                   </View>
                 ) : (
-                  <Text style={styles.emptyLocation}>No stock at this location yet.</Text>
+                  <Text style={styles.emptyLocation}>{t('shop.godowns.noStock')}</Text>
                 )}
               </BooksDocumentRow>
             );
@@ -768,15 +778,15 @@ export function ShopGodownsScreen() {
               godowns.length ? (
                 <EmptyState
                   icon="search"
-                  title="No matching locations"
-                  message="Try another filter or search."
+                  title={t('opsApp.shop.godowns.noMatchingTitle')}
+                  message={t('opsApp.shop.godowns.tryAnother')}
                 />
               ) : (
                 <EmptyState
                   icon="home"
-                  title="No godowns yet"
-                  message="Add a warehouse. New stock, POS, and online orders use the default godown. Transfer between locations as needed."
-                  actionLabel="New godown"
+                  title={t('opsApp.shop.godowns.noGodownsTitle')}
+                  message={t('opsApp.shop.godowns.noGodownsHint')}
+                  actionLabel={t('opsApp.shop.godowns.newGodown')}
                   onAction={() => setMode('godown')}
                 />
               )

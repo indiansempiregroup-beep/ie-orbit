@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export type BiProductKey = 'appointie' | 'shopie';
 
@@ -38,9 +39,10 @@ export function BiProductTabs({
   value: BiProductKey;
   onChange: (next: BiProductKey) => void;
 }) {
+  const { t } = useTranslation();
   if (!(showAppointie && showShopie)) return null;
   return (
-    <div role="tablist" aria-label="Product" style={trackStyle}>
+    <div role="tablist" aria-label={t('bi.productTabsAria')} style={trackStyle}>
       <button
         type="button"
         role="tab"
@@ -48,7 +50,7 @@ export function BiProductTabs({
         style={tabStyle(value === 'appointie')}
         onClick={() => onChange('appointie')}
       >
-        Orbit Appoint
+        {t('public.nav.appoint')}
       </button>
       <button
         type="button"
@@ -57,7 +59,7 @@ export function BiProductTabs({
         style={tabStyle(value === 'shopie')}
         onClick={() => onChange('shopie')}
       >
-        Orbit Mart
+        {t('public.nav.mart')}
       </button>
     </div>
   );

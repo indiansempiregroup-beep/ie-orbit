@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -30,14 +31,18 @@ import { formatMoney, formatVoucherDateTime } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { usePlanFeatures } from '../../hooks/useOpsExtended';
 import { PlanFeature } from '../../utils/planFeatures';
+import type { TFunction } from 'i18next';
 
-const MOVEMENT_OPTIONS = [
-  { value: 'adjust', label: 'Adjust' },
-  { value: 'receive', label: 'Receive' },
-  { value: 'damage', label: 'Damage' },
-];
+function movementOptions(t: TFunction) {
+  return [
+    { value: 'adjust', label: t('opsApp.shop.stockAdjust.adjust') },
+    { value: 'receive', label: t('opsApp.shop.stockAdjust.receive') },
+    { value: 'damage', label: t('opsApp.shop.stockAdjust.damage') },
+  ];
+}
 
 export function ShopStockAdjustScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const client = useOpsClient();
   const toast = useToast();
@@ -105,11 +110,11 @@ export function ShopStockAdjustScreen() {
       setGodowns(rows);
       setGodownId((current) => current || rows.find((row) => row.is_default)?.id || rows[0]?.id || '');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.stockAdjust.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, showGodowns]);
+  }, [businessId, client, showGodowns, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -134,7 +139,7 @@ export function ShopStockAdjustScreen() {
     if (!client || !selected) return;
     const delta = Number(quantityDelta);
     if (!Number.isFinite(delta) || delta === 0) {
-      toast.push('Enter a non-zero quantity change', 'error');
+      toast.push(t('opsApp.shop.stockAdjust.nonZero'), 'error');
       return;
     }
     setBusy(true);
@@ -146,13 +151,13 @@ export function ShopStockAdjustScreen() {
         ...(godownId ? { godown_id: godownId } : {}),
       });
       toast.push(
-        `Stock updated · ${response.data.name} now ${response.data.stock_on_hand}`,
+        t('opsApp.shop.stockAdjust.updated', { name: response.data.name, stock: response.data.stock_on_hand }),
         'success',
       );
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't update stock. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.stockAdjust.updateFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -163,9 +168,9 @@ export function ShopStockAdjustScreen() {
       <FormScreen
         footer={
           <View style={styles.formFooter}>
-            <Button label="Cancel" variant="ghost" fullWidth onPress={closeForm} />
+            <Button label={t('common.cancel')} variant="ghost" fullWidth onPress={closeForm} />
             <Button
-              label={busy ? 'Saving…' : 'Adjust stock'}
+              label={busy ? t('common.saving') : t('opsApp.shop.stockAdjust.adjustStock')}
               loading={busy}
               fullWidth
               size="lg"
@@ -176,18 +181,18 @@ export function ShopStockAdjustScreen() {
       >
         <FormHero
           icon="archive"
-          title="Adjust stock"
-          subtitle={`${selected.name} · On hand: ${selected.stock_on_hand}${selected.sku ? ` · SKU ${selected.sku}` : ''}`}
+          title={t('opsApp.shop.stockAdjust.adjustStock')}
+          subtitle={`${t('opsApp.shop.stockAdjust.heroSubtitle', { name: selected.name, stock: selected.stock_on_hand })}${selected.sku ? ` · ${t('opsApp.shop.stockAdjust.skuSuffix', { sku: selected.sku })}` : ''}`}
         />
 
         {officeStock.length > 1 ? (
           <View style={styles.officeBreakdown}>
-            <Text style={styles.officeHeading}>Stock by office</Text>
+            <Text style={styles.officeHeading}>{t('opsApp.shop.stockAdjust.stockByOffice')}</Text>
             {officeStock.map((office) => (
               <View key={office.branch_id} style={styles.officeRow}>
                 <Text style={styles.officeName}>
                   {office.branch_name}
-                  {office.is_primary ? ' · primary' : ''}
+                  {office.is_primary ? ` · ${t('opsApp.shop.stockAdjust.primarySuffix')}` : ''}
                 </Text>
                 <Text
                   style={Number(office.quantity) > 0 ? styles.officeQty : styles.officeQtyEmpty}
@@ -201,53 +206,55 @@ export function ShopStockAdjustScreen() {
 
         {officeStock.length > 1 ? (
           <SelectField
-            label="Office to adjust"
+            label={t('opsApp.shop.stockAdjust.officeToAdjust')}
             required
             value={godownId}
             options={officeStock.map((office) => ({
               value: office.godown_id,
-              label: office.is_primary ? `${office.branch_name} (primary)` : office.branch_name,
+              label: office.is_primary
+                ? `${office.branch_name} (${t('opsApp.shop.stockAdjust.primarySuffix')})`
+                : office.branch_name,
             }))}
             onChange={setGodownId}
-            placeholder="Select office"
+            placeholder={t('opsApp.shop.stockAdjust.selectOffice')}
           />
         ) : showGodowns && godowns.length ? (
           <SelectField
-            label="Godown"
+            label={t('opsApp.shop.stockAdjust.godown')}
             required
             value={godownId}
             options={godowns.map((godown) => ({
               value: godown.id,
-              label: godown.is_default ? `${godown.name} (default)` : godown.name,
+              label: godown.is_default ? t('shop.products.godownDefault', { name: godown.name }) : godown.name,
             }))}
             onChange={setGodownId}
-            placeholder="Select godown"
+            placeholder={t('opsApp.shop.stockAdjust.selectGodown')}
           />
         ) : null}
 
         <Input
-          label="Quantity change (+/-)"
+          label={t('opsApp.shop.stockAdjust.quantityChange')}
           required
           value={quantityDelta}
           onChangeText={(value) => setQuantityDelta(value.replace(/[^0-9.\-]/g, ''))}
-          placeholder="e.g. 5 or -2"
+          placeholder={t('opsApp.shop.stockAdjust.quantityPlaceholder')}
           keyboardType="numbers-and-punctuation"
         />
 
         <SelectField
-          label="Movement type"
+          label={t('opsApp.shop.stockAdjust.movementType')}
           required
           value={movementType}
-          options={MOVEMENT_OPTIONS}
+          options={movementOptions(t)}
           onChange={setMovementType}
         />
 
         <Input
-          label="Reason"
+          label={t('opsApp.shop.stockAdjust.reason')}
           optional
           value={reason}
           onChangeText={setReason}
-          placeholder="Optional note"
+          placeholder={t('opsApp.shop.stockAdjust.optionalNote')}
           multiline
         />
       </FormScreen>
@@ -260,7 +267,7 @@ export function ShopStockAdjustScreen() {
         <SearchBar
           value={search}
           onChangeText={setSearch}
-          placeholder="Search products"
+          placeholder={t('opsApp.shop.stockAdjust.searchProducts')}
           style={styles.searchBar}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -276,7 +283,7 @@ export function ShopStockAdjustScreen() {
               title={item.name}
               amount={String(item.stock_on_hand)}
               meta={`${formatMoney(item.price)}${item.sku ? ` · ${item.sku}` : ''}${item.updated_at || item.created_at ? ` · ${formatVoucherDateTime(item.updated_at || item.created_at, item.updated_at || item.created_at)}` : ''}`}
-              badge="Tap to adjust"
+              badge={t('opsApp.shop.stockAdjust.tapToAdjust')}
               icon="package"
               iconTone={Number(item.stock_on_hand) <= 0 ? 'rose' : 'navy'}
               onPress={() => void selectProduct(item)}
@@ -286,8 +293,8 @@ export function ShopStockAdjustScreen() {
             !loading ? (
               <EmptyState
                 icon="package"
-                title="No products found"
-                message="Add products first, then adjust stock quantities here."
+                title={t('opsApp.shop.stockAdjust.emptyTitle')}
+                message={t('opsApp.shop.stockAdjust.emptyMessage')}
               />
             ) : null
           }

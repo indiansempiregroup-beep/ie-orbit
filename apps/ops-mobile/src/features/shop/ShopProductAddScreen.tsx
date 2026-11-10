@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
@@ -39,7 +40,6 @@ import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
 import { SelectField } from '../../components/SelectField';
 import { CURRENCIES } from '../../constants/options';
-import { requiredMessage } from '../../utils/formValidation';
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
@@ -267,6 +267,7 @@ function formFromProduct(product: ShopProduct): FormState {
 }
 
 export function ShopProductAddScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<Props['route']>();
   const client = useOpsClient();
@@ -284,7 +285,8 @@ export function ShopProductAddScreen() {
   const [nameLookup, setNameLookup] = useState('');
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessageText] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<'error' | 'success'>('success');
   const [needsPackPhoto, setNeedsPackPhoto] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [previews, setPreviews] = useState<string[]>(emptyProductImageSlots());
@@ -300,8 +302,8 @@ export function ShopProductAddScreen() {
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: isEditing ? 'Edit product' : 'Add product' });
-  }, [isEditing, navigation]);
+    navigation.setOptions({ title: isEditing ? t('shop.products.editTitle') : t('shop.products.addTitle') });
+  }, [isEditing, navigation, t]);
 
   useEffect(() => {
     return () => {
@@ -321,15 +323,15 @@ export function ShopProductAddScreen() {
         setPreviews(emptyProductImageSlots());
         touchedRef.current = new Set();
         if (!normalizeProductGallery(next.images).length) {
-          setMessage('No product photos found for this item yet. Add a primary image.');
+          setMessage(t('opsApp.shop.productAdd.noPhotosFound'));
         }
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : 'Unable to load product');
+        setMessage(err instanceof Error ? err.message : t('opsApp.shop.productAdd.loadFailed'), 'error');
       } finally {
         setBusy(false);
       }
     })();
-  }, [client, productId]);
+  }, [client, productId, t]);
 
   useEffect(() => {
     if (!client || !businessId || !showGodowns) {
@@ -395,28 +397,34 @@ export function ShopProductAddScreen() {
         touchedRef.current.add('barcode');
         if (data.found) {
           setNeedsPackPhoto(false);
-          setMessage(enrichSuccessMessage(data, { editing: isEditing }));
+          setMessage(enrichSuccessMessage(data, t, { editing: isEditing }));
         } else {
           setNeedsPackPhoto(Boolean(data.needs_pack_photo));
           setMessage(
             enrichMissMessage(
               data,
               data.needs_pack_photo
-                ? 'No match yet. Capture a clear primary pack photo for Smart lookup.'
-                : 'Barcode updated — no online match for extra details.',
+                ? t('opsApp.shop.productAdd.noMatchYetPackPhoto')
+                : t('opsApp.shop.productAdd.barcodeUpdatedNoMatch'),
             ),
+            'error',
           );
         }
       } catch (err) {
         setForm((current) => ({ ...current, barcode: code }));
         touchedRef.current.add('barcode');
-        setMessage(err instanceof Error ? err.message : 'Barcode captured.');
+        setMessage(err instanceof Error ? err.message : t('opsApp.shop.productAdd.barcodeCaptured'), 'error');
       } finally {
         setBusy(false);
         navigation.setParams({ enrichCode: undefined });
       }
     })();
-  }, [client, navigation, route.params?.enrichCode, businessId, isEditing]);
+  }, [client, navigation, route.params?.enrichCode, businessId, isEditing, t]);
+
+  function setMessage(text: string | null, tone: 'error' | 'success' = 'success') {
+    setMessageText(text);
+    setMessageTone(tone);
+  }
 
   function markTouched(key: FormKey) {
     touchedRef.current.add(key);
@@ -437,7 +445,7 @@ export function ShopProductAddScreen() {
   ) {
     const base = (data.message || fallback).trim();
     if (data.needs_pack_photo && !/pack photo|photo/i.test(base)) {
-      return `${base} Capture a clear primary pack photo to try Smart lookup again.`;
+      return `${base} ${t('opsApp.shop.productAdd.capturePackPhotoRetry')}`;
     }
     return base;
   }
@@ -445,10 +453,10 @@ export function ShopProductAddScreen() {
   function authErrorMessage(err: unknown, fallback: string) {
     const text = err instanceof Error ? err.message : fallback;
     if (/token not valid|token_not_valid|unauthorized|401|authentication/i.test(text)) {
-      return 'Your session expired. Please sign out and sign in again, then retry.';
+      return t('opsApp.shop.productAdd.sessionExpired');
     }
     if (/network request failed|failed to fetch|networkerror|timed out|timeout/i.test(text)) {
-      return 'Upload lost connection while processing the photo. Try again, use a smaller photo, or turn off Remove background.';
+      return t('opsApp.shop.productAdd.uploadLostConnection');
     }
     return text || fallback;
   }
@@ -456,19 +464,19 @@ export function ShopProductAddScreen() {
   async function uploadAsset(index: number, asset: ImagePickerAsset, removeBackground = false) {
     const access = (await ensureFreshAccess()) || token;
     if (!businessId || !tenantId || !access) {
-      throw new Error('Workspace is not ready. Please sign in again.');
+      throw new Error(t('opsApp.shop.productAdd.workspaceNotReady'));
     }
     const uploaded = await uploadProductImage({
       token: access,
       tenantId,
       businessId,
       asset,
-      productName: productImageSlotLabel(index),
+      productName: productImageSlotLabel(index, t),
       prepareProductCanvas: true,
       removeBackground,
     });
     const imageUrl = uploaded.public_url || uploaded.private_url || '';
-    if (!imageUrl) throw new Error('Photo uploaded but no URL was returned.');
+    if (!imageUrl) throw new Error(t('opsApp.shop.invoiceScan.noPhotoUrlReturned'));
     return imageUrl;
   }
 
@@ -479,16 +487,16 @@ export function ShopProductAddScreen() {
       await pickAt(index, 'library');
       return;
     }
-    Alert.alert(productImageSlotLabel(index), 'Choose a source', [
+    Alert.alert(productImageSlotLabel(index, t), t('opsApp.shop.productAdd.chooseSource'), [
       {
-        text: 'Camera',
+        text: t('opsApp.shop.common.camera'),
         onPress: () => void pickAt(index, 'camera'),
       },
       {
-        text: 'Gallery',
+        text: t('opsApp.shop.common.gallery'),
         onPress: () => void pickAt(index, 'library'),
       },
-      { text: 'Cancel', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   }
 
@@ -497,13 +505,13 @@ export function ShopProductAddScreen() {
       if (source === 'camera') {
         const permission = await ImagePicker.requestCameraPermissionsAsync();
         if (!permission.granted) {
-          setMessage('Camera permission is required to photograph the product.');
+          setMessage(t('opsApp.shop.productAdd.cameraPermission'), 'error');
           return;
         }
       } else {
         const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          setMessage('Photo library permission is required.');
+          setMessage(t('opsApp.shop.productAdd.libraryPermission'), 'error');
           return;
         }
       }
@@ -543,8 +551,8 @@ export function ShopProductAddScreen() {
     setBusy(true);
     setMessage(
       options?.removeBackground
-        ? 'Removing background and uploading… this can take a few seconds.'
-        : 'Uploading photo…',
+        ? t('opsApp.shop.productAdd.removingBackground')
+        : t('opsApp.shop.productAdd.uploadingPhoto'),
     );
     try {
       // Pixels already cropped on device; server letterboxes (+ optional rembg).
@@ -564,11 +572,11 @@ export function ShopProductAddScreen() {
       });
       setMessage(
         index === 0
-          ? 'Primary photo uploaded. Tap Smart fill when you want to read the pack.'
-          : `${productImageSlotLabel(index)} uploaded.`,
+          ? t('shop.products.primaryUploaded')
+          : t('shop.products.slotUploaded', { label: productImageSlotLabel(index, t) }),
       );
     } catch (err) {
-      setMessage(authErrorMessage(err, 'Unable to upload photo'));
+      setMessage(authErrorMessage(err, t('shop.products.uploadFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -601,7 +609,7 @@ export function ShopProductAddScreen() {
   async function getFreshClient(): Promise<IEOrbitClient> {
     const access = (await ensureFreshAccess()) || token;
     if (!access || !businessId) {
-      throw new Error('Your session expired. Please sign out and sign in again, then retry.');
+      throw new Error(t('opsApp.shop.productAdd.sessionExpired'));
     }
     return createScopedClient(access, tenantId, businessId);
   }
@@ -613,7 +621,7 @@ export function ShopProductAddScreen() {
     if (!businessId) return;
     const started = Date.now();
     setAnalyzing(true);
-    setMessage('Analysing packaging in the background…');
+    setMessage(t('shop.products.analysingBg'));
 
     if (pollTimer.current) clearInterval(pollTimer.current);
     pollTimer.current = setInterval(() => {
@@ -637,13 +645,13 @@ export function ShopProductAddScreen() {
                 setAnalyzing(false);
                 if (sync.data.result) {
                   setForm((current) => applyEnrichment(current, sync.data.result!, touchedRef.current));
-                  setMessage(sync.data.result.message || 'Fields updated from packaging photos.');
+                  setMessage(sync.data.result.message || t('shop.products.fieldsUpdated'));
                 } else {
-                  setMessage(sync.data.error || 'Analysis timed out. Try again or scan the barcode.');
+                  setMessage(sync.data.error || t('shop.products.analysisTimeout'), 'error');
                 }
               } catch (fallbackError) {
                 setAnalyzing(false);
-                setMessage(authErrorMessage(fallbackError, 'Analysis timed out. Try again or scan the barcode.'));
+                setMessage(authErrorMessage(fallbackError, t('shop.products.analysisTimeout')), 'error');
               }
             }
             return;
@@ -651,17 +659,17 @@ export function ShopProductAddScreen() {
           if (pollTimer.current) clearInterval(pollTimer.current);
           setAnalyzing(false);
           if (job.status === 'failed') {
-            setMessage(job.error || 'Packaging analysis failed.');
+            setMessage(job.error || t('shop.products.analysisFailed'), 'error');
             return;
           }
           if (job.result) {
             setForm((current) => applyEnrichment(current, job.result!, touchedRef.current));
-            setMessage(job.result.message || 'Fields updated from packaging photos.');
+            setMessage(job.result.message || t('shop.products.fieldsUpdated'));
           }
         } catch (err) {
           if (pollTimer.current) clearInterval(pollTimer.current);
           setAnalyzing(false);
-          setMessage(authErrorMessage(err, 'Unable to check analysis status'));
+          setMessage(authErrorMessage(err, t('opsApp.shop.productAdd.statusCheckFailed')), 'error');
         }
       })();
     }, 1500);
@@ -671,11 +679,11 @@ export function ShopProductAddScreen() {
     if (!businessId) return;
     const front = form.images[0] || '';
     if (!front) {
-      setMessage('Capture the primary pack photo first, then tap Smart fill.');
+      setMessage(t('opsApp.shop.productAdd.capturePrimaryFirst'), 'error');
       return;
     }
     setBusy(true);
-    setMessage('Reading pack photo with Smart lookup…');
+    setMessage(t('opsApp.shop.productAdd.readingWithSmart'));
     try {
       const freshClient = await getFreshClient();
       const response = await freshClient.shop.enrichBarcode({
@@ -688,15 +696,16 @@ export function ShopProductAddScreen() {
       if (!response.data.found) {
         setNeedsPackPhoto(Boolean(response.data.needs_pack_photo));
         setMessage(
-          enrichMissMessage(response.data, 'Could not read the pack photo. Try again or fill manually.'),
+          enrichMissMessage(response.data, t('opsApp.shop.productAdd.couldNotRead')),
+          'error',
         );
         return;
       }
       setNeedsPackPhoto(false);
       setForm((current) => applyEnrichment(current, response.data, touchedRef.current));
-      setMessage(enrichSuccessMessage(response.data, { editing: isEditing }));
+      setMessage(enrichSuccessMessage(response.data, t, { editing: isEditing }));
     } catch (err) {
-      setMessage(authErrorMessage(err, "Couldn't run Smart lookup. Try again."));
+      setMessage(authErrorMessage(err, t('opsApp.shop.productAdd.smartLookupFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -707,7 +716,7 @@ export function ShopProductAddScreen() {
     const front = form.images[0] || undefined;
     const back = form.images[1] || undefined;
     if (!front && !back) {
-      setMessage('Capture photo 1 (front) and/or photo 2 (back) first.');
+      setMessage(t('shop.products.uploadPhotoFirst'), 'error');
       return;
     }
     const payload = {
@@ -729,12 +738,12 @@ export function ShopProductAddScreen() {
       const job = response.data;
       if (job.status === 'done' && job.result) {
         setForm((current) => applyEnrichment(current, job.result!, touchedRef.current));
-        setMessage(job.result.message || 'Fields updated from packaging photos.');
+        setMessage(job.result.message || t('shop.products.fieldsUpdated'));
       } else {
         await pollAnalysis(job.job_id, payload);
       }
     } catch (err) {
-      setMessage(authErrorMessage(err, "Couldn't start packaging analysis. Try again."));
+      setMessage(authErrorMessage(err, t('shop.products.analyseFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -759,7 +768,7 @@ export function ShopProductAddScreen() {
           setForm((current) => ({ ...current, barcode: trimmed }));
           touchedRef.current.add('barcode');
         }
-        setMessage(enrichMissMessage(response.data, 'No online match for that search.'));
+        setMessage(enrichMissMessage(response.data, t('opsApp.shop.productAdd.noMatchSearch')), 'error');
         return;
       }
       setNeedsPackPhoto(false);
@@ -780,9 +789,9 @@ export function ShopProductAddScreen() {
         });
       });
       if (looksLikeBarcode) touchedRef.current.add('barcode');
-      setMessage(enrichSuccessMessage(response.data));
+      setMessage(enrichSuccessMessage(response.data, t));
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Search failed');
+      setMessage(err instanceof Error ? err.message : t('opsApp.shop.productAdd.searchFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -791,14 +800,14 @@ export function ShopProductAddScreen() {
   async function save() {
     if (!client || !businessId) return;
     const nextErrors: Record<string, string> = {};
-    if (!form.name.trim()) nextErrors.name = requiredMessage('Product name');
+    if (!form.name.trim()) nextErrors.name = t('opsApp.shop.productAdd.required', { label: t('shop.products.fields.name') });
     const priceValue = Number(form.price.trim());
-    if (!form.price.trim()) nextErrors.price = requiredMessage('Price');
-    else if (!Number.isFinite(priceValue) || priceValue < 0) nextErrors.price = 'Enter a valid price';
-    if (!form.status.trim()) nextErrors.status = requiredMessage('Status');
-    if (!form.currency.trim()) nextErrors.currency = requiredMessage('Currency');
+    if (!form.price.trim()) nextErrors.price = t('opsApp.shop.productAdd.required', { label: t('shop.products.fields.price') });
+    else if (!Number.isFinite(priceValue) || priceValue < 0) nextErrors.price = t('opsApp.shop.productAdd.invalidPrice');
+    if (!form.status.trim()) nextErrors.status = t('opsApp.shop.productAdd.required', { label: t('shop.products.status') });
+    if (!form.currency.trim()) nextErrors.currency = t('opsApp.shop.productAdd.required', { label: t('shop.products.currency') });
     if (form.category === 'other' && !form.category_other.trim()) {
-      nextErrors.category_other = requiredMessage('New category name');
+      nextErrors.category_other = t('opsApp.shop.productAdd.required', { label: t('shop.products.newCategoryName') });
     }
     if (Object.keys(nextErrors).length) {
       setFieldErrors(nextErrors);
@@ -826,7 +835,7 @@ export function ShopProductAddScreen() {
         });
       } catch (err) {
         setBusy(false);
-        setMessage(authErrorMessage(err, "Couldn't save this category. Try again."));
+        setMessage(authErrorMessage(err, t('shop.products.categoryCreateFailed')), 'error');
         return;
       }
     }
@@ -862,11 +871,11 @@ export function ShopProductAddScreen() {
     try {
       if (productId) {
         await client.shop.patchProduct(productId, payload);
-        toast.push('Product details saved.', 'success');
+        toast.push(t('shop.products.saved'), 'success');
         setTimeout(() => navigation.goBack(), 250);
       } else {
         const response = await client.shop.createProduct(payload);
-        toast.push('Product added.', 'success');
+        toast.push(t('shop.products.added'), 'success');
         // Let the toast mount on the root host before this screen unmounts.
         setTimeout(() => {
           if (route.params?.returnTo === 'pos') {
@@ -888,8 +897,9 @@ export function ShopProductAddScreen() {
         }, 250);
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't save this product. Check the details and try again.");
-      toast.push(err instanceof Error ? err.message : "Couldn't save this product. Check the details and try again.", 'error');
+      const saveError = err instanceof Error ? err.message : t('shop.products.saveFailed');
+      setMessage(saveError, 'error');
+      toast.push(saveError, 'error');
     } finally {
       setBusy(false);
     }
@@ -916,8 +926,8 @@ export function ShopProductAddScreen() {
     <ImageLightbox
       uri={lightbox?.uri ?? null}
       visible={Boolean(lightbox)}
-      title={lightbox ? productImageSlotLabel(lightbox.index) : 'Photo'}
-      replaceLabel="Restart photo"
+      title={lightbox ? productImageSlotLabel(lightbox.index, t) : t('opsApp.shop.productAdd.photo')}
+      replaceLabel={t('opsApp.shop.productAdd.restartPhoto')}
       onClose={() => setLightbox(null)}
       onReplace={
         lightbox
@@ -932,7 +942,7 @@ export function ShopProductAddScreen() {
     <FormScreen
       footer={
         <Button
-          label={busy ? 'Working…' : isEditing ? 'Update product' : 'Save product'}
+          label={busy ? t('opsApp.shop.productAdd.working') : isEditing ? t('shop.products.updateProduct') : t('shop.products.saveProduct')}
           loading={busy}
           fullWidth
           size="lg"
@@ -942,28 +952,24 @@ export function ShopProductAddScreen() {
       }
     >
       <FormHero
-        title={isEditing ? 'Edit product' : 'New product'}
+        title={isEditing ? t('shop.products.editTitle') : t('opsApp.shop.productAdd.newProduct')}
         subtitle={
           isEditing
-            ? 'Update photos, price, stock, and barcode for this item.'
-            : 'Add photos, fill in the basics, then save to the catalog.'
+            ? t('opsApp.shop.productAdd.editSubtitle')
+            : t('opsApp.shop.productAdd.addSubtitle')
         }
       />
 
       {message ? (
         <FormAlert
           message={message}
-          tone={
-            /unable|failed|error|expired|permission|no match|could not|no online/i.test(message)
-              ? 'error'
-              : 'success'
-          }
+          tone={messageTone}
         />
       ) : null}
 
       <FormSection
-        title="Photos"
-        subtitle={`Primary photo first · up to ${MAX_PRODUCT_IMAGES} images`}
+        title={t('opsApp.shop.productAdd.photos')}
+        subtitle={t('opsApp.shop.productAdd.photosSubtitle', { max: MAX_PRODUCT_IMAGES })}
       >
         <View style={styles.photoGrid}>
           {imageSlots.map((url, index) => {
@@ -992,7 +998,7 @@ export function ShopProductAddScreen() {
                     <View style={[styles.photoPlaceholder, isPrimary && styles.photoPrimary]}>
                       <Feather name={isPrimary ? 'camera' : 'plus'} size={20} color={colors.mutedForeground} />
                       <Text style={styles.photoLabel}>
-                        {isPrimary ? 'Add primary photo' : `Photo ${index + 1}`}
+                        {isPrimary ? t('opsApp.shop.productAdd.addPrimaryPhoto') : t('shop.products.slotN', { n: index + 1 })}
                       </Text>
                     </View>
                   )}
@@ -1003,14 +1009,14 @@ export function ShopProductAddScreen() {
                       onPress={() => void captureAt(index)}
                       disabled={busy}
                       style={styles.photoRestart}
-                      accessibilityLabel={`Restart ${productImageSlotLabel(index)}`}
+                      accessibilityLabel={t('opsApp.shop.productAdd.restartSlot', { label: productImageSlotLabel(index, t) })}
                     >
                       <Feather name="refresh-cw" size={13} color="#fff" />
                     </Pressable>
                     <Pressable
                       onPress={() => removeAt(index)}
                       style={styles.photoRemove}
-                      accessibilityLabel={`Remove ${productImageSlotLabel(index)}`}
+                      accessibilityLabel={t('opsApp.shop.productAdd.removeSlot', { label: productImageSlotLabel(index, t) })}
                     >
                       <Feather name="x" size={14} color="#fff" />
                     </Pressable>
@@ -1018,7 +1024,7 @@ export function ShopProductAddScreen() {
                 ) : null}
                 {isPrimary && (url || previews[index]) ? (
                   <View style={styles.primaryBadge}>
-                    <Text style={styles.primaryBadgeText}>Primary</Text>
+                    <Text style={styles.primaryBadgeText}>{t('opsApp.shop.productAdd.primaryBadge')}</Text>
                   </View>
                 ) : null}
               </View>
@@ -1026,7 +1032,7 @@ export function ShopProductAddScreen() {
           })}
         </View>
         <Button
-          label={analyzing ? 'Analysing packaging…' : 'Fill details from photos'}
+          label={analyzing ? t('shop.products.analysing') : t('opsApp.shop.productAdd.fillFromPhotos')}
           variant="soft"
           icon="zap"
           disabled={busy || analyzing || (!form.images[0] && !form.images[1])}
@@ -1034,25 +1040,28 @@ export function ShopProductAddScreen() {
         />
         {form.images[0] ? (
           <Button
-            label={busy ? 'Reading pack…' : 'Smart fill (wallet)'}
+            label={busy ? t('opsApp.shop.productAdd.readingPack') : t('opsApp.shop.productAdd.smartFillWallet')}
             variant="primary"
             icon="camera"
             disabled={busy || analyzing}
             onPress={() => void runSmartLookupFromPhoto()}
           />
         ) : needsPackPhoto ? (
-          <Text style={styles.hint}>Add a primary pack photo above to retry Smart lookup.</Text>
+          <Text style={styles.hint}>{t('opsApp.shop.productAdd.needPackPhotoHint')}</Text>
         ) : null}
       </FormSection>
 
-      <FormSection title="Lookup" subtitle="Scan or type a barcode / name — Smart lookup fills when free catalogs miss">
+      <FormSection
+        title={t('opsApp.shop.productAdd.lookup')}
+        subtitle={t('opsApp.shop.productAdd.lookupSubtitle')}
+      >
         <View style={styles.lookupRow}>
           <View style={styles.lookupField}>
             <Input
-              label="Search by name or barcode"
+              label={t('opsApp.shop.productAdd.searchLabel')}
               value={nameLookup}
               onChangeText={setNameLookup}
-              placeholder="e.g. 8906002483785 or Pedigree Adult 3kg"
+              placeholder={t('opsApp.shop.productAdd.searchPlaceholder')}
               returnKeyType="search"
               onSubmitEditing={() => void lookupByName()}
             />
@@ -1061,52 +1070,52 @@ export function ShopProductAddScreen() {
             style={styles.iconAction}
             onPress={() => void lookupByName()}
             disabled={busy}
-            accessibilityLabel="Search catalog"
+            accessibilityLabel={t('opsApp.shop.productAdd.searchCatalog')}
           >
             <Feather name="search" size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
-        <Button label="Scan barcode" variant="outline" icon="maximize" onPress={openScanner} />
+        <Button label={t('opsApp.shop.productAdd.scanBarcode')} variant="outline" icon="maximize" onPress={openScanner} />
       </FormSection>
 
       {busy || analyzing ? <ActivityIndicator color={colors.primary} /> : null}
 
-      <FormSection title="Product" subtitle="Name and how it appears in the catalog">
+      <FormSection title={t('shop.products.defaultName')} subtitle={t('opsApp.shop.productAdd.productSubtitle')}>
         <Input
-          label="Product name"
+          label={t('shop.products.fields.name')}
           required
           value={form.name}
           onChangeText={(value) => setField('name', value)}
-          placeholder="Product name"
+          placeholder={t('shop.products.fields.name')}
           error={fieldErrors.name}
         />
         <FieldRow>
-          <Input label="Brand" optional value={form.brand} onChangeText={(value) => setField('brand', value)} />
-          <Input label="SKU" optional value={form.sku} onChangeText={(value) => setField('sku', value)} />
+          <Input label={t('shop.products.fields.brand')} optional value={form.brand} onChangeText={(value) => setField('brand', value)} />
+          <Input label={t('shop.products.fields.sku')} optional value={form.sku} onChangeText={(value) => setField('sku', value)} />
         </FieldRow>
         <Input
-          label="Pack size / quantity"
+          label={t('shop.products.fields.pack_size')}
           optional
           value={form.pack_size}
           onChangeText={(value) => setField('pack_size', value)}
-          placeholder="e.g. 1 kg, 12 pcs"
+          placeholder={t('shop.invoiceScan.packSizePlaceholder')}
         />
         <SelectField
-          label="Status"
+          label={t('shop.products.status')}
           required
           value={form.status}
           options={[
-            { value: 'active', label: 'Active' },
-            { value: 'draft', label: 'Draft' },
-            { value: 'inactive', label: 'Inactive' },
-            { value: 'archived', label: 'Archived' },
+            { value: 'active', label: t('shop.products.statuses.active') },
+            { value: 'draft', label: t('shop.products.statuses.draft') },
+            { value: 'inactive', label: t('shop.products.statuses.inactive') },
+            { value: 'archived', label: t('shop.products.statuses.archived') },
           ]}
           onChange={(value) => setField('status', value)}
           searchable={false}
           error={fieldErrors.status}
         />
         <View style={styles.chipBlock}>
-          <FieldLabel label="Category" optional />
+          <FieldLabel label={t('shop.products.category')} optional />
           <View style={styles.chips}>
             {categoryOptions.map((item) => (
               <Chip
@@ -1126,7 +1135,7 @@ export function ShopProductAddScreen() {
             ))}
             {!categoryOptions.some((item) => item.slug === 'other') ? (
               <Chip
-                label="Other"
+                label={t('shop.products.other')}
                 active={form.category === 'other'}
                 onPress={() => {
                   setForm((current) => ({
@@ -1141,21 +1150,21 @@ export function ShopProductAddScreen() {
           </View>
           {form.category === 'other' ? (
             <Input
-              label="New category name"
+              label={t('shop.products.newCategoryName')}
               required
               value={form.category_other}
               onChangeText={(value) => setField('category_other', value)}
-              placeholder="e.g. Dry dog food"
+              placeholder={t('shop.products.categoryPlaceholder')}
               error={fieldErrors.category_other}
             />
           ) : null}
         </View>
       </FormSection>
 
-      <FormSection title="Price & tax">
+      <FormSection title={t('opsApp.shop.productAdd.priceTax')}>
         <FieldRow>
           <Input
-            label="Selling price"
+            label={t('shop.products.fields.price')}
             required
             value={form.price}
             onChangeText={(value) => setField('price', value)}
@@ -1163,32 +1172,32 @@ export function ShopProductAddScreen() {
             error={fieldErrors.price}
           />
           <Input
-            label="Purchase price"
+            label={t('shop.products.fields.purchase_price')}
             optional
             value={form.purchase_price}
             onChangeText={(value) => setField('purchase_price', value)}
             keyboardType="decimal-pad"
-            hint="Owner cost for profit insights. Not shown to customers."
+            hint={t('opsApp.shop.productAdd.purchaseHint')}
           />
         </FieldRow>
         <FieldRow>
           <Input
-            label="GST %"
+            label={t('shop.products.gstPercent')}
             optional
             value={form.tax_rate}
             onChangeText={(value) => setField('tax_rate', value)}
             keyboardType="decimal-pad"
           />
           <Input
-            label="HSN"
+            label={t('shop.invoiceScan.hsn')}
             optional
             value={form.hsn_sac}
             onChangeText={(value) => setField('hsn_sac', value)}
-            hint="GST goods classification for invoices."
+            hint={t('opsApp.shop.productAdd.hsnHint')}
           />
         </FieldRow>
         <SelectField
-          label="Currency"
+          label={t('shop.products.currency')}
           required
           value={form.currency}
           options={
@@ -1200,38 +1209,38 @@ export function ShopProductAddScreen() {
           error={fieldErrors.currency}
         />
         <View style={styles.chipBlock}>
-          <FieldLabel label="GST on price" />
+          <FieldLabel label={t('opsApp.shop.productAdd.gstOnPrice')} />
           <View style={styles.chips}>
             <Chip
-              label="GST excluded"
+              label={t('shop.invoiceScan.gstExcluded')}
               active={form.tax_inclusive === 'excluded'}
               onPress={() => setField('tax_inclusive', 'excluded')}
             />
             <Chip
-              label="GST included"
+              label={t('shop.invoiceScan.gstIncluded')}
               active={form.tax_inclusive === 'included'}
               onPress={() => setField('tax_inclusive', 'included')}
             />
           </View>
           <Text style={styles.hint}>
             {form.tax_inclusive === 'included'
-              ? 'Selling price already includes GST. POS splits tax from the price.'
-              : 'GST is added on top of the selling price at checkout.'}
+              ? t('opsApp.shop.productAdd.gstIncludedHint')
+              : t('opsApp.shop.productAdd.gstExcludedHint')}
           </Text>
         </View>
       </FormSection>
 
-      <FormSection title="Stock">
+      <FormSection title={t('shop.products.stock')}>
         <FieldRow>
           <Input
-            label="Stock on hand"
+            label={t('shop.products.fields.stock_on_hand')}
             optional
             value={form.stock_on_hand}
             onChangeText={(value) => setField('stock_on_hand', value)}
             keyboardType="decimal-pad"
           />
           <Input
-            label="Low stock alert"
+            label={t('shop.products.fields.low_stock_threshold')}
             optional
             value={form.low_stock_threshold}
             onChangeText={(value) => setField('low_stock_threshold', value)}
@@ -1240,42 +1249,42 @@ export function ShopProductAddScreen() {
         </FieldRow>
         {showGodowns && godowns.length ? (
           <SelectField
-            label={isEditing ? 'Godown for stock changes' : 'Stock godown'}
+            label={isEditing ? t('shop.products.godownForChanges') : t('shop.products.stockGodown')}
             optional
             value={godownId}
             options={godowns.map((godown) => ({
               value: godown.id,
-              label: godown.is_default ? `${godown.name} (default)` : godown.name,
+              label: godown.is_default ? t('shop.products.godownDefault', { name: godown.name }) : godown.name,
             }))}
             onChange={setGodownId}
-            placeholder="Select godown"
+            placeholder={t('opsApp.shop.productAdd.selectGodown')}
           />
         ) : null}
       </FormSection>
 
-      <FormSection title="Barcode" subtitle="Optional · used at the Sale counter">
+      <FormSection title={t('shop.addMany.columns.barcode')} subtitle={t('opsApp.shop.productAdd.barcodeSubtitle')}>
         <View style={styles.lookupRow}>
           <View style={styles.lookupField}>
             <Input
-              label="Barcode / RFID EPC"
+              label={t('shop.products.barcodeRfid')}
               optional
               value={form.barcode}
               onChangeText={(value) => setField('barcode', value)}
-              placeholder="Scan or type"
+              placeholder={t('shop.products.scanOrType')}
               autoCapitalize="none"
             />
           </View>
-          <Pressable style={styles.iconAction} onPress={openScanner} accessibilityLabel="Scan barcode with camera">
+          <Pressable style={styles.iconAction} onPress={openScanner} accessibilityLabel={t('shop.products.scanWithCamera')}>
             <Feather name="camera" size={18} color={colors.primaryForeground} />
           </Pressable>
         </View>
         <View style={styles.chipBlock}>
-          <FieldLabel label="Code type" />
+          <FieldLabel label={t('shop.products.barcodeType')} />
           <View style={styles.chips}>
             {([
-              { value: 'manufacturer', label: 'Manufacturer' },
-              { value: 'internal', label: 'Internal' },
-              { value: 'rfid_epc', label: 'RFID EPC' },
+              { value: 'manufacturer', label: t('shop.products.barcodeTypes.manufacturer') },
+              { value: 'internal', label: t('shop.products.barcodeTypes.internal') },
+              { value: 'rfid_epc', label: t('shop.products.barcodeTypes.rfid_epc') },
             ] as const).map((item) => (
               <Chip
                 key={item.value}
@@ -1288,16 +1297,16 @@ export function ShopProductAddScreen() {
         </View>
       </FormSection>
 
-      <FormSection title="Description">
+      <FormSection title={t('shop.invoiceScan.description')}>
         <Input
-          label="Description / ingredients"
+          label={t('shop.products.descriptionLabel')}
           optional
           value={form.description}
           onChangeText={(value) => setField('description', value)}
           multiline
         />
         <HtmlEditorField
-          label="Product details"
+          label={t('shop.invoiceScan.productDetails')}
           optional
           value={form.details_html}
           onChange={(value) => setField('details_html', value)}

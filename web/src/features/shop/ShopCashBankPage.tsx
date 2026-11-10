@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowLeftRight, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -20,6 +21,7 @@ import {
 const fieldStyle: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
 
 export function ShopCashBankPage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
   const snackbar = useSnackbar();
@@ -28,6 +30,9 @@ export function ShopCashBankPage() {
   const suppliers = useShopSuppliers();
   const { createAccount } = useShopCashAccountMutations();
   const { createVoucher } = useShopVoucherMutations();
+
+  const accountTypeLabel = (type: string) =>
+    type === 'cash' ? t('shop.cashBank.cash') : type === 'bank' ? t('shop.cashBank.bank') : type;
 
   const accountDialog = useDialog();
   const inDialog = useDialog();
@@ -70,9 +75,9 @@ export function ShopCashBankPage() {
     try {
       await createAccount.mutateAsync({ name: accountName.trim(), account_type: accountType, opening_balance: openingBalance });
       accountDialog.hide();
-      snackbar.push('Account added.', 'success');
+      snackbar.push(t('shop.cashBank.toastAccountAdded'), 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't add this account. Try again."));
+      setMessage(getApiErrorMessage(error, t('shop.cashBank.errAddAccount')));
     }
   }
 
@@ -88,7 +93,7 @@ export function ShopCashBankPage() {
   async function submitPaymentIn(event: React.FormEvent) {
     event.preventDefault();
     if (!inCustomerId || !inAccountId || !inAmount || Number(inAmount) <= 0) {
-      setMessage('Select a customer, account, and amount.');
+      setMessage(t('shop.cashBank.errSelectIn'));
       return;
     }
     setMessage(null);
@@ -101,9 +106,9 @@ export function ShopCashBankPage() {
         notes: inNotes || undefined,
       });
       inDialog.hide();
-      snackbar.push(`Payment ${voucher.voucher_number} recorded.`, 'success');
+      snackbar.push(t('shop.cashBank.toastPaymentRecorded', { number: voucher.voucher_number }), 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't record that payment. Try again."));
+      setMessage(getApiErrorMessage(error, t('shop.cashBank.errPayment')));
     }
   }
 
@@ -119,7 +124,7 @@ export function ShopCashBankPage() {
   async function submitPaymentOut(event: React.FormEvent) {
     event.preventDefault();
     if (!outSupplierId || !outAccountId || !outAmount || Number(outAmount) <= 0) {
-      setMessage('Select a supplier, account, and amount.');
+      setMessage(t('shop.cashBank.errSelectOut'));
       return;
     }
     setMessage(null);
@@ -132,9 +137,9 @@ export function ShopCashBankPage() {
         notes: outNotes || undefined,
       });
       outDialog.hide();
-      snackbar.push(`Payment ${voucher.voucher_number} recorded.`, 'success');
+      snackbar.push(t('shop.cashBank.toastPaymentRecorded', { number: voucher.voucher_number }), 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't record that payment. Try again."));
+      setMessage(getApiErrorMessage(error, t('shop.cashBank.errPayment')));
     }
   }
 
@@ -150,7 +155,7 @@ export function ShopCashBankPage() {
   async function submitTransfer(event: React.FormEvent) {
     event.preventDefault();
     if (!fromAccountId || !toAccountId || fromAccountId === toAccountId || !transferAmount || Number(transferAmount) <= 0) {
-      setMessage('Select two different accounts and an amount.');
+      setMessage(t('shop.cashBank.errSelectTransfer'));
       return;
     }
     setMessage(null);
@@ -163,9 +168,9 @@ export function ShopCashBankPage() {
         notes: transferNotes || undefined,
       });
       transferDialog.hide();
-      snackbar.push(`Transfer ${voucher.voucher_number} recorded.`, 'success');
+      snackbar.push(t('shop.cashBank.toastTransferRecorded', { number: voucher.voucher_number }), 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't record this transfer. Try again."));
+      setMessage(getApiErrorMessage(error, t('shop.cashBank.errTransfer')));
     }
   }
 
@@ -187,24 +192,24 @@ export function ShopCashBankPage() {
   return (
     <div className="page-stack">
       <div className="invoice-page-header">
-        <h1 className="invoice-page-title">Cash &amp; bank</h1>
+        <h1 className="invoice-page-title">{t('shop.cashBank.title')}</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Button type="button" variant="neutral" onClick={openInDialog}>
-            Payment in
+            {t('shop.cashBank.paymentIn')}
           </Button>
           <Button type="button" variant="neutral" onClick={openOutDialog}>
-            Payment out
+            {t('shop.cashBank.paymentOut')}
           </Button>
           <Button type="button" variant="neutral" onClick={openTransferDialog}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <ArrowLeftRight size={14} aria-hidden="true" />
-              Transfer
+              {t('shop.cashBank.transfer')}
             </span>
           </Button>
           <Button type="button" variant="primary" onClick={openAccountDialog}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Plus size={16} aria-hidden="true" />
-              Add account
+              {t('shop.cashBank.addAccount')}
             </span>
           </Button>
         </div>
@@ -212,29 +217,29 @@ export function ShopCashBankPage() {
 
       <div className="invoice-strip">
         <div className="invoice-strip__cell">
-          <span>Cash</span>
+          <span>{t('shop.cashBank.cash')}</span>
           <strong>{formatMoney(cashTotal, currency)}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Bank</span>
+          <span>{t('shop.cashBank.bank')}</span>
           <strong>{formatMoney(bankTotal, currency)}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Accounts</span>
+          <span>{t('shop.cashBank.accounts')}</span>
           <strong>{accounts.data?.length ?? 0}</strong>
         </div>
       </div>
 
       <Card>
-        {accounts.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+        {accounts.isLoading ? <p className="invoice-muted">{t('common.loading')}</p> : null}
         <div className="invoice-list">
           {(accounts.data ?? []).map((account) => (
             <div key={account.id} className="invoice-row">
               <div className="invoice-row__main">
                 <strong>{account.name}</strong>
                 <span>
-                  {account.account_type}
-                  {account.is_active ? '' : ' · inactive'}
+                  {accountTypeLabel(account.account_type)}
+                  {account.is_active ? '' : ` · ${t('shop.cashBank.inactive')}`}
                   {account.created_at ? ` · ${formatVoucherWhen(account.created_at, account.created_at)}` : ''}
                 </span>
               </div>
@@ -245,50 +250,50 @@ export function ShopCashBankPage() {
           ))}
           {!accounts.isLoading && !accounts.data?.length ? (
             <div className="invoice-empty">
-              <p>No accounts yet. Add a cash or bank account to start recording payments.</p>
+              <p>{t('shop.cashBank.empty')}</p>
               <Button type="button" variant="primary" onClick={openAccountDialog}>
-                Add account
+                {t('shop.cashBank.addAccount')}
               </Button>
             </div>
           ) : null}
         </div>
       </Card>
 
-      <Dialog open={accountDialog.open} onClose={accountDialog.hide} title="Add account" labelledBy="add-account-dialog" busy={createAccount.isPending}>
+      <Dialog open={accountDialog.open} onClose={accountDialog.hide} title={t('shop.cashBank.addAccount')} labelledBy="add-account-dialog" busy={createAccount.isPending}>
         <form onSubmit={submitAccount} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            Account name
+            {t('shop.cashBank.accountName')}
             <input value={accountName} onChange={(event) => setAccountName(event.target.value)} required style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Type
+            {t('shop.cashBank.type')}
             <select value={accountType} onChange={(event) => setAccountType(event.target.value as 'cash' | 'bank')} style={fieldStyle}>
-              <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
+              <option value="cash">{t('shop.cashBank.cash')}</option>
+              <option value="bank">{t('shop.cashBank.bank')}</option>
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Opening balance
+            {t('shop.cashBank.openingBalance')}
             <input type="number" step="0.01" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} style={fieldStyle} />
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={createAccount.isPending}>
-              {createAccount.isPending ? 'Saving…' : 'Save account'}
+              {createAccount.isPending ? t('common.saving') : t('shop.cashBank.saveAccount')}
             </Button>
             <Button type="button" variant="neutral" onClick={accountDialog.hide} disabled={createAccount.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
         </form>
       </Dialog>
 
-      <Dialog open={inDialog.open} onClose={inDialog.hide} title="Payment in" labelledBy="payment-in-dialog" busy={createVoucher.isPending}>
+      <Dialog open={inDialog.open} onClose={inDialog.hide} title={t('shop.cashBank.paymentIn')} labelledBy="payment-in-dialog" busy={createVoucher.isPending}>
         <form onSubmit={submitPaymentIn} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            Customer
+            {t('shop.cashBank.customer')}
             <select value={inCustomerId} onChange={(event) => setInCustomerId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select customer…</option>
+              <option value="">{t('shop.cashBank.selectCustomer')}</option>
               {(customers.data ?? []).map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.full_name ?? customer.display_name ?? customer.email ?? customer.id}
@@ -297,42 +302,42 @@ export function ShopCashBankPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Received in
+            {t('shop.cashBank.receivedIn')}
             <select value={inAccountId} onChange={(event) => setInAccountId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select account…</option>
+              <option value="">{t('shop.cashBank.selectAccount')}</option>
               {(accounts.data ?? []).map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.account_type})
+                  {account.name} ({accountTypeLabel(account.account_type)})
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Amount
+            {t('shop.cashBank.amount')}
             <input type="number" min={0} step="0.01" value={inAmount} onChange={(event) => setInAmount(event.target.value)} required style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Notes
+            {t('shop.cashBank.notes')}
             <input value={inNotes} onChange={(event) => setInNotes(event.target.value)} style={fieldStyle} />
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={createVoucher.isPending}>
-              {createVoucher.isPending ? 'Saving…' : 'Record payment in'}
+              {createVoucher.isPending ? t('common.saving') : t('shop.cashBank.recordPaymentIn')}
             </Button>
             <Button type="button" variant="neutral" onClick={inDialog.hide} disabled={createVoucher.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
         </form>
       </Dialog>
 
-      <Dialog open={outDialog.open} onClose={outDialog.hide} title="Payment out" labelledBy="payment-out-dialog" busy={createVoucher.isPending}>
+      <Dialog open={outDialog.open} onClose={outDialog.hide} title={t('shop.cashBank.paymentOut')} labelledBy="payment-out-dialog" busy={createVoucher.isPending}>
         <form onSubmit={submitPaymentOut} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            Supplier
+            {t('shop.cashBank.supplier')}
             <select value={outSupplierId} onChange={(event) => setOutSupplierId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select supplier…</option>
+              <option value="">{t('shop.cashBank.selectSupplier')}</option>
               {(suppliers.data ?? []).map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
@@ -341,74 +346,74 @@ export function ShopCashBankPage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Paid from
+            {t('shop.cashBank.paidFrom')}
             <select value={outAccountId} onChange={(event) => setOutAccountId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select account…</option>
+              <option value="">{t('shop.cashBank.selectAccount')}</option>
               {(accounts.data ?? []).map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.account_type})
+                  {account.name} ({accountTypeLabel(account.account_type)})
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Amount
+            {t('shop.cashBank.amount')}
             <input type="number" min={0} step="0.01" value={outAmount} onChange={(event) => setOutAmount(event.target.value)} required style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Notes
+            {t('shop.cashBank.notes')}
             <input value={outNotes} onChange={(event) => setOutNotes(event.target.value)} style={fieldStyle} />
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={createVoucher.isPending}>
-              {createVoucher.isPending ? 'Saving…' : 'Record payment out'}
+              {createVoucher.isPending ? t('common.saving') : t('shop.cashBank.recordPaymentOut')}
             </Button>
             <Button type="button" variant="neutral" onClick={outDialog.hide} disabled={createVoucher.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}
         </form>
       </Dialog>
 
-      <Dialog open={transferDialog.open} onClose={transferDialog.hide} title="Transfer between accounts" labelledBy="transfer-dialog" busy={createVoucher.isPending}>
+      <Dialog open={transferDialog.open} onClose={transferDialog.hide} title={t('shop.cashBank.transferTitle')} labelledBy="transfer-dialog" busy={createVoucher.isPending}>
         <form onSubmit={submitTransfer} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            From account
+            {t('shop.cashBank.fromAccount')}
             <select value={fromAccountId} onChange={(event) => setFromAccountId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select account…</option>
+              <option value="">{t('shop.cashBank.selectAccount')}</option>
               {(accounts.data ?? []).map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.account_type})
+                  {account.name} ({accountTypeLabel(account.account_type)})
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            To account
+            {t('shop.cashBank.toAccount')}
             <select value={toAccountId} onChange={(event) => setToAccountId(event.target.value)} required style={fieldStyle}>
-              <option value="">Select account…</option>
+              <option value="">{t('shop.cashBank.selectAccount')}</option>
               {(accounts.data ?? []).map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.account_type})
+                  {account.name} ({accountTypeLabel(account.account_type)})
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Amount
+            {t('shop.cashBank.amount')}
             <input type="number" min={0} step="0.01" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} required style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Notes
+            {t('shop.cashBank.notes')}
             <input value={transferNotes} onChange={(event) => setTransferNotes(event.target.value)} style={fieldStyle} />
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={createVoucher.isPending}>
-              {createVoucher.isPending ? 'Saving…' : 'Record transfer'}
+              {createVoucher.isPending ? t('common.saving') : t('shop.cashBank.recordTransfer')}
             </Button>
             <Button type="button" variant="neutral" onClick={transferDialog.hide} disabled={createVoucher.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}

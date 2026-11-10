@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
@@ -61,6 +62,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function BusinessProfileEditPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuth();
   const workspace = useWorkspace();
@@ -92,17 +94,17 @@ export function BusinessProfileEditPage() {
   );
   const categoryOptions = useMemo(
     () => ensureSelectOption(
-      [{ value: '', label: 'Select category' }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))],
+      [{ value: '', label: t('register.selectCategory') }, ...BUSINESS_CATEGORIES.map((c) => ({ value: c, label: c }))],
       formState.business_type,
     ),
-    [formState.business_type],
+    [formState.business_type, t],
   );
   const industryOptions = useMemo(
     () => ensureSelectOption(
-      [{ value: '', label: 'Select industry' }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))],
+      [{ value: '', label: t('register.selectIndustry') }, ...INDUSTRIES.map((c) => ({ value: c, label: c }))],
       formState.industry_category,
     ),
-    [formState.industry_category],
+    [formState.industry_category, t],
   );
   const timezoneOptions = useMemo(
     () => ensureSelectOption(timezoneSelectOptions, formState.timezone),
@@ -122,7 +124,7 @@ export function BusinessProfileEditPage() {
     if (!workspace.businessId || !auth.token) return;
 
     const nextErrors: Record<string, string> = {};
-    if (!logoFile && !currentLogoUrl) nextErrors.logo = 'Business logo is required';
+    if (!logoFile && !currentLogoUrl) nextErrors.logo = t('settings.businessEdit.logoRequired');
     const emailError = invalidEmailMessage(formState.email);
     if (emailError) nextErrors.email = emailError;
     const phoneError = indianMobileError(formState.primary_contact, true);
@@ -167,10 +169,10 @@ export function BusinessProfileEditPage() {
       }
 
       await workspace.refreshWorkspace();
-      snackbar.push('Business profile saved.', 'success');
+      snackbar.push(t('settings.businessEdit.saved'), 'success');
       navigate('/settings/business');
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Couldn't save business details. Try again.";
+      const message = error instanceof Error ? error.message : t('settings.businessEdit.saveFailed');
       setErrorMessage(message);
       snackbar.push(message, 'error');
     } finally {
@@ -181,14 +183,14 @@ export function BusinessProfileEditPage() {
   if (!workspace.businessId) {
     return (
       <Card style={{ padding: 24 }}>
-        <p style={{ color: '#6b7280' }}>Select or create a business before editing its profile.</p>
-        <Button variant="ghost" onClick={() => navigate('/settings/business')}>Back to business profile</Button>
+        <p style={{ color: '#6b7280' }}>{t('settings.businessEdit.selectBusinessFirst')}</p>
+        <Button variant="ghost" onClick={() => navigate('/settings/business')}>{t('settings.businessEdit.backToProfile')}</Button>
       </Card>
     );
   }
 
   if (businessQuery.isLoading) {
-    return <Card style={{ padding: 24 }}><p>Loading business profile…</p></Card>;
+    return <Card style={{ padding: 24 }}><p>{t('settings.businessEdit.loading')}</p></Card>;
   }
 
   return (
@@ -196,30 +198,30 @@ export function BusinessProfileEditPage() {
       <div style={{ display: 'grid', gap: 20 }}>
         <div>
           <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', fontSize: 12 }}>
-            Business profile
+            {t('settings.businessProfile')}
           </p>
-          <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>Edit business profile</h2>
+          <h2 style={{ margin: '8px 0 0', fontSize: 24 }}>{t('settings.businessEdit.title')}</h2>
           <p style={{ margin: '8px 0 0', color: '#6b7280' }}>
-            Update the same business details you provided while creating your workspace.
+            {t('settings.businessEdit.lead')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 20 }}>
-          <Section title="Business details">
+          <Section title={t('settings.businessEdit.sectionDetails')}>
             <div style={fieldGridStyle}>
-              <Input label="Business name" value={formState.business_name} onChange={(e) => updateField('business_name', e.target.value)} required disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Display name" value={formState.display_name} onChange={(e) => updateField('display_name', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Business category" options={categoryOptions} value={formState.business_type} onChange={(e) => updateField('business_type', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Industry" options={industryOptions} value={formState.industry_category} onChange={(e) => updateField('industry_category', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business email" type="email" value={formState.email} onChange={(e) => { updateField('email', e.target.value); setFieldErrors((current) => ({ ...current, email: '' })); }} required error={fieldErrors.email} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Business phone" value={formState.primary_contact} onChange={(e) => { updateField('primary_contact', e.target.value); setFieldErrors((current) => ({ ...current, phone: '' })); }} required error={fieldErrors.phone} disabled={saving} style={{ marginBottom: 0 }} />
-              <Input label="Website (optional)" value={formState.website} onChange={(e) => updateField('website', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label={t('register.businessName')} value={formState.business_name} onChange={(e) => updateField('business_name', e.target.value)} required disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label={t('settings.businessEdit.displayName')} value={formState.display_name} onChange={(e) => updateField('display_name', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('register.businessCategory')} options={categoryOptions} value={formState.business_type} onChange={(e) => updateField('business_type', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('register.industry')} options={industryOptions} value={formState.industry_category} onChange={(e) => updateField('industry_category', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label={t('register.businessEmail')} type="email" value={formState.email} onChange={(e) => { updateField('email', e.target.value); setFieldErrors((current) => ({ ...current, email: '' })); }} required error={fieldErrors.email} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label={t('register.businessPhone')} value={formState.primary_contact} onChange={(e) => { updateField('primary_contact', e.target.value); setFieldErrors((current) => ({ ...current, phone: '' })); }} required error={fieldErrors.phone} disabled={saving} style={{ marginBottom: 0 }} />
+              <Input label={t('register.websiteOptional')} value={formState.website} onChange={(e) => updateField('website', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
           </Section>
 
-          <Section title="Location">
+          <Section title={t('register.location')}>
             <AddressLocationPicker
-              label="Business address"
+              label={t('register.businessAddress')}
               value={formState.address_line1}
               latitude={formState.latitude}
               longitude={formState.longitude}
@@ -245,34 +247,34 @@ export function BusinessProfileEditPage() {
               }}
             />
             <Input
-              label="Flat, floor, building or landmark"
+              label={t('register.line2Label')}
               value={formState.address_line2}
               onChange={(e) => updateField('address_line2', e.target.value)}
               disabled={saving}
-              placeholder="Shop 12, Ground floor, near City Mall"
+              placeholder={t('register.line2Placeholder')}
               style={{ marginBottom: 0 }}
             />
             <div style={fieldGridStyle}>
-              <Input label="Country" value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
-              <Input label="State" value={formState.state} onChange={(e) => updateField('state', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
-              <Input label="City" value={formState.city} onChange={(e) => updateField('city', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
-              <Input label="Postal code" value={formState.postal_code} onChange={(e) => updateField('postal_code', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label={t('settings.businessEdit.country')} value={formState.country} onChange={(e) => updateField('country', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label={t('settings.businessEdit.state')} value={formState.state} onChange={(e) => updateField('state', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label={t('settings.businessEdit.city')} value={formState.city} onChange={(e) => updateField('city', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
+              <Input label={t('settings.businessEdit.postalCode')} value={formState.postal_code} onChange={(e) => updateField('postal_code', e.target.value)} disabled={saving} readOnly={formState.latitude != null && formState.longitude != null} style={{ marginBottom: 0 }} />
             </div>
           </Section>
 
-          <Section title="Regional preferences">
+          <Section title={t('settings.businessEdit.sectionRegional')}>
             <div style={fieldGridStyle}>
-              <Select label="Currency" options={currencyOptions} value={formState.currency} onChange={(e) => updateField('currency', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Timezone" options={timezoneOptions} value={formState.timezone} onChange={(e) => updateField('timezone', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Language" options={languageOptions} value={formState.language} onChange={(e) => updateField('language', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Date format" options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))} value={formState.date_format} onChange={(e) => updateField('date_format', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
-              <Select label="Time format" options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))} value={formState.time_format} onChange={(e) => updateField('time_format', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('common.currency')} options={currencyOptions} value={formState.currency} onChange={(e) => updateField('currency', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('common.timezone')} options={timezoneOptions} value={formState.timezone} onChange={(e) => updateField('timezone', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('common.language')} options={languageOptions} value={formState.language} onChange={(e) => updateField('language', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('register.dateFormat')} options={DATE_FORMATS.map((d) => ({ value: d.value, label: d.label }))} value={formState.date_format} onChange={(e) => updateField('date_format', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('register.timeFormat')} options={TIME_FORMATS.map((d) => ({ value: d.value, label: d.label }))} value={formState.time_format} onChange={(e) => updateField('time_format', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
           </Section>
 
-          <Section title="Operations">
+          <Section title={t('settings.businessEdit.sectionOperations')}>
             <div style={fieldGridStyle}>
-              <Select label="Week starts on" options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))} value={formState.week_start_day} onChange={(e) => updateField('week_start_day', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
+              <Select label={t('register.weekStartsOn')} options={WEEK_START_DAYS.map((d) => ({ value: d.value, label: d.label }))} value={formState.week_start_day} onChange={(e) => updateField('week_start_day', e.target.value)} disabled={saving} style={{ marginBottom: 0 }} />
             </div>
             <BusinessHoursEditor
               value={formState.business_hours}
@@ -282,18 +284,18 @@ export function BusinessProfileEditPage() {
             {formState.selected_product === 'appointie' ? (
               <>
                 <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>
-                  Orbit Appoint booking defaults. Set these after you pick a package; they are not used by Orbit Mart.
+                  {t('settings.businessEdit.appointDefaults')}
                 </p>
                 <div style={fieldGridStyle}>
-                  <Select label="Appointment interval (minutes)" options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))} value={String(formState.appointment_interval)} onChange={(e) => updateField('appointment_interval', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
-                  <Select label="Default appointment duration" options={DEFAULT_DURATIONS.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.default_duration)} onChange={(e) => updateField('default_duration', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
-                  <Select label="Buffer time" options={BUFFER_TIMES.map((v) => ({ value: String(v), label: `${v} minutes` }))} value={String(formState.buffer_time)} onChange={(e) => updateField('buffer_time', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                  <Select label={t('settings.businessEdit.appointmentInterval')} options={APPOINTMENT_INTERVALS.map((v) => ({ value: String(v), label: String(v) }))} value={String(formState.appointment_interval)} onChange={(e) => updateField('appointment_interval', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                  <Select label={t('settings.businessEdit.defaultDuration')} options={DEFAULT_DURATIONS.map((v) => ({ value: String(v), label: t('settings.businessEdit.minutesValue', { value: v }) }))} value={String(formState.default_duration)} onChange={(e) => updateField('default_duration', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
+                  <Select label={t('settings.businessEdit.bufferTime')} options={BUFFER_TIMES.map((v) => ({ value: String(v), label: t('settings.businessEdit.minutesValue', { value: v }) }))} value={String(formState.buffer_time)} onChange={(e) => updateField('buffer_time', Number(e.target.value))} disabled={saving} style={{ marginBottom: 0 }} />
                 </div>
               </>
             ) : null}
           </Section>
 
-          <Section title="Product">
+          <Section title={t('settings.businessEdit.sectionProduct')}>
             <div className="wizard-product-picker" style={{ display: 'grid', gap: 12 }}>
               {PRODUCT_CATALOG.map((product) => (
                 <button
@@ -312,10 +314,10 @@ export function BusinessProfileEditPage() {
             </div>
           </Section>
 
-          <Section title="Branding">
+          <Section title={t('settings.businessEdit.sectionBranding')}>
             <div style={fieldGridStyle}>
-              <ColorInput label="Primary color" value={formState.primary_color} onChange={(value) => updateField('primary_color', value)} />
-              <ColorInput label="Secondary color" value={formState.secondary_color} onChange={(value) => updateField('secondary_color', value)} />
+              <ColorInput label={t('register.primaryColor')} value={formState.primary_color} onChange={(value) => updateField('primary_color', value)} />
+              <ColorInput label={t('register.secondaryColor')} value={formState.secondary_color} onChange={(value) => updateField('secondary_color', value)} />
             </div>
             <LogoUploadField
               required
@@ -329,14 +331,14 @@ export function BusinessProfileEditPage() {
               error={fieldErrors.logo}
             />
             <Input
-              label="Shop UPI ID"
+              label={t('settings.businessEdit.shopUpiId')}
               value={formState.upi_vpa}
               onChange={(e) => updateField('upi_vpa', e.target.value)}
               placeholder="shop@okaxis"
               disabled={saving}
             />
             <p style={{ margin: 0, color: 'var(--color-muted-foreground, #6b7280)', fontSize: 13 }}>
-              Used to generate amount-specific QR codes for customer online orders. Optional static QR URL can be set via API as payment_qr_url.
+              {t('settings.businessEdit.upiHint')}
             </p>
           </Section>
 
@@ -346,10 +348,10 @@ export function BusinessProfileEditPage() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <Button variant="ghost" type="button" onClick={() => navigate('/settings/business')} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" variant="primary" disabled={!isDirty || saving || updateBusiness.isPending}>
-              {saving ? 'Saving…' : 'Save business profile'}
+              {saving ? t('common.saving') : t('settings.businessEdit.save')}
             </Button>
           </div>
         </form>

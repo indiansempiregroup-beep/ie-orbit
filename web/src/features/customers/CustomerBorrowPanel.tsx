@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { CustomerBorrowLedgerEntry } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { useApiClient } from '../../hooks/useApiClient';
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChanged }: Props) {
+  const { t } = useTranslation();
   const client = useApiClient();
   const snackbar = useSnackbar();
   const [ledger, setLedger] = useState<CustomerBorrowLedgerEntry[]>([]);
@@ -37,11 +39,11 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
   async function recordPayment() {
     const value = Number(amount);
     if (!value || value <= 0) {
-      snackbar.push('Enter a valid payment amount.', 'error');
+      snackbar.push(t('customers.borrow.invalidAmount'), 'error');
       return;
     }
     if (value > balanceDue) {
-      snackbar.push(`Amount can't be more than ${money(balanceDue)} outstanding.`, 'error');
+      snackbar.push(t('customers.borrow.exceeds', { amount: money(balanceDue) }), 'error');
       return;
     }
     setBusy(true);
@@ -51,12 +53,12 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
         payment_method: method,
         notes: notes.trim(),
       });
-      snackbar.push(`Recorded payment of ${money(value)}.`, 'success');
+      snackbar.push(t('customers.borrow.recorded', { amount: money(value) }), 'success');
       setAmount('');
       setNotes('');
       onChanged();
     } catch (error) {
-      snackbar.push(error instanceof Error ? error.message : "Couldn't record that payment. Try again.", 'error');
+      snackbar.push(error instanceof Error ? error.message : t('shop.purchasePay.payFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -74,12 +76,12 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
       }}
     >
       <div>
-        <p style={{ margin: 0, color: '#6b7280', fontWeight: 600 }}>Borrow / credit outstanding</p>
+        <p style={{ margin: 0, color: '#6b7280', fontWeight: 600 }}>{t('customers.borrow.title')}</p>
         <p style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 700, color: balanceDue > 0 ? '#b42318' : undefined }}>
           {money(balanceDue)}
         </p>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6b7280' }}>
-          Record repayments here (partial or full). Order fulfillment status is not changed.
+          {t('customers.borrow.hint')}
         </p>
       </div>
 
@@ -88,7 +90,7 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
           <input
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
-            placeholder={`Amount (max ${money(balanceDue)})`}
+            placeholder={t('customers.borrow.amountPlaceholder', { max: money(balanceDue) })}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -99,41 +101,41 @@ export function CustomerBorrowPanel({ customerId, balanceDue, currency, onChange
                 variant={method === value ? 'primary' : 'neutral'}
                 onClick={() => setMethod(value)}
               >
-                {value.toUpperCase()}
+                {t(`shop.vouchers.payment.${value}`)}
               </Button>
             ))}
             <Button type="button" variant="ghost" onClick={() => setAmount(balanceDue.toFixed(2))}>
-              Full balance
+              {t('customers.borrow.fullBalance')}
             </Button>
           </div>
           <input
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="Note (optional)"
+            placeholder={t('customers.borrow.notePlaceholder')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <Button type="button" variant="primary" disabled={busy} onClick={() => void recordPayment()}>
-            {busy ? 'Saving…' : 'Record payment'}
+            {busy ? t('common.saving') : t('shop.purchasePay.title')}
           </Button>
         </div>
       ) : null}
 
       {ledger.length ? (
         <div style={{ display: 'grid', gap: 8 }}>
-          <strong>Recent borrow activity</strong>
+          <strong>{t('customers.borrow.recentActivity')}</strong>
           {ledger.slice(0, 8).map((entry) => (
             <div key={entry.id} style={{ fontSize: 13, borderTop: '1px solid #e5e7eb', paddingTop: 8 }}>
               <div>
                 {entry.entry_type === 'payment'
-                  ? 'Payment'
+                  ? t('customers.borrow.entryPayment')
                   : entry.entry_type === 'charge'
-                    ? 'Credit'
+                    ? t('shop.vouchers.payment.borrow')
                     : entry.entry_type}{' '}
                 · {money(Number(entry.amount))}
                 {entry.order_number ? ` · ${entry.order_number}` : ''}
               </div>
               <div style={{ opacity: 0.7 }}>
-                Balance {money(Number(entry.balance_after))}
+                {t('customers.borrow.balance', { amount: money(Number(entry.balance_after)) })}
                 {entry.created_at ? ` · ${formatTimestamp(entry.created_at)}` : ''}
               </div>
             </div>

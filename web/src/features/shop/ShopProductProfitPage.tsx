@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Card } from '../../components/Card';
@@ -8,6 +9,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { formatMoney } from '../../lib/currency';
 
 export function ShopProductProfitPage() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const { activeBusiness } = useWorkspace();
   const businessId = activeBusiness?.id || '';
@@ -45,15 +47,14 @@ export function ShopProductProfitPage() {
     <div style={{ display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0 }}>Product profit insights</h2>
+          <h2 style={{ margin: 0 }}>{t('shop.productProfit.title')}</h2>
           <p style={{ margin: '4px 0 0', color: 'var(--muted-foreground)', fontSize: 14 }}>
-            Owner-only. Sold profit uses cost at sale; catalog margins use avg cost. Prefer{' '}
-            <Link to="/bi/profit">BI Profit</Link> for filters and trends.
+            <Trans i18nKey="shop.productProfit.intro" components={{ link: <Link to="/bi/profit" /> }} />
           </p>
         </div>
         <Link to="/shop/products">
           <Button type="button" variant="neutral">
-            Back to products
+            {t('shop.productProfit.backToProducts')}
           </Button>
         </Link>
       </div>
@@ -61,7 +62,7 @@ export function ShopProductProfitPage() {
       <Card>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            Sales from
+            {t('shop.productProfit.salesFrom')}
             <input
               type="date"
               value={dateFrom}
@@ -70,7 +71,7 @@ export function ShopProductProfitPage() {
             />
           </label>
           <label style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-            Sales to
+            {t('shop.productProfit.salesTo')}
             <input
               type="date"
               value={dateTo}
@@ -79,12 +80,12 @@ export function ShopProductProfitPage() {
             />
           </label>
           <Button type="button" variant="neutral" onClick={() => void insights.refetch()}>
-            Refresh
+            {t('common.refresh')}
           </Button>
         </div>
       </Card>
 
-      {insights.isLoading ? <p>Loading…</p> : null}
+      {insights.isLoading ? <p>{t('common.loading')}</p> : null}
       {insights.error ? <p role="alert">{(insights.error as Error).message}</p> : null}
 
       {summary ? (
@@ -96,12 +97,12 @@ export function ShopProductProfitPage() {
           }}
         >
           {[
-            ['Products', String(summary.product_count)],
-            ['Inventory at cost', formatMoney(Number(summary.inventory_at_cost), currency)],
-            ['Potential profit', formatMoney(Number(summary.potential_profit), currency)],
-            ['Sales revenue', formatMoney(Number(summary.sales_revenue), currency)],
-            ['Sales COGS', formatMoney(Number(summary.sales_cogs), currency)],
-            ['Gross profit', formatMoney(Number(summary.gross_profit), currency)],
+            [t('shop.productProfit.sumProducts'), String(summary.product_count)],
+            [t('shop.productProfit.sumInventoryAtCost'), formatMoney(Number(summary.inventory_at_cost), currency)],
+            [t('shop.productProfit.sumPotentialProfit'), formatMoney(Number(summary.potential_profit), currency)],
+            [t('shop.productProfit.sumSalesRevenue'), formatMoney(Number(summary.sales_revenue), currency)],
+            [t('shop.productProfit.sumSalesCogs'), formatMoney(Number(summary.sales_cogs), currency)],
+            [t('shop.productProfit.sumGrossProfit'), formatMoney(Number(summary.gross_profit), currency)],
           ].map(([label, value]) => (
             <Card key={label}>
               <div style={{ fontSize: 13, color: 'var(--muted-foreground)' }}>{label}</div>
@@ -112,12 +113,20 @@ export function ShopProductProfitPage() {
       ) : null}
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Catalog margins</h3>
+        <h3 style={{ marginTop: 0 }}>{t('shop.productProfit.catalogMargins')}</h3>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
-                {['Product', 'Sell', 'Avg cost', 'Last buy', 'Margin %', 'Stock', 'At cost'].map(
+                {[
+                  t('shop.productProfit.colProduct'),
+                  t('shop.productProfit.colSell'),
+                  t('shop.productProfit.colAvgCost'),
+                  t('shop.productProfit.colLastBuy'),
+                  t('shop.productProfit.colMargin'),
+                  t('shop.productProfit.colStock'),
+                  t('shop.productProfit.colAtCost'),
+                ].map(
                   (label) => (
                     <th
                       key={label}
@@ -156,7 +165,7 @@ export function ShopProductProfitPage() {
               {!catalog.length ? (
                 <tr>
                   <td colSpan={7} style={{ padding: 12, color: 'var(--muted-foreground)' }}>
-                    No products yet. Add purchase price on products to see margins.
+                    {t('shop.productProfit.emptyCatalog')}
                   </td>
                 </tr>
               ) : null}
@@ -166,12 +175,18 @@ export function ShopProductProfitPage() {
       </Card>
 
       <Card>
-        <h3 style={{ marginTop: 0 }}>Sold profit (by product)</h3>
+        <h3 style={{ marginTop: 0 }}>{t('shop.productProfit.soldProfit')}</h3>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
-                {['Product', 'Units', 'Revenue', 'COGS', 'Gross profit'].map((label) => (
+                {[
+                  t('shop.productProfit.colProduct'),
+                  t('shop.productProfit.colUnits'),
+                  t('shop.productProfit.colRevenue'),
+                  t('shop.productProfit.colCogs'),
+                  t('shop.productProfit.colGrossProfit'),
+                ].map((label) => (
                   <th
                     key={label}
                     style={{ textAlign: 'left', padding: '8px 6px', borderBottom: '1px solid #e5e7eb' }}
@@ -202,7 +217,7 @@ export function ShopProductProfitPage() {
               {!sales.length ? (
                 <tr>
                   <td colSpan={5} style={{ padding: 12, color: 'var(--muted-foreground)' }}>
-                    No sales in this period yet.
+                    {t('shop.productProfit.emptySales')}
                   </td>
                 </tr>
               ) : null}

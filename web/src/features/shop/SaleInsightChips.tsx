@@ -1,13 +1,7 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatMoney } from '../../lib/currency';
 import { MetricTile } from '../bi/components/MetricTile';
-
-export const SALE_INSIGHT_HELP = {
-  points:
-    'Reward points on this sale or booking. Green (+) means you gave points; amber (−) means the customer used points to pay less; rose means points were reversed after a cancel, return, or refund.',
-  profit:
-    'What you kept from this shop sale after stock cost and discounts (including reward points used). Not shown for bookings.',
-} as const;
 
 type SaleInsightSource = {
   points_earned?: number | null;
@@ -93,6 +87,7 @@ type Props = {
 
 /** Growth Intelligence–style points + profit chips for orders and sale invoices. */
 export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Props) {
+  const { t } = useTranslation();
   const { pointsEarned, pointsRedeemed, pointsReversed, reversalReason, grossProfit } =
     readSaleInsights(source);
   const hasPoints = pointsEarned > 0 || pointsRedeemed > 0 || pointsReversed > 0;
@@ -110,12 +105,14 @@ export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Pr
           ? 'warning'
           : 'positive';
   const profitPositive = (grossProfit ?? 0) >= 0;
-  const help = reversalReason ? `${SALE_INSIGHT_HELP.points} ${reversalReason}` : SALE_INSIGHT_HELP.points;
+  const pointsHelp = t('shop.saleInsights.pointsHelp');
+  const profitHelp = t('shop.saleInsights.profitHelp');
+  const help = reversalReason ? `${pointsHelp} ${reversalReason}` : pointsHelp;
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
       <MetricTile
-        label="Points"
+        label={t('shop.saleInsights.points')}
         icon="gift"
         tone={pointsTone}
         help={help}
@@ -130,18 +127,18 @@ export function SaleInsightChips({ source, currency, hideWhenEmpty = false }: Pr
             {pointsRedeemed > 0 && pointsReversed > 0 ? (
               <span style={{ color: 'var(--muted-foreground)' }}> · </span>
             ) : null}
-            {pointsReversed > 0 ? <span style={{ color: '#be123c' }}>−{pointsReversed} rev</span> : null}
+            {pointsReversed > 0 ? <span style={{ color: '#be123c' }}>−{pointsReversed} {t('shop.saleInsights.reversedShort')}</span> : null}
             {!hasPoints ? <span style={{ color: 'var(--muted-foreground)' }}>—</span> : null}
           </>
         }
       />
       {hasProfit ? (
         <MetricTile
-          label="Profit"
+          label={t('shop.saleInsights.profit')}
           icon="trending-up"
           tone={profitPositive ? 'positive' : 'negative'}
-          help={SALE_INSIGHT_HELP.profit}
-          title={SALE_INSIGHT_HELP.profit}
+          help={profitHelp}
+          title={profitHelp}
           value={formatMoney(grossProfit ?? 0, currency)}
         />
       ) : null}

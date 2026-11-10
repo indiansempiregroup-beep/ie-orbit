@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -36,6 +37,7 @@ import type {
   ShopProduct,
   ShopSupplier,
 } from '@ie-orbit/sdk';
+import type { TFunction } from 'i18next';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { useAuth } from '../../contexts/AuthContext';
@@ -46,6 +48,7 @@ import {
   customerLabel,
   formatMoney,
   formatVoucherDateTime,
+  statusText,
   supplierLabel,
   todayIso,
 } from './shopBooksHelpers';
@@ -65,35 +68,30 @@ type DocLine = {
   taxInclusive: boolean;
 };
 
-const DOC_META: Record<
-  ShopBooksDocumentType,
-  { title: string; singular: string; convertLabel: string; usesSupplier: boolean }
-> = {
-  sale_order: {
-    title: 'Sale orders',
-    singular: 'sale order',
-    convertLabel: 'Convert to sale',
-    usesSupplier: false,
-  },
-  purchase_order: {
-    title: 'Purchase orders',
-    singular: 'purchase order',
-    convertLabel: 'Convert to purchase',
-    usesSupplier: true,
-  },
-  delivery_challan: {
-    title: 'Delivery challans',
-    singular: 'delivery challan',
-    convertLabel: 'Dispatch',
-    usesSupplier: false,
-  },
-  job_work: {
-    title: 'Job work',
-    singular: 'job work',
-    convertLabel: 'Convert to sale',
-    usesSupplier: false,
-  },
+const DOC_USES_SUPPLIER: Record<ShopBooksDocumentType, boolean> = {
+  sale_order: false,
+  purchase_order: true,
+  delivery_challan: false,
+  job_work: false,
 };
+
+function docMeta(docType: ShopBooksDocumentType, t: TFunction) {
+  const base = `opsApp.shop.documents.types.${docType}`;
+  const convertLabel =
+    docType === 'purchase_order'
+      ? t('shop.booksDocuments.convertToPurchase')
+      : docType === 'delivery_challan'
+        ? t('opsApp.shop.documents.dispatch')
+        : t('shop.booksDocuments.convertToSale');
+  return {
+    title: t(`${base}.title`),
+    newLabel: t(`${base}.newLabel`),
+    editLabel: t(`${base}.editLabel`),
+    emptyLabel: t(`${base}.empty`),
+    convertLabel,
+    usesSupplier: DOC_USES_SUPPLIER[docType],
+  };
+}
 
 function emptyLine(): DocLine {
   return {
@@ -161,7 +159,8 @@ export function ShopBooksDocumentsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksDocuments'>>();
   const docType = route.params.docType;
   const openDocumentId = route.params.documentId;
-  const meta = DOC_META[docType];
+  const { t } = useTranslation();
+  const meta = docMeta(docType, t);
   const client = useOpsClient();
   const toast = useToast();
   const auth = useAuth();
@@ -199,7 +198,7 @@ export function ShopBooksDocumentsScreen() {
   const openEdit = useCallback(
     (doc: ShopBooksDocument) => {
       if (!canEdit(doc)) {
-        toast.push('This document can no longer be edited', 'error');
+        toast.push(t('opsApp.shop.documents.editLocked'), 'error');
         return;
       }
       if (docType === 'sale_order' || docType === 'purchase_order' || docType === 'delivery_challan') {
@@ -215,7 +214,7 @@ export function ShopBooksDocumentsScreen() {
       setDetailDoc(null);
       setShowForm(true);
     },
-    [docType, meta.usesSupplier, navigation, toast],
+    [docType, meta.usesSupplier, navigation, toast, t],
   );
 
   const opensInPos =
@@ -238,12 +237,12 @@ export function ShopBooksDocumentsScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: showForm ? (editingId ? `Edit ${meta.singular}` : `New ${meta.singular}`) : meta.title,
+      title: showForm ? (editingId ? meta.editLabel : meta.newLabel) : meta.title,
       headerRight: () => (
         <Pressable
           onPress={() => (showForm ? closeForm() : openCreate())}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : `New ${meta.singular}`}
+          accessibilityLabel={showForm ? t('opsApp.shop.common.close') : meta.newLabel}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -251,7 +250,7 @@ export function ShopBooksDocumentsScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, editingId, closeForm, openCreate, meta.title, meta.singular]);
+  }, [navigation, showForm, editingId, closeForm, openCreate, meta.title, meta.newLabel, meta.editLabel, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -275,11 +274,11 @@ export function ShopBooksDocumentsScreen() {
         setSuppliers([]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents');
+      setError(err instanceof Error ? err.message : t('shop.booksDocuments.errLoad'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, docType, meta.usesSupplier]);
+  }, [businessId, client, docType, meta.usesSupplier, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -296,14 +295,14 @@ export function ShopBooksDocumentsScreen() {
         if (!cancelled && response.data) setDetailDoc(response.data);
       } catch (err) {
         if (!cancelled) {
-          toast.push(getApiErrorMessage(err, `Couldn't open this ${meta.singular}.`), 'error');
+          toast.push(getApiErrorMessage(err, t('opsApp.shop.documents.openFailed')), 'error');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [openDocumentId, client, toast, meta.singular]);
+  }, [openDocumentId, client, toast, t]);
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
@@ -348,15 +347,15 @@ export function ShopBooksDocumentsScreen() {
   const partyOptions = useMemo(() => {
     if (meta.usesSupplier) {
       return [
-        { value: '', label: 'No supplier' },
+        { value: '', label: t('opsApp.shop.common.noSupplier') },
         ...suppliers.map((supplier) => ({ value: supplier.id, label: supplierLabel(supplier) })),
       ];
     }
     return [
-      { value: '', label: 'No customer' },
+      { value: '', label: t('opsApp.shop.common.noCustomer') },
       ...customers.map((customer) => ({ value: customer.id, label: customerLabel(customer) })),
     ];
-  }, [customers, suppliers, meta.usesSupplier]);
+  }, [customers, suppliers, meta.usesSupplier, t]);
 
   const productOptions = useMemo(
     () => products.map((product) => ({ value: product.id, label: `${product.name} · ${formatMoney(product.price)}` })),
@@ -422,7 +421,7 @@ export function ShopBooksDocumentsScreen() {
     if (!client || !businessId) return;
     const validLines = lines.filter((line) => line.productId && Number(line.qty) > 0);
     if (!validLines.length) {
-      toast.push('Add at least one product line', 'error');
+      toast.push(t('opsApp.shop.documents.addAtLeastOne'), 'error');
       return;
     }
     const linesPayload = validLines.map((line) => ({
@@ -442,7 +441,7 @@ export function ShopBooksDocumentsScreen() {
           notes: notes.trim(),
           lines: linesPayload,
         });
-        toast.push(`${response.data.document_number} updated`, 'success');
+        toast.push(t('opsApp.shop.documents.updated', { number: response.data.document_number }), 'success');
         closeForm();
         setDetailDoc(response.data);
         await load();
@@ -457,7 +456,7 @@ export function ShopBooksDocumentsScreen() {
         notes: notes.trim() || undefined,
         lines: linesPayload,
       });
-      toast.push(`${response.data.document_number} created`, 'success');
+      toast.push(t('opsApp.shop.documents.created', { number: response.data.document_number }), 'success');
       closeForm();
       setDetailDoc(response.data);
       await load();
@@ -466,8 +465,8 @@ export function ShopBooksDocumentsScreen() {
         getApiErrorMessage(
           err,
           editingId
-            ? `Couldn't update this ${meta.singular}. Try again.`
-            : `Couldn't create this ${meta.singular}. Try again.`,
+            ? t('opsApp.shop.documents.updateFailed')
+            : t('opsApp.shop.documents.createFailed'),
         ),
         'error',
       );
@@ -481,16 +480,22 @@ export function ShopBooksDocumentsScreen() {
     const isDispatch = docType === 'delivery_challan' && action !== 'to_invoice';
     const ok = await confirmAction({
       title: isDispatch
-        ? 'Dispatch challan'
+        ? t('opsApp.shop.documents.dispatchTitle')
         : docType === 'delivery_challan'
-          ? 'Create invoice'
+          ? t('opsApp.shop.documents.createInvoice')
           : meta.convertLabel,
       message: isDispatch
-        ? `Mark ${doc.document_number} as dispatched and reduce stock?`
+        ? t('opsApp.shop.documents.dispatchConfirm', { number: doc.document_number })
         : docType === 'delivery_challan'
-          ? `Create a sale invoice from ${doc.document_number}?`
-          : `Convert ${doc.document_number}? This creates the ${docType === 'purchase_order' ? 'purchase bill' : 'sale invoice'}.`,
-      confirmLabel: isDispatch ? 'Dispatch' : docType === 'delivery_challan' ? 'Create invoice' : 'Convert',
+          ? t('opsApp.shop.documents.invoiceConfirm', { number: doc.document_number })
+          : docType === 'purchase_order'
+            ? t('shop.booksDocuments.confirmConvertPurchase', { number: doc.document_number })
+            : t('shop.booksDocuments.confirmConvertSale', { number: doc.document_number }),
+      confirmLabel: isDispatch
+        ? t('opsApp.shop.documents.dispatch')
+        : docType === 'delivery_challan'
+          ? t('opsApp.shop.documents.createInvoice')
+          : t('opsApp.shop.documents.convert'),
     });
     if (!ok) return;
     setConvertingId(doc.id);
@@ -500,8 +505,8 @@ export function ShopBooksDocumentsScreen() {
       if (voucher) {
         toast.push(
           voucher.voucher_number
-            ? `Converted to ${voucher.voucher_number}`
-            : `${doc.document_number} converted`,
+            ? t('shop.booksDocuments.convertedTo', { number: voucher.voucher_number })
+            : t('shop.booksDocuments.converted', { number: doc.document_number }),
           'success',
         );
         closeDetail();
@@ -513,13 +518,18 @@ export function ShopBooksDocumentsScreen() {
         }
         return;
       }
-      toast.push(isDispatch ? 'Dispatched · stock updated' : `${doc.document_number} updated`, 'success');
+      toast.push(
+        isDispatch
+          ? t('opsApp.shop.documents.dispatched')
+          : t('opsApp.shop.documents.updated', { number: doc.document_number }),
+        'success',
+      );
       if (result.data && 'document_number' in result.data) {
         setDetailDoc(result.data as ShopBooksDocument);
       }
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't convert this document. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('shop.booksDocuments.errConvert')), 'error');
     } finally {
       setConvertingId(null);
     }
@@ -532,10 +542,10 @@ export function ShopBooksDocumentsScreen() {
           <Button
             label={
               busy
-                ? 'Saving…'
+                ? t('common.saving')
                 : editingId
-                  ? `Save ${meta.singular} · ${formatMoney(totals.total)}`
-                  : `Create ${meta.singular} · ${formatMoney(totals.total)}`
+                  ? t('opsApp.shop.documents.saveAmount', { amount: formatMoney(totals.total) })
+                  : t('opsApp.shop.documents.createAmount', { amount: formatMoney(totals.total) })
             }
             loading={busy}
             fullWidth
@@ -547,13 +557,13 @@ export function ShopBooksDocumentsScreen() {
         <FormHero
           subtitle={
             editingId
-              ? 'Update the party, lines, date, or notes. Converted and dispatched records stay locked.'
-              : `Create a ${meta.singular} and convert it when ready.`
+              ? t('opsApp.shop.documents.heroEdit')
+              : t('opsApp.shop.documents.heroCreate')
           }
         />
 
         <SelectField
-          label={meta.usesSupplier ? 'Supplier' : 'Customer'}
+          label={meta.usesSupplier ? t('opsApp.shop.common.supplier') : t('opsApp.shop.common.customer')}
           required
           value={partyId}
           options={partyOptions}
@@ -561,23 +571,23 @@ export function ShopBooksDocumentsScreen() {
           searchable
         />
 
-        <DateField label="Date" required value={documentDate} onChange={setDocumentDate} allowClear={false} />
+        <DateField label={t('opsApp.shop.common.date')} required value={documentDate} onChange={setDocumentDate} allowClear={false} />
 
-        <Text style={styles.section}>Items</Text>
+        <Text style={styles.section}>{t('opsApp.shop.documents.items')}</Text>
         {lines.map((line) => (
           <View key={line.key} style={styles.lineCard}>
             <SelectField
-              label="Product"
+              label={t('opsApp.shop.documents.product')}
               required
               value={line.productId}
               options={productOptions}
               onChange={(value) => selectProductForLine(line.key, value)}
               searchable
-              placeholder="Choose product"
+              placeholder={t('opsApp.shop.documents.chooseProduct')}
             />
             <View style={styles.lineRow}>
               <View style={styles.lineField}>
-                <FieldLabel label="Qty" required />
+                <FieldLabel label={t('opsApp.shop.documents.qty')} required />
                 <TextInput
                   style={styles.input}
                   value={line.qty}
@@ -587,7 +597,7 @@ export function ShopBooksDocumentsScreen() {
                 />
               </View>
               <View style={styles.lineField}>
-                <FieldLabel label="Rate" required />
+                <FieldLabel label={t('opsApp.shop.documents.rate')} required />
                 <TextInput
                   style={styles.input}
                   value={line.rate}
@@ -597,7 +607,7 @@ export function ShopBooksDocumentsScreen() {
                 />
               </View>
               <View style={styles.lineField}>
-                <FieldLabel label="GST %" optional />
+                <FieldLabel label={t('opsApp.shop.documents.gstPct')} optional />
                 <TextInput
                   style={styles.input}
                   value={line.gst}
@@ -614,26 +624,26 @@ export function ShopBooksDocumentsScreen() {
         ))}
         <Pressable style={styles.addLineBtn} onPress={addLine}>
           <Feather name="plus" size={16} color={colors.primary} />
-          <Text style={styles.addLineText}>Add product line</Text>
+          <Text style={styles.addLineText}>{t('opsApp.shop.documents.addProductLine')}</Text>
         </Pressable>
 
         <View style={styles.totalsCard}>
           <View style={styles.totalRow}>
-            <Text style={styles.metaText}>Subtotal</Text>
+            <Text style={styles.metaText}>{t('opsApp.shop.documents.subtotal')}</Text>
             <Text style={styles.metaText}>{formatMoney(totals.subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.metaText}>Tax</Text>
+            <Text style={styles.metaText}>{t('opsApp.shop.documents.tax')}</Text>
             <Text style={styles.metaText}>{formatMoney(totals.tax)}</Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.payableLabel}>Total</Text>
+            <Text style={styles.payableLabel}>{t('opsApp.shop.documents.total')}</Text>
             <Text style={styles.payableValue}>{formatMoney(totals.total)}</Text>
           </View>
         </View>
 
         <Input
-          label="Notes"
+          label={t('opsApp.shop.common.notes')}
           optional
           value={notes}
           onChangeText={setNotes}
@@ -650,26 +660,26 @@ export function ShopBooksDocumentsScreen() {
           metrics={
             docType === 'delivery_challan'
               ? [
-                  { label: 'Open', value: String(docSummary.open), tone: 'due' as const, hint: formatMoney(docSummary.total) },
-                  { label: 'Dispatched', value: String(docSummary.dispatched) },
-                  { label: 'Invoiced', value: String(docSummary.converted), tone: 'paid' as const },
+                  { label: t('opsApp.shop.documents.open'), value: String(docSummary.open), tone: 'due' as const, hint: formatMoney(docSummary.total) },
+                  { label: t('opsApp.shop.documents.dispatchedStat'), value: String(docSummary.dispatched) },
+                  { label: t('opsApp.shop.documents.invoiced'), value: String(docSummary.converted), tone: 'paid' as const },
                 ]
               : [
-                  { label: 'Total', value: formatMoney(docSummary.total), hint: String(docSummary.count) },
-                  { label: 'Open', value: String(docSummary.open), tone: 'due' },
-                  { label: 'Done', value: String(docSummary.converted), tone: 'paid' },
+                  { label: t('opsApp.shop.documents.total'), value: formatMoney(docSummary.total), hint: String(docSummary.count) },
+                  { label: t('opsApp.shop.documents.open'), value: String(docSummary.open), tone: 'due' },
+                  { label: t('opsApp.shop.documents.done'), value: String(docSummary.converted), tone: 'paid' },
                 ]
           }
         />
-        <SearchBar value={search} onChangeText={setSearch} placeholder={`Search ${meta.title.toLowerCase()}`} style={styles.search} />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('shop.booksDocuments.searchPlaceholder')} style={styles.search} />
         {docType === 'delivery_challan' ? (
           <View style={styles.filterRow}>
             {(
               [
-                { value: 'all', label: 'All' },
-                { value: 'open', label: 'Open' },
-                { value: 'dispatched', label: 'Dispatched' },
-                { value: 'invoiced', label: 'Invoiced' },
+                { value: 'all', label: t('opsApp.shop.documents.all') },
+                { value: 'open', label: t('opsApp.shop.documents.open') },
+                { value: 'dispatched', label: t('opsApp.shop.documents.dispatchedStat') },
+                { value: 'invoiced', label: t('opsApp.shop.documents.invoiced') },
               ] as const
             ).map((option) => {
               const active = statusFilter === option.value;
@@ -697,7 +707,7 @@ export function ShopBooksDocumentsScreen() {
             const party =
               item.customer_name ||
               item.supplier_name ||
-              (item.customer || item.supplier ? 'Party' : 'Walk-in / no customer');
+              (item.customer || item.supplier ? t('opsApp.shop.documents.party') : t('opsApp.shop.documents.walkIn'));
             const converting = convertingId === item.id;
             const open = canDispatch(item);
             const status = docStatus(item);
@@ -707,14 +717,14 @@ export function ShopBooksDocumentsScreen() {
             const showInvoice = isChallan && !converted && canInvoiceChallan(item) && (dispatched || open);
             const primaryAction =
               isChallan && open
-                ? { label: converting ? 'Working…' : 'Dispatch', onPress: () => void onConvert(item, 'dispatch') }
+                ? { label: converting ? t('opsApp.shop.documents.working') : t('opsApp.shop.documents.dispatch'), onPress: () => void onConvert(item, 'dispatch') }
                 : isChallan && dispatched
                   ? {
-                      label: converting ? 'Working…' : 'Create invoice',
+                      label: converting ? t('opsApp.shop.documents.working') : t('opsApp.shop.documents.createInvoice'),
                       onPress: () => void onConvert(item, 'to_invoice'),
                     }
                   : open
-                    ? { label: converting ? 'Working…' : meta.convertLabel, onPress: () => void onConvert(item) }
+                    ? { label: converting ? t('opsApp.shop.documents.working') : meta.convertLabel, onPress: () => void onConvert(item) }
                     : null;
             const challanExtras =
               businessId && isChallan
@@ -722,17 +732,17 @@ export function ShopBooksDocumentsScreen() {
                     ...(showInvoice && open
                       ? [
                           {
-                            label: converting ? 'Working…' : 'Invoice',
+                            label: converting ? t('opsApp.shop.documents.working') : t('opsApp.shop.documents.invoice'),
                             onPress: () => void onConvert(item, 'to_invoice'),
                           },
                         ]
                       : []),
                     {
-                      label: 'View',
+                      label: t('opsApp.shop.documents.view'),
                       icon: 'eye' as const,
                       onPress: () => {
                         if (!auth.token) {
-                          toast.push('Sign in again to view this challan', 'error');
+                          toast.push(t('opsApp.shop.documents.signInChallan'), 'error');
                           return;
                         }
                         void openShopDocumentHtmlView({
@@ -745,12 +755,12 @@ export function ShopBooksDocumentsScreen() {
                           token: auth.token,
                           tenantId,
                         }).catch((err) =>
-                          toast.push(getApiErrorMessage(err, 'View failed'), 'error'),
+                          toast.push(getApiErrorMessage(err, t('opsApp.shop.documents.viewFailed')), 'error'),
                         );
                       },
                     },
                     {
-                      label: 'Share',
+                      label: t('opsApp.shop.documents.share'),
                       icon: 'share-2' as const,
                       onPress: () =>
                         setDocActions({
@@ -769,7 +779,13 @@ export function ShopBooksDocumentsScreen() {
                 title={party}
                 amount={formatMoney(item.total)}
                 meta={`${item.document_number}${item.document_date || item.created_at ? ` · ${formatVoucherDateTime(item.document_date, item.created_at)}` : ''}`}
-                badge={converted ? (isChallan ? 'Invoiced' : 'Converted') : item.status}
+                badge={
+                  converted
+                    ? isChallan
+                      ? t('opsApp.shop.documents.invoiced')
+                      : t('opsApp.shop.documents.convertedBadge')
+                    : statusText(item.status, t)
+                }
                 badgeKind={converted ? 'paid' : open ? 'due' : dispatched ? 'neutral' : 'neutral'}
                 icon={isChallan ? 'truck' : 'file-text'}
                 iconTone={converted ? 'green' : dispatched ? 'cyan' : 'navy'}
@@ -786,17 +802,17 @@ export function ShopBooksDocumentsScreen() {
                 icon={docType === 'delivery_challan' ? 'truck' : 'file-text'}
                 title={
                   documents.length && docType === 'delivery_challan'
-                    ? 'No challans match these filters'
-                    : `No ${meta.title.toLowerCase()} yet`
+                    ? t('opsApp.shop.documents.noChallansMatch')
+                    : meta.emptyLabel
                 }
                 message={
                   docType === 'delivery_challan'
                     ? documents.length
-                      ? 'Try a different search or status.'
-                      : 'Create a challan from the Sale counter, share or print it, then Dispatch when goods leave. Convert to invoice when you bill the customer.'
-                    : `Create a ${meta.singular} and convert it when ready.`
+                      ? t('opsApp.shop.documents.tryDifferent')
+                      : t('opsApp.shop.documents.challanEmpty')
+                    : t('opsApp.shop.documents.heroCreate')
                 }
-                actionLabel={documents.length && docType === 'delivery_challan' ? undefined : `New ${meta.singular}`}
+                actionLabel={documents.length && docType === 'delivery_challan' ? undefined : meta.newLabel}
                 onAction={documents.length && docType === 'delivery_challan' ? undefined : openCreate}
               />
             ) : null
@@ -823,7 +839,11 @@ export function ShopBooksDocumentsScreen() {
         visible={Boolean(docActions)}
         onClose={() => setDocActions(null)}
         target={docActions}
-        title={docActions ? `Challan ${docActions.number || ''}` : 'Delivery challan'}
+        title={
+          docActions
+            ? t('opsApp.shop.documents.challanTitle', { number: docActions.number || '' })
+            : t('opsApp.shop.documents.deliveryChallan')
+        }
       />
     </DesktopPage>
   );

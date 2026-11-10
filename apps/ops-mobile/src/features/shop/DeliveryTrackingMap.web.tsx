@@ -1,5 +1,6 @@
 import React, { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { colors } from '../../theme/tokens';
 import {
   dotIcon,
@@ -26,6 +27,7 @@ type Props = {
 const asLatLng = (point: DeliveryPoint): LatLngLiteral => ({ lat: point.latitude, lng: point.longitude });
 
 export function DeliveryTrackingMap({ delivery }: Props) {
+  const { t } = useTranslation();
   const { pickup, drop, rider, trail, points } = useMemo(
     () => deliveryMapGeometry(delivery),
     [delivery],
@@ -39,11 +41,15 @@ export function DeliveryTrackingMap({ delivery }: Props) {
   // Rebuild markers whenever the rider moves; the coordinate list is the signature.
   const signature = deliveryMapPointSignature(points);
   const returnPickup = isReturnPickupLive(delivery);
-  const pickupTitle = returnPickup ? 'Customer' : 'Pickup';
-  const dropTitle = returnPickup ? 'Shop' : 'Drop-off';
+  const pickupTitle = returnPickup
+    ? t('opsApp.shop.common.customer')
+    : t('shop.deliveryMap.pickup');
+  const dropTitle = returnPickup
+    ? t('customerApp.returns.detail.shop')
+    : t('shop.deliveryMap.dropoff');
   const pickupLabel = deliveryPlaceLabel(delivery.pickup);
   const dropLabel = deliveryPlaceLabel(delivery.drop);
-  const riderName = delivery.rider?.name || 'Rider';
+  const riderName = delivery.rider?.name || t('shop.orders.detail.rider');
 
   useEffect(() => {
     if (!MAPS_API_KEY || !center) return;
@@ -129,8 +135,8 @@ export function DeliveryTrackingMap({ delivery }: Props) {
   if (!center) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Location unavailable</Text>
-        <Text style={styles.fallbackText}>Tracking updates will continue even when GPS is unavailable.</Text>
+        <Text style={styles.fallbackTitle}>{t('shop.deliveryMap.locationUnavailable')}</Text>
+        <Text style={styles.fallbackText}>{t('shop.deliveryMap.trackingContinues')}</Text>
       </View>
     );
   }
@@ -138,7 +144,7 @@ export function DeliveryTrackingMap({ delivery }: Props) {
   if (mapError) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Map unavailable</Text>
+        <Text style={styles.fallbackTitle}>{t('shop.deliveryMap.mapUnavailable')}</Text>
         <Text style={styles.fallbackText}>{mapError}</Text>
       </View>
     );

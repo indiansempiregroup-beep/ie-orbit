@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowRight, CheckCircle2, MessageCircle, X } from 'lucide-react';
 import { createApiClient } from '@ie-orbit/sdk';
 import { Input } from '../../components/Input';
@@ -12,26 +13,15 @@ import { CONTACT_EMAIL } from '../../seo/config';
 const contactClient = createApiClient({ baseUrl: '/api/v1' });
 
 const TOPICS = [
-  {
-    id: 'demo',
-    label: 'Demo',
-    message: "I'd like a demo of the white-label customer app for my business.",
-  },
-  {
-    id: 'support',
-    label: 'Support',
-    message: 'I need help with my IE Orbit workspace.',
-  },
-  {
-    id: 'sales',
-    label: 'Sales',
-    message: "I'd like help choosing Orbit Appoint, Orbit Mart, or both for my business.",
-  },
+  { id: 'demo', labelKey: 'public.fab.topicDemo', messageKey: 'public.fab.msgDemo' },
+  { id: 'support', labelKey: 'public.fab.topicSupport', messageKey: 'public.fab.msgSupport' },
+  { id: 'sales', labelKey: 'public.fab.topicSales', messageKey: 'public.fab.msgSales' },
 ] as const;
 
 type TopicId = (typeof TOPICS)[number]['id'];
 
 export function PublicContactFab() {
+  const { t } = useTranslation();
   const location = useLocation();
   const panelId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -73,16 +63,17 @@ export function PublicContactFab() {
 
   function selectTopic(next: TopicId) {
     setTopic(next);
-    setMessage(TOPICS.find((item) => item.id === next)?.message ?? '');
+    const found = TOPICS.find((item) => item.id === next);
+    setMessage(found ? t(found.messageKey) : '');
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     const nextErrors = {
-      name: name.trim() ? undefined : 'Name is required',
+      name: name.trim() ? undefined : t('public.fab.nameRequired'),
       email: invalidEmailMessage(email) ?? undefined,
-      message: message.trim() ? undefined : 'Message is required',
+      message: message.trim() ? undefined : t('public.fab.messageRequired'),
     };
     setFieldErrors(nextErrors);
     if (nextErrors.name || nextErrors.email || nextErrors.message) return;
@@ -101,7 +92,7 @@ export function PublicContactFab() {
       setError(
         getApiErrorMessage(
           err,
-          `We could not send your message right now. Please email ${CONTACT_EMAIL} instead.`,
+          t('public.fab.sendFailed', { email: CONTACT_EMAIL }),
         ),
       );
     } finally {
@@ -137,13 +128,13 @@ export function PublicContactFab() {
         >
           <div className="public-contact-fab-panel-head">
             <div>
-              <p className="public-kicker">Contact us</p>
-              <h2 id={`${panelId}-title`}>Send a message</h2>
+              <p className="public-kicker">{t('public.fab.contactUs')}</p>
+              <h2 id={`${panelId}-title`}>{t('public.fab.panelTitle')}</h2>
             </div>
             <button
               type="button"
               className="public-contact-fab-close"
-              aria-label="Close contact form"
+              aria-label={t('public.fab.closeForm')}
               onClick={() => setOpen(false)}
             >
               <X size={18} />
@@ -153,19 +144,17 @@ export function PublicContactFab() {
           {submitted ? (
             <div className="public-contact-fab-success" role="status">
               <CheckCircle2 size={28} aria-hidden="true" />
-              <h3>Message sent</h3>
-              <p>Thank you. We will respond within two business days.</p>
+              <h3>{t('public.fab.sentTitle')}</h3>
+              <p>{t('public.fab.sentBody')}</p>
               <Button type="button" variant="primary" onClick={resetAndClose}>
-                Done
+                {t('common.done')}
               </Button>
             </div>
           ) : (
             <form className="public-contact-fab-form" onSubmit={handleSubmit} noValidate>
-              <p className="public-contact-fab-lead">
-                Demos, support, and sales questions. We reply within two business days.
-              </p>
+              <p className="public-contact-fab-lead">{t('public.fab.lead')}</p>
 
-              <div className="public-contact-fab-topics" role="group" aria-label="Message topic">
+              <div className="public-contact-fab-topics" role="group" aria-label={t('public.fab.topicAria')}>
                 {TOPICS.map((item) => (
                   <button
                     key={item.id}
@@ -175,7 +164,7 @@ export function PublicContactFab() {
                     onClick={() => selectTopic(item.id)}
                     disabled={loading}
                   >
-                    {item.label}
+                    {t(item.labelKey)}
                   </button>
                 ))}
               </div>
@@ -187,7 +176,7 @@ export function PublicContactFab() {
               ) : null}
 
               <Input
-                label="Name"
+                label={t('public.contact.name')}
                 name="fab-name"
                 required
                 autoComplete="name"
@@ -197,7 +186,7 @@ export function PublicContactFab() {
                 error={fieldErrors.name}
               />
               <Input
-                label="Email"
+                label={t('public.contact.email')}
                 name="fab-email"
                 type="email"
                 required
@@ -209,7 +198,7 @@ export function PublicContactFab() {
               />
               <label className="ui-field" htmlFor="fab-message">
                 <span className="ui-field-label">
-                  Message
+                  {t('public.contact.message')}
                   <span className="ui-field-required" aria-hidden="true">
                     {' '}
                     *
@@ -227,7 +216,7 @@ export function PublicContactFab() {
                   onChange={(event) => setMessage(event.target.value)}
                   disabled={loading}
                   aria-invalid={Boolean(fieldErrors.message)}
-                  placeholder="Tell us about your business…"
+                  placeholder={t('public.fab.messagePlaceholder')}
                 />
                 {fieldErrors.message ? (
                   <span className="field-error" role="alert">
@@ -246,8 +235,8 @@ export function PublicContactFab() {
                 </label>
               </div>
 
-              <Button type="submit" variant="primary" loading={loading} loadingLabel="Sending…">
-                Send message <ArrowRight size={16} aria-hidden="true" />
+              <Button type="submit" variant="primary" loading={loading} loadingLabel={t('public.contact.sending')}>
+                {t('public.contact.send')} <ArrowRight size={16} aria-hidden="true" />
               </Button>
             </form>
           )}
@@ -259,13 +248,13 @@ export function PublicContactFab() {
         className="public-contact-fab-button"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-label={open ? 'Close contact form' : 'Contact us'}
+        aria-label={open ? t('public.fab.closeForm') : t('public.fab.contactUs')}
         onClick={() => setOpen((value) => !value)}
       >
         <span className="public-contact-fab-ring" aria-hidden="true" />
         <span className="public-contact-fab-core">
           {open ? <X size={22} /> : <MessageCircle size={22} />}
-          <span className="public-contact-fab-label">{open ? 'Close' : 'Contact'}</span>
+          <span className="public-contact-fab-label">{open ? t('public.fab.close') : t('public.nav.contact')}</span>
         </span>
       </button>
     </div>

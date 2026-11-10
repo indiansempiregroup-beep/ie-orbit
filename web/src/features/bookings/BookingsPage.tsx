@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useBookingCreation, useBookingList, useCancelBooking, useConfirmBooking } from './bookingsHooks';
 import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
 import { useBranchesQuery } from '../settings/branchesHooks';
@@ -16,6 +17,7 @@ import { ServiceMultiPicker } from './ServiceMultiPicker';
 import { bookingServiceLabel, buildBookingCreateInput } from './bookingHelpers';
 
 export function BookingsPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const client = useApiClient();
   const workspace = useWorkspace();
@@ -126,33 +128,37 @@ export function BookingsPage() {
       <SubmitOverlay
         show={isSubmitting}
         message={
-          createBooking.isPending ? 'Creating booking…' : confirmBooking.isPending ? 'Confirming booking…' : 'Cancelling booking…'
+          createBooking.isPending
+            ? t('bookings.creatingBooking')
+            : confirmBooking.isPending
+              ? t('bookings.confirmingBooking')
+              : t('bookings.cancellingBooking')
         }
       />
       <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gap: 24 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Booking Workspace</p>
-            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>Bookings</h1>
-            <p style={{ margin: 0, color: '#6b7280' }}>Create and manage appointments using the platform booking engine.</p>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>{t('bookings.workspaceEyebrow')}</p>
+            <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>{t('bookings.title')}</h1>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.pageSubtitle')}</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button variant="primary" onClick={() => dialog.show()}>New booking</Button>
-            <Button variant="neutral" onClick={() => bookingsQuery.refetch()}>Refresh</Button>
+            <Button variant="primary" onClick={() => dialog.show()}>{t('nav.newBookingShort')}</Button>
+            <Button variant="neutral" onClick={() => bookingsQuery.refetch()}>{t('common.refresh')}</Button>
           </div>
         </header>
 
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Today's bookings</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('dashboard.todayBookings')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{todayCount}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Available services</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.availableServices')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{servicesQuery.data?.length ?? 0}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Team members</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.teamMembers')}</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{staffQuery.data?.length ?? 0}</p>
           </Card>
         </div>
@@ -162,11 +168,11 @@ export function BookingsPage() {
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search bookings by number, customer, staff or status"
+              placeholder={t('bookings.searchPlaceholder')}
               style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
-              aria-label="Search bookings"
+              aria-label={t('bookings.search')}
             />
-            <Button variant="ghost" onClick={() => setSearchTerm('')}>Clear</Button>
+            <Button variant="ghost" onClick={() => setSearchTerm('')}>{t('common.clear')}</Button>
           </div>
 
           <Card style={{ padding: 0, overflowX: 'auto' }}>
@@ -183,21 +189,21 @@ export function BookingsPage() {
                   alignItems: 'center',
                 }}
               >
-                <span style={tableCellStyle}>Booking</span>
-                <span style={tableCellStyle}>Customer</span>
-                <span style={tableCellStyle}>Service</span>
-                <span style={tableCellStyle}>Staff</span>
-                <span style={tableCellStyle}>Start</span>
-                <span style={tableCellStyle}>Status</span>
-                <span style={tableCellStyle}>Actions</span>
+                <span style={tableCellStyle}>{t('bookings.colBooking')}</span>
+                <span style={tableCellStyle}>{t('bookings.customer')}</span>
+                <span style={tableCellStyle}>{t('bookings.service')}</span>
+                <span style={tableCellStyle}>{t('bookings.staff')}</span>
+                <span style={tableCellStyle}>{t('bookings.colStart')}</span>
+                <span style={tableCellStyle}>{t('bookings.status')}</span>
+                <span style={tableCellStyle}>{t('bookings.colActions')}</span>
               </div>
               <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
                 {bookingsQuery.isLoading ? (
-                  <div style={{ padding: 28, textAlign: 'center' }}>Loading bookings…</div>
+                  <div style={{ padding: 28, textAlign: 'center' }}>{t('bookings.loading')}</div>
                 ) : bookingsQuery.error ? (
                   <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{bookingsQuery.error.message}</div>
                 ) : filteredBookings.length === 0 ? (
-                  <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No bookings found.</div>
+                  <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>{t('bookings.noneFound')}</div>
                 ) : (
                   filteredBookings.map((booking) => {
                     const status = booking.status ?? 'unknown';
@@ -226,9 +232,9 @@ export function BookingsPage() {
                         </span>
                         <span
                           style={tableCellStyle}
-                          title={booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}
+                          title={booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : t('bookings.unassigned')}
                         >
-                          {booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : 'Unassigned'}
+                          {booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : t('bookings.unassigned')}
                         </span>
                         <span style={tableCellStyle}>
                           {booking.start_at ? formatDateTime(booking.start_at) : '—'}
@@ -247,7 +253,7 @@ export function BookingsPage() {
                                     : '#6b7280',
                           }}
                         >
-                          {status}
+                          {t(`bookings.statuses.${status}`, { defaultValue: status })}
                         </span>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'nowrap', justifyContent: 'flex-start' }}>
                           {canConfirm ? (
@@ -255,17 +261,17 @@ export function BookingsPage() {
                               type="button"
                               variant="primary"
                               loading={confirmBooking.isPending}
-                              loadingLabel="Confirming…"
+                              loadingLabel={t('bookings.confirming')}
                               disabled={isSubmitting && !confirmBooking.isPending}
                               onClick={() =>
                                 booking.id &&
                                 confirmBooking.mutate(booking.id, {
-                                  onSuccess: () => snackbar.push('Booking confirmed.', 'success'),
+                                  onSuccess: () => snackbar.push(t('bookings.bookingConfirmed'), 'success'),
                                   onError: (error) => snackbar.push(error.message, 'error'),
                                 })
                               }
                             >
-                              Confirm
+                              {t('bookings.confirm')}
                             </Button>
                           ) : null}
                           {canCancel ? (
@@ -273,17 +279,17 @@ export function BookingsPage() {
                               type="button"
                               variant="neutral"
                               loading={cancelBooking.isPending}
-                              loadingLabel="Cancelling…"
+                              loadingLabel={t('bookings.cancelling')}
                               disabled={isSubmitting && !cancelBooking.isPending}
                               onClick={() =>
                                 booking.id &&
                                 cancelBooking.mutate(booking.id, {
-                                  onSuccess: () => snackbar.push('Booking cancelled.', 'success'),
+                                  onSuccess: () => snackbar.push(t('bookings.bookingCancelled'), 'success'),
                                   onError: (error) => snackbar.push(error.message, 'error'),
                                 })
                               }
                             >
-                              Cancel
+                              {t('common.cancel')}
                             </Button>
                           ) : null}
                           {!canConfirm && !canCancel ? <span style={{ color: '#9ca3af' }}>—</span> : null}
@@ -301,21 +307,21 @@ export function BookingsPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title="Create booking"
+        title={t('bookings.create')}
         labelledBy="create-booking-dialog"
         busy={createBooking.isPending}
-        busyMessage="Creating booking…"
+        busyMessage={t('bookings.creatingBooking')}
       >
         <form
           onSubmit={(event) => {
             event.preventDefault();
             setCreationError(null);
             if (needsOfficePicker && !formState.branch_id) {
-              setCreationError('Select an office for this booking.');
+              setCreationError(t('bookings.selectOfficeError'));
               return;
             }
             if (!selectedServices.length) {
-              setCreationError('Select at least one service.');
+              setCreationError(t('bookings.selectServiceError'));
               return;
             }
             createBooking.mutate(
@@ -328,7 +334,7 @@ export function BookingsPage() {
               }),
               {
               onSuccess: () => {
-                snackbar.push('Booking created.', 'success');
+                snackbar.push(t('bookings.bookingCreated'), 'success');
                 dialog.hide();
                 setSelectedServiceIds([]);
                 setFormState({
@@ -339,7 +345,7 @@ export function BookingsPage() {
                 });
               },
               onError: (err) => {
-                setCreationError(err.message ?? "Couldn't create this booking. Check the details and try again.");
+                setCreationError(err.message ?? t('bookings.createFailed'));
               },
             });
           }}
@@ -351,7 +357,7 @@ export function BookingsPage() {
             onChange={(event) => setFormState({ ...formState, customer_id: event.target.value })}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           >
-            <option value="">Select customer</option>
+            <option value="">{t('bookings.selectCustomer')}</option>
             {customersQuery.data?.map((customer) => (
               <option key={customer.id} value={customer.id}>{customer.full_name ?? customer.id}</option>
             ))}
@@ -366,13 +372,13 @@ export function BookingsPage() {
                 border: '1px solid color-mix(in srgb, var(--primary) 25%, var(--border))',
               }}
             >
-              <strong style={{ display: 'block', marginBottom: 6 }}>Automation offer</strong>
+              <strong style={{ display: 'block', marginBottom: 6 }}>{t('bookings.automationOffer')}</strong>
               {staffHints.map((hint, index) => (
                 <div key={`${hint.label}-${index}`} style={{ fontSize: 14, lineHeight: 1.4 }}>
                   {[
                     hint.label,
                     hint.discount_type === 'percent' && Number(hint.discount_value) > 0
-                      ? `${hint.discount_value}% off`
+                      ? t('bookings.offPct', { value: hint.discount_value })
                       : null,
                     hint.message,
                   ]
@@ -396,7 +402,7 @@ export function BookingsPage() {
               onChange={(event) => setFormState({ ...formState, branch_id: event.target.value || null })}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             >
-              <option value="">Select office</option>
+              <option value="">{t('bookings.selectOffice')}</option>
               {offices.map((office) => (
                 <option key={office.id} value={office.id}>
                   {office.display_name ??
@@ -413,14 +419,14 @@ export function BookingsPage() {
             onChange={(event) => setFormState({ ...formState, staff_id: event.target.value || null })}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           >
-            <option value="">Select staff (optional)</option>
+            <option value="">{t('bookings.selectStaffOptional')}</option>
             {staffQuery.data?.map((member) => (
               <option key={member.id} value={member.id}>{member.full_name ?? member.id}</option>
             ))}
           </select>
 
           <label style={{ display: 'grid', gap: 8 }}>
-            Start date & time
+            {t('bookings.startDateTime')}
             <input
               required
               type="datetime-local"
@@ -431,11 +437,11 @@ export function BookingsPage() {
           </label>
 
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" loading={createBooking.isPending} loadingLabel="Creating…">
-              Create booking
+            <Button type="submit" variant="primary" loading={createBooking.isPending} loadingLabel={t('bookings.creating')}>
+              {t('bookings.create')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createBooking.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {creationError ? <div style={{ color: '#dc2626' }}>{creationError}</div> : null}

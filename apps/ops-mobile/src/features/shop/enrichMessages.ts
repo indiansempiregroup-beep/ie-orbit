@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 /** Shop-owner-facing copy for barcode / Smart lookup results. Never show raw API source keys. */
 
 type EnrichMessageInput = {
@@ -17,58 +19,59 @@ function formatInrFromPaise(paise: number): string {
   return `₹${(paise / 100).toFixed(2)}`;
 }
 
-function billingNote(chargedPaise: number, options: { isSmart: boolean }): string {
+function billingNote(chargedPaise: number, options: { isSmart: boolean }, t: TFunction): string {
   if (chargedPaise > 0) {
-    return ` ${formatInrFromPaise(chargedPaise)} deducted from Smart Fill wallet.`;
+    return t('opsApp.shop.enrich.billDeducted', { amount: formatInrFromPaise(chargedPaise) });
   }
   if (options.isSmart) {
-    return ' No wallet charge.';
+    return t('opsApp.shop.enrich.billNoCharge');
   }
-  return ' Free — no wallet charge.';
+  return t('opsApp.shop.enrich.billFree');
 }
 
-export function enrichSourceLabel(source?: string | null): string {
+export function enrichSourceLabel(source: string | null | undefined, t: TFunction): string {
   const key = (source || '').trim();
   switch (key) {
     case 'platform_gtin':
-      return 'our product catalog';
+      return t('opsApp.shop.enrich.src.platformGtin');
     case 'shop_catalog':
-      return 'your catalog';
+      return t('opsApp.shop.enrich.src.shopCatalog');
     case 'shop_shared':
-      return 'shared shop catalog';
+      return t('opsApp.shop.enrich.src.shopShared');
     case 'gemini_vision':
-      return 'pack photo';
+      return t('opsApp.shop.enrich.src.geminiVision');
     case 'gemini_text':
-      return 'Smart lookup';
+      return t('opsApp.shop.enrich.src.geminiText');
     case 'gemini_name_expand':
-      return 'Smart name expand';
+      return t('opsApp.shop.enrich.src.geminiNameExpand');
     case 'openmrp':
-      return 'India product registry';
+      return t('opsApp.shop.enrich.src.openmrp');
     case 'barcode_lookup':
     case 'catalog_search':
     case 'image_hint':
-      return 'lookup';
+      return t('opsApp.shop.enrich.src.lookup');
     default:
       if (key.startsWith('open_') || key.endsWith('_barcode') || key.endsWith('_search')) {
-        return 'online product database';
+        return t('opsApp.shop.enrich.src.onlineDb');
       }
       if (key === 'public_go_upc' || key === 'datakick' || key.startsWith('commercial_')) {
-        return 'online product database';
+        return t('opsApp.shop.enrich.src.onlineDb');
       }
-      return 'lookup';
+      return t('opsApp.shop.enrich.src.lookup');
   }
 }
 
 export function enrichSuccessMessage(
   data: EnrichMessageInput,
+  t: TFunction,
   options?: { editing?: boolean; filledName?: string },
 ): string {
   const charged = Math.max(0, Number(data.charged_paise || 0) || 0);
   const sourceKey = (data.source || '').trim();
   const isSmart =
     sourceKey === 'gemini_text' || sourceKey === 'gemini_vision' || sourceKey === 'gemini_name_expand';
-  const billing = billingNote(charged, { isSmart });
-  const source = enrichSourceLabel(data.source);
+  const billing = billingNote(charged, { isSmart }, t);
+  const source = enrichSourceLabel(data.source, t);
 
   // Prefer API message when it already explains free vs wallet debit.
   const apiMessage = (data.message || '').trim();
@@ -83,28 +86,30 @@ export function enrichSuccessMessage(
   }
 
   if (options?.editing) {
-    return `Barcode updated from ${source}.${billing} Catalog details replaced; price and stock kept.`;
+    return t('opsApp.shop.enrich.msgEditing', { source, billing });
   }
   if (sourceKey === 'shop_catalog' || data.existing_product_name) {
-    return `Already in your catalog as ${data.existing_product_name || data.name || 'this product'}.`;
+    return t('opsApp.shop.enrich.msgInCatalog', {
+      name: data.existing_product_name || data.name || t('opsApp.shop.enrich.thisProduct'),
+    });
   }
   if (sourceKey === 'gemini_vision') {
-    return `Filled from pack photo.${billing} Review carefully, then save.`;
+    return t('opsApp.shop.enrich.msgVision', { billing });
   }
   if (sourceKey === 'gemini_text') {
     if (data.needs_pack_photo) {
-      return `Possible match from Smart lookup (not verified).${billing} Review carefully, or capture a pack photo to confirm.`;
+      return t('opsApp.shop.enrich.msgTextUnverified', { billing });
     }
-    return `Filled by Smart lookup.${billing} Review carefully — a pack photo improves accuracy.`;
+    return t('opsApp.shop.enrich.msgText', { billing });
   }
   if (sourceKey === 'platform_gtin') {
-    return `Filled from our product catalog.${billing} Review price and stock, then save.`;
+    return t('opsApp.shop.enrich.msgPlatform', { billing });
   }
   const name = (options?.filledName || data.name || '').trim();
   if (name) {
-    return `Filled “${name}” from ${source}.${billing} Review price and stock, then save.`;
+    return t('opsApp.shop.enrich.msgFilledName', { name, source, billing });
   }
-  return `Details filled from ${source}.${billing} Review price and stock, then save.`;
+  return t('opsApp.shop.enrich.msgFilledGeneric', { source, billing });
 }
 
 export function enrichLedgerSourceLabel(source?: string | null): string {

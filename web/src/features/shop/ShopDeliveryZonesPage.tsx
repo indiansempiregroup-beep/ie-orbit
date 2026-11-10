@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MapPin, Pencil, Plus } from 'lucide-react';
 import type { ShopDeliveryZone } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
@@ -48,6 +49,7 @@ function formFromZone(zone: ShopDeliveryZone): FormState {
 }
 
 export function ShopDeliveryZonesPage() {
+  const { t } = useTranslation();
   const zones = useShopDeliveryZones();
   const { createZone, patchZone } = useShopDeliveryZoneMutations();
   const dialog = useDialog();
@@ -95,12 +97,12 @@ export function ShopDeliveryZonesPage() {
   async function createEverywhereZone() {
     setEditingId(null);
     setForm({
-      name: 'Deliver everywhere',
+      name: t('shop.deliveryZones.presetName'),
       cities: '',
       prefixes: '',
       fee: '49',
       minOrder: '0',
-      notes: 'Catch-all zone for nationwide courier delivery.',
+      notes: t('shop.deliveryZones.presetNotes'),
       sameDay: false,
       instantDelivery: false,
       enabled: true,
@@ -128,16 +130,16 @@ export function ShopDeliveryZonesPage() {
       if (editingId) {
         await patchZone.mutateAsync({ zoneId: editingId, body: payload });
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Delivery zone saved.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.deliveryZones.toastSaved'), 'success'), 0);
       } else {
         await createZone.mutateAsync(payload);
         dialog.hide();
-        window.setTimeout(() => snackbar.push('Delivery zone added.', 'success'), 0);
+        window.setTimeout(() => snackbar.push(t('shop.deliveryZones.toastAdded'), 'success'), 0);
       }
       setForm(emptyForm);
       setEditingId(null);
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Couldn't save this delivery zone. Try again.";
+      const text = error instanceof Error ? error.message : t('shop.deliveryZones.errSave');
       setMessage(text);
       snackbar.push(text, 'error');
     }
@@ -149,7 +151,7 @@ export function ShopDeliveryZonesPage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search zone, city, postal…"
+          searchPlaceholder={t('shop.deliveryZones.searchPlaceholder')}
           onClear={() => {
             setSearch('');
             setEnabledFilter('');
@@ -157,13 +159,13 @@ export function ShopDeliveryZonesPage() {
           filters={[
             {
               id: 'enabled',
-              label: 'Availability',
+              label: t('shop.deliveryZones.availability'),
               value: enabledFilter,
               onChange: setEnabledFilter,
               options: [
-                { value: '', label: 'All zones' },
-                { value: 'enabled', label: 'Enabled' },
-                { value: 'disabled', label: 'Disabled' },
+                { value: '', label: t('shop.deliveryZones.allZones') },
+                { value: 'enabled', label: t('shop.deliveryZones.enabled') },
+                { value: 'disabled', label: t('shop.deliveryZones.disabled') },
               ],
             },
           ]}
@@ -171,13 +173,13 @@ export function ShopDeliveryZonesPage() {
             <Button type="button" variant="primary" onClick={openAddDialog}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <Plus size={16} aria-hidden="true" />
-                Add zone
+                {t('shop.deliveryZones.addZone')}
               </span>
             </Button>
           }
         />
 
-        {zones.isLoading ? <p>Loading…</p> : null}
+        {zones.isLoading ? <p>{t('common.loading')}</p> : null}
         {zones.error ? <p role="alert">{(zones.error as Error).message}</p> : null}
         <div style={{ display: 'grid', gap: 8 }}>
           {filtered.map((zone) => (
@@ -211,19 +213,21 @@ export function ShopDeliveryZonesPage() {
                 <div style={{ minWidth: 0 }}>
                   <strong>{zone.name}</strong>
                   <div style={{ opacity: 0.8 }}>
-                    {zone.enabled ? 'Enabled' : 'Disabled'}
+                    {zone.enabled ? t('shop.deliveryZones.enabled') : t('shop.deliveryZones.disabled')}
                     {!((zone.cities ?? []).length || (zone.postal_prefixes ?? []).length) ? (
-                      <span style={{ color: '#047857', fontWeight: 700 }}> · Covers all addresses</span>
+                      <span style={{ color: '#047857', fontWeight: 700 }}> · {t('shop.deliveryZones.coversAll')}</span>
                     ) : null}
-                    {zone.same_day ? ' · Same day' : ''}
-                    {zone.instant_delivery_enabled ? ' · Deliver now' : ''}
-                    {` · ${(zone.cities ?? []).join(', ') || 'Any city'}`}
-                    {` · fee ${zone.fee ?? 0}`}
+                    {zone.same_day ? ` · ${t('shop.deliveryZones.sameDay')}` : ''}
+                    {zone.instant_delivery_enabled ? ` · ${t('shop.deliveryZones.deliverNow')}` : ''}
+                    {` · ${(zone.cities ?? []).join(', ') || t('shop.deliveryZones.anyCity')}`}
+                    {` · ${t('shop.deliveryZones.fee', { amount: zone.fee ?? 0 })}`}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Prefixes {(zone.postal_prefixes ?? []).join(', ') || 'any'}
+                    {t('shop.deliveryZones.prefixes', {
+                      list: (zone.postal_prefixes ?? []).join(', ') || t('shop.deliveryZones.any'),
+                    })}
                     {zone.min_order_total && Number(zone.min_order_total)
-                      ? ` · min order ${zone.min_order_total}`
+                      ? ` · ${t('shop.deliveryZones.minOrderShort', { amount: zone.min_order_total })}`
                       : ''}
                     {zone.notes ? ` · ${zone.notes}` : ''}
                   </div>
@@ -232,7 +236,7 @@ export function ShopDeliveryZonesPage() {
               <Button type="button" variant="neutral" onClick={() => openEditDialog(zone)}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Pencil size={14} aria-hidden="true" />
-                  Edit
+                  {t('shop.deliveryZones.edit')}
                 </span>
               </Button>
             </div>
@@ -241,19 +245,19 @@ export function ShopDeliveryZonesPage() {
             <div style={{ display: 'grid', gap: 8 }}>
               <p>
                 {zones.data?.length
-                  ? 'No zones match these filters.'
-                  : 'No zones yet. Add one for delivery checkout.'}
+                  ? t('shop.deliveryZones.emptyFiltered')
+                  : t('shop.deliveryZones.emptyNone')}
               </p>
               {!zones.data?.length ? (
                 <Button type="button" variant="neutral" onClick={createEverywhereZone}>
-                  Deliver everywhere (preset)
+                  {t('shop.deliveryZones.presetButton')}
                 </Button>
               ) : null}
               {!zones.data?.length ? (
                 <Button type="button" variant="primary" onClick={openAddDialog}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
-                    Add your first zone
+                    {t('shop.deliveryZones.addFirst')}
                   </span>
                 </Button>
               ) : null}
@@ -265,28 +269,27 @@ export function ShopDeliveryZonesPage() {
       <Dialog
         open={dialog.open}
         onClose={dialog.hide}
-        title={editingId ? 'Edit delivery zone' : 'Add delivery zone'}
+        title={editingId ? t('shop.deliveryZones.editZone') : t('shop.deliveryZones.addDeliveryZone')}
         labelledBy="zone-dialog"
         busy={saving}
       >
         <form onSubmit={handleSave} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <p style={{ margin: 0, color: '#6b7280', fontSize: 14 }}>
-            Match checkout addresses by city name and/or postal prefix. Leave cities and postal
-            prefixes empty to deliver everywhere. Fee is added when the zone matches.
+            {t('shop.deliveryZones.dialogHint')}
           </p>
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Zone name</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.zoneName')}</span>
               <input
                 value={form.name}
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 required
-                placeholder="e.g. Nashik city"
+                placeholder={t('shop.deliveryZones.zoneNamePlaceholder')}
                 style={fieldInput}
               />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Cities (comma-separated)</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.cities')}</span>
               <input
                 value={form.cities}
                 onChange={(event) => setForm({ ...form, cities: event.target.value })}
@@ -295,7 +298,7 @@ export function ShopDeliveryZonesPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Postal prefixes (comma-separated)</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.postalPrefixes')}</span>
               <input
                 value={form.prefixes}
                 onChange={(event) => setForm({ ...form, prefixes: event.target.value })}
@@ -304,7 +307,7 @@ export function ShopDeliveryZonesPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Delivery fee</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.deliveryFee')}</span>
               <input
                 value={form.fee}
                 onChange={(event) => setForm({ ...form, fee: event.target.value })}
@@ -312,7 +315,7 @@ export function ShopDeliveryZonesPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
-              <span style={fieldLabel}>Minimum order</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.minimumOrder')}</span>
               <input
                 value={form.minOrder}
                 onChange={(event) => setForm({ ...form, minOrder: event.target.value })}
@@ -320,7 +323,7 @@ export function ShopDeliveryZonesPage() {
               />
             </label>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
-              <span style={fieldLabel}>Notes</span>
+              <span style={fieldLabel}>{t('shop.deliveryZones.notes')}</span>
               <textarea
                 value={form.notes}
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
@@ -334,7 +337,7 @@ export function ShopDeliveryZonesPage() {
                 checked={form.sameDay}
                 onChange={(event) => setForm({ ...form, sameDay: event.target.checked })}
               />
-              Same-day delivery
+              {t('shop.deliveryZones.sameDayDelivery')}
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
@@ -344,7 +347,7 @@ export function ShopDeliveryZonesPage() {
                   setForm({ ...form, instantDelivery: event.target.checked })
                 }
               />
-              Allow Deliver now
+              {t('shop.deliveryZones.allowDeliverNow')}
             </label>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
@@ -352,15 +355,15 @@ export function ShopDeliveryZonesPage() {
                 checked={form.enabled}
                 onChange={(event) => setForm({ ...form, enabled: event.target.checked })}
               />
-              Enabled
+              {t('shop.deliveryZones.enabled')}
             </label>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Saving…' : editingId ? 'Update zone' : 'Save zone'}
+              {saving ? t('common.saving') : editingId ? t('shop.deliveryZones.updateZone') : t('shop.deliveryZones.saveZone')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={saving}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}

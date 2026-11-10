@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Platform,
@@ -25,25 +26,27 @@ import { useBreakpoint } from '../../hooks/useBreakpoint';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
 import { openShopDocumentHtmlView, type ShopDocTarget } from '../../utils/shopDocumentShare';
 import { BooksInvoiceDrawer } from './BooksInvoiceDrawer';
+import { getApiErrorMessage } from '../../utils/format';
 import { DocumentActionsSheet } from './DocumentActionsSheet';
 import { formatVoucherDateTime } from './shopBooksHelpers';
 import { SaleInsightChips } from './SaleInsightChips';
+import type { TFunction } from 'i18next';
 import type { ShopBooksReportSlug } from '@ie-orbit/sdk';
 
 type SaleSource = 'pos' | 'online' | 'booking';
 
-const SALE_SOURCE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'all', label: 'All sources' },
-  { value: 'pos', label: 'POS' },
-  { value: 'online', label: 'Online Orders' },
-  { value: 'booking', label: 'Bookings' },
-];
+function saleSourceOptions(t: TFunction): Array<{ value: string; label: string }> {
+  return [
+    { value: 'all', label: t('shop.reportsPage.sourceAll') },
+    { value: 'pos', label: t('shop.reportsPage.sourceOptions.pos') },
+    { value: 'online', label: t('shop.reportsPage.sourceOptions.online') },
+    { value: 'booking', label: t('shop.reportsPage.sourceOptions.booking') },
+  ];
+}
 
-const SALE_SOURCE_LABELS: Record<SaleSource, string> = {
-  pos: 'POS',
-  online: 'Online',
-  booking: 'Booking',
-};
+function saleSourceLabel(t: TFunction, source: SaleSource) {
+  return t(`shop.reportsPage.sourceLabels.${source}`);
+}
 
 function parseSaleSource(value: unknown): SaleSource | null {
   const key = String(value ?? '').trim().toLowerCase();
@@ -53,47 +56,31 @@ function parseSaleSource(value: unknown): SaleSource | null {
 
 type ReportOption = {
   value: ShopBooksReportSlug;
-  label: string;
-  shortLabel: string;
-  hint: string;
   icon: React.ComponentProps<typeof Feather>['name'];
 };
 
 const REPORT_OPTIONS: ReportOption[] = [
-  { value: 'sales', label: 'Sales register', shortLabel: 'Sales', hint: 'Sales value, GST collected and invoice totals.', icon: 'trending-up' },
-  { value: 'purchase', label: 'Purchase register', shortLabel: 'Purchase', hint: 'Purchase value and available input tax.', icon: 'shopping-cart' },
-  { value: 'daybook', label: 'Day book', shortLabel: 'Day book', hint: 'Every posted voucher in chronological order.', icon: 'book-open' },
-  { value: 'gstr1', label: 'GSTR-1', shortLabel: 'GSTR-1', hint: 'Invoice-level outward supplies for GST filing.', icon: 'file-text' },
-  { value: 'gstr3b', label: 'GSTR-3B', shortLabel: 'GSTR-3B', hint: 'Output tax, input credit and net tax payable.', icon: 'layers' },
-  { value: 'pnl', label: 'Profit & loss', shortLabel: 'P&L', hint: 'Income, expenses and net profit for the period.', icon: 'pie-chart' },
+  { value: 'sales', icon: 'trending-up' },
+  { value: 'purchase', icon: 'shopping-cart' },
+  { value: 'daybook', icon: 'book-open' },
+  { value: 'gstr1', icon: 'file-text' },
+  { value: 'gstr3b', icon: 'layers' },
+  { value: 'pnl', icon: 'pie-chart' },
 ];
 
-const MONEY_LABELS: Record<string, string> = {
-  taxable_value: 'Taxable value',
-  cgst: 'CGST',
-  sgst: 'SGST',
-  igst: 'IGST',
-  tax_total: 'Total GST',
-  total: 'Grand total',
-  sales: 'Sales',
-  credit_notes: 'Less: credit notes',
-  other_income: 'Other income',
-  purchases: 'Purchases',
-  debit_notes: 'Less: debit notes',
-  operating_expenses: 'Operating expenses',
-};
+function titleCase(key: string) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
-const VOUCHER_TYPE_LABELS: Record<string, string> = {
-  sale: 'Sale',
-  purchase: 'Purchase',
-  credit_note: 'Credit note',
-  debit_note: 'Debit note',
-  payment_in: 'Payment in',
-  payment_out: 'Payment out',
-  expense: 'Expense',
-  other_income: 'Other income',
-  transfer: 'Transfer',
-};
+function labelFor(key: string, t: TFunction) {
+  return t(`shop.reportsPage.metrics.${key}`, {
+    defaultValue: t(`shop.reportsPage.statuses.${key}`, { defaultValue: titleCase(key) }),
+  });
+}
+
+function voucherTypeLabel(type: string, t: TFunction) {
+  return t(`shop.reportsPage.voucherTypes.${type}`, { defaultValue: titleCase(type || 'entry') });
+}
 
 /** Invoice-style docs that support HTML view / PDF / share links. */
 const DOCUMENT_KINDS = new Set(['sale', 'credit_note', 'debit_note']);
@@ -108,12 +95,14 @@ const RECORD_TYPES: Partial<Record<ShopBooksReportSlug, string[]>> = {
 
 type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
-const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
-  { value: 'date_desc', label: 'Newest first' },
-  { value: 'date_asc', label: 'Oldest first' },
-  { value: 'amount_desc', label: 'Highest amount' },
-  { value: 'amount_asc', label: 'Lowest amount' },
-];
+function sortOptions(t: TFunction): Array<{ value: SortKey; label: string }> {
+  return [
+    { value: 'date_desc', label: t('shop.reportsPage.sort.date_desc') },
+    { value: 'date_asc', label: t('shop.reportsPage.sort.date_asc') },
+    { value: 'amount_desc', label: t('shop.reportsPage.sort.amount_desc') },
+    { value: 'amount_asc', label: t('shop.reportsPage.sort.amount_asc') },
+  ];
+}
 
 type ReportRecord = {
   key: string;
@@ -156,7 +145,7 @@ function docKindFor(voucherType: string): string | null {
   return DOCUMENT_KINDS.has(kind) ? kind : null;
 }
 
-function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRecord {
+function toDaybookRecord(row: Record<string, unknown>, index: number, t: TFunction): ReportRecord {
   const type = String(row.voucher_type ?? '').toLowerCase();
   const id = row.id == null || row.id === '' ? null : String(row.id);
   return {
@@ -166,9 +155,9 @@ function toDaybookRecord(row: Record<string, unknown>, index: number): ReportRec
     date: String(row.voucher_date ?? ''),
     createdAt: String(row.created_at ?? ''),
     type,
-    typeLabel: VOUCHER_TYPE_LABELS[type] ?? labelFor(type || 'entry'),
+    typeLabel: voucherTypeLabel(type, t),
     docKind: docKindFor(type),
-    party: String(row.party ?? row.cash_account ?? 'Cash / walk-in'),
+    party: String(row.party ?? row.cash_account ?? t('shop.reportsPage.cashWalkIn')),
     status: String(row.status ?? '').toLowerCase(),
     total: num(row.total),
     paid: row.amount_paid == null ? null : num(row.amount_paid),
@@ -192,7 +181,7 @@ function hasGstDetail(record: ReportRecord) {
   return record.taxable > 0 || (record.cgst ?? 0) + (record.sgst ?? 0) + (record.igst ?? 0) > 0;
 }
 
-function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecord {
+function toGstr1Record(row: Record<string, unknown>, index: number, t: TFunction): ReportRecord {
   const invoiceType = String(row.invoice_type ?? 'B2C').toUpperCase();
   const voucherType = String(row.voucher_type ?? 'sale').toLowerCase();
   const id = row.id == null || row.id === '' ? null : String(row.id);
@@ -205,7 +194,7 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
     type: invoiceType,
     typeLabel: invoiceType,
     docKind: docKindFor(voucherType),
-    party: String(row.customer_name ?? 'Walk-in / B2C'),
+    party: String(row.customer_name ?? t('shop.reportsPage.walkInB2c')),
     status: 'confirmed',
     total: num(row.total),
     paid: null,
@@ -223,8 +212,8 @@ function toGstr1Record(row: Record<string, unknown>, index: number): ReportRecor
   };
 }
 
-function documentTitle(kind: string, number?: string) {
-  const label = VOUCHER_TYPE_LABELS[kind] ?? 'Document';
+function documentTitle(kind: string, t: TFunction, number?: string) {
+  const label = t(`shop.reportsPage.voucherTypes.${kind}`, { defaultValue: t('shop.reportsPage.document') });
   return number ? `${label} ${number}` : label;
 }
 
@@ -232,23 +221,27 @@ function csvCell(value: unknown) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
-function flattenSummary(value: unknown, prefix = ''): Array<{ label: string; value: unknown }> {
+function flattenSummary(
+  value: unknown,
+  t: TFunction,
+  prefix = '',
+): Array<{ label: string; value: unknown }> {
   if (value == null) return [];
   if (isRecord(value)) {
     return Object.entries(value).flatMap(([key, nested]) =>
-      flattenSummary(nested, prefix ? `${prefix} · ${labelFor(key)}` : labelFor(key)),
+      flattenSummary(nested, t, prefix ? `${prefix} · ${labelFor(key, t)}` : labelFor(key, t)),
     );
   }
-  if (Array.isArray(value)) return [{ label: prefix || 'Rows', value: value.length }];
-  return [{ label: prefix || 'Value', value }];
+  if (Array.isArray(value)) return [{ label: prefix || t('opsApp.shop.reports.csvRows'), value: value.length }];
+  return [{ label: prefix || t('opsApp.shop.reports.csvValue'), value }];
 }
 
-function recordCsvRow(record: ReportRecord) {
+function recordCsvRow(record: ReportRecord, t: TFunction) {
   return {
     date: record.date,
     number: record.number,
     type: record.typeLabel,
-    source: record.saleSource ? SALE_SOURCE_LABELS[record.saleSource] : '',
+    source: record.saleSource ? saleSourceLabel(t, record.saleSource) : '',
     party: record.party,
     status: record.status,
     total: record.total,
@@ -290,6 +283,7 @@ function buildReportCsv(input: {
   businessName?: string;
   businessGstin?: string;
   businessAddress?: string;
+  t: TFunction;
 }) {
   const lines = [
     ['Business', input.businessName || '—'].map(csvCell).join(','),
@@ -306,7 +300,7 @@ function buildReportCsv(input: {
     ...input.summary.map((row) => [row.label, row.value].map(csvCell).join(',')),
   );
   if (input.records.length) {
-    const rows = input.records.map(recordCsvRow);
+    const rows = input.records.map((record) => recordCsvRow(record, input.t));
     const columns = Object.keys(rows[0]).filter((column) =>
       rows.some((row) => String(row[column as keyof typeof row] ?? '') !== ''),
     );
@@ -335,10 +329,6 @@ function toIsoDate(date: Date) {
 
 function formatDate(value: unknown, timestamp?: unknown) {
   return formatVoucherDateTime(String(value ?? ''), timestamp ? String(timestamp) : null) || '—';
-}
-
-function labelFor(key: string) {
-  return MONEY_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function MetricTile({
@@ -381,13 +371,14 @@ function Breakdown({
   money: (value: unknown) => string;
   accent?: 'success' | 'danger';
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.breakdown}>
       <Text style={styles.breakdownTitle}>{title}</Text>
       {Object.entries(data).map(([key, value]) => (
         <View key={key} style={[styles.breakdownRow, key === 'total' && styles.breakdownTotal]}>
           <Text style={[styles.breakdownLabel, key === 'total' && styles.breakdownTotalText]}>
-            {labelFor(key)}
+            {labelFor(key, t)}
           </Text>
           <Text
             style={[
@@ -406,6 +397,7 @@ function Breakdown({
 }
 
 export function ShopBooksReportsScreen() {
+  const { t } = useTranslation();
   const { isDesktop } = useBreakpoint();
   const client = useOpsClient();
   const auth = useAuth();
@@ -431,7 +423,12 @@ export function ShopBooksReportsScreen() {
   const [booksInvoiceId, setBooksInvoiceId] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
 
-  const activeOption = REPORT_OPTIONS.find((option) => option.value === slug) ?? REPORT_OPTIONS[0];
+  const activeOptionBase = REPORT_OPTIONS.find((option) => option.value === slug) ?? REPORT_OPTIONS[0];
+  const activeOption = {
+    ...activeOptionBase,
+    label: t(`shop.reportsPage.tabs.${activeOptionBase.value}`),
+    hint: t(`shop.reportsPage.tabsDesc.${activeOptionBase.value}`),
+  };
   const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo);
   const currency = activeBusiness?.currency || 'INR';
 
@@ -495,13 +492,13 @@ export function ShopBooksReportsScreen() {
       setLedger(Array.isArray(daybook?.data) ? (daybook.data as Record<string, unknown>[]) : null);
       setVisibleCount(20);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to load report';
+      const message = err instanceof Error ? err.message : t('opsApp.shop.reports.loadFailed');
       setError(message);
       toast.push(message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [client, businessId, slug, dateFrom, dateTo, invalidRange, toast]);
+  }, [client, businessId, slug, dateFrom, dateTo, invalidRange, toast, t]);
 
   useEffect(() => {
     if (client && businessId) void runReport();
@@ -526,7 +523,7 @@ export function ShopBooksReportsScreen() {
     (record: ReportRecord) => {
       if (!businessId || !record.id || !record.docKind) return;
       if (!auth.token) {
-        toast.push('Sign in again to view this document', 'error');
+        toast.push(t('opsApp.shop.common.signInAgain'), 'error');
         return;
       }
       void openShopDocumentHtmlView({
@@ -538,9 +535,9 @@ export function ShopBooksReportsScreen() {
         },
         token: auth.token,
         tenantId,
-      }).catch((err) => toast.push(getApiErrorMessage(err, 'View failed'), 'error'));
+      }).catch((err) => toast.push(getApiErrorMessage(err, t('shop.vouchers.viewFailed')), 'error'));
     },
-    [auth.token, businessId, tenantId, toast],
+    [auth.token, businessId, tenantId, toast, t],
   );
 
   const rows = useMemo(
@@ -549,12 +546,12 @@ export function ShopBooksReportsScreen() {
   );
 
   const records = useMemo<ReportRecord[]>(() => {
-    if (slug === 'gstr1') return rows.map(toGstr1Record);
-    if (slug === 'daybook') return rows.map(toDaybookRecord);
+    if (slug === 'gstr1') return rows.map((row, index) => toGstr1Record(row, index, t));
+    if (slug === 'daybook') return rows.map((row, index) => toDaybookRecord(row, index, t));
     const allowed = RECORD_TYPES[slug];
-    const source = (ledger ?? []).filter(isRecord).map(toDaybookRecord);
+    const source = (ledger ?? []).filter(isRecord).map((row, index) => toDaybookRecord(row, index, t));
     return allowed ? source.filter((record) => allowed.includes(record.type)) : source;
-  }, [slug, rows, ledger]);
+  }, [slug, rows, ledger, t]);
 
   const typeOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -564,8 +561,8 @@ export function ShopBooksReportsScreen() {
 
   const statusOptions = useMemo(() => {
     const seen = new Set(records.map((record) => record.status).filter(Boolean));
-    return Array.from(seen, (value) => ({ value, label: labelFor(value) }));
-  }, [records]);
+    return Array.from(seen, (value) => ({ value, label: labelFor(value, t) }));
+  }, [records, t]);
 
   const showPaymentFilter = useMemo(
     () => records.some((record) => paymentState(record) != null),
@@ -653,15 +650,16 @@ export function ShopBooksReportsScreen() {
   async function shareCsv() {
     if (data == null) return;
     const businessName =
-      String(activeBusiness?.display_name || activeBusiness?.business_name || '').trim() || 'Business';
+      String(activeBusiness?.display_name || activeBusiness?.business_name || '').trim() || t('common.business');
     const csv = buildReportCsv({
       report: activeOption.label,
       period: periodLabel,
-      summary: flattenSummary(data),
+      summary: flattenSummary(data, t),
       records: filteredRecords,
       businessName,
       businessGstin: String(activeBusiness?.gst_tax_number || '').trim(),
       businessAddress: businessAddressLine(activeBusiness),
+      t,
     });
     const safeBiz = businessName.replace(/[^\w.-]+/g, '_').slice(0, 40);
     const filename = `${safeBiz}_${slug}_${dateFrom || 'all'}_${dateTo || 'today'}.csv`;
@@ -673,11 +671,11 @@ export function ShopBooksReportsScreen() {
         anchor.download = filename;
         anchor.click();
         URL.revokeObjectURL(url);
-        toast.push('CSV downloaded', 'success');
+        toast.push(t('opsApp.shop.reports.csvDownloaded'), 'success');
         return;
       }
       if (!(await Sharing.isAvailableAsync())) {
-        throw new Error('File sharing is not available on this device');
+        throw new Error(t('opsApp.shop.reports.sharingUnavailable'));
       }
       const file = new File(Paths.cache, filename);
       file.create({ overwrite: true, intermediates: true });
@@ -685,16 +683,19 @@ export function ShopBooksReportsScreen() {
       await Sharing.shareAsync(file.uri, {
         mimeType: 'text/csv',
         UTI: 'public.comma-separated-values-text',
-        dialogTitle: `Share ${activeOption.label}`,
+        dialogTitle: t('opsApp.shop.reports.shareTitle', { name: activeOption.label }),
       });
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to share CSV', 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.reports.shareCsvFailed'), 'error');
     }
   }
 
   const periodLabel = dateFrom || dateTo
-    ? `${dateFrom ? formatDate(dateFrom) : 'Beginning'} – ${dateTo ? formatDate(dateTo) : 'Today'}`
-    : 'All time';
+    ? t('shop.reportsPage.periodRange', {
+        from: dateFrom ? formatDate(dateFrom) : t('shop.reportsPage.beginning'),
+        to: dateTo ? formatDate(dateTo) : t('shop.reportsPage.today'),
+      })
+    : t('shop.reportsPage.allTime');
 
   function setPreset(kind: 'month' | 'quarter' | 'year' | 'all') {
     if (kind === 'all') {
@@ -718,8 +719,8 @@ export function ShopBooksReportsScreen() {
       return (
         <View style={styles.stateCard}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={styles.stateTitle}>Preparing your report</Text>
-          <Text style={styles.stateText}>Calculating totals and organising entries…</Text>
+          <Text style={styles.stateTitle}>{t('opsApp.shop.reports.preparingTitle')}</Text>
+          <Text style={styles.stateText}>{t('opsApp.shop.reports.preparingText')}</Text>
         </View>
       );
     }
@@ -730,10 +731,10 @@ export function ShopBooksReportsScreen() {
           <View style={[styles.stateIcon, styles.errorIcon]}>
             <Feather name="alert-circle" size={22} color={colors.destructive} />
           </View>
-          <Text style={styles.stateTitle}>Report could not be loaded</Text>
+          <Text style={styles.stateTitle}>{t('opsApp.shop.reports.loadErrorTitle')}</Text>
           <Text style={styles.stateText}>{error}</Text>
           <Pressable style={styles.retryBtn} onPress={() => void runReport()}>
-            <Text style={styles.retryText}>Try again</Text>
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
           </Pressable>
         </View>
       );
@@ -756,17 +757,17 @@ export function ShopBooksReportsScreen() {
               <Feather name={slug === 'sales' ? 'arrow-up-right' : 'arrow-down-right'} size={22} color={slug === 'sales' ? colors.success : colors.primary} />
             </View>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroLabel}>{slug === 'sales' ? 'Total sales' : 'Total purchases'}</Text>
+              <Text style={styles.heroLabel}>{slug === 'sales' ? t('opsApp.shop.reports.heroTotalSales') : t('opsApp.shop.reports.heroTotalPurchases')}</Text>
               <Text style={styles.heroValue} adjustsFontSizeToFit numberOfLines={1}>{money(total)}</Text>
-              <Text style={styles.heroMeta}>{String(count)} posted voucher{count === 1 ? '' : 's'}</Text>
+              <Text style={styles.heroMeta}>{t('opsApp.shop.reports.postedVouchers', { count })}</Text>
             </View>
           </View>
           <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-            <MetricTile label="Taxable value" value={money(taxable)} />
-            <MetricTile label="Total GST" value={money(taxTotal)} />
-            <MetricTile label="CGST" value={money(cgst)} />
-            <MetricTile label="SGST" value={money(sgst)} />
-            <MetricTile label="IGST" value={money(igst)} />
+            <MetricTile label={t('shop.reportsPage.metrics.taxable_value')} value={money(taxable)} />
+            <MetricTile label={t('shop.reportsPage.metrics.tax_total')} value={money(taxTotal)} />
+            <MetricTile label={t('shop.reportsPage.metrics.cgst')} value={money(cgst)} />
+            <MetricTile label={t('shop.reportsPage.metrics.sgst')} value={money(sgst)} />
+            <MetricTile label={t('shop.reportsPage.metrics.igst')} value={money(igst)} />
           </View>
         </>
       );
@@ -775,11 +776,11 @@ export function ShopBooksReportsScreen() {
     if (slug === 'daybook' && Array.isArray(data)) {
       return (
         <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-          <MetricTile label="Entries" value={String(filteredRecords.length)} />
-          <MetricTile label="Gross value" value={money(filteredTotals.total)} />
-          <MetricTile label="Settled amount" value={money(filteredTotals.settled)} />
+          <MetricTile label={t('shop.reportsPage.stat.entries')} value={String(filteredRecords.length)} />
+          <MetricTile label={t('shop.reportsPage.stat.grossValue')} value={money(filteredTotals.total)} />
+          <MetricTile label={t('shop.reportsPage.stat.settledAmount')} value={money(filteredTotals.settled)} />
           <MetricTile
-            label="Outstanding"
+            label={t('shop.reportsPage.stat.outstanding')}
             value={money(Math.max(filteredTotals.total - filteredTotals.settled, 0))}
           />
         </View>
@@ -790,10 +791,10 @@ export function ShopBooksReportsScreen() {
       const b2b = filteredRecords.filter((record) => record.type === 'B2B').length;
       return (
         <View style={[styles.metricGrid, isDesktop && styles.metricGridDesktop]}>
-          <MetricTile label="Invoices" value={String(filteredRecords.length)} />
-          <MetricTile label="B2B invoices" value={String(b2b)} />
-          <MetricTile label="Taxable value" value={money(filteredTotals.taxable)} />
-          <MetricTile label="Invoice value" value={money(filteredTotals.total)} />
+          <MetricTile label={t('shop.reportsPage.stat.invoices')} value={String(filteredRecords.length)} />
+          <MetricTile label={t('shop.reportsPage.stat.b2bInvoices')} value={String(b2b)} />
+          <MetricTile label={t('shop.reportsPage.metrics.taxable_value')} value={money(filteredTotals.taxable)} />
+          <MetricTile label={t('shop.reportsPage.stat.invoiceValue')} value={money(filteredTotals.total)} />
         </View>
       );
     }
@@ -805,19 +806,19 @@ export function ShopBooksReportsScreen() {
       return (
         <>
           <View style={styles.summaryStrip}>
-            <MetricTile label="Outward supplies" value={money(data.outward_taxable_supplies)} wide />
-            <MetricTile label="Inward supplies" value={money(data.inward_supplies)} wide />
+            <MetricTile label={t('shop.reportsPage.gstr3b.outwardTaxable')} value={money(data.outward_taxable_supplies)} wide />
+            <MetricTile label={t('opsApp.shop.reports.inwardSupplies')} value={money(data.inward_supplies)} wide />
           </View>
-          <Breakdown title="Output tax liability" data={outputTax} money={money} />
-          <Breakdown title="Eligible input tax credit" data={inputTax} money={money} accent="success" />
+          <Breakdown title={t('shop.reportsPage.gstr3b.outputTax')} data={outputTax} money={money} />
+          <Breakdown title={t('opsApp.shop.reports.eligibleItc')} data={inputTax} money={money} accent="success" />
           <View style={styles.payableCard}>
             <View style={styles.payableHeader}>
               <View style={styles.payableIcon}>
                 <Feather name="dollar-sign" size={20} color={colors.warning} />
               </View>
               <View>
-                <Text style={styles.payableTitle}>Estimated net tax payable</Text>
-                <Text style={styles.payableHint}>Output tax less available input credit</Text>
+                <Text style={styles.payableTitle}>{t('shop.reportsPage.gstr3b.netTaxPayable')}</Text>
+                <Text style={styles.payableHint}>{t('opsApp.shop.reports.payableHint')}</Text>
               </View>
             </View>
             <Breakdown title="" data={netTax} money={money} accent="danger" />
@@ -837,7 +838,7 @@ export function ShopBooksReportsScreen() {
               <Feather name={profit >= 0 ? 'trending-up' : 'trending-down'} size={22} color={profit >= 0 ? colors.success : colors.destructive} />
             </View>
             <View style={styles.heroCopy}>
-              <Text style={styles.heroLabel}>{profit >= 0 ? 'Net profit' : 'Net loss'}</Text>
+              <Text style={styles.heroLabel}>{profit >= 0 ? t('shop.reportsPage.pnl.netProfit') : t('opsApp.shop.reports.netLoss')}</Text>
               <Text style={[styles.heroValue, profit >= 0 ? styles.successText : styles.dangerText]} numberOfLines={1} adjustsFontSizeToFit>
                 {money(Math.abs(profit))}
               </Text>
@@ -845,14 +846,14 @@ export function ShopBooksReportsScreen() {
             </View>
           </View>
           <View style={[styles.pnlGrid, isDesktop && styles.pnlGridDesktop]}>
-            <Breakdown title="Income" data={income} money={money} accent="success" />
-            <Breakdown title="Expenses" data={expenses} money={money} accent="danger" />
+            <Breakdown title={t('shop.reportsPage.pnl.income')} data={income} money={money} accent="success" />
+            <Breakdown title={t('shop.reportsPage.pnl.expenses')} data={expenses} money={money} accent="danger" />
           </View>
         </>
       );
     }
 
-    return <EmptyReport message="There is no report data for this period." />;
+    return <EmptyReport message={t('opsApp.shop.reports.noReportData')} />;
   }
 
   function renderRecords() {
@@ -865,19 +866,19 @@ export function ShopBooksReportsScreen() {
       <View style={styles.recordsSection}>
         <View style={styles.recordsHeader}>
           <View style={styles.recordsHeadingCopy}>
-            <Text style={styles.recordsTitle}>All records</Text>
+            <Text style={styles.recordsTitle}>{t('shop.reportsPage.allRecords')}</Text>
             <Text style={styles.recordsMeta}>
-              {filteredRecords.length} of {records.length}
+              {t('shop.reportsPage.recordsCount', { shown: filteredRecords.length, total: records.length })}
               {slug === 'gstr3b' || slug === 'pnl' ? '' : ` · ${money(filteredTotal)}`}
-              {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}` : ''}
+              {activeFilterCount ? ` · ${t('shop.reportsPage.filtersApplied', { count: activeFilterCount })}` : ''}
             </Text>
           </View>
         </View>
 
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search number, party or GSTIN" />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('shop.reportsPage.searchPlaceholder')} />
 
         {hasVoid ? (
-          <Text style={styles.recordsNote}>Void entries are listed here but excluded from report totals.</Text>
+          <Text style={styles.recordsNote}>{t('shop.reportsPage.voidNote')}</Text>
         ) : null}
 
         <GroupedList>
@@ -904,7 +905,7 @@ export function ShopBooksReportsScreen() {
         {filteredRecords.length > visible.length ? (
           <Pressable style={styles.moreBtn} onPress={() => setVisibleCount((count) => count + 20)}>
             <Text style={styles.moreText}>
-              Show {Math.min(20, filteredRecords.length - visible.length)} more
+              {t('shop.reportsPage.showMore', { count: Math.min(20, filteredRecords.length - visible.length) })}
             </Text>
             <Feather name="chevron-down" size={16} color={colors.primary} />
           </Pressable>
@@ -914,8 +915,8 @@ export function ShopBooksReportsScreen() {
           <EmptyReport
             message={
               records.length
-                ? 'No records match the current filters.'
-                : 'No vouchers were posted in this period.'
+                ? t('shop.reportsPage.noMatch')
+                : t('shop.reportsPage.noVouchers')
             }
           />
         ) : null}
@@ -932,7 +933,7 @@ export function ShopBooksReportsScreen() {
       >
         <View style={styles.heading}>
           <View>
-            <Text style={styles.subtitle}>Business performance and GST insights</Text>
+            <Text style={styles.subtitle}>{t('opsApp.shop.reports.subtitle')}</Text>
           </View>
           {loading && data != null ? <ActivityIndicator color={colors.primary} /> : null}
         </View>
@@ -958,7 +959,7 @@ export function ShopBooksReportsScreen() {
                 }}
               >
                 <Feather name={option.icon} size={15} color={active ? colors.primaryForeground : colors.mutedForeground} />
-                <Text style={[styles.reportTabText, active && styles.reportTabTextActive]}>{option.shortLabel}</Text>
+                <Text style={[styles.reportTabText, active && styles.reportTabTextActive]}>{t(`shop.reportsPage.tabs.${option.value}`)}</Text>
               </Pressable>
             );
           })}
@@ -981,17 +982,17 @@ export function ShopBooksReportsScreen() {
             style={styles.hScroll}
             contentContainerStyle={styles.presets}
           >
-            <PresetChip label="This month" onPress={() => setPreset('month')} />
-            <PresetChip label="This quarter" onPress={() => setPreset('quarter')} />
-            <PresetChip label="Financial year" onPress={() => setPreset('year')} />
-            <PresetChip label="All time" onPress={() => setPreset('all')} />
+            <PresetChip label={t('shop.reportsPage.presetMonth')} onPress={() => setPreset('month')} />
+            <PresetChip label={t('shop.reportsPage.presetQuarter')} onPress={() => setPreset('quarter')} />
+            <PresetChip label={t('shop.reportsPage.presetYear')} onPress={() => setPreset('year')} />
+            <PresetChip label={t('shop.reportsPage.presetAll')} onPress={() => setPreset('all')} />
           </ScrollView>
 
           <View style={[styles.dateGrid, isDesktop && styles.dateGridDesktop]}>
-            <View style={styles.dateField}><DateField label="From date" value={dateFrom} onChange={setDateFrom} /></View>
-            <View style={styles.dateField}><DateField label="To date" value={dateTo} onChange={setDateTo} /></View>
+            <View style={styles.dateField}><DateField label={t('opsApp.shop.reports.fromDate')} value={dateFrom} onChange={setDateFrom} /></View>
+            <View style={styles.dateField}><DateField label={t('opsApp.shop.reports.toDate')} value={dateTo} onChange={setDateTo} /></View>
           </View>
-          {invalidRange ? <Text style={styles.error}>“From date” must be before or equal to “To date”.</Text> : null}
+          {invalidRange ? <Text style={styles.error}>{t('shop.reportsPage.rangeInvalid')}</Text> : null}
 
           <Pressable
             style={[styles.runBtn, (loading || invalidRange) && styles.runBtnDisabled]}
@@ -1003,7 +1004,7 @@ export function ShopBooksReportsScreen() {
           ) : (
             <>
               <Feather name="bar-chart-2" size={16} color="#fff" />
-                <Text style={styles.runBtnText}>View report</Text>
+                <Text style={styles.runBtnText}>{t('opsApp.shop.reports.viewReport')}</Text>
             </>
           )}
           </Pressable>
@@ -1016,12 +1017,12 @@ export function ShopBooksReportsScreen() {
               <Text style={styles.period}>{periodLabel}</Text>
             </View>
             <View style={styles.resultActions}>
-              {loading ? <Text style={styles.updating}>Updating…</Text> : null}
+              {loading ? <Text style={styles.updating}>{t('shop.reportsPage.updating')}</Text> : null}
               <Pressable
                 style={[styles.filterToggle, filtersOpen && styles.filterToggleActive]}
                 onPress={() => setFiltersOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Open record filters"
+                accessibilityLabel={t('opsApp.shop.reports.openFilters')}
               >
                 <Feather
                   name="sliders"
@@ -1029,17 +1030,19 @@ export function ShopBooksReportsScreen() {
                   color={filtersOpen ? colors.primaryForeground : colors.primary}
                 />
                 <Text style={[styles.filterToggleText, filtersOpen && styles.filterToggleTextActive]}>
-                  Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+                  {activeFilterCount
+                    ? t('shop.reportsPage.filtersCount', { count: activeFilterCount })
+                    : t('shop.reportsPage.filters')}
                 </Text>
               </Pressable>
               <Pressable
                 style={styles.shareBtn}
                 onPress={() => void shareCsv()}
                 accessibilityRole="button"
-                accessibilityLabel="Share CSV"
+                accessibilityLabel={t('opsApp.shop.reports.shareCsv')}
               >
                 <Feather name="share-2" size={15} color={colors.primary} />
-                <Text style={styles.shareBtnText}>Share CSV</Text>
+                <Text style={styles.shareBtnText}>{t('opsApp.shop.reports.shareCsv')}</Text>
               </Pressable>
             </View>
           </View>
@@ -1051,56 +1054,56 @@ export function ShopBooksReportsScreen() {
 
       <FilterSheet
         visible={filtersOpen}
-        title="Record filters"
+        title={t('shop.reportsPage.recordFilters')}
         onClose={() => setFiltersOpen(false)}
         onApply={() => setFiltersOpen(false)}
         onReset={resetFilters}
       >
         {showSourceFilter ? (
           <FilterChoiceGroup
-            label="Source"
+            label={t('shop.reportsPage.filterSource')}
             value={sourceFilter}
-            options={SALE_SOURCE_OPTIONS}
+            options={saleSourceOptions(t)}
             onChange={setSourceFilter}
           />
         ) : null}
 
         {typeOptions.length > 1 ? (
           <FilterChoiceGroup
-            label="Type"
+            label={t('shop.reportsPage.filterType')}
             value={typeFilter}
-            options={[{ value: 'all', label: 'All types' }, ...typeOptions]}
+            options={[{ value: 'all', label: t('shop.reportsPage.allTypes') }, ...typeOptions]}
             onChange={setTypeFilter}
           />
         ) : null}
 
         {statusOptions.length > 1 ? (
           <FilterChoiceGroup
-            label="Status"
+            label={t('common.status')}
             value={statusFilter}
-            options={[{ value: 'all', label: 'All statuses' }, ...statusOptions]}
+            options={[{ value: 'all', label: t('shop.reportsPage.allStatuses') }, ...statusOptions]}
             onChange={setStatusFilter}
           />
         ) : null}
 
         {showPaymentFilter ? (
           <FilterChoiceGroup
-            label="Payment"
+            label={t('shop.reportsPage.filterPayment')}
             value={paymentFilter}
             options={[
-              { value: 'all', label: 'Any' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'partial', label: 'Partly paid' },
-              { value: 'unpaid', label: 'Unpaid' },
+              { value: 'all', label: t('shop.reportsPage.any') },
+              { value: 'paid', label: t('shop.reportsPage.paid') },
+              { value: 'partial', label: t('shop.reportsPage.partlyPaid') },
+              { value: 'unpaid', label: t('shop.reportsPage.unpaid') },
             ]}
             onChange={setPaymentFilter}
           />
         ) : null}
 
         <FilterChoiceGroup
-          label="Sort by"
+          label={t('shop.reportsPage.sortBy')}
           value={sort}
-          options={SORT_OPTIONS}
+          options={sortOptions(t)}
           onChange={(value) => setSort(value as SortKey)}
         />
       </FilterSheet>
@@ -1117,8 +1120,8 @@ export function ShopBooksReportsScreen() {
         target={docActions}
         title={
           docActions
-            ? documentTitle(String(docActions.kind), docActions.number)
-            : 'Document'
+            ? documentTitle(String(docActions.kind), t, docActions.number)
+            : t('shop.reportsPage.document')
         }
       />
     </DesktopPage>
@@ -1138,6 +1141,7 @@ function RecordCard({
   onView?: () => void;
   onShare?: () => void;
 }) {
+  const { t } = useTranslation();
   const isVoid = record.status === 'void';
   const payment = paymentState(record);
   const balance = record.paid == null ? 0 : Math.max(record.total - record.paid, 0);
@@ -1166,7 +1170,7 @@ function RecordCard({
                     record.saleSource === 'booking' && styles.sourceBadgeTextBooking,
                   ]}
                 >
-                  {SALE_SOURCE_LABELS[record.saleSource]}
+                  {saleSourceLabel(t, record.saleSource)}
                 </Text>
               </View>
             ) : null}
@@ -1189,7 +1193,11 @@ function RecordCard({
                 payment === 'partial' && styles.warningText,
               ]}
             >
-              {payment === 'paid' ? 'Paid' : payment === 'partial' ? `${money(balance)} due` : 'Unpaid'}
+              {payment === 'paid'
+                ? t('shop.reportsPage.paid')
+                : payment === 'partial'
+                  ? t('shop.vouchers.dueAmount', { amount: money(balance) })
+                  : t('shop.reportsPage.unpaid')}
             </Text>
           ) : null}
         </View>
@@ -1200,7 +1208,7 @@ function RecordCard({
           {record.party}
         </Text>
         <View style={[styles.statusDot, isVoid && styles.statusDotVoid]} />
-        <Text style={[styles.statusText, isVoid && styles.dangerText]}>{labelFor(record.status || 'posted')}</Text>
+        <Text style={[styles.statusText, isVoid && styles.dangerText]}>{labelFor(record.status || 'posted', t)}</Text>
         {onPress ? <Feather name="chevron-right" size={16} color={colors.mutedForeground} /> : null}
       </View>
 
@@ -1225,14 +1233,22 @@ function RecordCard({
       {hasGst ? (
         <>
           <View style={styles.gstMetaRow}>
-            <Text style={styles.gstMeta}>GSTIN: {record.gstin || 'Unregistered'}</Text>
-            <Text style={styles.gstMeta}>Taxable: {money(record.taxable)}</Text>
+            <Text style={styles.gstMeta}>
+              {t('opsApp.shop.reports.gstinLine', {
+                value: record.gstin || t('opsApp.shop.reports.unregistered'),
+              })}
+            </Text>
+            <Text style={styles.gstMeta}>
+              {t('opsApp.shop.reports.taxableLine', { amount: money(record.taxable) })}
+            </Text>
           </View>
           <View style={styles.taxRow}>
-            <Text style={styles.taxText}>CGST {money(record.cgst)}</Text>
-            <Text style={styles.taxText}>SGST {money(record.sgst)}</Text>
-            <Text style={styles.taxText}>IGST {money(record.igst)}</Text>
-            {record.placeOfSupply ? <Text style={styles.taxText}>PoS {record.placeOfSupply}</Text> : null}
+            <Text style={styles.taxText}>{t('shop.reportsPage.metrics.cgst')} {money(record.cgst)}</Text>
+            <Text style={styles.taxText}>{t('shop.reportsPage.metrics.sgst')} {money(record.sgst)}</Text>
+            <Text style={styles.taxText}>{t('shop.reportsPage.metrics.igst')} {money(record.igst)}</Text>
+            {record.placeOfSupply ? <Text style={styles.taxText}>
+                {t('opsApp.shop.reports.posLine', { value: record.placeOfSupply })}
+              </Text> : null}
           </View>
         </>
       ) : null}
@@ -1245,7 +1261,7 @@ function RecordCard({
         <Pressable
           onPress={onPress}
           accessibilityRole="button"
-          accessibilityLabel={`Open ${record.number}`}
+          accessibilityLabel={t('opsApp.shop.reports.openAria', { number: record.number })}
           style={styles.entryMain}
         >
           {body}
@@ -1262,10 +1278,10 @@ function RecordCard({
               onPress={onView}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={`View ${record.number}`}
+              accessibilityLabel={t('shop.reportsPage.table.viewAria', { number: record.number })}
             >
               <Feather name="eye" size={14} color={colors.primary} />
-              <Text style={styles.entryActionText}>View</Text>
+              <Text style={styles.entryActionText}>{t('shop.reportsPage.table.view')}</Text>
             </Pressable>
           ) : null}
           {onShare ? (
@@ -1274,10 +1290,10 @@ function RecordCard({
               onPress={onShare}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={`Share ${record.number}`}
+              accessibilityLabel={t('shop.reportsPage.table.shareAria', { number: record.number })}
             >
               <Feather name="share-2" size={14} color={colors.primary} />
-              <Text style={styles.entryActionText}>Share</Text>
+              <Text style={styles.entryActionText}>{t('shop.reportsPage.table.share')}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -1295,12 +1311,13 @@ function PresetChip({ label, onPress }: { label: string; onPress: () => void }) 
 }
 
 function EmptyReport({ message }: { message: string }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.stateCard}>
       <View style={styles.stateIcon}>
         <Feather name="inbox" size={22} color={colors.mutedForeground} />
       </View>
-      <Text style={styles.stateTitle}>Nothing to show</Text>
+      <Text style={styles.stateTitle}>{t('opsApp.shop.reports.nothingToShow')}</Text>
       <Text style={styles.stateText}>{message}</Text>
     </View>
   );

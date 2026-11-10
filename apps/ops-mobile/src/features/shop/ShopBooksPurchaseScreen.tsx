@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -45,6 +46,7 @@ import { confirmAction } from '../../utils/confirmAction';
 import { getApiErrorMessage } from '../../utils/format';
 
 export function ShopBooksPurchaseScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ShopBooksPurchase'>>();
@@ -73,7 +75,7 @@ export function ShopBooksPurchaseScreen() {
             <Pressable
               onPress={() => navigation.navigate('ShopInvoiceScan')}
               accessibilityRole="button"
-              accessibilityLabel="Scan invoice"
+              accessibilityLabel={t('shop.vouchers.scanInvoice')}
               hitSlop={8}
               style={styles.headerBtn}
             >
@@ -83,7 +85,7 @@ export function ShopBooksPurchaseScreen() {
           <Pressable
             onPress={() => navigation.navigate('ShopPos', { mode: 'purchase' })}
             accessibilityRole="button"
-            accessibilityLabel="New purchase"
+            accessibilityLabel={t('shop.vouchers.newPurchase')}
             hitSlop={8}
             style={styles.headerBtn}
           >
@@ -92,7 +94,7 @@ export function ShopBooksPurchaseScreen() {
         </View>
       ),
     });
-  }, [canScan, navigation]);
+  }, [canScan, navigation, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -102,11 +104,11 @@ export function ShopBooksPurchaseScreen() {
       const vouchersRes = await client.shop.listVouchers({ business_id: businessId, type: 'purchase' });
       setVouchers(vouchersRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load purchases');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.purchase.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -123,14 +125,14 @@ export function ShopBooksPurchaseScreen() {
         if (!cancelled && response.data) setDetailVoucher(response.data);
       } catch (err) {
         if (!cancelled) {
-          toast.push(getApiErrorMessage(err, "Couldn't open that purchase bill."), 'error');
+          toast.push(getApiErrorMessage(err, t('opsApp.shop.purchase.openFailed')), 'error');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [openVoucherId, client, toast]);
+  }, [openVoucherId, client, toast, t]);
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
@@ -168,19 +170,19 @@ export function ShopBooksPurchaseScreen() {
   async function onVoid(voucher: ShopBooksVoucher) {
     if (!client) return;
     const ok = await confirmAction({
-      title: 'Void purchase',
-      message: `Void ${voucher.voucher_number}? This cannot be undone.`,
-      confirmLabel: 'Void',
+      title: t('opsApp.shop.purchase.voidTitle'),
+      message: t('shop.vouchers.confirmVoid', { number: voucher.voucher_number }),
+      confirmLabel: t('opsApp.shop.sale.void'),
       destructive: true,
     });
     if (!ok) return;
     try {
       await client.shop.voidVoucher(voucher.id);
-      toast.push('Purchase voided', 'success');
+      toast.push(t('opsApp.shop.purchase.voided'), 'success');
       closeDetail();
       await load();
     } catch (err) {
-      toast.push(getApiErrorMessage(err, "Couldn't void this purchase. Try again."), 'error');
+      toast.push(getApiErrorMessage(err, t('opsApp.shop.purchase.voidFailed')), 'error');
     }
   }
 
@@ -199,13 +201,13 @@ export function ShopBooksPurchaseScreen() {
             style={styles.searchFlex}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search bills"
+            placeholder={t('shop.vouchers.searchBills')}
           />
           <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
         </View>
         {activeFilterCount || search.trim() ? (
           <Pressable onPress={clearFilters} hitSlop={8} style={styles.resetRow}>
-            <Text style={styles.clear}>Clear search & filters</Text>
+            <Text style={styles.clear}>{t('shop.vouchers.clearFilters')}</Text>
           </Pressable>
         ) : null}
         <FilterSheet
@@ -214,34 +216,34 @@ export function ShopBooksPurchaseScreen() {
           onReset={clearFilters}
         >
           <FilterChoiceGroup
-            label="Period"
+            label={t('opsApp.shop.common.period')}
             value={periodFilter}
             options={[
-              { value: 'all', label: 'All time' },
-              { value: 'today', label: 'Today' },
-              { value: '7d', label: 'Last 7 days' },
-              { value: 'month', label: 'This month' },
+              { value: 'all', label: t('opsApp.shop.common.allTime') },
+              { value: 'today', label: t('common.today') },
+              { value: '7d', label: t('opsApp.shop.common.last7Days') },
+              { value: 'month', label: t('opsApp.shop.common.thisMonth') },
             ]}
             onChange={(value) => setPeriodFilter(value as VoucherPeriodFilter)}
           />
           <FilterChoiceGroup
-            label="Payment"
+            label={t('shop.vouchers.paymentFilter')}
             value={payFilter}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'unpaid', label: 'Unpaid' },
+              { value: 'all', label: t('common.all') },
+              { value: 'paid', label: t('shop.vouchers.stripPaid') },
+              { value: 'unpaid', label: t('shop.vouchers.unpaid') },
             ]}
             onChange={(value) => setPayFilter(value as VoucherPayFilter)}
           />
           <FilterChoiceGroup
-            label="Sort"
+            label={t('opsApp.shop.common.sort')}
             value={sortBy}
             options={[
-              { value: 'newest', label: 'Newest' },
-              { value: 'oldest', label: 'Oldest' },
-              { value: 'amount_desc', label: 'Amount high–low' },
-              { value: 'amount_asc', label: 'Amount low–high' },
+              { value: 'newest', label: t('opsApp.shop.common.newest') },
+              { value: 'oldest', label: t('opsApp.shop.common.oldest') },
+              { value: 'amount_desc', label: t('opsApp.shop.common.amountHighLow') },
+              { value: 'amount_asc', label: t('opsApp.shop.common.amountLowHigh') },
             ]}
             onChange={setSortBy}
           />
@@ -262,10 +264,16 @@ export function ShopBooksPurchaseScreen() {
             const party = voucherPartyLabel(item);
             return (
               <BooksDocumentRow
-                title={party === '—' ? 'Supplier bill' : party}
+                title={party === '—' ? t('opsApp.shop.purchase.supplierBill') : party}
                 amount={formatMoney(item.total)}
                 meta={`${item.voucher_number}${item.voucher_date || item.created_at ? ` · ${formatVoucherDateTime(item.voucher_date, item.created_at)}` : ''}`}
-                badge={voided ? item.status : paid ? 'Paid' : `To pay ${formatMoney(balance)}`}
+                badge={
+                  voided
+                    ? t(`shop.vouchers.status.${item.status}`, { defaultValue: item.status })
+                    : paid
+                      ? t('shop.vouchers.stripPaid')
+                      : `${t('shop.vouchers.stripToPay')} ${formatMoney(balance)}`
+                }
                 badgeKind={voided ? 'void' : paid ? 'paid' : 'due'}
                 icon={voided ? 'slash' : 'truck'}
                 iconTone={voided ? 'rose' : paid ? 'green' : 'amber'}
@@ -278,13 +286,21 @@ export function ShopBooksPurchaseScreen() {
             !loading ? (
               <EmptyState
                 icon="truck"
-                title={activeFilterCount || search.trim() ? 'No matching purchases' : 'No purchases yet'}
+                title={
+                  activeFilterCount || search.trim()
+                    ? t('opsApp.shop.purchase.noMatching')
+                    : t('opsApp.shop.purchase.noPurchases')
+                }
                 message={
                   activeFilterCount || search.trim()
-                    ? 'Try clearing filters or adjusting period / payment.'
-                    : 'Record supplier bills to track what you owe.'
+                    ? t('opsApp.shop.purchase.tryClearing')
+                    : t('opsApp.shop.purchase.emptyHint')
                 }
-                actionLabel={activeFilterCount || search.trim() ? 'Clear filters' : 'Record a purchase'}
+                actionLabel={
+                  activeFilterCount || search.trim()
+                    ? t('opsApp.shop.common.clearFilters')
+                    : t('opsApp.shop.purchase.record')
+                }
                 onAction={
                   activeFilterCount || search.trim()
                     ? clearFilters

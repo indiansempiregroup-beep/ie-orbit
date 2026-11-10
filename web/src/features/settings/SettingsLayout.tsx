@@ -18,7 +18,7 @@ const settingsNav: Array<{
   { to: '/settings/support', labelKey: 'settings.support', label: 'Support tickets' },
   { to: '/settings/products', labelKey: 'settings.productsBilling' },
   { to: '/settings/team', labelKey: 'settings.team', permission: 'iam:role:assign' },
-  { to: '/settings/role-menus', label: 'Role menus', ownerOnly: true },
+  { to: '/settings/role-menus', labelKey: 'settings.roleMenus', ownerOnly: true },
 ];
 
 export function SettingsLayout() {
@@ -52,7 +52,7 @@ export function SettingsLayout() {
                 border: isActive ? '1px solid #bfdbfe' : '1px solid transparent',
               })}
             >
-              {item.label ?? (item.labelKey ? t(item.labelKey) : item.to)}
+              {item.labelKey ? t(item.labelKey) : (item.label ?? item.to)}
             </NavLink>
           ))}
         </nav>

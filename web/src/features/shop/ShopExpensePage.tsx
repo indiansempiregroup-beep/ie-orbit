@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Card } from '../../components/Card';
@@ -26,7 +27,19 @@ const FALLBACK_EXPENSE_CATEGORIES = [
   'Other',
 ];
 
+const FALLBACK_CATEGORY_KEYS: Record<string, string> = {
+  Rent: 'rent',
+  Electricity: 'electricity',
+  Salaries: 'salaries',
+  Transport: 'transport',
+  Packaging: 'packaging',
+  Marketing: 'marketing',
+  Maintenance: 'maintenance',
+  Other: 'other',
+};
+
 export function ShopExpensePage() {
+  const { t } = useTranslation();
   const workspace = useWorkspace();
   const client = useApiClient();
   const currency = workspace.activeBusiness?.currency;
@@ -44,6 +57,10 @@ export function ShopExpensePage() {
     ? expenseCatsQuery.data
     : FALLBACK_EXPENSE_CATEGORIES;
   const [searchParams, setSearchParams] = useSearchParams();
+  const categoryLabel = (item: string) => {
+    const key = FALLBACK_CATEGORY_KEYS[item];
+    return key && !expenseCatsQuery.data?.length ? t(`shop.expense.categories.${key}`) : item;
+  };
   const dialog = useDialog();
 
   const [search, setSearch] = useState('');
@@ -98,7 +115,7 @@ export function ShopExpensePage() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!amount || Number(amount) <= 0) {
-      setMessage('Enter an expense amount.');
+      setMessage(t('shop.expense.errAmount'));
       return;
     }
     setMessage(null);
@@ -113,19 +130,19 @@ export function ShopExpensePage() {
         notes: notes || undefined,
       });
       dialog.hide();
-      snackbar.push(`Expense ${voucher.voucher_number} recorded.`, 'success');
+      snackbar.push(t('shop.expense.toastRecorded', { number: voucher.voucher_number }), 'success');
     } catch (error) {
-      setMessage(getApiErrorMessage(error, "Couldn't record this expense. Try again."));
+      setMessage(getApiErrorMessage(error, t('shop.expense.errRecord')));
     }
   }
 
   async function handleVoid(voucherId: string, voucherNumber: string) {
-    if (!window.confirm(`Void ${voucherNumber}?`)) return;
+    if (!window.confirm(t('shop.expense.confirmVoid', { number: voucherNumber }))) return;
     try {
       await voidVoucher.mutateAsync(voucherId);
-      snackbar.push(`${voucherNumber} voided.`, 'success');
+      snackbar.push(t('shop.expense.toastVoided', { number: voucherNumber }), 'success');
     } catch (error) {
-      snackbar.push(getApiErrorMessage(error, "Couldn't void this expense. Try again."), 'error');
+      snackbar.push(getApiErrorMessage(error, t('shop.expense.errVoid')), 'error');
     }
   }
 
@@ -143,22 +160,22 @@ export function ShopExpensePage() {
   return (
     <div className="page-stack">
       <div className="invoice-page-header">
-        <h1 className="invoice-page-title">Expenses</h1>
+        <h1 className="invoice-page-title">{t('shop.expense.title')}</h1>
         <Button type="button" variant="primary" onClick={openAddDialog}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Plus size={16} aria-hidden="true" />
-            Add expense
+            {t('shop.expense.addExpense')}
           </span>
         </Button>
       </div>
 
       <div className="invoice-strip">
         <div className="invoice-strip__cell">
-          <span>Total</span>
+          <span>{t('shop.expense.total')}</span>
           <strong>{formatMoney(expenseSummary.total, currency)}</strong>
         </div>
         <div className="invoice-strip__cell">
-          <span>Entries</span>
+          <span>{t('shop.expense.entries')}</span>
           <strong>{expenseSummary.count}</strong>
         </div>
       </div>
@@ -167,7 +184,7 @@ export function ShopExpensePage() {
         <ShopFilterBar
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search expenses"
+          searchPlaceholder={t('shop.expense.searchPlaceholder')}
           dateFrom={dateFrom}
           dateTo={dateTo}
           onDateFromChange={setDateFrom}
@@ -179,7 +196,7 @@ export function ShopExpensePage() {
           }}
         />
 
-        {expenses.isLoading ? <p className="invoice-muted">Loading…</p> : null}
+        {expenses.isLoading ? <p className="invoice-muted">{t('common.loading')}</p> : null}
         <div className="invoice-list">
           {filtered.map((voucher) => {
             const isVoid = voucher.status === 'void';
@@ -198,12 +215,12 @@ export function ShopExpensePage() {
                 <div className="invoice-row__side">
                   <strong>{formatMoney(Number(voucher.total ?? 0), currency)}</strong>
                   <span className={`invoice-pill ${isVoid ? 'is-void' : 'is-paid'}`}>
-                    {isVoid ? 'Void' : 'Expense'}
+                    {isVoid ? t('shop.expense.voidStatus') : t('shop.expense.expenseBadge')}
                   </span>
                 </div>
                 {voucher.status !== 'void' ? (
                   <Button type="button" variant="ghost" onClick={() => void handleVoid(voucher.id, voucher.voucher_number)}>
-                    Void
+                    {t('shop.expense.voidAction')}
                   </Button>
                 ) : null}
               </div>
@@ -211,50 +228,50 @@ export function ShopExpensePage() {
           })}
           {!expenses.isLoading && !filtered.length ? (
             <div className="invoice-empty">
-              <p>No expenses recorded yet.</p>
+              <p>{t('shop.expense.empty')}</p>
               <Button type="button" variant="primary" onClick={openAddDialog}>
-                Add expense
+                {t('shop.expense.addExpense')}
               </Button>
             </div>
           ) : null}
         </div>
       </Card>
 
-      <Dialog open={dialog.open} onClose={dialog.hide} title="Add expense" labelledBy="add-expense-dialog" busy={createVoucher.isPending}>
+      <Dialog open={dialog.open} onClose={dialog.hide} title={t('shop.expense.addExpense')} labelledBy="add-expense-dialog" busy={createVoucher.isPending}>
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
-            Date
+            {t('shop.expense.date')}
             <input type="date" value={voucherDate} onChange={(event) => setVoucherDate(event.target.value)} style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Amount
+            {t('shop.expense.amount')}
             <input type="number" min={0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} required style={fieldStyle} />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Category
+            {t('shop.expense.category')}
             <select value={category} onChange={(event) => setCategory(event.target.value)} style={fieldStyle}>
               {EXPENSE_CATEGORIES.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {categoryLabel(item)}
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Paid from account
+            {t('shop.expense.paidFromAccount')}
             <select value={cashAccountId} onChange={(event) => setCashAccountId(event.target.value)} style={fieldStyle}>
-              <option value="">Select account…</option>
+              <option value="">{t('shop.expense.selectAccount')}</option>
               {(accounts.data ?? []).map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.account_type})
+                  {account.name} ({account.account_type === 'cash' ? t('shop.cashBank.cash') : account.account_type === 'bank' ? t('shop.cashBank.bank') : account.account_type})
                 </option>
               ))}
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Paid to (optional supplier)
+            {t('shop.expense.paidTo')}
             <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} style={fieldStyle}>
-              <option value="">None</option>
+              <option value="">{t('shop.expense.none')}</option>
               {(suppliers.data ?? []).map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
@@ -263,15 +280,15 @@ export function ShopExpensePage() {
             </select>
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
-            Notes
+            {t('shop.expense.notes')}
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} style={fieldStyle} />
           </label>
           <div style={{ display: 'grid', gap: 12 }}>
             <Button type="submit" variant="primary" disabled={createVoucher.isPending}>
-              {createVoucher.isPending ? 'Saving…' : 'Save expense'}
+              {createVoucher.isPending ? t('common.saving') : t('shop.expense.saveExpense')}
             </Button>
             <Button type="button" variant="neutral" onClick={dialog.hide} disabled={createVoucher.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {message ? <p role="status">{message}</p> : null}

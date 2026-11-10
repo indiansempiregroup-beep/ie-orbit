@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCustomerDetail, useCustomerUpdate } from '../management/managementHooks';
 import { useDialog } from '../../hooks/useDialog';
@@ -31,6 +32,7 @@ type AddressFormState = {
 };
 
 export function CustomerDetailPage() {
+  const { t } = useTranslation();
   const snackbar = useSnackbar();
   const { activeBusiness } = useWorkspace();
   const showGstFields = hasSubscribedProduct(activeBusiness?.product_subscriptions, 'shopie');
@@ -89,19 +91,19 @@ export function CustomerDetailPage() {
 
   useEditFormInit(editDialog.open, customerQuery.data, initForm);
 
-  const customerName = customerQuery.data?.full_name ?? 'Customer profile';
+  const customerName = customerQuery.data?.full_name ?? t('customers.profileFallback');
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>
-      <SubmitOverlay show={updateCustomer.isPending} message="Saving customer…" />
+      <SubmitOverlay show={updateCustomer.isPending} message={t('customers.savingCustomer')} />
       <div style={{ maxWidth: 920, margin: '0 auto', display: 'grid', gap: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>Customer Detail</p>
+            <p style={{ margin: 0, color: '#10b981', fontWeight: 700, letterSpacing: 1 }}>{t('customers.detailEyebrow')}</p>
             <h1 style={{ margin: '8px 0 0', fontSize: 32 }}>{customerName}</h1>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Button variant="ghost" onClick={() => navigate('/customers')}>Back to customers</Button>
+            <Button variant="ghost" onClick={() => navigate('/customers')}>{t('customers.backToCustomers')}</Button>
             <Button
               variant="primary"
               onClick={() => {
@@ -109,7 +111,7 @@ export function CustomerDetailPage() {
               }}
               disabled={!customerQuery.data}
             >
-              Edit customer
+              {t('customers.edit')}
             </Button>
           </div>
         </div>
@@ -121,29 +123,29 @@ export function CustomerDetailPage() {
         {activeTab === 'overview' ? (
         <Card style={{ display: 'grid', gap: 24 }}>
           {customerQuery.isLoading ? (
-            <div style={{ padding: 28, textAlign: 'center' }}>Loading customer...</div>
+            <div style={{ padding: 28, textAlign: 'center' }}>{t('customers.loadingOne')}</div>
           ) : customerQuery.error ? (
             <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{customerQuery.error.message}</div>
           ) : customerQuery.data ? (
             <div style={{ display: 'grid', gap: 20 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Name</p>
-                  <p style={{ margin: '8px 0 0', fontSize: 20, fontWeight: 700 }}>{customerQuery.data.full_name ?? 'Unknown'}</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.name')}</p>
+                  <p style={{ margin: '8px 0 0', fontSize: 20, fontWeight: 700 }}>{customerQuery.data.full_name ?? t('customers.unknown')}</p>
                 </div>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Status</p>
-                  <p style={{ margin: '8px 0 0', fontSize: 20, fontWeight: 700 }}>{customerQuery.data.status ?? 'Unknown'}</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('common.status')}</p>
+                  <p style={{ margin: '8px 0 0', fontSize: 20, fontWeight: 700 }}>{t(`customers.statuses.${customerQuery.data.status ?? 'unknown'}`, { defaultValue: customerQuery.data.status ?? '' })}</p>
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Email</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('common.email')}</p>
                   <p style={{ margin: '8px 0 0' }}>{customerQuery.data.email ?? '—'}</p>
                 </div>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Phone</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('common.phone')}</p>
                   <p style={{ margin: '8px 0 0' }}>{customerQuery.data.phone_number ?? '—'}</p>
                 </div>
               </div>
@@ -163,7 +165,7 @@ export function CustomerDetailPage() {
               />
 
               <div style={{ display: 'grid', gap: 12 }}>
-                <p style={{ margin: 0, color: '#6b7280' }}>Address</p>
+                <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.address')}</p>
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
                   {[
                     customerQuery.data.full_address,
@@ -182,17 +184,17 @@ export function CustomerDetailPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Created</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.created')}</p>
                   <p style={{ margin: '8px 0 0' }}>{customerQuery.data.created_at ? formatTimestamp(customerQuery.data.created_at) : '—'}</p>
                 </div>
                 <div>
-                  <p style={{ margin: 0, color: '#6b7280' }}>Updated</p>
+                  <p style={{ margin: 0, color: '#6b7280' }}>{t('customers.updated')}</p>
                   <p style={{ margin: '8px 0 0' }}>{customerQuery.data.updated_at ? formatTimestamp(customerQuery.data.updated_at) : '—'}</p>
                 </div>
               </div>
             </div>
           ) : (
-            <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>Customer not found.</div>
+            <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>{t('customers.notFound')}</div>
           )}
         </Card>
         ) : null}
@@ -201,10 +203,10 @@ export function CustomerDetailPage() {
       <Dialog
         open={editDialog.open}
         onClose={editDialog.hide}
-        title="Edit customer"
+        title={t('customers.edit')}
         labelledBy="edit-customer-dialog"
         busy={updateCustomer.isPending}
-        busyMessage="Saving customer…"
+        busyMessage={t('customers.savingCustomer')}
       >
         <form
           onSubmit={(event) => {
@@ -242,11 +244,11 @@ export function CustomerDetailPage() {
               },
               {
                 onSuccess: () => {
-                  snackbar.push('Customer details saved.', 'success');
+                  snackbar.push(t('customers.detailsSaved'), 'success');
                   editDialog.hide();
                   customerQuery.refetch();
                 },
-                onError: (err) => setEditError(err.message ?? "Couldn't save this customer. Check the details and try again."),
+                onError: (err) => setEditError(err.message ?? t('customers.saveFailed')),
               },
             );
           }}
@@ -256,20 +258,20 @@ export function CustomerDetailPage() {
             required
             value={formState.display_name}
             onChange={(event) => setFormState({ ...formState, display_name: event.target.value })}
-            placeholder="Display name"
+            placeholder={t('customers.displayName')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
             value={formState.email ?? ''}
             onChange={(event) => setFormState({ ...formState, email: event.target.value })}
-            placeholder="Email"
+            placeholder={t('common.email')}
             type="email"
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           <input
             value={formState.phone_number ?? ''}
             onChange={(event) => setFormState({ ...formState, phone_number: event.target.value })}
-            placeholder="Phone number"
+            placeholder={t('customers.phoneNumber')}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           />
           {showGstFields ? (
@@ -278,7 +280,7 @@ export function CustomerDetailPage() {
               onChange={(event) =>
                 setFormState({ ...formState, gstin: normalizeGstin(event.target.value) })
               }
-              placeholder="GSTIN (optional, for Orbit Mart B2B bills)"
+              placeholder={t('customers.gstinPlaceholder')}
               maxLength={15}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
             />
@@ -288,12 +290,12 @@ export function CustomerDetailPage() {
             onChange={(event) => setFormState({ ...formState, status: event.target.value })}
             style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
           >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="active">{t('customers.statuses.active')}</option>
+            <option value="inactive">{t('customers.statuses.inactive')}</option>
           </select>
           <div style={{ display: 'grid', gap: 8 }}>
             <AddressLocationPicker
-              label="Customer address (Google Maps)"
+              label={t('customers.addressLabel')}
               value={addressForm.full_address}
               latitude={addressForm.latitude}
               longitude={addressForm.longitude}
@@ -320,14 +322,14 @@ export function CustomerDetailPage() {
             <input
               value={addressForm.line2}
               onChange={(event) => setAddressForm((current) => ({ ...current, line2: event.target.value }))}
-              placeholder="Flat, floor, building or landmark"
+              placeholder={t('customers.line2Placeholder')}
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
             <input
               required={Boolean(addressForm.full_address.trim())}
               value={addressForm.phone_number}
               onChange={(event) => setAddressForm((current) => ({ ...current, phone_number: event.target.value }))}
-              placeholder="Delivery phone for this address"
+              placeholder={t('customers.deliveryPhone')}
               inputMode="tel"
               style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb', background: '#fff' }}
             />
@@ -338,7 +340,7 @@ export function CustomerDetailPage() {
                   value={addressForm[field]}
                   readOnly={addressForm.latitude != null && addressForm.longitude != null}
                   onChange={(event) => setAddressForm((current) => ({ ...current, [field]: event.target.value }))}
-                  placeholder={field === 'postal_code' ? 'Postal code' : field[0].toUpperCase() + field.slice(1)}
+                  placeholder={t(field === 'postal_code' ? 'customers.postalCode' : `customers.${field}`)}
                   style={{
                     padding: 12,
                     borderRadius: 12,
@@ -350,11 +352,11 @@ export function CustomerDetailPage() {
             </div>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Button type="submit" variant="primary" loading={updateCustomer.isPending} loadingLabel="Saving…">
-              Save changes
+            <Button type="submit" variant="primary" loading={updateCustomer.isPending} loadingLabel={t('common.saving')}>
+              {t('common.saveChanges')}
             </Button>
             <Button type="button" variant="neutral" onClick={editDialog.hide} disabled={updateCustomer.isPending}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
           {editError ? <div style={{ color: '#dc2626' }}>{editError}</div> : null}

@@ -1,5 +1,6 @@
 import { getActiveIntlLocale } from '@ie-orbit/i18n';
 import { SHOP_PRODUCT_CATEGORIES, type ShopOrder, type ShopProduct } from '@ie-orbit/sdk';
+import type { TFunction } from 'i18next';
 import { colors } from '../../theme/tokens';
 
 const NONE = '__none__';
@@ -148,34 +149,77 @@ export function formatShopDateTime(iso?: string | null): string {
   });
 }
 
-export function shopReturnMethodLabel(method?: string | null): string {
+const RETURN_METHOD_FALLBACK: Record<string, string> = {
+  dropoff: 'Drop off at shop',
+  reverse_pickup: 'Pickup requested',
+  instant_pickup: 'Instant pickup',
+  in_store: 'In store',
+};
+
+export function shopReturnMethodLabel(method?: string | null, t?: TFunction): string {
   const value = String(method || '').toLowerCase();
-  if (value === 'dropoff') return 'Drop off at shop';
-  if (value === 'reverse_pickup') return 'Pickup requested';
-  if (value === 'instant_pickup') return 'Instant pickup';
-  if (value === 'in_store') return 'In store';
-  return '';
+  const fallback = RETURN_METHOD_FALLBACK[value];
+  if (!fallback) return '';
+  return t ? t(`customerApp.returns.method.${value}`, { defaultValue: fallback }) : fallback;
 }
 
-/** Customer-facing status for online return logistics. */
-export function shopReturnStatusLabel(item: {
+export type ShopReturnStatusKey =
+  | 'completed'
+  | 'declined'
+  | 'acceptFee'
+  | 'riderDispatched'
+  | 'pickupArranged'
+  | 'awaitingDropoff'
+  | 'awaitingInstant'
+  | 'awaitingPickup'
+  | 'pending';
+
+const RETURN_STATUS_FALLBACK: Record<ShopReturnStatusKey, string> = {
+  completed: 'Completed',
+  declined: 'Declined',
+  acceptFee: 'Accept pickup fee',
+  riderDispatched: 'Rider dispatched',
+  pickupArranged: 'Pickup arranged',
+  awaitingDropoff: 'Awaiting drop-off',
+  awaitingInstant: 'Awaiting instant pickup',
+  awaitingPickup: 'Awaiting pickup',
+  pending: 'Pending',
+};
+
+/** Language-independent key for the customer-facing return status; null for unknown raw statuses. */
+export function shopReturnStatusKey(item: {
   status?: string | null;
   return_method?: string | null;
   pickup_arranged_at?: string | null;
-}): string {
+}): ShopReturnStatusKey | null {
   const status = String(item.status || '').toLowerCase();
   const method = String(item.return_method || '').toLowerCase();
-  if (status === 'completed') return 'Completed';
-  if (status === 'rejected') return 'Declined';
-  if (status === 'awaiting_customer') return 'Accept pickup fee';
+  if (status === 'completed') return 'completed';
+  if (status === 'rejected') return 'declined';
+  if (status === 'awaiting_customer') return 'acceptFee';
   if (status === 'approved' || item.pickup_arranged_at) {
-    return method === 'instant_pickup' ? 'Rider dispatched' : 'Pickup arranged';
+    return method === 'instant_pickup' ? 'riderDispatched' : 'pickupArranged';
   }
-  if (method === 'dropoff') return 'Awaiting drop-off';
-  if (method === 'instant_pickup') return 'Awaiting instant pickup';
-  if (method === 'reverse_pickup') return 'Awaiting pickup';
-  if (status === 'pending') return 'Pending';
-  return status || 'Pending';
+  if (method === 'dropoff') return 'awaitingDropoff';
+  if (method === 'instant_pickup') return 'awaitingInstant';
+  if (method === 'reverse_pickup') return 'awaitingPickup';
+  if (status === 'pending' || !status) return 'pending';
+  return null;
+}
+
+/** Customer-facing status for online return logistics. */
+export function shopReturnStatusLabel(
+  item: {
+    status?: string | null;
+    return_method?: string | null;
+    pickup_arranged_at?: string | null;
+  },
+  t?: TFunction,
+): string {
+  const key = shopReturnStatusKey(item);
+  if (!key) return String(item.status || '').toLowerCase();
+  const fallback = RETURN_STATUS_FALLBACK[key];
+  return t ? t(`customerApp.returns.status.${key}`, { defaultValue: fallback }) : fallback;
 }
 
 /** True when the order has a mapped delivery pin suitable for instant return pickup. */

@@ -488,26 +488,6 @@
   animation-delay: 140ms;
 }
 
-.public-about-hero__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 10px;
-  animation: public-about-hero-rise 950ms ease both;
-  animation-delay: 200ms;
-}
-
-.public-about-hero__actions .button.neutral {
-  background: transparent;
-  color: #f8fafc;
-  border-color: rgba(248, 250, 252, 0.35);
-}
-
-.public-about-hero__actions .button.neutral:hover {
-  background: rgba(248, 250, 252, 0.08);
-  border-color: rgba(248, 250, 252, 0.55);
-}
-
 @keyframes public-about-hero-rise {
   from {
     opacity: 0;
@@ -566,8 +546,7 @@
 
   .public-about-hero__brand,
   .public-about-hero__title,
-  .public-about-hero__lead,
-  .public-about-hero__actions {
+  .public-about-hero__lead {
     animation: none;
   }
 }

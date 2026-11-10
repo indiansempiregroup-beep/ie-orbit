@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import type { ShopDeliveryLive, ShopReturnPickupLive } from '@ie-orbit/sdk';
 import { colors, typography } from '../../theme/tokens';
@@ -9,15 +10,18 @@ import { deliveryMapPoints } from './deliveryMapPoints';
 type Props = { live: ShopDeliveryLive | ShopReturnPickupLive; primary: string };
 
 export function DeliveryTrackerMap({ live, primary }: Props) {
+  const { t } = useTranslation();
   const mapRef = useRef<MapView | null>(null);
   const { pickup, rider, drop, trail, points, center } = deliveryMapPoints(live);
   const signature = points.map((point) => `${point.latitude},${point.longitude}`).join('|');
   const isReturnPickup = String(live.delivery_method || '').toLowerCase() === 'instant_pickup';
-  const pickupTitle = isReturnPickup ? 'Your address' : 'Shop';
-  const dropTitle = isReturnPickup ? 'Shop' : 'Your address';
+  const yourAddress = t('customerApp.returns.detail.yourAddress');
+  const shopLabel = t('customerApp.returns.detail.shop');
+  const pickupTitle = isReturnPickup ? yourAddress : shopLabel;
+  const dropTitle = isReturnPickup ? shopLabel : yourAddress;
   const pickupLabel = live.pickup?.address || pickupTitle;
-  const dropLabel = live.drop?.address || (isReturnPickup ? 'Shop' : 'Delivery address');
-  const riderName = live.rider?.name || 'Rider';
+  const dropLabel = live.drop?.address || (isReturnPickup ? shopLabel : t('customerApp.orderDetail.deliveryAddress'));
+  const riderName = live.rider?.name || t('customerApp.returns.detail.rider');
 
   useEffect(() => {
     if (!mapRef.current || !points.length) return;
@@ -36,7 +40,7 @@ export function DeliveryTrackerMap({ live, primary }: Props) {
   if (!center) {
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackText}>Live GPS will appear here when the rider starts sharing location.</Text>
+        <Text style={styles.fallbackText}>{t('customerApp.deliveryTracker.livePending')}</Text>
       </View>
     );
   }

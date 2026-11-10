@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { colors, spacing } from '../../theme/tokens';
 import {
   DELIVERY_MAP_COLORS,
@@ -26,6 +27,7 @@ function LegendRow({ color, label, value }: { color: string; label: string; valu
 }
 
 export function DeliveryMapLegend({ delivery }: Props) {
+  const { t } = useTranslation();
   const { pickup, drop, rider } = deliveryMapGeometry(delivery);
   if (!pickup && !drop) return null;
   const returnPickup = isReturnPickupLive(delivery);
@@ -34,21 +36,29 @@ export function DeliveryMapLegend({ delivery }: Props) {
       {pickup ? (
         <LegendRow
           color={DELIVERY_MAP_COLORS.pickup}
-          label={returnPickup ? 'Collect from customer' : 'Pickup from'}
+          label={
+            returnPickup
+              ? t('shop.deliveryMap.collectFromCustomer')
+              : t('shop.deliveryMap.pickupFrom')
+          }
           value={deliveryPlaceLabel(delivery.pickup)}
         />
       ) : null}
       {rider ? (
         <LegendRow
           color={DELIVERY_MAP_COLORS.rider}
-          label="Rider"
-          value={`${delivery.rider?.name || 'Assigned rider'} · ${rider.latitude.toFixed(5)}, ${rider.longitude.toFixed(5)}`}
+          label={t('shop.orders.detail.rider')}
+          value={`${delivery.rider?.name || t('shop.orders.detail.assignedRider')} · ${rider.latitude.toFixed(5)}, ${rider.longitude.toFixed(5)}`}
         />
       ) : null}
       {drop ? (
         <LegendRow
           color={DELIVERY_MAP_COLORS.drop}
-          label={returnPickup ? 'Return to shop' : 'Deliver to'}
+          label={
+            returnPickup
+              ? t('customerApp.returns.detail.returnToShop')
+              : t('customerApp.cart.deliverTo')
+          }
           value={deliveryPlaceLabel(delivery.drop)}
         />
       ) : null}

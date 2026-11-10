@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import type { TFunction } from 'i18next';
 import type { CustomerAddress } from '@ie-orbit/sdk';
 
 export type AddressTypeKey = 'home' | 'work' | 'other';
@@ -20,6 +21,14 @@ export function addressTypeMeta(type?: string | null): AddressTypeMeta {
   const known = ADDRESS_TYPES.find((item) => item.key === key);
   if (known) return known;
   return { key: 'other', label: key ? key[0].toUpperCase() + key.slice(1) : 'Other', icon: 'map-pin' };
+}
+
+/** Localised label for an address type (home/work/other); custom types fall back to their own text. */
+export function addressTypeLabel(type: string | null | undefined, t: TFunction): string {
+  const meta = addressTypeMeta(type);
+  const raw = String(type || 'home').toLowerCase();
+  if (!ADDRESS_TYPES.some((item) => item.key === raw)) return meta.label;
+  return t(`customerApp.addresses.type.${meta.key}`, { defaultValue: meta.label });
 }
 
 /** Address parts ordered the way a courier reads them: door detail, street, city block, country. */

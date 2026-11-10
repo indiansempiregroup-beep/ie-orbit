@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Wallet } from 'lucide-react';
 import type { ShopSmartLookupLedgerEntry } from '@ie-orbit/sdk';
@@ -15,29 +17,30 @@ const FALLBACK_TOP_UP_OPTIONS_PAISE = [5000, 10000, 25000, 50000];
 
 type HistoryKind = 'money' | 'all' | 'credits' | 'debits';
 
-function formatLedgerAmount(row: ShopSmartLookupLedgerEntry) {
+function formatLedgerAmount(row: ShopSmartLookupLedgerEntry, t: TFunction) {
   const paise = row.charged_paise ?? 0;
   if (paise > 0) return `−₹${(paise / 100).toFixed(2)}`;
   if (paise < 0) return `+₹${(Math.abs(paise) / 100).toFixed(2)}`;
-  return 'Free';
+  return t('settings.smartLookup.free');
 }
 
-function ledgerLabel(row: ShopSmartLookupLedgerEntry) {
-  if (row.entry_type === 'credit' || row.source === 'wallet_top_up') return 'Wallet top-up';
-  if (row.source === 'gemini_automation') return 'Automation draft';
+function ledgerLabel(row: ShopSmartLookupLedgerEntry, t: TFunction) {
+  if (row.entry_type === 'credit' || row.source === 'wallet_top_up') return t('settings.smartLookup.ledgerTopUp');
+  if (row.source === 'gemini_automation') return t('settings.smartLookup.ledgerAutomation');
   if (row.source === 'gemini_invoice' || row.source === 'gemini_invoice_error') {
     const meta = row.metadata || {};
     const hint = row.code || String(meta.invoice_number || meta.supplier_name || '').trim();
-    if (row.source === 'gemini_invoice_error') return 'Invoice scan (failed)';
-    return hint ? `Invoice scan · ${hint}` : 'Invoice scan';
+    if (row.source === 'gemini_invoice_error') return t('settings.smartLookup.ledgerInvoiceFailed');
+    return hint ? t('settings.smartLookup.ledgerInvoiceHint', { hint }) : t('settings.smartLookup.ledgerInvoice');
   }
   if (row.entry_type === 'debit' || row.charged_paise > 0) {
-    return row.code ? `Smart fill · ${row.code}` : 'Smart fill';
+    return row.code ? t('settings.smartLookup.ledgerSmartFillCode', { code: row.code }) : t('settings.smartLookup.ledgerSmartFill');
   }
   return enrichLedgerSourceLabel(row.source);
 }
 
 export function SmartLookupSettingsPanel() {
+  const { t } = useTranslation();
   const client = useApiClient();
   const snackbar = useSnackbar();
   const workspace = useWorkspace();
@@ -137,11 +140,11 @@ export function SmartLookupSettingsPanel() {
   function openCustomTopUp() {
     const rupees = Number(customRupees);
     if (!Number.isFinite(rupees) || rupees < 1) {
-      snackbar.push('Enter at least ₹1.', 'error');
+      snackbar.push(t('settings.smartLookup.enterMin'), 'error');
       return;
     }
     if (rupees > 100_000) {
-      snackbar.push('Maximum top-up is ₹1,00,000.', 'error');
+      snackbar.push(t('settings.smartLookup.maxTopUp'), 'error');
       return;
     }
     setTopUpPaise(Math.round(rupees * 100));
@@ -186,11 +189,9 @@ export function SmartLookupSettingsPanel() {
               <Sparkles size={20} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 18 }}>AI wallet</h2>
+              <h2 style={{ margin: 0, fontSize: 18 }}>{t('settings.smartLookup.title')}</h2>
               <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 14, lineHeight: 1.45 }}>
-                Pack-photo fill, invoice scan, and automation drafts debit this prepaid wallet from the
-                tokens Gemini reports on that call (input, output, and thinking), using the platform token
-                rates. Free barcode catalogs stay free.
+                {t('settings.smartLookup.intro')}
               </p>
             </div>
           </div>
@@ -207,8 +208,7 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              Start or renew a <strong>ShopIE / Orbit Mart</strong> subscription on this page (above) to enable Smart
-              lookup and the prepaid wallet.
+              <Trans i18nKey="settings.smartLookup.needSubscription" components={{ strong: <strong /> }} />
             </div>
           ) : null}
 
@@ -224,7 +224,7 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              Smart lookup is disabled by the platform. Contact IE support if you need pack-photo fill.
+              {t('settings.smartLookup.disabledByPlatform')}
             </div>
           ) : null}
 
@@ -240,8 +240,7 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              Smart product lookup is not on your current plan. Ask your platform admin to enable it on the package
-              Features tab, or upgrade to a plan that includes it.
+              {t('settings.smartLookup.notOnPlan')}
             </div>
           ) : null}
 
@@ -257,7 +256,7 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              ShopIE is soft-locked. Renew above before changing Smart lookup or topping up the wallet.
+              {t('settings.smartLookup.softLocked')}
             </div>
           ) : null}
 
@@ -284,16 +283,16 @@ export function SmartLookupSettingsPanel() {
                   .mutateAsync({ enabled: event.target.checked })
                   .then(() =>
                     snackbar.push(
-                      event.target.checked ? 'Smart lookup on.' : 'Smart lookup off.',
+                      event.target.checked ? t('settings.smartLookup.toastOn') : t('settings.smartLookup.toastOff'),
                       'success',
                     ),
                   )
                   .catch((error) =>
-                    snackbar.push(getApiErrorMessage(error, "Couldn't update Smart lookup. Try again."), 'error'),
+                    snackbar.push(getApiErrorMessage(error, t('settings.smartLookup.updateFailed')), 'error'),
                   );
               }}
             />
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Enable pack-photo auto-fill</span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{t('settings.smartLookup.enableToggle')}</span>
           </label>
           ) : null}
 
@@ -305,10 +304,10 @@ export function SmartLookupSettingsPanel() {
             }}
           >
             {[
-              { label: 'Wallet', value: hasAiWallet ? `₹${balance.toFixed(2)}` : '—', icon: true },
-              { label: 'Free this month', value: hasAiWallet ? String(data?.month.free_lookups ?? 0) : '—' },
-              { label: 'Paid lookups', value: hasAiWallet ? String(data?.month.paid_lookups ?? 0) : '—' },
-              { label: 'Spent', value: hasAiWallet ? `₹${(data?.month.spent_inr ?? 0).toFixed(2)}` : '—' },
+              { label: t('settings.smartLookup.statWallet'), value: hasAiWallet ? `₹${balance.toFixed(2)}` : '—', icon: true },
+              { label: t('settings.smartLookup.statFree'), value: hasAiWallet ? String(data?.month.free_lookups ?? 0) : '—' },
+              { label: t('settings.smartLookup.statPaid'), value: hasAiWallet ? String(data?.month.paid_lookups ?? 0) : '—' },
+              { label: t('settings.smartLookup.statSpent'), value: hasAiWallet ? `₹${(data?.month.spent_inr ?? 0).toFixed(2)}` : '—' },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -342,12 +341,12 @@ export function SmartLookupSettingsPanel() {
                 fontSize: 13,
               }}
             >
-              Wallet is low. Top up below so pack photos, invoice scans, and automation drafts can continue.
+              {t('settings.smartLookup.lowBalance')}
             </div>
           ) : null}
 
           <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Top up with UPI</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t('settings.smartLookup.topUpTitle')}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {topUpOptions.map((paise) => (
                 <Button
@@ -365,7 +364,7 @@ export function SmartLookupSettingsPanel() {
               <input
                 value={customRupees}
                 onChange={(event) => setCustomRupees(event.target.value)}
-                placeholder="Custom ₹"
+                placeholder={t('settings.smartLookup.customPlaceholder')}
                 inputMode="decimal"
                 disabled={!canTopUp}
                 style={{
@@ -381,11 +380,11 @@ export function SmartLookupSettingsPanel() {
                 onClick={openCustomTopUp}
                 disabled={!canTopUp || !customRupees.trim()}
               >
-                Pay
+                {t('settings.smartLookup.pay')}
               </Button>
             </div>
             <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>
-              Pay → submit UTR/screenshot → IE confirms → wallet credits. Same claim flow as subscriptions.
+              {t('settings.smartLookup.payFlow')}
             </p>
           </div>
 
@@ -400,14 +399,14 @@ export function SmartLookupSettingsPanel() {
                   justifyContent: 'space-between',
                 }}
               >
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Wallet history</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{t('settings.smartLookup.historyTitle')}</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {(
                     [
-                      ['money', 'Money'],
-                      ['credits', 'Credits'],
-                      ['debits', 'Debits'],
-                      ['all', 'All'],
+                      ['money', t('settings.smartLookup.kindMoney')],
+                      ['credits', t('settings.smartLookup.kindCredits')],
+                      ['debits', t('settings.smartLookup.kindDebits')],
+                      ['all', t('common.all')],
                     ] as const
                   ).map(([value, label]) => (
                     <button
@@ -443,7 +442,7 @@ export function SmartLookupSettingsPanel() {
                     setHistoryPage(1);
                     setHistoryQ(event.target.value);
                   }}
-                  placeholder="Search barcode or text"
+                  placeholder={t('settings.smartLookup.searchPlaceholder')}
                   style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }}
                 />
                 <select
@@ -454,7 +453,7 @@ export function SmartLookupSettingsPanel() {
                   }}
                   style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e5e7eb' }}
                 >
-                  <option value="">All sources</option>
+                  <option value="">{t('settings.smartLookup.allSources')}</option>
                   {(history?.sources ?? ['wallet_top_up', 'gemini_vision']).map((source) => (
                     <option key={source} value={source}>
                       {enrichLedgerSourceLabel(source)}
@@ -462,7 +461,7 @@ export function SmartLookupSettingsPanel() {
                   ))}
                 </select>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#6b7280' }}>
-                  From
+                  {t('common.from')}
                   <input
                     type="date"
                     value={historyDateFrom}
@@ -474,7 +473,7 @@ export function SmartLookupSettingsPanel() {
                   />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: '#6b7280' }}>
-                  To
+                  {t('common.to')}
                   <input
                     type="date"
                     value={historyDateTo}
@@ -490,10 +489,10 @@ export function SmartLookupSettingsPanel() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {(
                   [
-                    [7, '7d'],
-                    [30, '30d'],
-                    [90, '90d'],
-                    ['', 'All time'],
+                    [7, t('settings.smartLookup.range7d')],
+                    [30, t('settings.smartLookup.range30d')],
+                    [90, t('settings.smartLookup.range90d')],
+                    ['', t('settings.smartLookup.rangeAll')],
                   ] as const
                 ).map(([value, label]) => (
                   <button
@@ -532,7 +531,7 @@ export function SmartLookupSettingsPanel() {
                       textDecoration: 'underline',
                     }}
                   >
-                    Clear filters
+                    {t('settings.smartLookup.clearFilters')}
                   </button>
                 ) : null}
               </div>
@@ -546,32 +545,32 @@ export function SmartLookupSettingsPanel() {
                   }}
                 >
                   <div style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff' }}>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>Credits</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>{t('settings.smartLookup.summaryCredits')}</div>
                     <div style={{ fontWeight: 700 }}>₹{history.summary.credits_inr.toFixed(2)}</div>
                   </div>
                   <div style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff' }}>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>Debits</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>{t('settings.smartLookup.summaryDebits')}</div>
                     <div style={{ fontWeight: 700 }}>₹{history.summary.debits_inr.toFixed(2)}</div>
                   </div>
                   <div style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb', background: '#fff' }}>
-                    <div style={{ fontSize: 11, color: '#6b7280' }}>Net</div>
+                    <div style={{ fontSize: 11, color: '#6b7280' }}>{t('settings.smartLookup.summaryNet')}</div>
                     <div style={{ fontWeight: 700 }}>₹{history.summary.net_inr.toFixed(2)}</div>
                   </div>
                 </div>
               ) : null}
 
               {historyQuery.isLoading ? (
-                <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>Loading history…</p>
+                <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>{t('settings.smartLookup.loadingHistory')}</p>
               ) : history?.items?.length ? (
                 <>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
                         <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-                          <th style={{ padding: 8 }}>When</th>
-                          <th style={{ padding: 8 }}>Entry</th>
-                          <th style={{ padding: 8 }}>Amount</th>
-                          <th style={{ padding: 8 }}>Balance after</th>
+                          <th style={{ padding: 8 }}>{t('settings.smartLookup.colWhen')}</th>
+                          <th style={{ padding: 8 }}>{t('settings.smartLookup.colEntry')}</th>
+                          <th style={{ padding: 8 }}>{t('settings.smartLookup.colAmount')}</th>
+                          <th style={{ padding: 8 }}>{t('settings.smartLookup.colBalanceAfter')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -580,7 +579,7 @@ export function SmartLookupSettingsPanel() {
                             <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
                               {new Date(row.created_at).toLocaleString()}
                             </td>
-                            <td style={{ padding: 8 }}>{ledgerLabel(row)}</td>
+                            <td style={{ padding: 8 }}>{ledgerLabel(row, t)}</td>
                             <td
                               style={{
                                 padding: 8,
@@ -593,7 +592,7 @@ export function SmartLookupSettingsPanel() {
                                 fontWeight: 600,
                               }}
                             >
-                              {formatLedgerAmount(row)}
+                              {formatLedgerAmount(row, t)}
                             </td>
                             <td style={{ padding: 8 }}>
                               {row.balance_after_paise == null
@@ -615,8 +614,7 @@ export function SmartLookupSettingsPanel() {
                     }}
                   >
                     <span style={{ fontSize: 12, color: '#9ca3af' }}>
-                      Page {history.page} of {history.total_pages ?? 1} · {history.total} entr
-                      {history.total === 1 ? 'y' : 'ies'}
+                      {t('settings.smartLookup.pageInfo', { page: history.page, pages: history.total_pages ?? 1, total: history.total })}
                     </span>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <Button
@@ -625,7 +623,7 @@ export function SmartLookupSettingsPanel() {
                         disabled={historyPage <= 1 || historyQuery.isFetching}
                         onClick={() => setHistoryPage((page) => Math.max(1, page - 1))}
                       >
-                        Previous
+                        {t('settings.smartLookup.previous')}
                       </Button>
                       <Button
                         type="button"
@@ -633,14 +631,14 @@ export function SmartLookupSettingsPanel() {
                         disabled={!history.has_more || historyQuery.isFetching}
                         onClick={() => setHistoryPage((page) => page + 1)}
                       >
-                        Next
+                        {t('settings.smartLookup.next')}
                       </Button>
                     </div>
                   </div>
                 </>
               ) : (
                 <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>
-                  No matching wallet movements. Top-ups and paid Smart fills will appear here.
+                  {t('settings.smartLookup.emptyHistory')}
                 </p>
               )}
             </div>
@@ -653,7 +651,7 @@ export function SmartLookupSettingsPanel() {
           amountPaise={topUpPaise}
           onClose={() => setTopUpPaise(null)}
           onClaimed={async () => {
-            snackbar.push('Top-up submitted — wallet credits after IE confirms.', 'success');
+            snackbar.push(t('settings.smartLookup.topUpSubmitted'), 'success');
             void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup', businessId] });
             void queryClient.invalidateQueries({ queryKey: ['shop-smart-lookup-history', businessId] });
           }}

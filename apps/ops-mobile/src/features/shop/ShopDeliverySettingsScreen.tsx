@@ -1,4 +1,6 @@
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { ActivityIndicator, Pressable, Share, StyleSheet, Switch, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,22 +18,26 @@ import { getApiBaseUrl } from '../../config/apiBaseUrl';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 
-const PROVIDER_OPTIONS = [
-  { value: 'mock', label: 'Demo provider (no real rider)' },
-  { value: 'porter', label: 'Porter' },
-  { value: 'shiprocket_quick', label: 'Shiprocket Quick' },
-];
+function providerOptions(t: TFunction) {
+  return [
+    { value: 'mock', label: t('shop.deliverySettings.providerMock') },
+    { value: 'porter', label: 'Porter' },
+    { value: 'shiprocket_quick', label: 'Shiprocket Quick' },
+  ];
+}
 
 const SHIPROCKET_BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
 
-const BEARER_OPTIONS = [
-  { value: 'customer', label: 'Customer pays the live fee' },
-  { value: 'merchant', label: 'Shop pays (free delivery)' },
-  { value: 'split', label: 'Split — shop absorbs up to a cap' },
-];
+function bearerOptions(t: TFunction) {
+  return [
+    { value: 'customer', label: t('shop.deliverySettings.bearerCustomer') },
+    { value: 'merchant', label: t('shop.deliverySettings.bearerMerchant') },
+    { value: 'split', label: t('shop.deliverySettings.bearerSplit') },
+  ];
+}
 
-function providerLabel(provider: string): string {
-  return PROVIDER_OPTIONS.find((option) => option.value === provider)?.label ?? provider;
+function providerLabel(provider: string, t: TFunction): string {
+  return providerOptions(t).find((option) => option.value === provider)?.label ?? provider;
 }
 
 /** The API returns saved secrets as bullets, never the real value. */
@@ -40,6 +46,7 @@ function isMasked(value: unknown): boolean {
 }
 
 export function ShopDeliverySettingsScreen() {
+  const { t } = useTranslation();
   const client = useOpsClient();
   const toast = useToast();
   const { businessId } = useWorkspace();
@@ -88,11 +95,11 @@ export function ShopDeliverySettingsScreen() {
         webhook_secret: isMasked(config.webhook_secret),
       });
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Unable to load delivery settings.'));
+      setError(getApiErrorMessage(err, t('opsApp.shop.deliverySettings.loadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [client, businessId]);
+  }, [client, businessId, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -111,7 +118,7 @@ export function ShopDeliverySettingsScreen() {
     try {
       await Share.share({ message: webhookUrl });
     } catch {
-      toast.push('Unable to share the webhook URL.', 'error');
+      toast.push(t('opsApp.shop.deliverySettings.shareFailed'), 'error');
     }
   }
 
@@ -143,10 +150,10 @@ export function ShopDeliverySettingsScreen() {
         cod_allowed_for_instant_delivery: codAllowedForInstant,
         delivery_integration: integration,
       });
-      toast.push('Instant delivery settings saved.', 'success');
+      toast.push(t('shop.deliverySettings.toastSaved'), 'success');
       await load();
     } catch (err) {
-      const message = getApiErrorMessage(err, "Couldn't save delivery settings. Try again.");
+      const message = getApiErrorMessage(err, t('shop.deliverySettings.errSave'));
       setError(message);
       toast.push(message, 'error');
     } finally {
@@ -162,7 +169,7 @@ export function ShopDeliverySettingsScreen() {
       onRefresh={onRefresh}
       footer={
         <Button
-          label={saving ? 'Saving…' : 'Save delivery settings'}
+          label={saving ? t('common.saving') : t('shop.deliverySettings.saveSettings')}
           loading={saving}
           fullWidth
           size="lg"
@@ -172,8 +179,8 @@ export function ShopDeliverySettingsScreen() {
     >
       <FormHero
         icon="truck"
-        title="Instant delivery"
-        subtitle="Connect your own Porter or Shiprocket Quick account. Orbit Mart quotes the customer at checkout and books a rider when you dispatch a packed order."
+        title={t('shop.deliverySettings.title')}
+        subtitle={t('shop.deliverySettings.intro')}
       />
 
       {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
@@ -182,9 +189,9 @@ export function ShopDeliverySettingsScreen() {
       <View style={styles.card}>
         <View style={styles.switchRow}>
           <View style={styles.switchCopy}>
-            <Text style={styles.switchLabel}>Enable instant delivery</Text>
+            <Text style={styles.switchLabel}>{t('shop.deliverySettings.enableTitle')}</Text>
             <Text style={styles.switchHint}>
-              Your store address needs a map pin before this can be turned on.
+              {t('shop.deliverySettings.enableHint')}
             </Text>
           </View>
           <Switch
@@ -195,9 +202,9 @@ export function ShopDeliverySettingsScreen() {
         </View>
         <View style={[styles.switchRow, { marginTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md }]}>
           <View style={styles.switchCopy}>
-            <Text style={styles.switchLabel}>Allow COD for instant orders</Text>
+            <Text style={styles.switchLabel}>{t('shop.deliverySettings.codTitle')}</Text>
             <Text style={styles.switchHint}>
-              Off = customers choosing Porter or Shiprocket Quick must pay online. Standard delivery still uses Payment settings.
+              {t('shop.deliverySettings.codHint')}
             </Text>
           </View>
           <Switch
@@ -210,18 +217,18 @@ export function ShopDeliverySettingsScreen() {
           <View style={styles.statusRow}>
             <Feather name="truck" size={14} color={colors.primary} />
             <Text style={styles.statusText}>
-              {providerLabel(provider)} ·{' '}
-              {BEARER_OPTIONS.find((option) => option.value === chargeBearer)?.label}
+              {providerLabel(provider, t)} ·{' '}
+              {bearerOptions(t).find((option) => option.value === chargeBearer)?.label}
             </Text>
           </View>
         ) : null}
       </View>
 
       <SelectField
-        label="Delivery provider"
+        label={t('shop.deliverySettings.provider')}
         required
         value={provider}
-        options={PROVIDER_OPTIONS}
+        options={providerOptions(t)}
         onChange={(next) => {
           setProvider(next);
           if (next === 'shiprocket_quick' && !baseUrl.trim()) {
@@ -233,7 +240,7 @@ export function ShopDeliverySettingsScreen() {
       {needsCredentials ? (
         <>
           <Input
-            label="API base URL"
+            label={t('shop.deliverySettings.apiBaseUrl')}
             optional
             value={baseUrl}
             onChangeText={setBaseUrl}
@@ -243,12 +250,12 @@ export function ShopDeliverySettingsScreen() {
             keyboardType="url"
             hint={
               provider === 'shiprocket_quick'
-                ? 'Leave blank to use https://apiv2.shiprocket.in/v1/external'
-                : 'Use the URL your provider account manager gave you.'
+                ? t('opsApp.shop.deliverySettings.baseUrlHintShiprocket')
+                : t('opsApp.shop.deliverySettings.baseUrlHintOther')
             }
           />
           <Input
-            label={provider === 'porter' ? 'Porter API key' : 'API token'}
+            label={provider === 'porter' ? t('shop.deliverySettings.porterApiKey') : t('shop.deliverySettings.apiToken')}
             required={provider === 'porter' && !storedSecrets.api_key}
             optional={provider !== 'porter'}
             value={apiKey}
@@ -256,25 +263,19 @@ export function ShopDeliverySettingsScreen() {
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder={storedSecrets.api_key ? 'Saved' : 'Paste the key'}
-            hint={storedSecrets.api_key ? 'Saved — leave blank to keep the current key.' : undefined}
+            placeholder={storedSecrets.api_key ? t('opsApp.shop.deliverySettings.saved') : t('opsApp.shop.deliverySettings.pasteKey')}
+            hint={storedSecrets.api_key ? t('opsApp.shop.deliverySettings.keepKey') : undefined}
           />
           {provider === 'shiprocket_quick' ? (
             <>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>After Shiprocket KYC</Text>
+                <Text style={styles.cardTitle}>{t('opsApp.shop.deliverySettings.afterKyc')}</Text>
                 <Text style={styles.cardHint}>
-                  1. In Shiprocket go to Settings → API → Configure → Create an API User. Use an
-                  email that is different from your dashboard login.{'\n'}
-                  2. Under Settings → Pickup, add the shop address. The nickname must match Pickup
-                  location name below (usually Primary).{'\n'}
-                  3. Paste that API user email and password here, then save.{'\n'}
-                  4. Turn on Allow Deliver now for the matching delivery zone.{'\n'}
-                  5. Paste the webhook URL below into Shiprocket if they give you a webhook field.
+                  {`1. ${t('shop.deliverySettings.kycStep1')}\n2. ${t('shop.deliverySettings.kycStep2')}\n3. ${t('shop.deliverySettings.kycStep3')}\n4. ${t('shop.deliverySettings.kycStep4')}\n5. ${t('opsApp.shop.deliverySettings.kycStep5')}`}
                 </Text>
               </View>
               <Input
-                label="API user email"
+                label={t('shop.deliverySettings.apiUserEmail')}
                 required
                 value={email}
                 onChangeText={setEmail}
@@ -283,28 +284,32 @@ export function ShopDeliverySettingsScreen() {
                 keyboardType="email-address"
               />
               <Input
-                label="API user password"
+                label={t('shop.deliverySettings.apiUserPassword')}
                 required={!storedSecrets.password}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
                 autoCapitalize="none"
-                placeholder={storedSecrets.password ? 'Saved' : 'Paste the password'}
+                placeholder={
+                  storedSecrets.password
+                    ? t('opsApp.shop.deliverySettings.saved')
+                    : t('opsApp.shop.deliverySettings.pastePassword')
+                }
                 hint={
                   storedSecrets.password
-                    ? 'Saved — leave blank to keep the current password.'
+                    ? t('opsApp.shop.deliverySettings.keepPassword')
                     : undefined
                 }
               />
               <Input
-                label="Pickup location name"
+                label={t('shop.deliverySettings.pickupLocationName')}
                 required
                 value={pickupLocation}
                 onChangeText={setPickupLocation}
-                hint="Must match the nickname in Shiprocket Settings → Pickup."
+                hint={t('opsApp.shop.deliverySettings.pickupHint')}
               />
               <Input
-                label="Default parcel weight (kg)"
+                label={t('shop.deliverySettings.parcelWeight')}
                 optional
                 value={parcelWeight}
                 onChangeText={setParcelWeight}
@@ -313,27 +318,31 @@ export function ShopDeliverySettingsScreen() {
             </>
           ) : null}
           <Input
-            label="Webhook signing secret"
+            label={t('shop.deliverySettings.webhookSecret')}
             optional
             value={webhookSecret}
             onChangeText={setWebhookSecret}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder={storedSecrets.webhook_secret ? 'Saved' : 'Paste the signing secret'}
+            placeholder={
+              storedSecrets.webhook_secret
+                ? t('opsApp.shop.deliverySettings.saved')
+                : t('opsApp.shop.deliverySettings.pasteSecret')
+            }
             hint={
               storedSecrets.webhook_secret
-                ? 'Saved — leave blank to keep the current secret.'
-                : 'Status updates without a valid signature are rejected.'
+                ? t('opsApp.shop.deliverySettings.keepSecret')
+                : t('opsApp.shop.deliverySettings.invalidSignature')
             }
           />
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Webhook URL</Text>
+            <Text style={styles.cardTitle}>{t('shop.deliverySettings.webhookUrl')}</Text>
             <Text style={styles.cardHint}>
-              Paste this into your provider dashboard so rider status reaches Orbit Mart live.
+              {t('opsApp.shop.deliverySettings.webhookCardHint')}
             </Text>
             <Text style={styles.mono} selectable>
-              {webhookUrl || 'Select a business to see the URL'}
+              {webhookUrl || t('opsApp.shop.deliverySettings.selectBusiness')}
             </Text>
             {webhookUrl ? (
               <Pressable
@@ -343,7 +352,7 @@ export function ShopDeliverySettingsScreen() {
                 hitSlop={6}
               >
                 <Feather name="share-2" size={14} color={colors.primary} />
-                <Text style={styles.shareText}>Share URL</Text>
+                <Text style={styles.shareText}>{t('opsApp.shop.deliverySettings.shareUrl')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -351,28 +360,28 @@ export function ShopDeliverySettingsScreen() {
       ) : null}
 
       <SelectField
-        label="Who pays the delivery fee?"
+        label={t('shop.deliverySettings.chargeBearer')}
         required
         value={chargeBearer}
-        options={BEARER_OPTIONS}
+        options={bearerOptions(t)}
         onChange={setChargeBearer}
       />
       <Input
-        label="Free delivery above order value"
+        label={t('shop.deliverySettings.freeAbove')}
         optional
         value={freeMin}
         onChangeText={setFreeMin}
         keyboardType="decimal-pad"
-        hint="0 turns this off. The shop absorbs the fee above this order value."
+        hint={t('opsApp.shop.deliverySettings.freeAboveHint')}
       />
       {chargeBearer === 'split' ? (
         <Input
-          label="Shop absorbs up to"
+          label={t('shop.deliverySettings.absorbUpTo')}
           optional
           value={absorbCap}
           onChangeText={setAbsorbCap}
           keyboardType="decimal-pad"
-          hint="Anything above this cap is added to the customer's bill."
+          hint={t('opsApp.shop.deliverySettings.absorbHint')}
         />
       ) : null}
     </FormScreen>

@@ -1,4 +1,5 @@
 import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   FlatList,
@@ -32,6 +33,7 @@ import {
   formatMoney,
   formatVoucherDate,
   formatVoucherDateTime,
+  statusText,
   supplierLabel,
 } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
@@ -47,6 +49,7 @@ function isPending(status?: string) {
 }
 
 export function ShopBooksChequesScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
@@ -98,7 +101,7 @@ export function ShopBooksChequesScreen() {
             }
           }}
           accessibilityRole="button"
-          accessibilityLabel={showForm ? 'Close' : 'New cheque'}
+          accessibilityLabel={showForm ? t('opsApp.shop.common.close') : t('opsApp.shop.cheques.newCheque')}
           hitSlop={8}
           style={styles.headerBtn}
         >
@@ -106,7 +109,7 @@ export function ShopBooksChequesScreen() {
         </Pressable>
       ),
     });
-  }, [navigation, showForm, closeForm, filter]);
+  }, [navigation, showForm, closeForm, filter, t]);
 
   const load = useCallback(async () => {
     if (!businessId || !client) return;
@@ -124,11 +127,11 @@ export function ShopBooksChequesScreen() {
       setSuppliers(suppliersRes.data ?? []);
       setAccounts(accountsRes.data ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load cheques');
+      setError(err instanceof Error ? err.message : t('opsApp.shop.cheques.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,28 +166,28 @@ export function ShopBooksChequesScreen() {
   const partyOptions = useMemo(() => {
     if (direction === 'in') {
       return [
-        { value: '', label: 'No customer' },
+        { value: '', label: t('opsApp.shop.common.noCustomer') },
         ...customers.map((c) => ({ value: c.id, label: customerLabel(c) })),
       ];
     }
     return [
-      { value: '', label: 'No supplier' },
+      { value: '', label: t('opsApp.shop.common.noSupplier') },
       ...suppliers.map((s) => ({ value: s.id, label: supplierLabel(s) })),
     ];
-  }, [customers, suppliers, direction]);
+  }, [customers, suppliers, direction, t]);
 
   const accountOptions = useMemo(
     () => [
-      { value: '', label: 'No account' },
+      { value: '', label: t('opsApp.shop.cheques.noAccount') },
       ...accounts.map((a) => ({ value: a.id, label: a.name })),
     ],
-    [accounts],
+    [accounts, t],
   );
 
   async function submit() {
     if (!client || !businessId) return;
     if (!chequeNumber.trim() || !(Number(amount) > 0)) {
-      toast.push('Enter cheque number and amount', 'error');
+      toast.push(t('opsApp.shop.cheques.enterNumberAmount'), 'error');
       return;
     }
     setBusy(true);
@@ -201,11 +204,11 @@ export function ShopBooksChequesScreen() {
         cash_account_id: cashAccountId || null,
         notes: notes.trim() || undefined,
       });
-      toast.push('Cheque recorded', 'success');
+      toast.push(t('opsApp.shop.cheques.recorded'), 'success');
       closeForm();
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't record this cheque. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.cheques.recordFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -218,10 +221,10 @@ export function ShopBooksChequesScreen() {
       await client.shop.clearCheque(cheque.id, {
         cash_account_id: cheque.cash_account || cashAccountId || null,
       });
-      toast.push('Cheque cleared', 'success');
+      toast.push(t('opsApp.shop.cheques.cleared'), 'success');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : 'Unable to clear cheque', 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.cheques.clearFailed'), 'error');
     } finally {
       setActionId(null);
     }
@@ -232,10 +235,10 @@ export function ShopBooksChequesScreen() {
     setActionId(cheque.id);
     try {
       await client.shop.bounceCheque(cheque.id);
-      toast.push('Cheque marked bounced', 'success');
+      toast.push(t('opsApp.shop.cheques.bounced'), 'success');
       await load();
     } catch (err) {
-      toast.push(err instanceof Error ? err.message : "Couldn't mark this cheque as bounced. Try again.", 'error');
+      toast.push(err instanceof Error ? err.message : t('opsApp.shop.cheques.bounceFailed'), 'error');
     } finally {
       setActionId(null);
     }
@@ -246,7 +249,7 @@ export function ShopBooksChequesScreen() {
       <FormScreen
         footer={
           <Button
-            label={busy ? 'Saving…' : 'Record cheque'}
+            label={busy ? t('common.saving') : t('opsApp.shop.cheques.record')}
             loading={busy}
             fullWidth
             size="lg"
@@ -254,13 +257,13 @@ export function ShopBooksChequesScreen() {
           />
         }
       >
-        <Text style={styles.formTitle}>New cheque</Text>
+        <Text style={styles.formTitle}>{t('opsApp.shop.cheques.newCheque')}</Text>
         <View style={styles.chips}>
-          <Chip label="Cheque in" active={direction === 'in'} onPress={() => setDirection('in')} />
-          <Chip label="Cheque out" active={direction === 'out'} onPress={() => setDirection('out')} />
+          <Chip label={t('opsApp.shop.cheques.chequeIn')} active={direction === 'in'} onPress={() => setDirection('in')} />
+          <Chip label={t('opsApp.shop.cheques.chequeOut')} active={direction === 'out'} onPress={() => setDirection('out')} />
         </View>
         <SelectField
-          label={direction === 'in' ? 'Customer' : 'Supplier'}
+          label={direction === 'in' ? t('opsApp.shop.common.customer') : t('opsApp.shop.common.supplier')}
           required
           value={partyId}
           options={partyOptions}
@@ -268,40 +271,40 @@ export function ShopBooksChequesScreen() {
           searchable
         />
         <Input
-          label="Cheque number"
+          label={t('opsApp.shop.cheques.number')}
           required
           value={chequeNumber}
           onChangeText={setChequeNumber}
-          placeholder="Cheque #"
+          placeholder={t('opsApp.shop.cheques.numberPlaceholder')}
         />
         <Input
-          label="Amount"
+          label={t('opsApp.shop.common.amount')}
           required
           value={amount}
           onChangeText={(value) => setAmount(value.replace(/[^0-9.]/g, ''))}
           keyboardType="decimal-pad"
         />
         <Input
-          label="Bank"
+          label={t('opsApp.shop.cheques.bank')}
           optional
           value={bankName}
           onChangeText={setBankName}
-          placeholder="Bank name"
+          placeholder={t('opsApp.shop.cheques.bankPlaceholder')}
         />
-        <DateField label="Due date" optional value={dueDate} onChange={setDueDate} />
+        <DateField label={t('opsApp.shop.cheques.dueDate')} optional value={dueDate} onChange={setDueDate} />
         <SelectField
-          label="Cash / bank account"
+          label={t('opsApp.shop.cheques.account')}
           required
           value={cashAccountId}
           options={accountOptions}
           onChange={setCashAccountId}
         />
         <Input
-          label="Notes"
+          label={t('opsApp.shop.common.notes')}
           optional
           value={notes}
           onChangeText={setNotes}
-          placeholder="Notes"
+          placeholder={t('opsApp.shop.common.notes')}
           multiline
         />
       </FormScreen>
@@ -312,16 +315,16 @@ export function ShopBooksChequesScreen() {
     <DesktopPage>
       <View style={[styles.screen, { paddingTop: spacing.md }]}>
         <View style={styles.chips}>
-          <Chip label="In" active={filter === 'in'} onPress={() => setFilter('in')} />
-          <Chip label="Out" active={filter === 'out'} onPress={() => setFilter('out')} />
+          <Chip label={t('opsApp.shop.cheques.in')} active={filter === 'in'} onPress={() => setFilter('in')} />
+          <Chip label={t('opsApp.shop.cheques.out')} active={filter === 'out'} onPress={() => setFilter('out')} />
         </View>
         <VoucherSummaryCards
           metrics={[
-            { label: 'Total', value: formatMoney(chequeSummary.total), hint: String(chequeSummary.count) },
-            { label: 'Pending', value: String(chequeSummary.pending), tone: 'due' },
+            { label: t('opsApp.shop.cheques.total'), value: formatMoney(chequeSummary.total), hint: String(chequeSummary.count) },
+            { label: t('opsApp.shop.cheques.pending'), value: String(chequeSummary.pending), tone: 'due' },
           ]}
         />
-        <SearchBar value={search} onChangeText={setSearch} placeholder="Search cheques" style={styles.search} />
+        <SearchBar value={search} onChangeText={setSearch} placeholder={t('opsApp.shop.cheques.search')} style={styles.search} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         <FlatList
@@ -341,20 +344,20 @@ export function ShopBooksChequesScreen() {
                 meta={[
                   party,
                   item.bank_name,
-                  item.due_date ? `Due ${formatVoucherDate(item.due_date)}` : '',
+                  item.due_date ? t('opsApp.shop.cheques.dueMeta', { date: formatVoucherDate(item.due_date) }) : '',
                   item.created_at ? formatVoucherDateTime(item.created_at, item.created_at) : '',
                 ]
                   .filter(Boolean)
                   .join(' · ')}
-                badge={item.status}
+                badge={statusText(item.status, t)}
                 badgeKind={pending ? 'due' : item.status.toLowerCase().includes('bounce') ? 'void' : 'paid'}
                 icon="credit-card"
                 iconTone={pending ? 'amber' : 'green'}
                 extraActions={
                   pending
                     ? [
-                        { label: acting ? '…' : 'Clear', onPress: () => void onClear(item) },
-                        { label: 'Bounce', onPress: () => void onBounce(item), destructive: true },
+                        { label: acting ? '…' : t('opsApp.shop.cheques.clear'), onPress: () => void onClear(item) },
+                        { label: t('opsApp.shop.cheques.bounce'), onPress: () => void onBounce(item), destructive: true },
                       ]
                     : undefined
                 }
@@ -365,9 +368,9 @@ export function ShopBooksChequesScreen() {
             !loading ? (
               <EmptyState
                 icon="credit-card"
-                title={`No cheque ${filter} records`}
-                message="Record incoming or outgoing cheques and clear or bounce them when settled."
-                actionLabel="New cheque"
+                title={filter === 'in' ? t('opsApp.shop.cheques.emptyIn') : t('opsApp.shop.cheques.emptyOut')}
+                message={t('opsApp.shop.cheques.emptyMessage')}
+                actionLabel={t('opsApp.shop.cheques.newCheque')}
                 onAction={() => {
                   setDirection(filter);
                   setShowForm(true);
