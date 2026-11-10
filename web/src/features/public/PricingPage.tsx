@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
 import { stripPlanProductPrefix } from '../../config/products';
-import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
+import { combinedPlanFeatureSections, isProPlan, planFeatureDisplay } from '../../config/planFeatures';
 import { PlanFeatureList } from './PlanFeatureList';
 import { PublicCtaBand } from './PublicCtaBand';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -395,6 +395,12 @@ function CombinedPlanGrid({
         const martPaise = tier.mart?.amount_paise ?? null;
         const combinedPaise =
           appointPaise != null && martPaise != null ? appointPaise + martPaise : null;
+        const sections = combinedPlanFeatureSections(
+          tier.appoint!,
+          appointPlans,
+          tier.mart!,
+          martPlans,
+        );
         return (
           <article
             key={tier.key}
@@ -415,12 +421,16 @@ function CombinedPlanGrid({
             </p>
             <div className="public-combined-plan-features">
               <div>
-                <p className="public-kicker">{t('public.plans.appointName')}</p>
-                <PlanFeatureList groups={planFeatureDisplay(tier.appoint!, appointPlans)} />
+                <h3 className="public-combined-plan-features__title">{t('public.plans.sharedName')}</h3>
+                <PlanFeatureList groups={sections.shared} />
               </div>
               <div>
-                <p className="public-kicker">{t('public.plans.martName')}</p>
-                <PlanFeatureList groups={planFeatureDisplay(tier.mart!, martPlans)} />
+                <h3 className="public-combined-plan-features__title">{t('public.plans.appointName')}</h3>
+                <PlanFeatureList groups={sections.appoint} />
+              </div>
+              <div>
+                <h3 className="public-combined-plan-features__title">{t('public.plans.martName')}</h3>
+                <PlanFeatureList groups={sections.mart} />
               </div>
             </div>
           </article>

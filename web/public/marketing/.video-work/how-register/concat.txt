@@ -1,0 +1,5 @@
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-register/intro-vo.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-register/step1-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-register/step2-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-register/step3-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-register/outro-vo.mp4'

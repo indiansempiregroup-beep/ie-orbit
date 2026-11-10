@@ -9,6 +9,7 @@ import { TenantOpsGuard } from './guards/TenantOpsGuard';
 import { PublicLayout } from './features/public/PublicLayout';
 import { AuthLayout } from './features/auth/AuthLayout';
 import { HostGate } from './components/HostGate';
+import { ScrollToTop } from './components/ScrollToTop';
 import { HomePage } from './features/public/HomePage';
 import { SeoRuntime } from './seo/SeoRuntime';
 
@@ -217,6 +218,7 @@ function PageFallback() {
 function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <SeoRuntime />
       <HostGate>
         <Suspense fallback={<PageFallback />}>

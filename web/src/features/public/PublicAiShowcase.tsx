@@ -13,7 +13,6 @@ type AiHighlight = {
   title: string;
   prompt: string;
   body: string;
-  meta: string;
   icon: LucideIcon;
   tone: 'blue' | 'peach' | 'yellow';
 };
@@ -28,7 +27,6 @@ export function PublicAiShowcase({ id = 'ai', showCta = false }: { id?: string; 
         title: t('public.ai.assistantTitle'),
         prompt: t('public.ai.assistantPrompt'),
         body: t('public.ai.assistantBody'),
-        meta: t('public.ai.assistantMeta'),
         icon: MessageSquareText,
         tone: 'blue',
       },
@@ -37,7 +35,6 @@ export function PublicAiShowcase({ id = 'ai', showCta = false }: { id?: string; 
         title: t('public.ai.autoTitle'),
         prompt: t('public.ai.autoPrompt'),
         body: t('public.ai.autoBody'),
-        meta: t('public.ai.autoMeta'),
         icon: Sparkles,
         tone: 'peach',
       },
@@ -46,7 +43,6 @@ export function PublicAiShowcase({ id = 'ai', showCta = false }: { id?: string; 
         title: t('public.ai.invoiceTitle'),
         prompt: t('public.ai.invoicePrompt'),
         body: t('public.ai.invoiceBody'),
-        meta: t('public.ai.invoiceMeta'),
         icon: ScanLine,
         tone: 'yellow',
       },
@@ -80,8 +76,7 @@ export function PublicAiShowcase({ id = 'ai', showCta = false }: { id?: string; 
                   <span>{t('public.ai.askOrbit')}</span>
                   {item.prompt}
                 </p>
-                <p>{item.body}</p>
-                <p className="public-ai-meta">{item.meta}</p>
+                <p className="public-ai-body">{item.body}</p>
               </article>
             );
           })}

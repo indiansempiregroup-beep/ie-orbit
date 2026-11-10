@@ -4004,10 +4004,10 @@
       "cookies": "Cookies",
       "appoint": "Orbit Appoint",
       "mart": "Orbit Mart",
-      "both": "Orbit Appoint + Mart"
+      "both": "Orbit Appoint + Orbit Mart"
     },
     "footer": {
-      "blurb": "Apps client en marque blanche pour les entreprises indiennes — Orbit Mart retail et Orbit Appoint réservations, sous votre marque.",
+      "blurb": "Apps client en marque blanche pour votre entreprise. Orbit Appoint pour les réservations et Orbit Mart pour le retail, sous votre marque.",
       "startWith": "Commencez par ce dont vous avez besoin",
       "appointTitle": "Réservations sans allers-retours",
       "martTitle": "Une boutique qui vous ressemble",
@@ -4015,6 +4015,7 @@
       "onDevices": "Sur iOS et Android",
       "onDevicesBody": "Dirigeants et équipes gèrent l’espace depuis le téléphone.",
       "product": "Produit",
+      "explore": "Explorer",
       "company": "Entreprise",
       "legal": "Légal",
       "copyright": "© {{year}} Indians Empire Technologies"
@@ -4619,7 +4620,8 @@
         "sharedCustomers": "Clients partagés dans un seul espace de travail",
         "noCard": "Aucune carte bancaire requise pour commencer"
       },
-      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (facturés par produit)"
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (facturés par produit)",
+      "sharedName": "Inclus dans les deux"
     },
     "features": {
       "createAccount": "Créer un compte",
@@ -4663,20 +4665,44 @@
         "benefitsLead": "Moins de créneaux manqués, moins de jeux de téléphone et une application client à l’image de votre marque.",
         "benefits": {
           "b1": {
-            "title": "Application de réservation en marque blanche",
-            "body": "Vos clients installent votre marque — pas une fiche IE Orbit générique — sur iOS et Android."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Customers get direct connectivity to your location with Google Maps directions inside your branded app."
           },
           "b2": {
-            "title": "Un calendrier partagé",
-            "body": "Fini les agendas papier et les discussions WhatsApp. Chacun voit qui est libre et ce qui est réservé."
+            "title": "Reward points that bring customers back",
+            "body": "End customers earn and redeem reward points so they book again instead of drifting to a competitor."
           },
           "b3": {
-            "title": "Des rappels efficaces",
-            "body": "Rappels par e-mail dans toutes les offres ; rappels WhatsApp avec Pro pour réduire les absences."
+            "title": "Staff-wise performance reports",
+            "body": "See performance by staff — bookings, revenue, and utilisation — so you know who is driving results."
           },
           "b4": {
-            "title": "Grandissez sans chaos",
-            "body": "Ajoutez un second bureau, les paiements, la BI complète et une application sans publicité en passant à Pro."
+            "title": "Your brand on iOS and Android",
+            "body": "Clients install your brand — not a generic IE Orbit listing — on iOS and Android."
+          },
+          "b5": {
+            "title": "Online booking with live staff availability",
+            "body": "Customers pick a real open slot; staff see the same calendar update instantly."
+          },
+          "b6": {
+            "title": "WhatsApp and email reminders that cut no-shows",
+            "body": "Email reminders on every plan; WhatsApp reminders on Pro so customers actually show up."
+          },
+          "b7": {
+            "title": "Collect reviews after every visit",
+            "body": "Turn happy visits into ratings that help the next customer trust and book."
+          },
+          "b8": {
+            "title": "In-app payments on Pro",
+            "body": "Take payment when they book so deposits and dues stay clear for the floor."
+          },
+          "b9": {
+            "title": "AI assistant for the day’s bookings",
+            "body": "Ask plain-language questions about the schedule and customers without digging through screens."
+          },
+          "b10": {
+            "title": "Automation Creator for follow-ups and offers",
+            "body": "On Pro, set rules for reminders and staff offer hints so the team stays consistent."
           }
         },
         "pricingTitle": "Tarifs d’Orbit Appoint",
@@ -4705,7 +4731,7 @@
           "f1": "Application client en marque blanche : vos acheteurs commandent sous votre marque",
           "f2": "Caisse, catalogue, commandes en ligne et retours avec Starter",
           "f3": "Livraison instantanée avec Porter/Shiprocket avec Pro",
-          "f4": "Journal de caisse avec Starter ; rapports GST, facture électronique, Grow et e-way avec Pro",
+          "f4": "Journal de caisse avec Starter ; rapports GST, facture électronique, Grow et ledger avec Pro",
           "f5": "Extraction de factures par IA avec Pro — photographiez la facture d’un fournisseur, vérifiez les lignes, puis ajoutez le stock",
           "f6": "Automation Creator avec Pro pour les règles d’anniversaire, d’occasion et VIP"
         },
@@ -4729,20 +4755,44 @@
         "benefitsLead": "Un seul espace de travail pour la caisse, la boutique en ligne et une comptabilité prête pour la GST.",
         "benefits": {
           "b1": {
-            "title": "Application boutique en marque blanche",
-            "body": "Les clients parcourent et commandent dans une application à l’image de votre magasin, pas d’une place de marché."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Shoppers get direct connectivity to your store with Google Maps directions inside your branded app."
           },
           "b2": {
-            "title": "Caisse et catalogue réunis",
-            "body": "Caisse, retours et commandes en ligne partagent les mêmes produits et la même liste de clients."
+            "title": "Reward points that bring shoppers back",
+            "body": "End customers earn and redeem reward points so they return to your store instead of buying elsewhere."
           },
           "b3": {
-            "title": "La GST quand vous en avez besoin",
-            "body": "Journal de caisse avec Starter. Rapports GST, facture électronique et e-way bill avec Pro."
+            "title": "Staff-wise sales reports",
+            "body": "Track sales and performance by staff so you can coach the floor and reward top sellers."
           },
           "b4": {
-            "title": "Livraison et marketing avec Pro",
-            "body": "Livraison instantanée avec Porter/Shiprocket et assistants Grow pour les promotions et les fiches produits."
+            "title": "Your store brand on iOS and Android",
+            "body": "Customers browse and order in an app that looks like your store, not a marketplace."
+          },
+          "b5": {
+            "title": "POS, catalog, and online orders in one place",
+            "body": "Walk-ins, returns, and app orders share the same products and customer list."
+          },
+          "b6": {
+            "title": "Instant Delivery with Porter or Shiprocket",
+            "body": "On Pro, hand off last-mile delivery from the order without a separate courier tool."
+          },
+          "b7": {
+            "title": "GST reports, e-invoice, and ledger",
+            "body": "Pull GST-ready books from the same workspace instead of rebuilding them in Excel."
+          },
+          "b8": {
+            "title": "Scan supplier bills with AI",
+            "body": "Photograph a vendor invoice, review the lines, then add stock without retyping."
+          },
+          "b9": {
+            "title": "Online coupons and Grow promos",
+            "body": "Run discount codes and marketing helpers so the shop app keeps selling between visits."
+          },
+          "b10": {
+            "title": "Barcode and smart product lookup",
+            "body": "Fill catalog details faster with barcode flow and AI pack photo lookup when needed."
           }
         },
         "pricingTitle": "Tarifs d’Orbit Mart",
@@ -4757,7 +4807,7 @@
         "pro": {
           "f1": "Tout ce qui est dans Starter",
           "f2": "Livraison instantanée avec Porter/Shiprocket",
-          "f3": "Rapports GST, facture électronique et e-way",
+          "f3": "Rapports GST, facture électronique et ledger",
           "f4": "Assistants marketing Grow",
           "f5": "Extraction de factures par IA",
           "f6": "Application client sans publicité"
@@ -4794,20 +4844,52 @@
         "benefitsLead": "Arrêtez de répartir réservations et vente entre des outils qui ne se parlent jamais.",
         "benefits": {
           "b1": {
-            "title": "Une application client à votre marque",
-            "body": "Réservez un service et achetez un produit sans quitter l’univers de votre marque."
+            "title": "One white-label app to book and shop",
+            "body": "Book a service and buy a product without leaving your brand experience."
           },
           "b2": {
-            "title": "Clients partagés",
-            "body": "Historique des visites, commandes en boutique et relances vivent dans la même fiche client."
+            "title": "Shared customers across bookings and retail",
+            "body": "Visit history, shop orders, and follow-ups live on the same customer record."
           },
           "b3": {
-            "title": "Vente croisée naturelle",
-            "body": "Proposez des produits à emporter après un service, ou réservez la prochaine visite depuis la boutique."
+            "title": "Cross-sell services and products naturally",
+            "body": "Offer take-home products after a service, or book the next visit from the shop flow."
           },
           "b4": {
-            "title": "Un essai, un seul circuit de facturation",
-            "body": "Essai Pro complet de {{days}} jours sur l’espace de travail, puis facturation UPI par offre produit."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Customers reach you for appointments and store visits with directions in your branded app."
+          },
+          "b5": {
+            "title": "Reward points across bookings and shopping",
+            "body": "End customers earn and redeem reward points on services and shop orders to stay loyal."
+          },
+          "b6": {
+            "title": "Staff-wise reports for services and retail",
+            "body": "See performance across bookings and sales so you manage one team with clear numbers."
+          },
+          "b7": {
+            "title": "Live calendars plus POS in one workspace",
+            "body": "The floor schedule and the counter share one login, one customer list, and one brand."
+          },
+          "b8": {
+            "title": "WhatsApp reminders and Instant Delivery",
+            "body": "Cut no-shows on appointments and hand off last-mile shop orders with Porter or Shiprocket."
+          },
+          "b9": {
+            "title": "GST reports, e-invoice, and ledger",
+            "body": "Pull GST-ready books from the same workspace instead of rebuilding them in Excel."
+          },
+          "b10": {
+            "title": "AI assistant, bill scan, and Automation Creator",
+            "body": "Ask about the day, scan supplier bills, and automate follow-ups across book and shop."
+          },
+          "b11": {
+            "title": "In-app payments, reviews, and online coupons",
+            "body": "Collect deposits and ratings on visits, then keep the shop selling with coupons and Grow promos."
+          },
+          "b12": {
+            "title": "Barcode catalog and smart product lookup",
+            "body": "Fill product details faster with barcode flow and AI pack photo lookup when needed."
           }
         },
         "pricingTitle": "Tarifs si vous utilisez les deux",
@@ -4822,7 +4904,7 @@
           "f1": "Orbit Appoint Pro {{price}}/mois + Orbit Mart Pro {{price}}/mois",
           "f2": "Tout ce qui est dans Starter",
           "f3": "Rappels WhatsApp, paiements et second bureau sur Appoint",
-          "f4": "Livraison instantanée, facture électronique GST/e-way et Grow sur Mart",
+          "f4": "Livraison instantanée, facture électronique GST, ledger et Grow sur Mart",
           "f5": "BI complète, Automation Creator et application client sans publicité"
         }
       }

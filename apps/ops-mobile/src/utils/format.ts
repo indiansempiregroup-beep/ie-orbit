@@ -234,7 +234,8 @@ export function getApiErrorMessage(
   context: AuthFormContext = 'generic',
 ): string {
   if (isNetworkFailure(error)) {
-    return `Cannot reach API at ${getApiBaseUrl()}. Check that the device is on the same Wi‑Fi, the backend is running, and EXPO_PUBLIC_API_BASE_URL uses your computer’s LAN IP (not localhost) when testing on a phone.`;
+    const message = 'Cannot reach the server. Check your network and try again.';
+    return __DEV__ ? `${message} (${getApiBaseUrl()})` : message;
   }
     if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);

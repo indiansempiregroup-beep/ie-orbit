@@ -1,9 +1,9 @@
 import { createApiClient } from '@ie-orbit/sdk';
 import { getApiBaseUrl } from '../config/apiBaseUrl';
 
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
-/** Fail hung device requests quickly so screens stop spinning forever. */
+/** Fail hung device requests so screens stop spinning forever. */
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -20,9 +20,8 @@ async function fetchWithTimeout(
       (err instanceof Error && (err.name === 'AbortError' || /aborted|timed out/i.test(err.message))) ||
       (typeof err === 'object' && err !== null && 'name' in err && (err as { name?: string }).name === 'AbortError');
     if (aborted) {
-      throw new Error(
-        `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. Check API at ${getApiBaseUrl()}.`,
-      );
+      const message = 'Connection timed out. Check your network and try again.';
+      throw new Error(__DEV__ ? `${message} (${getApiBaseUrl()})` : message);
     }
     throw err;
   } finally {

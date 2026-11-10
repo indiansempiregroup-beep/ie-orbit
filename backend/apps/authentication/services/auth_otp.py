@@ -6,17 +6,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.conf import settings
-from django.core.mail import send_mail
 from django.db.models import Q
 from rest_framework import exceptions
 
 from apps.authentication.constants import DEFAULT_CUSTOMER_ROLE_CODE, DEFAULT_OWNER_ROLE_CODE
-from apps.authentication.emails.otp_email import build_login_otp_email
 from apps.authentication.models import OtpPurpose, User, UserStatus
 from apps.authentication.repositories.users import UserRepository
 from apps.authentication.services.authentication import AuthenticationService, LoginResult
 from apps.authentication.services.otp import OtpService
 from apps.authentication.services.roles import RoleService
+from apps.authentication.tasks import send_login_otp_email_task
 from apps.businesses.models import Business
 from apps.customers.services.contact import format_contact_phone
 from apps.notifications.services.whatsapp_catalog import catalog_by_code
@@ -241,21 +240,18 @@ class AuthOtpService:
         if channel == "email":
             email = identifier.strip().lower()
             expiry = int(settings.IAM_SETTINGS["OTP_EXPIRY_MINUTES"])
-            content = build_login_otp_email(email=email, code=code, expiry_minutes=expiry)
+            # Queue SMTP off the request path so /otp/send stays fast under slow mail hosts.
             try:
-                send_mail(
-                    subject=content.subject,
-                    message=content.plain_text,
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[email],
-                    html_message=content.html,
-                    fail_silently=False,
-                )
+                send_login_otp_email_task.delay(email, code, expiry)
             except Exception:
-                logger.exception("Failed to send login OTP to %s", email)
-                raise exceptions.ValidationError(
-                    {"identifier": "Unable to send sign-in code. Try again shortly."}
-                ) from None
+                logger.exception("Failed to queue login OTP email for %s; sending inline", email)
+                try:
+                    send_login_otp_email_task(email, code, expiry)
+                except Exception:
+                    logger.exception("Failed to send login OTP to %s", email)
+                    raise exceptions.ValidationError(
+                        {"identifier": "Unable to send sign-in code. Try again shortly."}
+                    ) from None
         elif channel == "whatsapp":
             business = self.resolve_business(tenant_slug=tenant_slug, business_code=business_code)
             if business is None and client == "ops":

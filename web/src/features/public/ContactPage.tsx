@@ -258,24 +258,6 @@ export function ContactPage() {
               <h3>Two business days</h3>
               <p>Most demos and support notes get a reply sooner. Include your city and product if you can.</p>
             </div>
-            <a className="public-contact-aside-link" href={`mailto:${CONTACT_EMAIL}`}>
-              <div className="public-card-icon">
-                <Mail size={20} aria-hidden="true" />
-              </div>
-              <div>
-                <p className="public-kicker">{t('public.contact.email')}</p>
-                <strong>{CONTACT_EMAIL}</strong>
-              </div>
-            </a>
-            <a className="public-contact-aside-link" href={`tel:${CONTACT_PHONE_TEL}`}>
-              <div className="public-card-icon public-card-icon--teal">
-                <Phone size={20} aria-hidden="true" />
-              </div>
-              <div>
-                <p className="public-kicker">Phone</p>
-                <strong>{CONTACT_PHONE_DISPLAY}</strong>
-              </div>
-            </a>
             <div className="public-contact-aside-card public-contact-aside-card--soft">
               <div className="public-card-icon public-card-icon--teal">
                 <MessageSquare size={20} aria-hidden="true" />

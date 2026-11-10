@@ -6,7 +6,7 @@ import type { TFunction } from 'i18next';
 import { ArrowRight } from 'lucide-react';
 import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { Button } from '../../components/Button';
-import { isProPlan, planFeatureDisplay } from '../../config/planFeatures';
+import { combinedPlanFeatureSections, isProPlan, planFeatureDisplay } from '../../config/planFeatures';
 import { stripPlanProductPrefix } from '../../config/products';
 import { PlanFeatureList } from './PlanFeatureList';
 import { PublicCtaBand } from './PublicCtaBand';
@@ -43,20 +43,11 @@ function planKicker(plan: BillingPlanCatalogItem, t: TFunction) {
 const PRODUCT_IDS = ['appoint', 'mart', 'both'] as const;
 type ProductId = (typeof PRODUCT_IDS)[number];
 
-type Tone = 'peach' | 'blue' | 'teal' | 'yellow';
-
 type ProductContent = {
   id: ProductId;
   kicker: string;
   title: string;
-  body: string;
-  features: string[];
-  howTitle: string;
-  howLead: string;
-  howSteps: Array<{ title: string; body: string; tone: Tone }>;
-  benefitsTitle: string;
-  benefitsLead: string;
-  benefits: Array<{ title: string; body: string; tone: Tone }>;
+  benefits: string[];
   pricingTitle: string;
   pricingLead: string;
   pricingProduct: 'appointie' | 'shopie' | 'both';
@@ -69,17 +60,7 @@ type ProductContent = {
   }>;
 };
 
-const HOW_TONES: Record<ProductId, Tone[]> = {
-  appoint: ['peach', 'blue', 'teal'],
-  mart: ['blue', 'peach', 'teal'],
-  both: ['peach', 'blue', 'teal'],
-};
-const BENEFIT_TONES: Record<ProductId, Tone[]> = {
-  appoint: ['peach', 'blue', 'teal', 'yellow'],
-  mart: ['blue', 'peach', 'teal', 'yellow'],
-  both: ['peach', 'blue', 'teal', 'yellow'],
-};
-const FEATURE_COUNT: Record<ProductId, number> = { appoint: 6, mart: 6, both: 5 };
+const BENEFIT_COUNT: Record<ProductId, number> = { appoint: 10, mart: 10, both: 12 };
 const STARTER_FEATURE_COUNT: Record<ProductId, number> = { appoint: 5, mart: 5, both: 5 };
 const PRO_FEATURE_COUNT: Record<ProductId, number> = { appoint: 6, mart: 6, both: 5 };
 const PRICING_PRODUCT: Record<ProductId, ProductContent['pricingProduct']> = {
@@ -97,7 +78,6 @@ function buildProducts(t: TFunction): ProductContent[] {
     const list = (path: string, count: number, values?: Record<string, unknown>) =>
       Array.from({ length: count }, (_, i) => t(`${base}.${path}.f${i + 1}`, values) as string);
     const isBoth = id === 'both';
-    const trialValues = { days: TRIAL_DAYS };
     const packageValues = isBoth ? { price: starterPrice } : undefined;
     const proPackageValues = isBoth ? { price: proPrice } : undefined;
     const priceMultiplier = isBoth ? 2 : 1;
@@ -106,22 +86,9 @@ function buildProducts(t: TFunction): ProductContent[] {
       id,
       kicker: t(`${base}.kicker`),
       title: t(`${base}.title`),
-      body: t(`${base}.body`),
-      features: list('features', FEATURE_COUNT[id], trialValues),
-      howTitle: t(`${base}.howTitle`),
-      howLead: t(`${base}.howLead`),
-      howSteps: HOW_TONES[id].map((tone, i) => ({
-        title: t(`${base}.how.s${i + 1}.title`),
-        body: t(`${base}.how.s${i + 1}.body`),
-        tone,
-      })),
-      benefitsTitle: t(`${base}.benefitsTitle`),
-      benefitsLead: t(`${base}.benefitsLead`),
-      benefits: BENEFIT_TONES[id].map((tone, i) => ({
-        title: t(`${base}.benefits.b${i + 1}.title`),
-        body: t(`${base}.benefits.b${i + 1}.body`, trialValues),
-        tone,
-      })),
+      benefits: Array.from({ length: BENEFIT_COUNT[id] }, (_, i) =>
+        t(`${base}.benefits.b${i + 1}.title`) as string,
+      ),
       pricingTitle: t(`${base}.pricingTitle`),
       pricingLead: isBoth
         ? ''
@@ -276,6 +243,12 @@ function CombinedPlanCards({
         const combinedPaise =
           appointPaise != null && martPaise != null ? appointPaise + martPaise : null;
         const combined = formatInr(combinedPaise) ?? `₹${tier.fallbackPrice}`;
+        const sections = combinedPlanFeatureSections(
+          tier.appoint!,
+          appointPlans,
+          tier.mart!,
+          martPlans,
+        );
         return (
           <article
             key={tier.key}
@@ -296,12 +269,16 @@ function CombinedPlanCards({
             </p>
             <div className="public-combined-plan-features">
               <div>
-                <p className="public-kicker">{t('public.plans.appointName')}</p>
-                <PlanFeatureList groups={planFeatureDisplay(tier.appoint!, appointPlans)} />
+                <h3 className="public-combined-plan-features__title">{t('public.plans.sharedName')}</h3>
+                <PlanFeatureList groups={sections.shared} />
               </div>
               <div>
-                <p className="public-kicker">{t('public.plans.martName')}</p>
-                <PlanFeatureList groups={planFeatureDisplay(tier.mart!, martPlans)} />
+                <h3 className="public-combined-plan-features__title">{t('public.plans.appointName')}</h3>
+                <PlanFeatureList groups={sections.appoint} />
+              </div>
+              <div>
+                <h3 className="public-combined-plan-features__title">{t('public.plans.martName')}</h3>
+                <PlanFeatureList groups={sections.mart} />
               </div>
             </div>
           </article>
@@ -317,8 +294,6 @@ export function FeaturesPage() {
   const productId = productFromHash(location.hash);
   const products = useMemo(() => buildProducts(t), [t]);
   const item = products.find((entry) => entry.id === productId) ?? products[0]!;
-  const pricingHref =
-    item.pricingProduct === 'both' ? '/pricing' : `/pricing?product=${item.pricingProduct}`;
 
   const catalogQuery = useQuery({
     queryKey: ['public', 'plans'],
@@ -340,10 +315,9 @@ export function FeaturesPage() {
         <div className="public-feature-copy">
           <p className="public-kicker">{item.kicker}</p>
           <h1>{item.title}</h1>
-          <p>{item.body}</p>
           <ul className="public-list">
-            {item.features.map((feature) => (
-              <li key={feature}>{feature}</li>
+            {item.benefits.map((benefit) => (
+              <li key={benefit}>{benefit}</li>
             ))}
           </ul>
           <Link to={registerStartPath()} state={REGISTER_FRESH_START_STATE}>
@@ -352,46 +326,16 @@ export function FeaturesPage() {
             </Button>
           </Link>
         </div>
-        <div className={`public-feature-visual public-feature-visual--${item.id}`}>
-          <PublicProductShot slot={item.id} />
+        <div className="public-feature-visual">
+          <PublicProductShot slot="workspace" rotate={false} />
         </div>
       </section>
 
-      <div className="public-page">
-        <section className="public-section" style={{ marginTop: 0 }} aria-label={t('public.features.howAria')}>
-          <div className="public-section__head">
-            <p className="public-kicker">{t('public.features.howKicker')}</p>
-            <h2>{item.howTitle}</h2>
-            <p className="public-lead public-lead--wide">{item.howLead}</p>
-          </div>
-          <div className="public-how-grid">
-            {item.howSteps.map((step, index) => (
-              <article key={step.title} className={`public-product-explain public-product-explain--${step.tone}`}>
-                <span className="public-step__index">0{index + 1}</span>
-                <h3>{step.title}</h3>
-                <p>{step.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="public-section" aria-label={t('public.features.benefitsAria')}>
-          <div className="public-section__head">
-            <p className="public-kicker">{t('public.features.benefitsKicker')}</p>
-            <h2>{item.benefitsTitle}</h2>
-            <p className="public-lead public-lead--wide">{item.benefitsLead}</p>
-          </div>
-          <div className="public-stats public-stats--benefits">
-            {item.benefits.map((benefit) => (
-              <article key={benefit.title} className={`public-product-explain public-product-explain--${benefit.tone}`}>
-                <h3>{benefit.title}</h3>
-                <p>{benefit.body}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="public-section" aria-label={t('public.features.pricingAria')}>
+      <section
+        className="public-home-band public-home-band--pricing public-features-pricing"
+        aria-label={t('public.features.pricingAria')}
+      >
+        <div className="public-path-inner">
           <div className="public-section__head">
             <p className="public-kicker">{t('public.features.pricingKicker')}</p>
             <h2>{item.pricingTitle}</h2>
@@ -420,14 +364,9 @@ export function FeaturesPage() {
             >
               <Button variant="primary">{t('public.startTrial', { days: TRIAL_DAYS })}</Button>
             </Link>
-            <Link to={pricingHref}>
-              <Button variant="neutral">
-                {t('public.features.seeFullPricing')} <ArrowRight size={16} aria-hidden="true" />
-              </Button>
-            </Link>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
       <PublicCtaBand title={t('public.features.ctaTitle', { days: TRIAL_DAYS })} />
     </>
   );

@@ -18,6 +18,8 @@ export type IndustryMeta = {
   path: string;
   products: IndustryProduct[];
   cardGif: string;
+  /** Static still for hover/list cards (non-animated). */
+  cardImage: string;
   related: string[];
 };
 
@@ -50,6 +52,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/salon-spa',
     products: ['appoint', 'mart'],
     cardGif: '/marketing/industries/salon-spa/card.gif',
+    cardImage: '/marketing/industries/salon-spa/card.jpg',
     related: ['clinic-healthcare', 'fitness-wellness', 'retail'],
   },
   {
@@ -57,6 +60,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/clinic-healthcare',
     products: ['appoint', 'mart'],
     cardGif: '/marketing/industries/clinic-healthcare/card.gif',
+    cardImage: '/marketing/industries/clinic-healthcare/card.jpg',
     related: ['salon-spa', 'professional-services', 'fitness-wellness'],
   },
   {
@@ -64,6 +68,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/fitness-wellness',
     products: ['appoint', 'mart'],
     cardGif: '/marketing/industries/fitness-wellness/card.gif',
+    cardImage: '/marketing/industries/fitness-wellness/card.jpg',
     related: ['salon-spa', 'education-training', 'professional-services'],
   },
   {
@@ -71,6 +76,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/professional-services',
     products: ['appoint'],
     cardGif: '/marketing/industries/professional-services/card.gif',
+    cardImage: '/marketing/industries/professional-services/card.jpg',
     related: ['education-training', 'clinic-healthcare', 'home-services'],
   },
   {
@@ -78,6 +84,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/retail',
     products: ['mart'],
     cardGif: '/marketing/industries/retail/card.gif',
+    cardImage: '/marketing/industries/retail/card.jpg',
     related: ['salon-spa', 'home-services', 'fitness-wellness'],
   },
   {
@@ -85,6 +92,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/education-training',
     products: ['appoint', 'mart'],
     cardGif: '/marketing/industries/education-training/card.gif',
+    cardImage: '/marketing/industries/education-training/card.jpg',
     related: ['professional-services', 'fitness-wellness', 'home-services'],
   },
   {
@@ -92,6 +100,7 @@ export const INDUSTRY_META: IndustryMeta[] = [
     path: '/industries/home-services',
     products: ['appoint', 'mart'],
     cardGif: '/marketing/industries/home-services/card.gif',
+    cardImage: '/marketing/industries/home-services/card.jpg',
     related: ['professional-services', 'retail', 'salon-spa'],
   },
 ];

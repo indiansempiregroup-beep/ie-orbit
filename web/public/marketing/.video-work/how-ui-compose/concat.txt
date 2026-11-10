@@ -1,0 +1,6 @@
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/intro-vo.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/step1-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/step2-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/step2b-silent.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/step3-final.mp4'
+file '/Users/sanketpathak/Sanket/ie-orbit/ie-orbit/web/public/marketing/.video-work/how-ui-compose/outro-vo.mp4'

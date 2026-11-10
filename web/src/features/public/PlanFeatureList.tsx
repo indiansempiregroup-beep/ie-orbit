@@ -40,16 +40,18 @@ export function PlanFeatureList({ groups }: { groups: DisplayFeatureGroup[] }) {
             key={group.title}
             className={`public-plan-features__group${aiGroup ? ' is-ai' : ''}`}
           >
-            <p className="public-plan-features__title">
-              {aiGroup ? (
-                <span className="public-plan-features__title-ai">
-                  <Sparkles size={12} strokeWidth={2.4} aria-hidden="true" />
-                  {group.title}
-                </span>
-              ) : (
-                group.title
-              )}
-            </p>
+            {group.title ? (
+              <p className="public-plan-features__title">
+                {aiGroup ? (
+                  <span className="public-plan-features__title-ai">
+                    <Sparkles size={12} strokeWidth={2.4} aria-hidden="true" />
+                    {group.title}
+                  </span>
+                ) : (
+                  group.title
+                )}
+              </p>
+            ) : null}
             <ul className="public-plan-features__list">
               {group.items.map((item) => {
                 const ai = isAiFeature(item.code);

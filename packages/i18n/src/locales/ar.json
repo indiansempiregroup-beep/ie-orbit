@@ -4024,10 +4024,10 @@
       "cookies": "ملفات تعريف الارتباط",
       "appoint": "Orbit Appoint",
       "mart": "Orbit Mart",
-      "both": "Orbit Appoint + Mart"
+      "both": "Orbit Appoint + Orbit Mart"
     },
     "footer": {
-      "blurb": "تطبيقات عملاء بعلامتك التجارية للشركات الهندية — Orbit Mart للتجزئة وOrbit Appoint للحجوزات.",
+      "blurb": "تطبيقات عملاء بعلامتك التجارية لعملك. Orbit Appoint للحجوزات وOrbit Mart للتجزئة، تحت علامتك.",
       "startWith": "ابدأ بما تحتاجه",
       "appointTitle": "حجوزات بلا ذهاب وإياب",
       "martTitle": "متجر يبدو كأنه لك",
@@ -4035,6 +4035,7 @@
       "onDevices": "على iOS وAndroid",
       "onDevicesBody": "يدير المالكون والموظفون مساحة العمل من الهاتف.",
       "product": "المنتج",
+      "explore": "استكشف",
       "company": "الشركة",
       "legal": "قانوني",
       "copyright": "© {{year}} Indians Empire Technologies"
@@ -4639,7 +4640,8 @@
         "sharedCustomers": "عملاء مشتركون في مساحة عمل واحدة",
         "noCard": "لا حاجة إلى بطاقة ائتمان للبدء"
       },
-      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (تُحتسب الفاتورة لكل منتج)"
+      "combinedBilledNote": "Orbit Appoint {{appoint}} + Orbit Mart {{mart}} (تُحتسب الفاتورة لكل منتج)",
+      "sharedName": "مشمول في كليهما"
     },
     "features": {
       "createAccount": "إنشاء حساب",
@@ -4683,20 +4685,44 @@
         "benefitsLead": "مواعيد ضائعة أقل، واتصالات هاتفية أقل، وتطبيق عملاء يشبه علامتك التجارية.",
         "benefits": {
           "b1": {
-            "title": "تطبيق حجز بعلامتك التجارية",
-            "body": "يثبّت العملاء علامتك أنت — وليس صفحة عامة لـ IE Orbit — على iOS وAndroid."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Customers get direct connectivity to your location with Google Maps directions inside your branded app."
           },
           "b2": {
-            "title": "تقويم مشترك واحد",
-            "body": "وداعًا للدفاتر ومحادثات واتساب. يرى الجميع من هو متاح وما هو محجوز."
+            "title": "Reward points that bring customers back",
+            "body": "End customers earn and redeem reward points so they book again instead of drifting to a competitor."
           },
           "b3": {
-            "title": "تذكيرات فعّالة",
-            "body": "تذكيرات بالبريد الإلكتروني في كل الخطط؛ وتذكيرات واتساب مع Pro لتقليل الغياب."
+            "title": "Staff-wise performance reports",
+            "body": "See performance by staff — bookings, revenue, and utilisation — so you know who is driving results."
           },
           "b4": {
-            "title": "انمُ دون فوضى",
-            "body": "أضف مكتبًا ثانيًا والمدفوعات وذكاء الأعمال الكامل وتطبيقًا بلا إعلانات عند الانتقال إلى Pro."
+            "title": "Your brand on iOS and Android",
+            "body": "Clients install your brand — not a generic IE Orbit listing — on iOS and Android."
+          },
+          "b5": {
+            "title": "Online booking with live staff availability",
+            "body": "Customers pick a real open slot; staff see the same calendar update instantly."
+          },
+          "b6": {
+            "title": "WhatsApp and email reminders that cut no-shows",
+            "body": "Email reminders on every plan; WhatsApp reminders on Pro so customers actually show up."
+          },
+          "b7": {
+            "title": "Collect reviews after every visit",
+            "body": "Turn happy visits into ratings that help the next customer trust and book."
+          },
+          "b8": {
+            "title": "In-app payments on Pro",
+            "body": "Take payment when they book so deposits and dues stay clear for the floor."
+          },
+          "b9": {
+            "title": "AI assistant for the day’s bookings",
+            "body": "Ask plain-language questions about the schedule and customers without digging through screens."
+          },
+          "b10": {
+            "title": "Automation Creator for follow-ups and offers",
+            "body": "On Pro, set rules for reminders and staff offer hints so the team stays consistent."
           }
         },
         "pricingTitle": "أسعار Orbit Appoint",
@@ -4725,7 +4751,7 @@
           "f1": "تطبيق عملاء بعلامتك التجارية ليشتري المتسوقون باسمك",
           "f2": "نقطة بيع وكتالوج وطلبات عبر الإنترنت ومرتجعات مع Starter",
           "f3": "توصيل فوري عبر Porter/Shiprocket مع Pro",
-          "f4": "دفتر اليومية مع Starter؛ وتقارير GST والفاتورة الإلكترونية وGrow وe-way مع Pro",
+          "f4": "دفتر اليومية مع Starter؛ وتقارير GST والفاتورة الإلكترونية وGrow وledger مع Pro",
           "f5": "استخراج الفواتير بالذكاء الاصطناعي مع Pro — صوّر فاتورة المورّد وراجع البنود ثم أضف المخزون",
           "f6": "منشئ الأتمتة مع Pro لقواعد أعياد الميلاد والمناسبات وعملاء VIP"
         },
@@ -4749,20 +4775,44 @@
         "benefitsLead": "مساحة عمل واحدة للكاونتر والمتجر الإلكتروني ودفاتر جاهزة لـ GST.",
         "benefits": {
           "b1": {
-            "title": "تطبيق متجر بعلامتك التجارية",
-            "body": "يتصفح العملاء ويطلبون في تطبيق يشبه متجرك، وليس سوقًا إلكترونيًا."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Shoppers get direct connectivity to your store with Google Maps directions inside your branded app."
           },
           "b2": {
-            "title": "الكاونتر والكتالوج معًا",
-            "body": "تشترك نقطة البيع والمرتجعات والطلبات عبر الإنترنت في المنتجات وقائمة العملاء نفسها."
+            "title": "Reward points that bring shoppers back",
+            "body": "End customers earn and redeem reward points so they return to your store instead of buying elsewhere."
           },
           "b3": {
-            "title": "GST عندما تحتاجه",
-            "body": "دفتر اليومية مع Starter. وتقارير GST والفاتورة الإلكترونية وفاتورة e-way مع Pro."
+            "title": "Staff-wise sales reports",
+            "body": "Track sales and performance by staff so you can coach the floor and reward top sellers."
           },
           "b4": {
-            "title": "التوصيل والتسويق مع Pro",
-            "body": "توصيل فوري عبر Porter/Shiprocket بالإضافة إلى مساعدي Grow للعروض والقوائم."
+            "title": "Your store brand on iOS and Android",
+            "body": "Customers browse and order in an app that looks like your store, not a marketplace."
+          },
+          "b5": {
+            "title": "POS, catalog, and online orders in one place",
+            "body": "Walk-ins, returns, and app orders share the same products and customer list."
+          },
+          "b6": {
+            "title": "Instant Delivery with Porter or Shiprocket",
+            "body": "On Pro, hand off last-mile delivery from the order without a separate courier tool."
+          },
+          "b7": {
+            "title": "GST reports, e-invoice, and ledger",
+            "body": "Pull GST-ready books from the same workspace instead of rebuilding them in Excel."
+          },
+          "b8": {
+            "title": "Scan supplier bills with AI",
+            "body": "Photograph a vendor invoice, review the lines, then add stock without retyping."
+          },
+          "b9": {
+            "title": "Online coupons and Grow promos",
+            "body": "Run discount codes and marketing helpers so the shop app keeps selling between visits."
+          },
+          "b10": {
+            "title": "Barcode and smart product lookup",
+            "body": "Fill catalog details faster with barcode flow and AI pack photo lookup when needed."
           }
         },
         "pricingTitle": "أسعار Orbit Mart",
@@ -4777,7 +4827,7 @@
         "pro": {
           "f1": "كل ما في Starter",
           "f2": "توصيل فوري عبر Porter/Shiprocket",
-          "f3": "تقارير GST والفاتورة الإلكترونية وe-way",
+          "f3": "تقارير GST والفاتورة الإلكترونية وledger",
           "f4": "مساعدو تسويق Grow",
           "f5": "استخراج الفواتير بالذكاء الاصطناعي",
           "f6": "تطبيق عملاء بلا إعلانات"
@@ -4814,20 +4864,52 @@
         "benefitsLead": "توقف عن تقسيم الحجوزات والتجزئة بين أدوات لا تتحدث إلى بعضها.",
         "benefits": {
           "b1": {
-            "title": "تطبيق عملاء واحد بعلامتك",
-            "body": "احجز خدمة واشترِ منتجًا دون مغادرة تجربة علامتك التجارية."
+            "title": "One white-label app to book and shop",
+            "body": "Book a service and buy a product without leaving your brand experience."
           },
           "b2": {
-            "title": "عملاء مشتركون",
-            "body": "يبقى سجل الزيارات وطلبات المتجر والمتابعات في سجل العميل نفسه."
+            "title": "Shared customers across bookings and retail",
+            "body": "Visit history, shop orders, and follow-ups live on the same customer record."
           },
           "b3": {
-            "title": "بيع متقاطع طبيعي",
-            "body": "اعرض منتجات للأخذ بعد الخدمة، أو احجز الزيارة التالية من المتجر."
+            "title": "Cross-sell services and products naturally",
+            "body": "Offer take-home products after a service, or book the next visit from the shop flow."
           },
           "b4": {
-            "title": "تجربة واحدة ومسار فوترة واحد",
-            "body": "تجربة Pro كاملة لمدة {{days}} يومًا على مساحة العمل، ثم فوترة عبر UPI حسب خطة كل منتج."
+            "title": "Google Maps directions inside your customer app",
+            "body": "Customers reach you for appointments and store visits with directions in your branded app."
+          },
+          "b5": {
+            "title": "Reward points across bookings and shopping",
+            "body": "End customers earn and redeem reward points on services and shop orders to stay loyal."
+          },
+          "b6": {
+            "title": "Staff-wise reports for services and retail",
+            "body": "See performance across bookings and sales so you manage one team with clear numbers."
+          },
+          "b7": {
+            "title": "Live calendars plus POS in one workspace",
+            "body": "The floor schedule and the counter share one login, one customer list, and one brand."
+          },
+          "b8": {
+            "title": "WhatsApp reminders and Instant Delivery",
+            "body": "Cut no-shows on appointments and hand off last-mile shop orders with Porter or Shiprocket."
+          },
+          "b9": {
+            "title": "GST reports, e-invoice, and ledger",
+            "body": "Pull GST-ready books from the same workspace instead of rebuilding them in Excel."
+          },
+          "b10": {
+            "title": "AI assistant, bill scan, and Automation Creator",
+            "body": "Ask about the day, scan supplier bills, and automate follow-ups across book and shop."
+          },
+          "b11": {
+            "title": "In-app payments, reviews, and online coupons",
+            "body": "Collect deposits and ratings on visits, then keep the shop selling with coupons and Grow promos."
+          },
+          "b12": {
+            "title": "Barcode catalog and smart product lookup",
+            "body": "Fill product details faster with barcode flow and AI pack photo lookup when needed."
           }
         },
         "pricingTitle": "الأسعار عند تشغيل المنتجين معًا",
@@ -4842,7 +4924,7 @@
           "f1": "Orbit Appoint Pro بسعر {{price}}/شهر + Orbit Mart Pro بسعر {{price}}/شهر",
           "f2": "كل ما في Starter",
           "f3": "تذكيرات واتساب والمدفوعات ومكتب ثانٍ في Appoint",
-          "f4": "توصيل فوري والفاتورة الإلكترونية GST/e-way وGrow في Mart",
+          "f4": "توصيل فوري والفاتورة الإلكترونية GST، ledger وGrow في Mart",
           "f5": "ذكاء الأعمال الكامل ومنشئ الأتمتة وتطبيق عملاء بلا إعلانات"
         }
       }

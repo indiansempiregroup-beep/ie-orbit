@@ -152,10 +152,14 @@ export function WorkspacePickerScreen() {
             ? 'Fix the workspace setup above, then tap Retry.'
             : 'Pick a workspace and business, then tap Continue.'}
       </Text>
-      <Text style={styles.apiHint}>{getApiBaseUrl()}</Text>
-      <Text style={styles.apiHint}>
-        {`t:${tenants.length} b:${businesses.length} · ${tenantId ? 'tenant✓' : 'tenant·'} ${businessId ? 'biz✓' : 'biz·'} ${ready ? 'READY→dashboard' : loading ? 'loading' : 'idle'}`}
-      </Text>
+      {__DEV__ ? (
+        <>
+          <Text style={styles.apiHint}>{getApiBaseUrl()}</Text>
+          <Text style={styles.apiHint}>
+            {`t:${tenants.length} b:${businesses.length} · ${tenantId ? 'tenant✓' : 'tenant·'} ${businessId ? 'biz✓' : 'biz·'} ${ready ? 'READY→dashboard' : loading ? 'loading' : 'idle'}`}
+          </Text>
+        </>
+      ) : null}
     </ScrollView>
   );
 }

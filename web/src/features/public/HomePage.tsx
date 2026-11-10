@@ -1,19 +1,55 @@
 import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
+import { createApiClient, type BillingPlanCatalogItem } from '@ie-orbit/sdk';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '../../components/Button';
+import { isProPlan } from '../../config/planFeatures';
 import { PublicAiShowcase } from './PublicAiShowcase';
 import { PublicCtaBand } from './PublicCtaBand';
 import { PublicHeroStoryVideo } from './PublicHeroStoryVideo';
+import { PublicHowItWorks } from './PublicHowItWorks';
 import { PublicProductShot } from './PublicProductShot';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
 import { PRO_MONTHLY_INR, STARTER_MONTHLY_INR, TRIAL_DAYS } from '../../seo/config';
 
+const publicClient = createApiClient({ baseUrl: '/api/v1' });
+
+function majorFromPaise(paise: number | null | undefined, fallback: number) {
+  if (paise == null || Number.isNaN(Number(paise))) return fallback;
+  return Math.round(Number(paise) / 100);
+}
+
+function pickTier(plans: BillingPlanCatalogItem[], pro: boolean) {
+  return plans.find((plan) => isProPlan(plan) === pro);
+}
+
 export function HomePage() {
   const { t } = useTranslation();
+
+  const catalogQuery = useQuery({
+    queryKey: ['public', 'plans', 'INR'],
+    queryFn: async () => (await publicClient.billing.publicPlans({ currency: 'INR' })).data,
+    staleTime: 1000 * 60 * 30,
+    retry: false,
+  });
+
+  const catalog = catalogQuery.data;
+  const trialDays = catalog?.trial_days || TRIAL_DAYS;
+  const appointPlans = (catalog?.plans ?? []).filter((plan) => plan.product_code === 'appointie');
+  const martPlans = (catalog?.plans ?? []).filter((plan) => plan.product_code === 'shopie');
+  const appointStarter = pickTier(appointPlans, false);
+  const appointPro = pickTier(appointPlans, true);
+  const martStarter = pickTier(martPlans, false);
+  const martPro = pickTier(martPlans, true);
+  const starterAmount = majorFromPaise(
+    appointStarter?.amount_paise ?? martStarter?.amount_paise,
+    STARTER_MONTHLY_INR,
+  );
+  const proAmount = majorFromPaise(appointPro?.amount_paise ?? martPro?.amount_paise, PRO_MONTHLY_INR);
 
   const paths = useMemo(
     () => [
@@ -23,6 +59,7 @@ export function HomePage() {
         body: t('public.home.pathBookingsBody'),
         tone: 'peach' as const,
         to: '/features#appoint',
+        image: '/marketing/integrations/calendar.jpg',
       },
       {
         kicker: t('public.home.pathShopKicker'),
@@ -30,6 +67,7 @@ export function HomePage() {
         body: t('public.home.pathShopBody'),
         tone: 'blue' as const,
         to: '/features#mart',
+        image: '/marketing/integrations/delivery.jpg',
       },
       {
         kicker: t('public.home.pathBothKicker'),
@@ -37,6 +75,7 @@ export function HomePage() {
         body: t('public.home.pathBothBody'),
         tone: 'dark' as const,
         to: '/features#both',
+        image: '/marketing/paths/path-both.jpg',
       },
     ],
     [t],
@@ -72,30 +111,6 @@ export function HomePage() {
     [t],
   );
 
-  const steps = useMemo(
-    () => [
-      {
-        title: t('public.home.step1Title'),
-        body: t('public.home.step1Body'),
-        gif: '/marketing/how-it-works/step-1.gif',
-        tone: 'peach' as const,
-      },
-      {
-        title: t('public.home.step2Title'),
-        body: t('public.home.step2Body'),
-        gif: '/marketing/how-it-works/step-2.gif',
-        tone: 'blue' as const,
-      },
-      {
-        title: t('public.home.step3Title'),
-        body: t('public.home.step3Body'),
-        gif: '/marketing/how-it-works/step-3.gif',
-        tone: 'teal' as const,
-      },
-    ],
-    [t],
-  );
-
   const homeProducts = useMemo(
     () => [
       {
@@ -104,6 +119,8 @@ export function HomePage() {
         body: t('public.home.productAppointBody'),
         to: '/pricing?product=appointie',
         tone: 'peach' as const,
+        starter: majorFromPaise(appointStarter?.amount_paise, STARTER_MONTHLY_INR),
+        pro: majorFromPaise(appointPro?.amount_paise, PRO_MONTHLY_INR),
       },
       {
         name: t('public.nav.mart'),
@@ -111,9 +128,11 @@ export function HomePage() {
         body: t('public.home.productMartBody'),
         to: '/pricing?product=shopie',
         tone: 'blue' as const,
+        starter: majorFromPaise(martStarter?.amount_paise, STARTER_MONTHLY_INR),
+        pro: majorFromPaise(martPro?.amount_paise, PRO_MONTHLY_INR),
       },
     ],
-    [t],
+    [t, appointStarter?.amount_paise, appointPro?.amount_paise, martStarter?.amount_paise, martPro?.amount_paise],
   );
 
   return (
@@ -172,12 +191,17 @@ export function HomePage() {
           <div className="public-path-grid">
             {paths.map((path) => (
               <Link key={path.kicker} to={path.to} className={`public-path-card public-path-card--${path.tone}`}>
-                <div className="public-path-card-top">
-                  <span>{path.kicker}</span>
-                  <ArrowRight size={16} aria-hidden="true" />
+                <div className="public-path-card-media" aria-hidden="true">
+                  <img src={path.image} alt="" loading="lazy" />
                 </div>
-                <h3>{path.title}</h3>
-                <p>{path.body}</p>
+                <div className="public-path-card-copy">
+                  <div className="public-path-card-top">
+                    <span>{path.kicker}</span>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </div>
+                  <h3>{path.title}</h3>
+                  <p>{path.body}</p>
+                </div>
               </Link>
             ))}
           </div>
@@ -186,8 +210,8 @@ export function HomePage() {
 
       <PublicAiShowcase showCta />
 
-      <div className="public-page">
-        <section className="public-section" aria-label={t('public.home.platformAria')}>
+      <section className="public-home-band public-home-band--platform" aria-label={t('public.home.platformAria')}>
+        <div className="public-path-inner">
           <div className="public-section__head">
             <p className="public-kicker">{t('public.home.platformKicker')}</p>
             <h2>{t('public.home.platformTitle')}</h2>
@@ -205,38 +229,21 @@ export function HomePage() {
               </article>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="public-section" aria-label={t('public.home.howAria')}>
-          <div className="public-section__head">
-            <p className="public-kicker">{t('public.home.howKicker')}</p>
-            <h2>{t('public.home.howTitle')}</h2>
-          </div>
-          <div className="public-how-grid">
-            {steps.map((step, index) => (
-              <article key={step.title} className={`public-stat public-stat--${step.tone} public-how-card`}>
-                <div className="public-stat-media">
-                  <img src={step.gif} alt="" loading="lazy" />
-                </div>
-                <div className="public-stat-copy">
-                  <span className="public-step__index">0{index + 1}</span>
-                  <strong>{step.title}</strong>
-                  <span>{step.body}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
+      <PublicHowItWorks />
 
-        <section className="public-section" aria-label={t('public.home.pricingAria')}>
+      <section className="public-home-band public-home-band--pricing" aria-label={t('public.home.pricingAria')}>
+        <div className="public-path-inner">
           <div className="public-section__head">
             <p className="public-kicker">{t('public.home.pricingKicker')}</p>
             <h2>{t('public.home.pricingTitle')}</h2>
             <p className="public-lead public-lead--wide">
               {t('public.home.pricingLead', {
-                days: TRIAL_DAYS,
-                starter: STARTER_MONTHLY_INR,
-                pro: PRO_MONTHLY_INR,
+                days: trialDays,
+                starter: starterAmount,
+                pro: proAmount,
               })}
             </p>
           </div>
@@ -249,11 +256,11 @@ export function HomePage() {
                 <div className="public-home-price-tiers">
                   <div>
                     <strong>{t('public.starter')}</strong>
-                    <span>{t('public.perMonth', { amount: STARTER_MONTHLY_INR })}</span>
+                    <span>{t('public.perMonth', { amount: product.starter })}</span>
                   </div>
                   <div>
                     <strong>{t('public.pro')}</strong>
-                    <span>{t('public.perMonth', { amount: PRO_MONTHLY_INR })}</span>
+                    <span>{t('public.perMonth', { amount: product.pro })}</span>
                   </div>
                 </div>
                 <Link to={product.to}>
@@ -270,11 +277,11 @@ export function HomePage() {
               state={REGISTER_FRESH_START_STATE}
               onClick={() => trackEvent('generate_lead', { method: 'home_pricing_trial' })}
             >
-              <Button variant="primary">{t('public.startTrial', { days: TRIAL_DAYS })}</Button>
+              <Button variant="primary">{t('public.startTrial', { days: trialDays })}</Button>
             </Link>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       <PublicCtaBand />
     </>

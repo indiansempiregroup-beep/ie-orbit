@@ -622,19 +622,53 @@ export function isProPlan(plan: BillingPlanCatalogItem) {
   return plan.plan_code.toLowerCase().includes('pro');
 }
 
+function isSharedCatalogFeature(code: string) {
+  const def = FEATURE_BY_CODE.get(code);
+  return Boolean(def?.products.includes('appointie') && def.products.includes('shopie'));
+}
+
+function planDeltaFeatureCodes(
+  plan: BillingPlanCatalogItem,
+  productPlans: BillingPlanCatalogItem[] = [],
+): string[] {
+  const starter = productPlans.find((item) => item.plan_code.toLowerCase().includes('starter'));
+  const enabled = plan.features ?? [];
+  if (!isProPlan(plan) || !starter) return enabled;
+  const starterKeys = new Set(starter.features ?? []);
+  return enabled.filter((code) => !starterKeys.has(code));
+}
+
+function productOnlyCodes(codes: string[], product: PlanProductCode): string[] {
+  return codes.filter((code) => {
+    const def = FEATURE_BY_CODE.get(code);
+    if (!def) return product === 'appointie';
+    return def.products.includes(product) && !isSharedCatalogFeature(code);
+  });
+}
+
+function productIncludedGroups(plan: BillingPlanCatalogItem): DisplayFeatureGroup[] {
+  const items: DisplayFeatureItem[] = [];
+  if (isProPlan(plan)) {
+    items.push({
+      code: `everything-starter-${plan.product_code}`,
+      label: 'Everything in Starter',
+      detail: 'All Starter functions stay included when you upgrade.',
+    });
+  }
+  items.push(staffLine(plan));
+  const extras = extraCapsLine(plan);
+  if (extras) items.push({ ...extras, code: `${extras.code}-${plan.product_code}` });
+  return items.length ? [{ title: '', items }] : [];
+}
+
 export function planFeatureDisplay(
   plan: BillingPlanCatalogItem,
   productPlans: BillingPlanCatalogItem[] = [],
 ): DisplayFeatureGroup[] {
-  const starter = productPlans.find((item) => item.plan_code.toLowerCase().includes('starter'));
-  const pro = isProPlan(plan);
-  const enabled = plan.features ?? [];
-  const starterKeys = new Set(starter?.features ?? []);
-  const keysToShow =
-    pro && starter ? enabled.filter((code) => !starterKeys.has(code)) : enabled;
+  const keysToShow = planDeltaFeatureCodes(plan, productPlans);
 
   const included: DisplayFeatureItem[] = [];
-  if (pro) {
+  if (isProPlan(plan)) {
     included.push({
       code: 'everything-starter',
       label: 'Everything in Starter',
@@ -648,7 +682,7 @@ export function planFeatureDisplay(
     detail: 'Customers install your brand on iOS and Android — not a generic IE Orbit listing.',
   });
   included.push(biLine(plan));
-  if (!enabled.includes('ad_free')) {
+  if (!(plan.features ?? []).includes('ad_free')) {
     included.push({
       code: 'google-ads',
       label: 'Customer app may show Google Ads',
@@ -659,4 +693,62 @@ export function planFeatureDisplay(
   if (extras) included.push(extras);
 
   return [{ title: 'Included', items: included }, ...groupPlanFeatures(keysToShow)];
+}
+
+/** Combined Appoint + Mart card: shared features first, then each product’s unique list. */
+export function combinedPlanFeatureSections(
+  appointPlan: BillingPlanCatalogItem,
+  appointPlans: BillingPlanCatalogItem[],
+  martPlan: BillingPlanCatalogItem,
+  martPlans: BillingPlanCatalogItem[],
+): {
+  shared: DisplayFeatureGroup[];
+  appoint: DisplayFeatureGroup[];
+  mart: DisplayFeatureGroup[];
+} {
+  const appointKeys = planDeltaFeatureCodes(appointPlan, appointPlans);
+  const martKeys = planDeltaFeatureCodes(martPlan, martPlans);
+  const sharedCodes = [
+    ...new Set([...appointKeys, ...martKeys].filter((code) => isSharedCatalogFeature(code))),
+  ];
+
+  const sharedIncluded: DisplayFeatureItem[] = [
+    {
+      code: 'white-label',
+      label: 'White-label customer app',
+      detail: 'Customers install your brand on iOS and Android — not a generic IE Orbit listing.',
+    },
+  ];
+  const richerBi =
+    (appointPlan.bi_features?.length ?? 0) >= (martPlan.bi_features?.length ?? 0)
+      ? appointPlan
+      : martPlan;
+  sharedIncluded.push(biLine(richerBi));
+  if (!(appointPlan.features ?? []).includes('ad_free') && !(martPlan.features ?? []).includes('ad_free')) {
+    sharedIncluded.push({
+      code: 'google-ads',
+      label: 'Customer app may show Google Ads',
+      detail: 'A plan with ad-free apps hides them so only your brand shows.',
+    });
+  } else if ((appointPlan.features ?? []).includes('ad_free') || (martPlan.features ?? []).includes('ad_free')) {
+    sharedIncluded.push({
+      code: 'ad-free',
+      label: 'Ad-free customer app',
+      detail: 'Your branded app stays free of Google Ads on this tier.',
+    });
+  }
+
+  return {
+    shared: [{ title: '', items: sharedIncluded }, ...groupPlanFeatures(sharedCodes)],
+    appoint: [
+      ...productIncludedGroups(appointPlan),
+      ...groupPlanFeatures(productOnlyCodes(appointKeys, 'appointie')).map((group) =>
+        group.title === 'Orbit Appoint' ? { ...group, title: '' } : group,
+      ),
+    ],
+    mart: [
+      ...productIncludedGroups(martPlan),
+      ...groupPlanFeatures(productOnlyCodes(martKeys, 'shopie')),
+    ],
+  };
 }

@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, CalendarDays, ChevronDown, Layers, Menu, ShoppingBag, X } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronDown, Layers, Mail, Menu, Phone, ShoppingBag, X } from 'lucide-react';
 import { BrandLockup } from '../../components/BrandLockup';
 import { Button } from '../../components/Button';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
@@ -11,7 +11,7 @@ import { PublicSocialIcon } from './PublicSocialIcons';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
 import { registerStartPath } from '../onboarding/affiliateCode';
 import { trackEvent } from '../../seo/analytics';
-import { SOCIAL_LINKS } from '../../seo/config';
+import { CONTACT_EMAIL, CONTACT_PHONE_DISPLAY, CONTACT_PHONE_TEL, SOCIAL_LINKS } from '../../seo/config';
 import { IndustryShotRotationProvider } from './IndustryShotRotation';
 
 function productHashActive(pathname: string, hash: string, linkHash: string) {
@@ -79,11 +79,8 @@ export function PublicLayout() {
   const footerColumns = useMemo(
     () => [
       {
-        title: t('public.footer.product'),
+        title: t('public.footer.explore'),
         links: [
-          { to: '/features#appoint', label: t('public.nav.appoint') },
-          { to: '/features#mart', label: t('public.nav.mart') },
-          { to: '/features#both', label: t('public.nav.both') },
           { to: '/industries', label: t('public.nav.industries') },
           { to: '/integrations', label: t('public.nav.integrations') },
           { to: '/pricing', label: t('public.nav.pricing') },
@@ -116,10 +113,7 @@ export function PublicLayout() {
   }, [location.pathname, location.hash]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
-
-  useEffect(() => {
+    // Product hash tabs on /features stay on the same path; reset scroll when the tab changes.
     if (location.pathname !== '/features') return;
     window.scrollTo(0, 0);
   }, [location.hash, location.pathname]);
@@ -243,6 +237,16 @@ export function PublicLayout() {
               <BrandLockup />
             </Link>
             <p>{t('public.footer.blurb')}</p>
+            <div className="public-footer-contact">
+              <a href={`mailto:${CONTACT_EMAIL}`}>
+                <Mail size={14} aria-hidden="true" />
+                <span>{CONTACT_EMAIL}</span>
+              </a>
+              <a href={`tel:${CONTACT_PHONE_TEL}`}>
+                <Phone size={14} aria-hidden="true" />
+                <span>{CONTACT_PHONE_DISPLAY}</span>
+              </a>
+            </div>
             <nav className="public-footer-social" aria-label={t('public.socialNav')}>
               {SOCIAL_LINKS.map((link) => (
                 <a

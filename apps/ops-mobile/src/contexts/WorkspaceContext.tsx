@@ -46,7 +46,7 @@ function asList<T>(data: unknown): T[] {
 }
 
 function withApiHint(message: string): string {
-  return `${message} (API: ${getApiBaseUrl()})`;
+  return __DEV__ ? `${message} (API: ${getApiBaseUrl()})` : message;
 }
 
 function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -87,7 +87,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     async (resolvedTenantId: string, preferredBusinessId?: string | null) => {
       if (!token) return null;
       const client = createScopedClient(token, resolvedTenantId);
-      const response = await withDeadline(client.businesses.list(), 15000, 'Loading businesses');
+      const response = await withDeadline(client.businesses.list(), 30000, 'Loading businesses');
       const list = asList<Business>(response.data);
       setBusinesses(list);
 
@@ -120,7 +120,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const client = createScopedClient(token);
-      const response = await withDeadline(client.tenants.list(), 15000, 'Loading workspaces');
+      const response = await withDeadline(client.tenants.list(), 30000, 'Loading workspaces');
       const nextTenants = asList<TenantSummary>(response.data);
       setTenants(nextTenants);
 
@@ -232,7 +232,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const client = createScopedClient(token, tenantId);
         const response = await withDeadline(
           client.businesses.get(nextBusinessId),
-          8000,
+          30000,
           'Loading business',
         );
         setActiveBusiness(response.data);

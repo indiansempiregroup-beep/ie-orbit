@@ -244,7 +244,8 @@ export function getApiErrorMessage(
   context: AuthFormContext = 'generic',
 ): string {
   if (isNetworkFailure(error)) {
-    return `Cannot reach API at ${getApiBaseUrl()}. Check Wi‑Fi / hotspot and that Windows Firewall allows TCP 8000.`;
+    const message = 'Cannot reach the server. Check your network and try again.';
+    return __DEV__ ? `${message} (${getApiBaseUrl()})` : message;
   }
   if (error instanceof ApiClientError) {
     const details = formatErrorDetails(error.payload.error.details);
