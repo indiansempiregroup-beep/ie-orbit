@@ -136,18 +136,37 @@ export function enrichmentLookupForProduct(
   return query ? { query } : null;
 }
 
+export type BuildEnrichmentPatchOptions = {
+  /**
+   * When true (bulk default), write catalog images whenever enrichment returns any,
+   * even if the product already has an image_url from Excel.
+   */
+  refreshImages?: boolean;
+  /**
+   * When true (bulk default), write HSN from enrichment when present and product HSN is blank.
+   * (Always fill-empty for HSN; kept explicit for callers.)
+   */
+  fillHsn?: boolean;
+};
+
 /**
- * Build a fill-empty-only PATCH from enrichment.
- * Keeps price, stock, status, and existing identity fields.
+ * Build a PATCH from enrichment.
+ * Text/brand/description stay fill-empty so Excel values are kept.
+ * Catalog images can refresh; HSN/GST/pack fill only when blank.
+ * Keeps price, stock, and status.
  * Returns null when there is nothing safe to write.
  */
 export function buildEnrichmentPatch(
   product: BulkEnrichProduct,
   data: BulkEnrichmentData,
   businessId: string,
+  options?: BuildEnrichmentPatchOptions,
 ): BulkEnrichPatch | null {
   if (!data.found) return null;
   if (data.existing_product_id && data.existing_product_id !== product.id) return null;
+
+  const refreshImages = options?.refreshImages !== false;
+  const fillHsn = options?.fillHsn !== false;
 
   const patch: BulkEnrichPatch = { business_id: businessId };
   let changed = false;
@@ -161,7 +180,9 @@ export function buildEnrichmentPatch(
 
   fillText('brand', data.brand, product.brand);
   fillText('pack_size', data.pack_size || data.serving_size, product.pack_size);
-  fillText('hsn_sac', data.hsn_sac, product.hsn_sac);
+  if (fillHsn) {
+    fillText('hsn_sac', data.hsn_sac, product.hsn_sac);
+  }
   fillText('sku', data.sku || data.code, product.sku);
   fillText('description', data.description, product.description);
   fillText('details_html', data.details_html, product.details_html);
@@ -180,20 +201,18 @@ export function buildEnrichmentPatch(
     changed = true;
   }
 
-  if (!productHasImage(product)) {
-    const images = enrichmentImageUrls(data);
-    if (images.length) {
-      patch.image_url = images[0];
-      patch.metadata = {
-        ...(product.metadata || {}),
-        images: {
-          gallery: images,
-          front: images[0] || '',
-          back: images[1] || '',
-        },
-      };
-      changed = true;
-    }
+  const images = enrichmentImageUrls(data);
+  if (images.length && (refreshImages || !productHasImage(product))) {
+    patch.image_url = images[0];
+    patch.metadata = {
+      ...(product.metadata || {}),
+      images: {
+        gallery: images,
+        front: images[0] || '',
+        back: images[1] || '',
+      },
+    };
+    changed = true;
   }
 
   const enrichCode = String(data.code || '').trim();
@@ -211,6 +230,7 @@ export async function runBulkProductEnrich(options: {
   mode: BulkEnrichMode;
   businessId: string;
   enrich: (payload: {
+    product_id?: string;
     code?: string;
     query?: string;
     use_smart_lookup?: boolean;
@@ -218,9 +238,16 @@ export async function runBulkProductEnrich(options: {
   patch: (productId: string, body: BulkEnrichPatch) => Promise<unknown>;
   onProgress?: (progress: BulkEnrichProgress) => void;
   limit?: number;
+  /** Defaults: refresh catalog images + fill blank HSN. */
+  patchOptions?: BuildEnrichmentPatchOptions;
 }): Promise<BulkEnrichResult> {
   const limit = options.limit ?? BULK_ENRICH_LIMIT;
   const ids = options.ids.slice(0, limit);
+  const patchOptions: BuildEnrichmentPatchOptions = {
+    refreshImages: true,
+    fillHsn: true,
+    ...options.patchOptions,
+  };
   const result: BulkEnrichResult = {
     updated: 0,
     skipped: 0,
@@ -246,7 +273,11 @@ export async function runBulkProductEnrich(options: {
     }
 
     try {
-      const data = await options.enrich({ ...lookup, use_smart_lookup: true });
+      const data = await options.enrich({
+        ...lookup,
+        product_id: product.id,
+        use_smart_lookup: true,
+      });
       result.chargedPaise += Number(data.charged_paise || 0);
 
       if (data.existing_product_id && data.existing_product_id !== product.id) {
@@ -266,7 +297,7 @@ export async function runBulkProductEnrich(options: {
         continue;
       }
 
-      const body = buildEnrichmentPatch(product, data, options.businessId);
+      const body = buildEnrichmentPatch(product, data, options.businessId, patchOptions);
       if (!body) {
         result.skipped += 1;
         continue;

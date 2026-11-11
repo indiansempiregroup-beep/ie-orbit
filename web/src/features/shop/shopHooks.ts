@@ -482,6 +482,7 @@ export function useShopProductMutations() {
         | {
             code?: string;
             query?: string;
+            product_id?: string;
             image_url?: string;
             hint?: string;
             use_smart_lookup?: boolean;

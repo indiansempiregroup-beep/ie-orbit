@@ -313,7 +313,10 @@ class ShopBarcodeEnrichView(APIView):
         if business_id:
             business = _business(request, business_id, features=CATALOG_FEATURES)
 
-        # If this shop already has the barcode, return a pointer so the client can open edit.
+        # If this shop already has the barcode, return a pointer so "add product"
+        # can open the existing row. When the client is enriching that same product
+        # (bulk fill / edit with product_id), continue to external lookup instead.
+        enriching_product_id = data.get("product_id")
         if code and business is not None:
             existing = self.catalog.lookup_by_barcode(
                 tenant=request.current_tenant, business=business, code=code
@@ -322,28 +325,30 @@ class ShopBarcodeEnrichView(APIView):
                 existing = self.catalog.get_product(
                     tenant=request.current_tenant, business=business, product_id=existing.id
                 )
-                return success_response(
-                    ProductEnrichmentService.with_user_message(
-                        {
-                            "found": True,
-                            "code": code,
-                            "source": "shop_catalog",
-                            "existing_product_id": str(existing.id),
-                            "existing_product_name": existing.name,
-                            "sku": existing.sku or code,
-                            "name": existing.name,
-                            "brand": existing.brand,
-                            "pack_size": existing.pack_size,
-                            "description": existing.description,
-                            "category": existing.category,
-                            "category_label": CategoryService().label_for(existing.category),
-                            "image_url": existing.image_url,
-                            "confidence": "high",
-                            "needs_pack_photo": False,
-                            "message": f"Already in your catalog as {existing.name}.",
-                        }
+                same_product = enriching_product_id is not None and existing.id == enriching_product_id
+                if not same_product:
+                    return success_response(
+                        ProductEnrichmentService.with_user_message(
+                            {
+                                "found": True,
+                                "code": code,
+                                "source": "shop_catalog",
+                                "existing_product_id": str(existing.id),
+                                "existing_product_name": existing.name,
+                                "sku": existing.sku or code,
+                                "name": existing.name,
+                                "brand": existing.brand,
+                                "pack_size": existing.pack_size,
+                                "description": existing.description,
+                                "category": existing.category,
+                                "category_label": CategoryService().label_for(existing.category),
+                                "image_url": existing.image_url,
+                                "confidence": "high",
+                                "needs_pack_photo": False,
+                                "message": f"Already in your catalog as {existing.name}.",
+                            }
+                        )
                     )
-                )
 
         if image_url and use_smart and business is not None:
             result = self.smart.smart_enrich(

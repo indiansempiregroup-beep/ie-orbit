@@ -300,6 +300,9 @@ class BarcodeLookupSerializer(serializers.Serializer):
 
 class EnrichBarcodeSerializer(serializers.Serializer):
     business_id = serializers.UUIDField(required=False)
+    # When enriching an existing product (bulk fill / edit), pass its id so a
+    # matching shop barcode does not short-circuit external catalog lookup.
+    product_id = serializers.UUIDField(required=False)
     code = serializers.CharField(required=False, allow_blank=True, max_length=128)
     query = serializers.CharField(required=False, allow_blank=True, max_length=200)
     image_url = serializers.CharField(required=False, allow_blank=True, max_length=1024)

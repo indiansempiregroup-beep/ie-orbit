@@ -5669,6 +5669,8 @@ class ApiClient {
       this.request<ShopBarcodeBulkLookupResult>('/shop/barcodes/lookup-bulk', { method: 'POST', body }),
     enrichBarcode: (body: {
       business_id?: string;
+      /** Pass when filling an existing product so shop barcode match does not block external lookup. */
+      product_id?: string;
       code?: string;
       query?: string;
       image_url?: string;
@@ -7985,6 +7987,7 @@ export {
   enrichmentLookupForProduct,
   primaryShopBarcode,
   runBulkProductEnrich,
+  type BuildEnrichmentPatchOptions,
   type BulkEnrichMode,
   type BulkEnrichProgress,
   type BulkEnrichResult,

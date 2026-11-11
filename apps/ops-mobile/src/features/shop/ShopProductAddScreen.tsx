@@ -377,6 +377,7 @@ export function ShopProductAddScreen() {
           : (
               await client.shop.enrichBarcode({
                 business_id: businessId,
+                product_id: productId || undefined,
                 code,
                 use_smart_lookup: true,
               })
@@ -688,6 +689,7 @@ export function ShopProductAddScreen() {
       const freshClient = await getFreshClient();
       const response = await freshClient.shop.enrichBarcode({
         business_id: businessId,
+        product_id: productId || undefined,
         code: form.barcode || undefined,
         image_url: front,
         hint: nameLookup || form.name || form.brand,
@@ -759,6 +761,7 @@ export function ShopProductAddScreen() {
     try {
       const response = await client.shop.enrichBarcode({
         business_id: businessId,
+        product_id: productId || undefined,
         ...(looksLikeBarcode ? { code: trimmed } : { query: trimmed }),
         use_smart_lookup: true,
       });

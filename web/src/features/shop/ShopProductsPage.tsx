@@ -687,10 +687,16 @@ export function ShopProductsPage() {
         payload.code
           ? {
               code,
+              product_id: editingId || undefined,
               image_url: payload.image_url,
               use_smart_lookup: payload.use_smart_lookup ?? true,
             }
-          : { query: payload.query || '', image_url: payload.image_url, use_smart_lookup: payload.use_smart_lookup ?? true },
+          : {
+              query: payload.query || '',
+              product_id: editingId || undefined,
+              image_url: payload.image_url,
+              use_smart_lookup: payload.use_smart_lookup ?? true,
+            },
       );
 
       if (data.existing_product_id && data.existing_product_id !== editingId) {
