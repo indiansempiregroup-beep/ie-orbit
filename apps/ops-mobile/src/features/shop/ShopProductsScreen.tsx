@@ -30,7 +30,7 @@ import type { BulkEnrichMode, ShopProduct } from '@ie-orbit/sdk';
 import {
   BULK_ENRICH_LIMIT,
   clampPageSize,
-  primaryShopBarcode,
+  enrichmentLookupForProduct,
   runBulkProductEnrich,
   SHOP_PRODUCT_CATEGORIES,
   toPagedResult,
@@ -50,6 +50,16 @@ import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { useSheetKeyboardLayout } from '../../hooks/useSheetKeyboardLayout';
 import { formatMoney } from './posPayment';
+import {
+  COLUMN_LABEL_KEY,
+  DEFAULT_PRODUCT_COLUMNS,
+  missingFieldQuery,
+  parseProductColumns,
+  PRODUCT_COLUMN_IDS,
+  PRODUCT_COLUMNS_STORAGE_KEY,
+  type MissingFieldFilter,
+  type ProductColumnId,
+} from './productColumns';
 
 const BULK_HINT_KEY = 'shop.bulkHint.dismissed';
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
@@ -76,8 +86,13 @@ export function ShopProductsScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
+  const [brandFilter, setBrandFilter] = useState('');
+  const [debouncedBrand, setDebouncedBrand] = useState('');
+  const [missingFilter, setMissingFilter] = useState<MissingFieldFilter>('');
   const [sortBy, setSortBy] = useState('name_asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<ProductColumnId[]>([...DEFAULT_PRODUCT_COLUMNS]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkCategory, setBulkCategory] = useState('');
@@ -212,6 +227,23 @@ export function ShopProductsScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedBrand(brandFilter.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [brandFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const key = businessId ? `${PRODUCT_COLUMNS_STORAGE_KEY}.${businessId}` : PRODUCT_COLUMNS_STORAGE_KEY;
+      const raw = await getPersistentItem(key);
+      if (!cancelled) setVisibleColumns(parseProductColumns(raw));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [businessId]);
+
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
@@ -222,6 +254,8 @@ export function ShopProductsScreen() {
         search: debouncedSearch || undefined,
         status: status || undefined,
         category: category || undefined,
+        brand: debouncedBrand || undefined,
+        ...missingFieldQuery(missingFilter),
         page_size: clampPageSize(pageSize),
         cursor: cursor || undefined,
       });
@@ -246,7 +280,19 @@ export function ShopProductsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, debouncedSearch, status, category, pageSize, cursor, sortBy, t]);
+  }, [
+    businessId,
+    client,
+    debouncedSearch,
+    status,
+    category,
+    debouncedBrand,
+    missingFilter,
+    pageSize,
+    cursor,
+    sortBy,
+    t,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -260,7 +306,30 @@ export function ShopProductsScreen() {
     setCursor(null);
     setCursorStack([null]);
     setSelectedIds([]);
-  }, [debouncedSearch, status, category, pageSize]);
+  }, [debouncedSearch, status, category, debouncedBrand, missingFilter, pageSize]);
+
+  function toggleColumn(id: ProductColumnId) {
+    setVisibleColumns((current) => {
+      const next = current.includes(id) ? current.filter((col) => col !== id) : [...current, id];
+      const ordered = PRODUCT_COLUMN_IDS.filter((col) => next.includes(col));
+      const safe = ordered.length ? ordered : [...DEFAULT_PRODUCT_COLUMNS];
+      const key = businessId ? `${PRODUCT_COLUMNS_STORAGE_KEY}.${businessId}` : PRODUCT_COLUMNS_STORAGE_KEY;
+      void setPersistentItem(key, JSON.stringify(safe));
+      return safe;
+    });
+  }
+
+  const showCol = (id: ProductColumnId) => visibleColumns.includes(id);
+
+  useEffect(() => {
+    if (!showCol('status') && status) setStatus('');
+    if (!showCol('category') && category) setCategory('');
+    if (!showCol('brand') && brandFilter) setBrandFilter('');
+    if (missingFilter === 'barcode' && !showCol('barcode')) setMissingFilter('');
+    if (missingFilter === 'image' && !showCol('image')) setMissingFilter('');
+    if (missingFilter === 'hsn' && !showCol('hsn')) setMissingFilter('');
+    if (missingFilter === 'sku' && !showCol('sku')) setMissingFilter('');
+  }, [visibleColumns, status, category, brandFilter, missingFilter]);
 
   const pageRows = items;
   const pageIds = useMemo(() => pageRows.map((item) => item.id), [pageRows]);
@@ -352,7 +421,7 @@ export function ShopProductsScreen() {
     const eligible = ids.filter((id) => {
       const product = productsById.get(id);
       if (!product) return false;
-      return mode === 'barcode' ? Boolean(primaryShopBarcode(product)) : Boolean(product.name?.trim());
+      return Boolean(enrichmentLookupForProduct(product, mode));
     });
     if (!eligible.length) {
       toast.push(
@@ -417,8 +486,24 @@ export function ShopProductsScreen() {
             placeholder={t('shop.products.searchShort')}
             style={styles.searchFlex}
           />
+          <Pressable
+            onPress={() => setColumnsOpen(true)}
+            style={styles.columnsChip}
+            accessibilityRole="button"
+            accessibilityLabel={t('shop.products.columns')}
+            hitSlop={8}
+          >
+            <Feather name="layout" size={14} color={colors.primary} />
+            <Text style={styles.columnsChipText}>{t('shop.products.columns')}</Text>
+          </Pressable>
           <FilterButton
-            count={Number(Boolean(status)) + Number(Boolean(category)) + Number(sortBy !== 'name_asc')}
+            count={
+              Number(Boolean(status)) +
+              Number(Boolean(category)) +
+              Number(Boolean(brandFilter.trim())) +
+              Number(Boolean(missingFilter)) +
+              Number(sortBy !== 'name_asc')
+            }
             onPress={() => setFiltersOpen(true)}
           />
         </View>
@@ -450,11 +535,13 @@ export function ShopProductsScreen() {
             </Pressable>
           </View>
         ) : null}
-        {status || category ? (
+        {status || category || brandFilter.trim() || missingFilter ? (
           <Pressable
             onPress={() => {
               setStatus('');
               setCategory('');
+              setBrandFilter('');
+              setMissingFilter('');
             }}
             style={styles.clearFilters}
           >
@@ -468,22 +555,61 @@ export function ShopProductsScreen() {
           onReset={() => {
             setStatus('');
             setCategory('');
+            setBrandFilter('');
+            setMissingFilter('');
             setSortBy('name_asc');
           }}
         >
-          <FilterChoiceGroup
-            label={t('common.status')}
-            value={status}
-            options={statusOptions}
-            onChange={setStatus}
-          />
-          <FilterChoiceGroup
-            label={t('shop.products.category')}
-            value={category}
-            options={categoryOptions}
-            onChange={setCategory}
-            searchable
-          />
+          <Text style={styles.filterFieldLabel}>{t('shop.products.filterOnlyVisible')}</Text>
+          {showCol('brand') ? (
+            <>
+              <Text style={styles.filterFieldLabel}>{t('shop.products.brandFilter')}</Text>
+              <TextInput
+                value={brandFilter}
+                onChangeText={setBrandFilter}
+                placeholder={t('shop.products.brandFilterPlaceholder')}
+                placeholderTextColor={colors.mutedForeground}
+                style={styles.brandInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </>
+          ) : null}
+          {showCol('status') ? (
+            <FilterChoiceGroup
+              label={t('common.status')}
+              value={status}
+              options={statusOptions}
+              onChange={setStatus}
+            />
+          ) : null}
+          {showCol('category') ? (
+            <FilterChoiceGroup
+              label={t('shop.products.category')}
+              value={category}
+              options={categoryOptions}
+              onChange={setCategory}
+              searchable
+            />
+          ) : null}
+          {showCol('barcode') || showCol('image') || showCol('hsn') || showCol('sku') ? (
+            <FilterChoiceGroup
+              label={t('shop.products.missingAny')}
+              value={missingFilter}
+              options={[
+                { value: '', label: t('shop.products.missingNone') },
+                ...(showCol('barcode')
+                  ? [{ value: 'barcode', label: t('shop.products.missingBarcode') }]
+                  : []),
+                ...(showCol('image')
+                  ? [{ value: 'image', label: t('shop.products.missingImage') }]
+                  : []),
+                ...(showCol('hsn') ? [{ value: 'hsn', label: t('shop.products.missingHsn') }] : []),
+                ...(showCol('sku') ? [{ value: 'sku', label: t('shop.products.missingSku') }] : []),
+              ]}
+              onChange={(value) => setMissingFilter(value as MissingFieldFilter)}
+            />
+          ) : null}
           <FilterChoiceGroup
             label={t('shop.products.filterSort')}
             value={sortBy}
@@ -498,6 +624,34 @@ export function ShopProductsScreen() {
             onChange={setSortBy}
           />
         </FilterSheet>
+
+        <Modal visible={columnsOpen} transparent animationType="fade" onRequestClose={() => setColumnsOpen(false)}>
+          <Pressable style={styles.columnsBackdrop} onPress={() => setColumnsOpen(false)}>
+            <Pressable style={[styles.columnsSheet, { paddingBottom: bottomPad }]} onPress={(e) => e.stopPropagation()}>
+              <Text style={styles.columnsTitle}>{t('shop.products.columnsTitle')}</Text>
+              <Text style={styles.filterFieldLabel}>{t('shop.products.columnsFilterHint')}</Text>
+              <ScrollView style={{ maxHeight: maxHeight * 0.7 }}>
+                {PRODUCT_COLUMN_IDS.map((id) => (
+                  <Pressable
+                    key={id}
+                    onPress={() => toggleColumn(id)}
+                    style={styles.columnRow}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: visibleColumns.includes(id) }}
+                  >
+                    <Feather
+                      name={visibleColumns.includes(id) ? 'check-square' : 'square'}
+                      size={18}
+                      color={visibleColumns.includes(id) ? colors.primary : colors.mutedForeground}
+                    />
+                    <Text style={styles.columnRowLabel}>{t(COLUMN_LABEL_KEY[id])}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Button label={t('common.done')} onPress={() => setColumnsOpen(false)} />
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -570,16 +724,34 @@ export function ShopProductsScreen() {
             const selected = selectedIds.includes(item.id);
             const categoryLabel =
               SHOP_PRODUCT_CATEGORIES.find((c) => c.value === item.category)?.label || item.category;
+            const metaParts: string[] = [];
+            if (showCol('sku')) metaParts.push(`SKU ${item.sku || '—'}`);
+            if (showCol('stock')) metaParts.push(t('shop.products.stockCount', { count: item.stock_on_hand }));
+            if (showCol('category') && categoryLabel) metaParts.push(String(categoryLabel));
+            if (showCol('brand')) metaParts.push(item.brand || t('shop.products.noBrand'));
+            if (showCol('barcode')) {
+              const codes = (item.barcodes ?? []).map((row) => row.code).filter(Boolean);
+              metaParts.push(codes.length ? codes.join(', ') : t('shop.products.noBarcodes'));
+            }
+            if (showCol('hsn')) metaParts.push(`HSN ${item.hsn_sac || '—'}`);
+            if (showCol('gst')) metaParts.push(`GST ${item.gst_rate ?? item.tax_rate ?? 0}%`);
+            if (showCol('pack_size') && item.pack_size) metaParts.push(item.pack_size);
             return (
               <BooksDocumentRow
                 title={item.name}
-                amount={formatMoney(item.price, item.currency)}
-                meta={`${t('shop.products.rowMeta', { sku: item.sku || '—', stock: item.stock_on_hand })}${categoryLabel ? ` · ${categoryLabel}` : ''}`}
-                badge={t(`shop.products.statuses.${item.status}`, { defaultValue: item.status })}
+                amount={showCol('price') ? formatMoney(item.price, item.currency) : undefined}
+                meta={metaParts.join(' · ')}
+                badge={
+                  showCol('status')
+                    ? t(`shop.products.statuses.${item.status}`, { defaultValue: item.status })
+                    : undefined
+                }
                 badgeKind={item.status === 'active' ? 'paid' : item.status === 'inactive' ? 'void' : 'neutral'}
                 icon="package"
                 iconTone="amber"
-                imageUri={resolveMediaUrl(primaryProductImageUrl(item)) || undefined}
+                imageUri={
+                  showCol('image') ? resolveMediaUrl(primaryProductImageUrl(item)) || undefined : undefined
+                }
                 onPress={() => navigation.navigate('ShopProductAdd', { productId: item.id })}
                 leading={
                   canWrite ? (
@@ -765,6 +937,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.tint,
   },
+  columnsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.tint,
+  },
+  columnsChipText: { color: colors.primary, fontFamily: fonts.bodySemi, fontSize: 13 },
   selectRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -854,6 +1036,47 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', gap: 10, marginBottom: spacing.sm },
   filterHalf: { flex: 1 },
   clearFilters: { alignSelf: 'flex-start', marginBottom: spacing.sm },
+  filterFieldLabel: {
+    color: colors.mutedForeground,
+    fontSize: 12,
+    fontFamily: fonts.bodySemi,
+    marginBottom: 6,
+    marginTop: spacing.sm,
+  },
+  brandInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.foreground,
+    marginBottom: spacing.md,
+    backgroundColor: colors.card,
+  },
+  columnsBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  columnsSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  columnsTitle: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 17,
+    color: colors.foreground,
+  },
+  columnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+  },
+  columnRowLabel: { color: colors.foreground, fontSize: 15 },
   clearFiltersText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   row: {
     backgroundColor: colors.card,

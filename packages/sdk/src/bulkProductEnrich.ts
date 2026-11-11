@@ -128,7 +128,8 @@ export function enrichmentLookupForProduct(
   mode: BulkEnrichMode,
 ): { code?: string; query?: string } | null {
   if (mode === 'barcode') {
-    const code = primaryShopBarcode(product);
+    // Prefer barcode; fall back to SKU when barcode is missing (common after CSV import).
+    const code = primaryShopBarcode(product) || String(product.sku || '').trim();
     return code ? { code } : null;
   }
   const query = String(product.name || '').trim();

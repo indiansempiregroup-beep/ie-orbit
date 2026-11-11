@@ -48,6 +48,10 @@ class CatalogService:
         category: str | None = None,
         brand: str | None = None,
         stock: str | None = None,
+        missing_barcode: bool | None = None,
+        missing_image: bool | None = None,
+        missing_hsn: bool | None = None,
+        missing_sku: bool | None = None,
     ) -> QuerySet[ShopProduct]:
         qs = (
             ShopProduct.objects.filter(tenant=tenant, business=business)
@@ -59,6 +63,7 @@ class CatalogService:
                     filter=Q(reviews__deleted_at__isnull=True, reviews__is_active=True),
                     distinct=True,
                 ),
+                barcode_count=Count("barcodes", distinct=True),
             )
             .order_by("name")
         )
@@ -88,6 +93,23 @@ class CatalogService:
                 low_stock_threshold__gt=0,
                 stock_on_hand__lte=F("low_stock_threshold"),
             )
+        if missing_barcode is True:
+            qs = qs.filter(barcode_count=0)
+        elif missing_barcode is False:
+            qs = qs.filter(barcode_count__gt=0)
+        if missing_image is True:
+            # Primary photo field; gallery-only rows are uncommon after CSV import.
+            qs = qs.filter(Q(image_url="") | Q(image_url__isnull=True))
+        elif missing_image is False:
+            qs = qs.exclude(Q(image_url="") | Q(image_url__isnull=True))
+        if missing_hsn is True:
+            qs = qs.filter(Q(hsn_sac="") | Q(hsn_sac__isnull=True))
+        elif missing_hsn is False:
+            qs = qs.exclude(Q(hsn_sac="") | Q(hsn_sac__isnull=True))
+        if missing_sku is True:
+            qs = qs.filter(Q(sku="") | Q(sku__isnull=True))
+        elif missing_sku is False:
+            qs = qs.exclude(Q(sku="") | Q(sku__isnull=True))
         return qs
 
     def get_product(self, *, tenant: Tenant, business: Business, product_id: UUID) -> ShopProduct:

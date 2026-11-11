@@ -105,13 +105,26 @@ class ShopProductListCreateView(APIView):
         if not business_id:
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, features=CATALOG_FEATURES)
+        def _flag(name: str) -> bool | None:
+            raw = str(request.query_params.get(name) or "").strip().lower()
+            if raw in {"1", "true", "yes"}:
+                return True
+            if raw in {"0", "false", "no"}:
+                return False
+            return None
+
         qs = self.catalog.list_products(
             tenant=request.current_tenant,
             business=business,
             search=request.query_params.get("search"),
             status=request.query_params.get("status"),
             category=request.query_params.get("category"),
+            brand=request.query_params.get("brand"),
             stock=request.query_params.get("stock"),
+            missing_barcode=_flag("missing_barcode"),
+            missing_image=_flag("missing_image"),
+            missing_hsn=_flag("missing_hsn"),
+            missing_sku=_flag("missing_sku"),
         )
         return paginated_list_response(request, qs, ShopProductSerializer)
 

@@ -34,6 +34,11 @@ export function useShopProducts(
   category = '',
   options?: {
     stock?: string;
+    brand?: string;
+    missing_barcode?: boolean;
+    missing_image?: boolean;
+    missing_hsn?: boolean;
+    missing_sku?: boolean;
     pageSize?: number;
     cursor?: string | null;
     /** When true, fetch every page (export/tools only). Prefer paged mode for UI. */
@@ -46,6 +51,11 @@ export function useShopProducts(
   const pageSize = options?.pageSize ?? 25;
   const cursor = options?.cursor || undefined;
   const stock = options?.stock || undefined;
+  const brand = options?.brand?.trim() || undefined;
+  const missingBarcode = options?.missing_barcode;
+  const missingImage = options?.missing_image;
+  const missingHsn = options?.missing_hsn;
+  const missingSku = options?.missing_sku;
   const fetchAll = Boolean(options?.all);
   return useQuery({
     queryKey: [
@@ -54,27 +64,35 @@ export function useShopProducts(
       search,
       status,
       category,
+      brand || '',
       stock || '',
+      missingBarcode === true ? '1' : missingBarcode === false ? '0' : '',
+      missingImage === true ? '1' : missingImage === false ? '0' : '',
+      missingHsn === true ? '1' : missingHsn === false ? '0' : '',
+      missingSku === true ? '1' : missingSku === false ? '0' : '',
       fetchAll ? 'all' : pageSize,
       fetchAll ? 'all' : cursor || '',
     ],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      if (fetchAll) {
-        const rows = await client.shop.listAllProducts({
-          business_id: businessId,
-          search: search || undefined,
-          status: status || undefined,
-          category: category || undefined,
-        });
-        return toPagedResult({ data: rows, meta: { pagination: { page_size: rows.length } } });
-      }
-      const response = await client.shop.listProducts({
+      const filters = {
         business_id: businessId,
         search: search || undefined,
         status: status || undefined,
         category: category || undefined,
+        brand,
         stock: stock || undefined,
+        missing_barcode: missingBarcode,
+        missing_image: missingImage,
+        missing_hsn: missingHsn,
+        missing_sku: missingSku,
+      };
+      if (fetchAll) {
+        const rows = await client.shop.listAllProducts(filters);
+        return toPagedResult({ data: rows, meta: { pagination: { page_size: rows.length } } });
+      }
+      const response = await client.shop.listProducts({
+        ...filters,
         page_size: clampPageSize(pageSize),
         cursor,
       });

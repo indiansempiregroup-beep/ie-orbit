@@ -5594,8 +5594,13 @@ class ApiClient {
       search?: string;
       status?: string;
       category?: string;
+      brand?: string;
       /** Server stock filter: in_stock | out | low */
       stock?: 'in_stock' | 'out' | 'low' | string;
+      missing_barcode?: boolean | string;
+      missing_image?: boolean | string;
+      missing_hsn?: boolean | string;
+      missing_sku?: boolean | string;
       page_size?: number;
       cursor?: string;
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
@@ -5604,6 +5609,12 @@ class ApiClient {
       search?: string;
       status?: string;
       category?: string;
+      brand?: string;
+      stock?: string;
+      missing_barcode?: boolean | string;
+      missing_image?: boolean | string;
+      missing_hsn?: boolean | string;
+      missing_sku?: boolean | string;
     }) => {
       const rows: ShopProduct[] = [];
       const seen = new Set<string>();
