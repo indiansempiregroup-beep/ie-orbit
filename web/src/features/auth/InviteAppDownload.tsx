@@ -1,7 +1,9 @@
-import { OpsStoreBadges } from '../public/OpsStoreBadges';
+import { hasOpsStoreBadges, OpsStoreBadges } from '../public/OpsStoreBadges';
 import { detectPreferredOpsStore, preferredPhoneLabel } from '../../lib/preferredOpsStore';
 
 export function InviteAppDownload({ email }: { email?: string | null }) {
+  if (!hasOpsStoreBadges()) return null;
+
   const preferred = detectPreferredOpsStore();
   const phone = preferredPhoneLabel(preferred);
 

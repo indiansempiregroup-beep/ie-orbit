@@ -16,13 +16,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { useCustomers } from '../../hooks/useOpsData';
+import { ShopCustomerPickerField } from './ShopPickers';
 import { uploadPetImage } from '../../api/media';
 import { FormScreen } from '../../components/FormScreen';
 import { FormHero } from '../../components/FormHero';
 import { ImagePickerButton } from '../../components/ImagePickerButton';
 import { DateField } from '../../components/DateField';
-import { SelectField } from '../../components/SelectField';
 import { Button } from '../../components/ui/Button';
 import { FormSection } from '../../components/ui/FormSection';
 import { Input } from '../../components/ui/Input';
@@ -91,7 +90,6 @@ export function ShopPetFormScreen() {
   const { token } = useAuth();
   const { businessId, tenantId } = useWorkspace();
   const toast = useToast();
-  const { customers, reload: refreshCustomers } = useCustomers();
   const petId = route.params?.petId;
   const isEdit = Boolean(petId);
 
@@ -158,27 +156,6 @@ export function ShopPetFormScreen() {
       setForm((current) => ({ ...current, customerId: selectId }));
     }
   }, [route.params?.selectCustomerId]);
-
-  useEffect(() => {
-    void refreshCustomers();
-  }, [refreshCustomers, route.params?.selectCustomerId]);
-
-  const customerOptions = useMemo(() => {
-    const options = (customers ?? []).map((customer) => ({
-      value: customer.id,
-      label:
-        customer.full_name ||
-        customer.display_name ||
-        [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
-        customer.email ||
-        customer.phone_number ||
-        customer.id,
-    }));
-    if (form.customerId && !options.some((option) => option.value === form.customerId)) {
-      options.push({ value: form.customerId, label: t('opsApp.shop.pets.selectedCustomer') });
-    }
-    return options;
-  }, [customers, form.customerId, t]);
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -312,16 +289,14 @@ export function ShopPetFormScreen() {
       <FormSection title={t('opsApp.shop.pets.owner')}>
         <View style={styles.customerRow}>
           <View style={styles.customerField}>
-            <SelectField
+            <ShopCustomerPickerField
               label={t('shop.pets.customer')}
               required
               value={form.customerId}
-              options={customerOptions}
               onChange={(value) => {
                 setField('customerId', value);
                 setFieldErrors((current) => ({ ...current, customerId: '' }));
               }}
-              searchable
               placeholder={t('shop.pets.selectCustomer')}
               error={fieldErrors.customerId}
             />

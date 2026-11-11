@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useStaffCreate, useStaffList, useStaffSearch, useStaffUpdate } from '../management/managementHooks';
+import { useStaffCreate, useStaffList, useStaffUpdate } from '../management/managementHooks';
 import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -11,11 +11,14 @@ import { useActiveBusinessFormField, useBusinessFormChange } from '../../hooks/u
 import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { indianMobileError } from '../../lib/phoneValidation';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 export function StaffPage() {
   const snackbar = useSnackbar();
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  const listState = useCursorListState();
+  const { searchTerm, setSearchTerm } = listState;
   const createStaff = useStaffCreate();
   const updateStaff = useStaffUpdate();
   const [formState, setFormState] = useState({
@@ -32,8 +35,12 @@ export function StaffPage() {
     is_bookable: true,
   });
   const [creationError, setCreationError] = useState<string | null>(null);
-  const { data: staff, isLoading, error, refetch } = useStaffList();
-  const search = useStaffSearch(searchTerm);
+  const { data: page, isLoading, isFetching, error, refetch } = useStaffList({
+    q: listState.debouncedSearch,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
+  const staff = page?.items;
   const dialog = useDialog();
   const handleBusinessFormChange = useBusinessFormChange((business) => {
     setFormState((current) => ({ ...current, business }));
@@ -42,7 +49,7 @@ export function StaffPage() {
     setFormState((current) => ({ ...current, business }));
   });
 
-  const selectedData = searchTerm.trim() ? search.data ?? [] : staff ?? [];
+  const selectedData = staff ?? [];
 
   const staffSummary = useMemo(() => {
     const total = staff?.length ?? 0;
@@ -88,7 +95,7 @@ export function StaffPage() {
 
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Total staff</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>Staff on this page</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{staffSummary.total}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
@@ -120,10 +127,10 @@ export function StaffPage() {
               <span>Actions</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
-              {isLoading || search.isLoading ? (
+              {isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center' }}>Loading staff…</div>
-              ) : error || search.error ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? search.error?.message ?? 'Unable to load staff'}</div>
+              ) : error ? (
+                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? 'Unable to load staff'}</div>
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No staff found.</div>
               ) : (
@@ -187,6 +194,13 @@ export function StaffPage() {
                   );
                 })
               )}
+            </div>
+            <div style={{ padding: '0 20px 16px' }}>
+              <CursorPager
+                {...listState.pagerProps(page, selectedData.length)}
+                label="staff"
+                disabled={isFetching}
+              />
             </div>
           </Card>
         </section>

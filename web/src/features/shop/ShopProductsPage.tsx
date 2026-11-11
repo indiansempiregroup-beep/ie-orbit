@@ -3,8 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Camera, Pencil, Plus, Rows3 } from 'lucide-react';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
-import type { ShopBarcodeEnrichment, ShopGodown, ShopProduct, ShopProductCategoryItem } from '@ie-orbit/sdk';
-import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
+import type {
+  BulkEnrichMode,
+  ShopBarcodeEnrichment,
+  ShopGodown,
+  ShopProduct,
+  ShopProductCategoryItem,
+} from '@ie-orbit/sdk';
+import { BULK_ENRICH_LIMIT, primaryShopBarcode, runBulkProductEnrich, SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -17,7 +23,7 @@ import { useShopGodowns, useShopProductMutations, useShopProducts } from './shop
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '../../hooks/useApiClient';
 import { ShopFilterBar } from './ShopFilterBar';
-import { TablePagination } from '../bi/components/TablePagination';
+import { CursorPager } from '../bi/components/CursorPager';
 import { uploadProductImage } from './uploadProductImage';
 import { ProductImageCropModal, type ProductImageCropResult } from './ProductImageCropModal';
 import { hasBiFeature } from '../../config/planFeatures';
@@ -239,8 +245,9 @@ export function ShopProductsPage() {
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
   const [stockFilter, setStockFilter] = useState('');
-  const [pageSize, setPageSize] = useState(10);
-  const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<Array<string | null>>([null]);
   const [barcodeLookup, setBarcodeLookup] = useState('');
   const [nameLookup, setNameLookup] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -267,7 +274,11 @@ export function ShopProductsPage() {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
-  const products = useShopProducts(debouncedSearch, status, category);
+  const products = useShopProducts(debouncedSearch, status, category, {
+    stock: stockFilter || undefined,
+    pageSize,
+    cursor,
+  });
   const godownsQuery = useShopGodowns();
   const godowns = godownsQuery.data ?? [];
   const categoriesQuery = useQuery({
@@ -300,6 +311,8 @@ export function ShopProductsPage() {
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkPercent, setBulkPercent] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkEnrichBusy, setBulkEnrichBusy] = useState<BulkEnrichMode | null>(null);
+  const [bulkEnrichProgress, setBulkEnrichProgress] = useState({ done: 0, total: 0 });
   const [showBulkHint, setShowBulkHint] = useState(() => {
     try {
       return window.localStorage.getItem('shop.bulkHint.dismissed') !== '1';
@@ -308,35 +321,36 @@ export function ShopProductsPage() {
     }
   });
 
-  const filtered = useMemo(() => {
-    const rows = products.data ?? [];
-    if (!stockFilter) return rows;
-    return rows.filter((product) => {
-      const stock = Number(product.stock_on_hand);
-      const threshold = Number(product.low_stock_threshold ?? 0);
-      if (stockFilter === 'in_stock') return stock > 0;
-      if (stockFilter === 'out') return stock <= 0;
-      if (stockFilter === 'low') return stock > 0 && threshold > 0 && stock <= threshold;
-      return true;
-    });
-  }, [products.data, stockFilter]);
-
-  const pageOffset = useMemo(() => {
-    if (!filtered.length) return 0;
-    const maxOffset = Math.floor((filtered.length - 1) / pageSize) * pageSize;
-    return Math.min(offset, maxOffset);
-  }, [filtered.length, offset, pageSize]);
-  const pageRows = useMemo(
-    () => filtered.slice(pageOffset, pageOffset + pageSize),
-    [filtered, pageOffset, pageSize],
-  );
+  const pageRows = products.data?.items ?? [];
+  const nextCursor = products.data?.nextCursor ?? null;
+  const previousCursor = products.data?.previousCursor ?? null;
 
   useEffect(() => {
-    setOffset(0);
+    setCursor(null);
+    setCursorStack([null]);
+    setSelectedIds([]);
   }, [debouncedSearch, status, category, stockFilter, pageSize]);
 
   const pageIds = useMemo(() => pageRows.map((product) => product.id), [pageRows]);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+
+  function goNextPage() {
+    if (!nextCursor) return;
+    setCursorStack((stack) => [...stack, cursor]);
+    setCursor(nextCursor);
+  }
+
+  function goPreviousPage() {
+    setCursorStack((stack) => {
+      if (stack.length <= 1) {
+        setCursor(null);
+        return [null];
+      }
+      const nextStack = stack.slice(0, -1);
+      setCursor(nextStack[nextStack.length - 1] ?? null);
+      return nextStack;
+    });
+  }
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -386,6 +400,66 @@ export function ShopProductsPage() {
       }
     } catch (error) {
       snackbar.push(error instanceof Error ? error.message : tp('bulkFailed'), 'error');
+    }
+  }
+
+  async function applyBulkEnrich(mode: BulkEnrichMode) {
+    if (!businessId || !selectedIds.length || bulkEnrichBusy) return;
+    const productsById = new Map(pageRows.map((product) => [product.id, product]));
+    const ids = selectedIds.slice(0, BULK_ENRICH_LIMIT);
+    const eligible = ids.filter((id) => {
+      const product = productsById.get(id);
+      if (!product) return false;
+      return mode === 'barcode' ? Boolean(primaryShopBarcode(product)) : Boolean(product.name?.trim());
+    });
+    if (!eligible.length) {
+      snackbar.push(tp(mode === 'barcode' ? 'bulkEnrichNeedBarcode' : 'bulkEnrichNeedName'), 'error');
+      return;
+    }
+    setBulkEnrichBusy(mode);
+    setBulkEnrichProgress({ done: 0, total: eligible.length });
+    try {
+      const result = await runBulkProductEnrich({
+        productsById,
+        ids: eligible,
+        mode,
+        businessId,
+        enrich: async (payload) => {
+          const response = await client.shop.enrichBarcode({
+            business_id: businessId,
+            ...payload,
+          });
+          return response.data;
+        },
+        patch: async (productId, body) => {
+          await client.shop.patchProduct(productId, body);
+        },
+        onProgress: setBulkEnrichProgress,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['shop-products'] });
+      await queryClient.invalidateQueries({ queryKey: ['shop-godowns'] });
+      if (result.updated && !result.failed && !result.skipped) {
+        snackbar.push(tp('bulkEnrichDone', { updated: result.updated }), 'success');
+        setSelectedIds([]);
+      } else if (result.updated) {
+        snackbar.push(
+          tp('bulkEnrichPartial', {
+            updated: result.updated,
+            skipped: result.skipped,
+            failed: result.failed,
+          }),
+          'info',
+        );
+      } else if (result.failed) {
+        snackbar.push(result.errors[0]?.message || tp('bulkFailed'), 'error');
+      } else {
+        snackbar.push(tp('bulkEnrichNone'), 'info');
+      }
+    } catch (error) {
+      snackbar.push(error instanceof Error ? error.message : tp('bulkFailed'), 'error');
+    } finally {
+      setBulkEnrichBusy(null);
+      setBulkEnrichProgress({ done: 0, total: 0 });
     }
   }
 
@@ -492,7 +566,7 @@ export function ShopProductsPage() {
         setMessage(alreadyText);
         snackbar.push(alreadyText, 'info');
         if (!editingId) {
-          const existing = (products.data ?? []).find((row) => row.id === data.existing_product_id);
+          const existing = pageRows.find((row) => row.id === data.existing_product_id);
           if (existing) openEditDialog(existing);
         }
         return;
@@ -891,28 +965,61 @@ export function ShopProductsPage() {
 
         {products.isLoading ? <p>{t('common.loading')}</p> : null}
         {products.error ? <p role="alert">{(products.error as Error).message}</p> : null}
-        {filtered.length ? (
+        {pageRows.length ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
               <input type="checkbox" checked={allPageSelected} onChange={toggleSelectPage} />
               {tp('selectPage', { count: pageRows.length })}
             </label>
             {selectedIds.length ? (
-              <Button type="button" variant="neutral" onClick={() => setBulkOpen(true)}>
-                {tp('selectedEdit', { count: selectedIds.length })}
-              </Button>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' }}>
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() => setBulkOpen(true)}
+                  disabled={Boolean(bulkEnrichBusy)}
+                >
+                  {tp('selectedEdit', { count: selectedIds.length })}
+                </Button>
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() => void applyBulkEnrich('barcode')}
+                  loading={bulkEnrichBusy === 'barcode'}
+                  disabled={Boolean(bulkEnrichBusy)}
+                  aria-label={tp('a11yFetchBarcode', { n: selectedIds.length })}
+                >
+                  {bulkEnrichBusy === 'barcode'
+                    ? tp('bulkEnrichBusy', bulkEnrichProgress)
+                    : tp('fetchFromBarcode')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={() => void applyBulkEnrich('name')}
+                  loading={bulkEnrichBusy === 'name'}
+                  disabled={Boolean(bulkEnrichBusy)}
+                  aria-label={tp('a11yFetchName', { n: selectedIds.length })}
+                >
+                  {bulkEnrichBusy === 'name'
+                    ? tp('bulkEnrichBusy', bulkEnrichProgress)
+                    : tp('fetchFromName')}
+                </Button>
+              </div>
             ) : null}
           </div>
         ) : null}
-        <TablePagination
-          total={filtered.length}
-          offset={pageOffset}
+        <CursorPager
+          count={pageRows.length}
           pageSize={pageSize}
-          pageSizeOptions={[10, 25, 50, 100]}
-          singleLine
-          label={tp('paginationLabel')}
-          onPageChange={setOffset}
+          hasPrevious={cursorStack.length > 1 || Boolean(previousCursor)}
+          hasNext={Boolean(nextCursor)}
+          onPrevious={goPreviousPage}
+          onNext={goNextPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 25, 50, 100]}
+          label={tp('paginationLabel')}
+          disabled={products.isFetching}
         />
         <div style={{ display: 'grid', gap: 8 }}>
           {pageRows.map((product) => (
@@ -1033,7 +1140,7 @@ export function ShopProductsPage() {
               </Button>
             </div>
           ))}
-          {!products.isLoading && !filtered.length ? (
+          {!products.isLoading && !pageRows.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <p>{tp('empty')}</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1065,15 +1172,17 @@ export function ShopProductsPage() {
             </div>
           ) : null}
         </div>
-        <TablePagination
-          total={filtered.length}
-          offset={pageOffset}
+        <CursorPager
+          count={pageRows.length}
           pageSize={pageSize}
-          pageSizeOptions={[10, 25, 50, 100]}
-          singleLine
-          label={tp('paginationLabel')}
-          onPageChange={setOffset}
+          hasPrevious={cursorStack.length > 1 || Boolean(previousCursor)}
+          hasNext={Boolean(nextCursor)}
+          onPrevious={goPreviousPage}
+          onNext={goNextPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 25, 50, 100]}
+          label={tp('paginationLabel')}
+          disabled={products.isFetching}
         />
       </Card>
 

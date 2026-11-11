@@ -8,7 +8,7 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Count, Q, QuerySet, Sum, Value
+from django.db.models import Avg, Count, F, Q, QuerySet, Sum, Value
 from django.db.models.functions import Coalesce, ExtractWeekDay, TruncDate
 from django.utils import timezone
 
@@ -47,6 +47,7 @@ class CatalogService:
         status: str | None = None,
         category: str | None = None,
         brand: str | None = None,
+        stock: str | None = None,
     ) -> QuerySet[ShopProduct]:
         qs = (
             ShopProduct.objects.filter(tenant=tenant, business=business)
@@ -76,6 +77,17 @@ class CatalogService:
                 | Q(category__icontains=term)
                 | Q(barcodes__code__icontains=term)
             ).distinct()
+        stock_key = str(stock or "").strip().lower()
+        if stock_key == "in_stock":
+            qs = qs.filter(stock_on_hand__gt=0)
+        elif stock_key == "out":
+            qs = qs.filter(stock_on_hand__lte=0)
+        elif stock_key == "low":
+            qs = qs.filter(
+                stock_on_hand__gt=0,
+                low_stock_threshold__gt=0,
+                stock_on_hand__lte=F("low_stock_threshold"),
+            )
         return qs
 
     def get_product(self, *, tenant: Tenant, business: Business, product_id: UUID) -> ShopProduct:

@@ -11,6 +11,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
+import { findInCursorPages } from '../../utils/findInPages';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShopDeliveryZoneForm'>;
 
@@ -62,8 +63,10 @@ export function ShopDeliveryZoneFormScreen({ navigation, route }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listDeliveryZones({ business_id: businessId });
-      const zone = response.data.find((row) => row.id === zoneId);
+      const zone = await findInCursorPages(
+        (cursor) => client.shop.listDeliveryZones({ business_id: businessId, page_size: 100, cursor }),
+        (row) => row.id === zoneId,
+      );
       if (!zone) {
         setError(t('opsApp.shop.zones.notFound'));
         return;

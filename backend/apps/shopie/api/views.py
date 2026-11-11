@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from drf_spectacular.utils import extend_schema
@@ -76,6 +77,11 @@ from apps.shopie.services import CatalogService, OrderService
 from apps.shopie.services.categories import CategoryService
 from apps.shopie.services.enrichment import ProductEnrichmentService
 from apps.shopie.services.fulfillment import FulfillmentService
+from apps.shopie.services.list_search import (
+    CUSTOMER_SEARCH_FIELDS,
+    apply_text_search,
+    request_search_term,
+)
 from apps.shopie.services.masters import MasterService
 from apps.shopie.services.merchant_payments import MerchantPaymentService
 from apps.shopie.services.packaging_analysis import PackagingAnalysisService
@@ -105,6 +111,7 @@ class ShopProductListCreateView(APIView):
             search=request.query_params.get("search"),
             status=request.query_params.get("status"),
             category=request.query_params.get("category"),
+            stock=request.query_params.get("stock"),
         )
         return paginated_list_response(request, qs, ShopProductSerializer)
 
@@ -746,7 +753,15 @@ class ShopOrderListCreateView(APIView):
             business=business,
             status=request.query_params.get("status"),
             customer_id=customer_id,
+            q=request.query_params.get("q") or request.query_params.get("search"),
         )
+        fulfillment_modes = [
+            part.strip().lower()
+            for part in str(request.query_params.get("fulfillment_mode") or "").split(",")
+            if part.strip()
+        ]
+        if fulfillment_modes:
+            qs = qs.filter(fulfillment_mode__in=fulfillment_modes)
         return paginated_list_response(request, qs, ShopOrderListSerializer)
 
     def post(self, request: Request) -> Response:
@@ -1191,6 +1206,11 @@ class ShopInvoiceListView(APIView):
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, features=INVOICE_FEATURES)
         qs = ShopInvoice.objects.filter(tenant=request.current_tenant, business=business)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("invoice_number", "status", "notes", *CUSTOMER_SEARCH_FIELDS),
+        )
         return paginated_list_response(request, qs, ShopInvoiceSerializer)
 
 
@@ -1205,6 +1225,19 @@ class ShopQuotationListCreateView(APIView):
         business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_QUOTATIONS)
         qs = ShopQuotation.objects.filter(tenant=request.current_tenant, business=business)
         qs = qs.select_related("customer")
+        state = str(request.query_params.get("state") or "").strip().lower()
+        if state == "converted":
+            qs = qs.filter(Q(status="converted") | Q(converted_order__isnull=False))
+        elif state == "open":
+            qs = qs.exclude(
+                Q(status__in=["converted", "cancelled", "void", "rejected", "expired"])
+                | Q(converted_order__isnull=False)
+            )
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("quotation_number", "status", "notes", *CUSTOMER_SEARCH_FIELDS),
+        )
         return paginated_list_response(request, qs, ShopQuotationSerializer)
 
     def post(self, request: Request) -> Response:

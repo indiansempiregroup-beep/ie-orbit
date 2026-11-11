@@ -30,13 +30,17 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type {
-  Customer,
-  ShopBooksDocument,
-  ShopBooksDocumentType,
-  ShopProduct,
-  ShopSupplier,
+import {
+  clampPageSize,
+  toPagedResult,
+  type ShopBooksDocument,
+  type ShopBooksDocumentType,
+  type ShopProduct,
+  type ShopSupplier,
 } from '@ie-orbit/sdk';
+import { ShopCustomerPickerField, ShopProductPickerField } from './ShopPickers';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import type { TFunction } from 'i18next';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
@@ -45,7 +49,6 @@ import { confirmAction } from '../../utils/confirmAction';
 import { isProductTaxInclusive } from './posPricing';
 import { getApiErrorMessage } from '../../utils/format';
 import {
-  customerLabel,
   formatMoney,
   formatVoucherDateTime,
   statusText,
@@ -167,8 +170,6 @@ export function ShopBooksDocumentsScreen() {
   const { businessId, tenantId } = useWorkspace();
 
   const [documents, setDocuments] = useState<ShopBooksDocument[]>([]);
-  const [products, setProducts] = useState<ShopProduct[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,8 +181,10 @@ export function ShopBooksDocumentsScreen() {
   const [documentDate, setDocumentDate] = useState(todayIso());
   const [lines, setLines] = useState<DocLine[]>([emptyLine()]);
   const [notes, setNotes] = useState('');
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'dispatched' | 'invoiced'>('all');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [docType, statusFilter],
+  });
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const [detailDoc, setDetailDoc] = useState<ShopBooksDocument | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -257,28 +260,31 @@ export function ShopBooksDocumentsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [docsRes, productsRes, partiesRes] = await Promise.all([
-        client.shop.listDocuments({ business_id: businessId, doc_type: docType }),
-        client.shop.listProducts({ business_id: businessId, status: 'active' }),
-        meta.usesSupplier
-          ? client.shop.listSuppliers({ business_id: businessId })
-          : client.customers.list({ business: businessId }),
-      ]);
-      setDocuments(docsRes.data ?? []);
-      setProducts(productsRes.data ?? []);
+      const docsRes = await client.shop.listDocuments({
+        business_id: businessId,
+        doc_type: docType,
+        q,
+        state: docType === 'delivery_challan' && statusFilter !== 'all' ? statusFilter : undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
       if (meta.usesSupplier) {
-        setSuppliers((partiesRes.data as ShopSupplier[]) ?? []);
-        setCustomers([]);
+        const suppliersRes = await client.shop.listSuppliers({ business_id: businessId });
+        setSuppliers(suppliersRes.data ?? []);
       } else {
-        setCustomers((partiesRes.data as Customer[]) ?? []);
         setSuppliers([]);
       }
+      const page = toPagedResult(docsRes, pageSize);
+      setDocuments(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('shop.booksDocuments.errLoad'));
+      setDocuments([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, docType, meta.usesSupplier, t]);
+  }, [businessId, client, docType, statusFilter, meta.usesSupplier, q, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -306,22 +312,8 @@ export function ShopBooksDocumentsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filteredDocs = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return documents.filter((item) => {
-      const status = docStatus(item);
-      if (docType === 'delivery_challan' && statusFilter !== 'all') {
-        if (statusFilter === 'open' && !['draft', 'confirmed'].includes(status)) return false;
-        if (statusFilter === 'dispatched' && status !== 'dispatched') return false;
-        if (statusFilter === 'invoiced' && status !== 'converted' && !item.converted_voucher) return false;
-      }
-      if (!term) return true;
-      return [item.document_number, item.customer_name ?? '', item.supplier_name ?? '', item.status, String(item.total)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [documents, search, docType, statusFilter]);
+  const filteredDocs = documents;
+  const hasFilters = Boolean(search) || (docType === 'delivery_challan' && statusFilter !== 'all');
 
   const docSummary = useMemo(() => {
     let total = 0;
@@ -344,32 +336,21 @@ export function ShopBooksDocumentsScreen() {
     return { total, open, converted, dispatched, count: documents.length };
   }, [documents, docType]);
 
-  const partyOptions = useMemo(() => {
-    if (meta.usesSupplier) {
-      return [
-        { value: '', label: t('opsApp.shop.common.noSupplier') },
-        ...suppliers.map((supplier) => ({ value: supplier.id, label: supplierLabel(supplier) })),
-      ];
-    }
-    return [
-      { value: '', label: t('opsApp.shop.common.noCustomer') },
-      ...customers.map((customer) => ({ value: customer.id, label: customerLabel(customer) })),
-    ];
-  }, [customers, suppliers, meta.usesSupplier, t]);
-
-  const productOptions = useMemo(
-    () => products.map((product) => ({ value: product.id, label: `${product.name} · ${formatMoney(product.price)}` })),
-    [products],
+  const supplierOptions = useMemo(
+    () => [
+      { value: '', label: t('opsApp.shop.common.noSupplier') },
+      ...suppliers.map((supplier) => ({ value: supplier.id, label: supplierLabel(supplier) })),
+    ],
+    [suppliers, t],
   );
 
   function setLine(key: string, patch: Partial<DocLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
 
-  function selectProductForLine(key: string, productId: string) {
-    const product = products.find((p) => p.id === productId);
+  function selectProductForLine(key: string, product: ShopProduct | null) {
     setLine(key, {
-      productId,
+      productId: product?.id ?? '',
       name: product?.name ?? '',
       rate: product ? String(product.price) : '0',
       gst: product ? String(product.gst_rate ?? product.tax_rate ?? 0) : '0',
@@ -562,27 +543,34 @@ export function ShopBooksDocumentsScreen() {
           }
         />
 
-        <SelectField
-          label={meta.usesSupplier ? t('opsApp.shop.common.supplier') : t('opsApp.shop.common.customer')}
-          required
-          value={partyId}
-          options={partyOptions}
-          onChange={setPartyId}
-          searchable
-        />
+        {meta.usesSupplier ? (
+          <SelectField
+            label={t('opsApp.shop.common.supplier')}
+            required
+            value={partyId}
+            options={supplierOptions}
+            onChange={setPartyId}
+            searchable
+          />
+        ) : (
+          <ShopCustomerPickerField
+            label={t('opsApp.shop.common.customer')}
+            required
+            value={partyId}
+            onChange={(id) => setPartyId(id)}
+          />
+        )}
 
         <DateField label={t('opsApp.shop.common.date')} required value={documentDate} onChange={setDocumentDate} allowClear={false} />
 
         <Text style={styles.section}>{t('opsApp.shop.documents.items')}</Text>
         {lines.map((line) => (
           <View key={line.key} style={styles.lineCard}>
-            <SelectField
+            <ShopProductPickerField
               label={t('opsApp.shop.documents.product')}
               required
               value={line.productId}
-              options={productOptions}
-              onChange={(value) => selectProductForLine(line.key, value)}
-              searchable
+              onChange={(_id, product) => selectProductForLine(line.key, product)}
               placeholder={t('opsApp.shop.documents.chooseProduct')}
             />
             <View style={styles.lineRow}>
@@ -801,21 +789,29 @@ export function ShopBooksDocumentsScreen() {
               <EmptyState
                 icon={docType === 'delivery_challan' ? 'truck' : 'file-text'}
                 title={
-                  documents.length && docType === 'delivery_challan'
+                  hasFilters && docType === 'delivery_challan'
                     ? t('opsApp.shop.documents.noChallansMatch')
                     : meta.emptyLabel
                 }
                 message={
                   docType === 'delivery_challan'
-                    ? documents.length
+                    ? hasFilters
                       ? t('opsApp.shop.documents.tryDifferent')
                       : t('opsApp.shop.documents.challanEmpty')
                     : t('opsApp.shop.documents.heroCreate')
                 }
-                actionLabel={documents.length && docType === 'delivery_challan' ? undefined : meta.newLabel}
-                onAction={documents.length && docType === 'delivery_challan' ? undefined : openCreate}
+                actionLabel={hasFilters && docType === 'delivery_challan' ? undefined : meta.newLabel}
+                onAction={hasFilters && docType === 'delivery_challan' ? undefined : openCreate}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filteredDocs.length}
+              label={t('shop.booksDocuments.paginationLabel', { defaultValue: 'documents' })}
+              disabled={loading}
+            />
           }
         />
       </View>

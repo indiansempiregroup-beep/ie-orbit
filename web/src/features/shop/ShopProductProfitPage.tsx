@@ -23,6 +23,7 @@ export function ShopProductProfitPage() {
     queryFn: async () => {
       const response = await client.shop.productProfitInsights({
         business_id: businessId,
+        include_catalog: false,
         ...(dateFrom ? { date_from: dateFrom } : {}),
         ...(dateTo ? { date_to: dateTo } : {}),
       });

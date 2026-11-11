@@ -6,7 +6,6 @@ import { usePageMeta } from '../../hooks/usePageMeta';
 import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { formatMoney } from '../../lib/currency';
 import { useDashboardSummary } from '../dashboard/dashboardHooks';
-import { useStaffList } from '../management/managementHooks';
 import { StatCard } from '../bi/components/StatCard';
 import { useBIReportsQuery } from '../bi/biHooks';
 
@@ -24,7 +23,6 @@ export function ReportsPage() {
   usePageMeta({ title: 'Reports — Orbit Appoint' });
   const navigate = useNavigate();
   const { staffId, setStaffId, canFilter } = useReportStaffFilter();
-  const staffQuery = useStaffList();
   const summaryQuery = useDashboardSummary();
   const reportsQuery = useBIReportsQuery();
   const summary = summaryQuery.data;
@@ -42,7 +40,7 @@ export function ReportsPage() {
         </p>
         {canFilter ? (
           <div style={{ marginBottom: 16 }}>
-            <StaffReportFilter staff={staffQuery.data ?? []} staffId={staffId} onChange={setStaffId} />
+            <StaffReportFilter staffId={staffId} onChange={setStaffId} />
           </div>
         ) : null}
         <Button variant="neutral" onClick={() => navigate('/bi/reports')}>

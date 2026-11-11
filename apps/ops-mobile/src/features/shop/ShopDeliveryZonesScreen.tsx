@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,7 +17,9 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopDeliveryZone } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopDeliveryZone } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { shopListRefreshControl } from './shopRefreshControl';
 
 function statusOptions(t: TFunction) {
@@ -37,8 +39,10 @@ export function ShopDeliveryZonesScreen() {
   const [zones, setZones] = useState<ShopDeliveryZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [enabledFilter, setEnabledFilter] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [enabledFilter],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   useLayoutEffect(() => {
@@ -62,14 +66,24 @@ export function ShopDeliveryZonesScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listDeliveryZones({ business_id: businessId });
-      setZones(response.data);
+      const response = await client.shop.listDeliveryZones({
+        business_id: businessId,
+        q,
+        enabled: enabledFilter === 'enabled' ? 'true' : enabledFilter === 'disabled' ? 'false' : undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      setZones(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.zones.loadFailed'));
+      setZones([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, enabledFilter, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,18 +93,8 @@ export function ShopDeliveryZonesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return zones.filter((zone) => {
-      if (enabledFilter === 'enabled' && !zone.enabled) return false;
-      if (enabledFilter === 'disabled' && zone.enabled) return false;
-      if (!term) return true;
-      return [zone.name, ...(zone.cities ?? []), ...(zone.postal_prefixes ?? []), zone.notes ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [zones, search, enabledFilter]);
+  const filtered = zones;
+  const hasFilters = Boolean(search.trim()) || Boolean(enabledFilter);
 
   return (
     <DesktopPage>
@@ -148,16 +152,24 @@ export function ShopDeliveryZonesScreen() {
             !loading ? (
               <EmptyState
                 icon="map-pin"
-                title={zones.length ? t('opsApp.shop.zones.noMatching') : t('opsApp.shop.zones.noZones')}
+                title={hasFilters ? t('opsApp.shop.zones.noMatching') : t('opsApp.shop.zones.noZones')}
                 message={
-                  zones.length
+                  hasFilters
                     ? t('opsApp.shop.zones.tryAnother')
                     : t('opsApp.shop.zones.emptyHint')
                 }
-                actionLabel={zones.length ? undefined : t('shop.deliveryZones.addZone')}
-                onAction={zones.length ? undefined : () => navigation.navigate('ShopDeliveryZoneForm', {})}
+                actionLabel={hasFilters ? undefined : t('shop.deliveryZones.addZone')}
+                onAction={hasFilters ? undefined : () => navigation.navigate('ShopDeliveryZoneForm', {})}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('shop.deliveryZones.paginationLabel', { defaultValue: 'zones' })}
+              disabled={loading}
+            />
           }
         />
       </View>

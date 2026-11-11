@@ -12,6 +12,8 @@ import { ShopFilterBar } from './ShopFilterBar';
 import { formatMoney } from '../../lib/currency';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import type { ShopCoupon } from '@ie-orbit/sdk';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 type FormState = {
   code: string;
@@ -121,25 +123,24 @@ export function ShopCouponsPage() {
   const { t } = useTranslation();
   const workspace = useWorkspace();
   const currency = workspace.activeBusiness?.currency;
-  const coupons = useShopCoupons();
   const { createCoupon, patchCoupon, deleteCoupon } = useShopCouponMutations();
   const dialog = useDialog();
   const snackbar = useSnackbar();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const listState = useCursorListState({ resetKey: statusFilter });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const coupons = useShopCoupons({
+    q: listState.debouncedSearch,
+    isActive: statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : '',
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (coupons.data ?? []).filter((coupon) => {
-      if (statusFilter === 'active' && coupon.is_active === false) return false;
-      if (statusFilter === 'inactive' && coupon.is_active !== false) return false;
-      if (!term) return true;
-      return [coupon.code, coupon.name, coupon.description ?? ''].join(' ').toLowerCase().includes(term);
-    });
-  }, [coupons.data, search, statusFilter]);
+  // Server-filtered page (q + is_active).
+  const filtered = useMemo(() => coupons.data?.items ?? [], [coupons.data]);
 
   const busy = createCoupon.isPending || patchCoupon.isPending || deleteCoupon.isPending;
 
@@ -293,11 +294,11 @@ export function ShopCouponsPage() {
           {!coupons.isLoading && !filtered.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <p>
-                {coupons.data?.length
+                {search || statusFilter
                   ? t('shop.coupons.emptyFiltered')
                   : t('shop.coupons.emptyNone')}
               </p>
-              {!coupons.data?.length ? (
+              {!search && !statusFilter ? (
                 <Button type="button" variant="primary" onClick={openCreate}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
@@ -308,6 +309,11 @@ export function ShopCouponsPage() {
             </div>
           ) : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(coupons.data, filtered.length)}
+          label={t('shop.coupons.addCoupon').split(' ').pop()?.toLowerCase() ?? 'coupons'}
+          disabled={coupons.isFetching}
+        />
       </Card>
 
       <Dialog

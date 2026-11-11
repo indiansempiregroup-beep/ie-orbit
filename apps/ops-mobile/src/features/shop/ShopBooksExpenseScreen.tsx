@@ -31,7 +31,9 @@ import { BooksDocumentRow } from './BooksDocumentRow';
 import { groupedListProps } from '../../components/ui/GroupedList';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksVoucher, ShopCashAccount } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopBooksVoucher, type ShopCashAccount } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
   formatMoney,
   formatVoucherDateTime,
@@ -93,7 +95,9 @@ export function ShopBooksExpenseScreen() {
 
   const [busy, setBusy] = useState(false);
   const [listKind, setListKind] = useState<EntryKind>('expense');
-  const [search, setSearch] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [listKind],
+  });
   const [entryKind, setEntryKind] = useState<EntryKind>('expense');
 
   const [category, setCategory] = useState('');
@@ -137,22 +141,28 @@ export function ShopBooksExpenseScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [expenseRes, incomeRes, accountsRes] = await Promise.all([
-        client.shop.listVouchers({ business_id: businessId, type: 'expense' }),
-        client.shop.listVouchers({ business_id: businessId, type: 'other_income' }),
+      const [vouchersRes, accountsRes] = await Promise.all([
+        client.shop.listVouchers({
+          business_id: businessId,
+          type: listKind,
+          q,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.shop.listCashAccounts({ business_id: businessId }),
       ]);
-      const merged = [...(expenseRes.data ?? []), ...(incomeRes.data ?? [])].sort((a, b) =>
-        (b.voucher_date ?? b.created_at ?? '').localeCompare(a.voucher_date ?? a.created_at ?? ''),
-      );
-      setVouchers(merged);
+      const page = toPagedResult(vouchersRes, pageSize);
+      setVouchers(page.items);
+      setPageMeta(page);
       setAccounts(accountsRes.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load expenses');
+      setVouchers([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, listKind, q, pageSize, cursor, setPageMeta, clearPageMeta]);
 
   useFocusEffect(
     useCallback(() => {
@@ -162,17 +172,7 @@ export function ShopBooksExpenseScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const visibleVouchers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return vouchers.filter((v) => {
-      if ((v.voucher_type || 'expense') !== listKind) return false;
-      if (!term) return true;
-      return [v.voucher_number, v.notes ?? '', v.cash_account_name ?? '', String(v.total)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [vouchers, listKind, search]);
+  const visibleVouchers = vouchers;
   const summary = useMemo(() => summarizeVouchers(visibleVouchers), [visibleVouchers]);
 
   const categoryOptions = useMemo(() => {
@@ -437,6 +437,14 @@ export function ShopBooksExpenseScreen() {
                 }}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={visibleVouchers.length}
+              label={t('opsApp.shop.expense.paginationLabel', { defaultValue: 'entries' })}
+              disabled={loading}
+            />
           }
         />
       </View>

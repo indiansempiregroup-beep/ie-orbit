@@ -26,7 +26,15 @@ import { Input } from '../../components/ui/Input';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksVoucher, ShopPartyStatement, ShopSupplier } from '@ie-orbit/sdk';
+import {
+  clampPageSize,
+  toPagedResult,
+  type ShopBooksVoucher,
+  type ShopPartyStatement,
+  type ShopSupplier,
+} from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { formatMoney, formatVoucherDateTime, supplierLabel } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
@@ -38,8 +46,6 @@ import { indianMobileError, requiredMessage } from '../../utils/formValidation';
 import { normalizeGstin, validateGstin } from '../../utils/gstin';
 import { getApiErrorMessage } from '../../utils/format';
 import { shareCsv, toCsv } from '../../utils/shareCsv';
-
-const INVOICE_PAGE_SIZE = 20;
 
 function invoiceTypes(t: TFunction) {
   return [
@@ -84,24 +90,6 @@ function invoiceDue(voucher: ShopBooksVoucher) {
   return Math.max(0, Number(voucher.total ?? 0) - Number(voucher.amount_paid ?? 0));
 }
 
-function invoiceMatches(
-  voucher: ShopBooksVoucher,
-  search: string,
-  payment: string,
-) {
-  const due = invoiceDue(voucher);
-  const isVoid = (voucher.status || '').toLowerCase() === 'void';
-  if (payment === 'paid' && (isVoid || due > 0.009)) return false;
-  if (payment === 'due' && (isVoid || due <= 0.009)) return false;
-  const term = search.trim().toLowerCase();
-  if (!term) return true;
-  return [voucher.voucher_number, voucher.voucher_type, voucher.status, voucher.notes]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-    .includes(term);
-}
-
 function invoiceTypeLabel(value: string | undefined, t: TFunction) {
   const key = (value || '').toLowerCase();
   return (
@@ -144,7 +132,16 @@ export function ShopBooksPartiesScreen() {
   const [suppliers, setSuppliers] = useState<ShopSupplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const {
+    search,
+    setSearch,
+    q: supplierQuery,
+    pageSize: supplierPageSize,
+    cursor: supplierCursor,
+    setPageMeta: setSupplierPageMeta,
+    clearPageMeta: clearSupplierPageMeta,
+    pager: supplierPager,
+  } = useCursorPaging();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ShopSupplier | null>(null);
@@ -153,14 +150,24 @@ export function ShopBooksPartiesScreen() {
   const [form, setForm] = useState<SupplierForm>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [invoices, setInvoices] = useState<ShopBooksVoucher[]>([]);
-  const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
-  const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoiceType, setInvoiceType] = useState('');
   const [invoiceStatus, setInvoiceStatus] = useState('');
   const [invoicePayment, setInvoicePayment] = useState('');
   const [invoiceFrom, setInvoiceFrom] = useState('');
   const [invoiceTo, setInvoiceTo] = useState('');
+  const {
+    search: invoiceSearch,
+    setSearch: setInvoiceSearch,
+    q: invoiceQuery,
+    pageSize: invoicePageSize,
+    cursor: invoiceCursor,
+    setPageMeta: setInvoicePageMeta,
+    clearPageMeta: clearInvoicePageMeta,
+    pager: invoicePager,
+  } = useCursorPaging({
+    resetKeys: [selected?.id ?? '', invoiceType, invoiceStatus, invoicePayment, invoiceFrom, invoiceTo],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -196,7 +203,6 @@ export function ShopBooksPartiesScreen() {
     setInvoiceFrom('');
     setInvoiceTo('');
     setInvoices([]);
-    setInvoiceCursor(null);
     setSelected(supplier);
   }, []);
 
@@ -254,14 +260,32 @@ export function ShopBooksPartiesScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listSuppliers({ business_id: businessId });
-      setSuppliers(response.data ?? []);
+      const response = await client.shop.listSuppliers({
+        business_id: businessId,
+        search: supplierQuery,
+        page_size: clampPageSize(supplierPageSize),
+        cursor: supplierCursor,
+      });
+      const page = toPagedResult(response, supplierPageSize);
+      setSuppliers(page.items);
+      setSupplierPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.parties.loadFailed'));
+      setSuppliers([]);
+      clearSupplierPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [
+    businessId,
+    client,
+    supplierQuery,
+    supplierPageSize,
+    supplierCursor,
+    setSupplierPageMeta,
+    clearSupplierPageMeta,
+    t,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -271,16 +295,7 @@ export function ShopBooksPartiesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return suppliers;
-    return suppliers.filter((supplier) =>
-      [supplier.name, supplier.phone ?? '', supplier.email ?? '', supplier.gstin ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [suppliers, search]);
+  const filtered = suppliers;
 
   function setField<K extends keyof SupplierForm>(key: K, value: SupplierForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -332,42 +347,56 @@ export function ShopBooksPartiesScreen() {
     }
   }
 
-  const loadInvoices = useCallback(
-    async (cursor?: string | null) => {
-      if (!client || !businessId || !selected) return;
-      setInvoicesLoading(true);
-      try {
-        const response = await client.shop.listVouchers({
-          business_id: businessId,
-          supplier_id: selected.id,
-          type: invoiceType || undefined,
-          status: invoiceStatus || undefined,
-          date_from: invoiceFrom || undefined,
-          date_to: invoiceTo || undefined,
-          page_size: INVOICE_PAGE_SIZE,
-          cursor: cursor || undefined,
-        });
-        const page = response.data ?? [];
-        setInvoices((current) => (cursor ? [...current, ...page] : page));
-        setInvoiceCursor(response.meta?.pagination?.next_cursor ?? null);
-      } catch (err) {
-        toast.push(getApiErrorMessage(err, t('shop.parties.loadInvoicesFailed')), 'error');
-      } finally {
-        setInvoicesLoading(false);
-      }
-    },
-    [businessId, client, invoiceFrom, invoiceStatus, invoiceTo, invoiceType, selected, toast, t],
-  );
+  const loadInvoices = useCallback(async () => {
+    if (!client || !businessId || !selected) return;
+    setInvoicesLoading(true);
+    try {
+      const response = await client.shop.listVouchers({
+        business_id: businessId,
+        supplier_id: selected.id,
+        type: invoiceType || undefined,
+        status: invoiceStatus || undefined,
+        pay: invoicePayment === 'paid' ? 'paid' : invoicePayment === 'due' ? 'unpaid' : undefined,
+        date_from: invoiceFrom || undefined,
+        date_to: invoiceTo || undefined,
+        q: invoiceQuery,
+        page_size: clampPageSize(invoicePageSize),
+        cursor: invoiceCursor,
+      });
+      const page = toPagedResult(response, invoicePageSize);
+      setInvoices(page.items);
+      setInvoicePageMeta(page);
+    } catch (err) {
+      toast.push(getApiErrorMessage(err, t('shop.parties.loadInvoicesFailed')), 'error');
+      setInvoices([]);
+      clearInvoicePageMeta();
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [
+    businessId,
+    client,
+    invoiceFrom,
+    invoiceStatus,
+    invoiceTo,
+    invoiceType,
+    invoicePayment,
+    invoiceQuery,
+    invoicePageSize,
+    invoiceCursor,
+    selected,
+    setInvoicePageMeta,
+    clearInvoicePageMeta,
+    toast,
+    t,
+  ]);
 
   useEffect(() => {
     if (!selected) return;
-    void loadInvoices(null);
+    void loadInvoices();
   }, [selected, loadInvoices]);
 
-  const visibleInvoices = useMemo(
-    () => invoices.filter((voucher) => invoiceMatches(voucher, invoiceSearch, invoicePayment)),
-    [invoices, invoicePayment, invoiceSearch],
-  );
+  const visibleInvoices = invoices;
 
   async function exportInvoices() {
     if (!client || !businessId || !selected) return;
@@ -381,15 +410,17 @@ export function ShopBooksPartiesScreen() {
           supplier_id: selected.id,
           type: invoiceType || undefined,
           status: invoiceStatus || undefined,
+          pay: invoicePayment === 'paid' ? 'paid' : invoicePayment === 'due' ? 'unpaid' : undefined,
           date_from: invoiceFrom || undefined,
           date_to: invoiceTo || undefined,
+          q: invoiceQuery,
           page_size: 100,
           cursor,
         });
         rows.push(...(response.data ?? []));
         cursor = response.meta?.pagination?.next_cursor || undefined;
       } while (cursor);
-      const matched = rows.filter((voucher) => invoiceMatches(voucher, invoiceSearch, invoicePayment));
+      const matched = rows;
       const csv = toCsv(
         ['Number', 'Date', 'Type', 'Status', 'Total', 'Paid', 'Due', 'Notes'],
         matched.map((voucher) => [
@@ -638,9 +669,13 @@ export function ShopBooksPartiesScreen() {
               !invoicesLoading ? (
                 <EmptyState
                   icon="file-text"
-                  title={invoices.length ? t('shop.parties.noInvoices') : t('opsApp.shop.parties.noInvoicesYet')}
+                  title={
+                    invoiceSearch.trim() || invoiceFilterCount
+                      ? t('shop.parties.noInvoices')
+                      : t('opsApp.shop.parties.noInvoicesYet')
+                  }
                   message={
-                    invoices.length
+                    invoiceSearch.trim() || invoiceFilterCount
                       ? t('opsApp.shop.parties.tryAnother')
                       : t('opsApp.shop.parties.invoicesHint')
                   }
@@ -648,14 +683,12 @@ export function ShopBooksPartiesScreen() {
               ) : null
             }
             ListFooterComponent={
-              invoiceCursor ? (
-                <Button
-                  label={invoicesLoading ? t('common.loading') : t('shop.parties.loadMore')}
-                  variant="outline"
-                  loading={invoicesLoading}
-                  onPress={() => void loadInvoices(invoiceCursor)}
-                />
-              ) : null
+              <CursorPager
+                {...invoicePager}
+                count={visibleInvoices.length}
+                label={t('shop.parties.invoicesPaginationLabel', { defaultValue: 'bills' })}
+                disabled={invoicesLoading}
+              />
             }
           />
         </View>
@@ -669,7 +702,6 @@ export function ShopBooksPartiesScreen() {
         <VoucherSummaryCards
           metrics={[
             { label: t('shop.parties.tabSuppliers'), value: String(filtered.length) },
-            { label: t('common.all'), value: String(suppliers.length) },
           ]}
         />
         <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder={t('shop.parties.searchSuppliers')} />
@@ -713,6 +745,14 @@ export function ShopBooksPartiesScreen() {
                 onAction={openCreate}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...supplierPager}
+              count={filtered.length}
+              label={t('shop.parties.suppliersPaginationLabel', { defaultValue: 'suppliers' })}
+              disabled={loading}
+            />
           }
         />
       </View>

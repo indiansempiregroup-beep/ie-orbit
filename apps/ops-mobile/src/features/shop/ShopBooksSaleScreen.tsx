@@ -44,7 +44,9 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { getApiErrorMessage } from '../../utils/format';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import { ApiClientError } from '@ie-orbit/sdk';
+import { ApiClientError, clampPageSize, toPagedResult } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import type {
   Customer,
   ShopBooksVoucher,
@@ -65,6 +67,7 @@ import {
   voucherBalanceDue,
   voucherDisplayPaid,
   voucherDisplayTotal,
+  voucherListFilters,
   voucherPartyLabel,
   type VoucherInvoiceTypeFilter,
   type VoucherPayFilter,
@@ -435,8 +438,6 @@ export function ShopBooksSaleScreen() {
   const { businessId, tenantId } = useWorkspace();
 
   const [vouchers, setVouchers] = useState<ShopBooksVoucher[]>([]);
-  const [products, setProducts] = useState<ShopProduct[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<ShopCashAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -446,8 +447,10 @@ export function ShopBooksSaleScreen() {
   const [periodFilter, setPeriodFilter] = useState<VoucherPeriodFilter>('all');
   const [invoiceTypeFilter, setInvoiceTypeFilter] = useState<VoucherInvoiceTypeFilter>('all');
   const [customerFilter, setCustomerFilter] = useState('');
-  const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [payFilter, periodFilter, invoiceTypeFilter, customerFilter],
+  });
   const [filterOpen, setFilterOpen] = useState(false);
   const [complianceVoucher, setComplianceVoucher] = useState<ShopBooksVoucher | null>(null);
   const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
@@ -491,22 +494,48 @@ export function ShopBooksSaleScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [vouchersRes, productsRes, customersRes, accountsRes] = await Promise.all([
-        client.shop.listVouchers({ business_id: businessId, type: 'sale', source: 'pos' }),
-        client.shop.listProducts({ business_id: businessId, status: 'active' }),
-        client.customers.list({ business: businessId }),
+      const [vouchersRes, accountsRes] = await Promise.all([
+        client.shop.listVouchers({
+          business_id: businessId,
+          type: 'sale',
+          source: 'pos',
+          q,
+          ...voucherListFilters({
+            pay: payFilter,
+            period: periodFilter,
+            invoiceType: invoiceTypeFilter,
+            customerId: customerFilter,
+          }),
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.shop.listCashAccounts({ business_id: businessId }),
       ]);
-      setVouchers(vouchersRes.data ?? []);
-      setProducts(productsRes.data ?? []);
-      setCustomers(customersRes.data ?? []);
+      const page = toPagedResult(vouchersRes, pageSize);
+      setVouchers(page.items);
+      setPageMeta(page);
       setAccounts(accountsRes.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.sale.loadFailed'));
+      setVouchers([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [
+    businessId,
+    client,
+    q,
+    payFilter,
+    periodFilter,
+    invoiceTypeFilter,
+    customerFilter,
+    pageSize,
+    cursor,
+    setPageMeta,
+    clearPageMeta,
+    t,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -534,32 +563,24 @@ export function ShopBooksSaleScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filterCustomerOptions = useMemo(
-    () => [
+  const filterCustomerOptions = useMemo(() => {
+    const parties = new Map<string, string>();
+    for (const voucher of vouchers) {
+      if (!voucher.customer) continue;
+      parties.set(voucher.customer, voucher.customer_name || voucher.customer);
+    }
+    return [
       { value: '', label: t('opsApp.shop.common.allCustomers') },
       { value: '__walkin__', label: t('opsApp.shop.sale.walkInOrCash') },
-      ...customers.map((customer) => ({
-        value: customer.id,
-        label:
-          customer.full_name ||
-          customer.display_name ||
-          [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
-          customer.email ||
-          customer.phone_number ||
-          customer.id,
-      })),
-    ],
-    [customers, t],
-  );
+      ...Array.from(parties.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+  }, [vouchers, t]);
 
   const filteredVouchers = useMemo(() => {
-    const list = filterSaleVouchers(vouchers, {
-      pay: payFilter,
-      period: periodFilter,
-      customerId: customerFilter,
-      invoiceType: invoiceTypeFilter,
-      search,
-    });
+    // Search / period / customer / invoice type run on the API; `pay` is re-checked so return-adjusted rows match their badge.
+    const list = filterSaleVouchers(vouchers, { pay: payFilter });
     return [...list].sort((a, b) => {
       if (sortBy === 'oldest') return String(a.voucher_date || '').localeCompare(String(b.voucher_date || ''));
       if (sortBy === 'amount_desc') return Number(b.total ?? 0) - Number(a.total ?? 0);
@@ -567,7 +588,7 @@ export function ShopBooksSaleScreen() {
       if (sortBy === 'party') return voucherPartyLabel(a).localeCompare(voucherPartyLabel(b));
       return String(b.voucher_date || '').localeCompare(String(a.voucher_date || ''));
     });
-  }, [vouchers, payFilter, periodFilter, customerFilter, invoiceTypeFilter, search, sortBy]);
+  }, [vouchers, payFilter, sortBy]);
 
   const summary = useMemo(() => summarizeVouchers(filteredVouchers), [filteredVouchers]);
 
@@ -589,42 +610,8 @@ export function ShopBooksSaleScreen() {
     setSortBy('newest');
   }
 
-  const customerOptions = useMemo(
-    () => [
-      { value: '', label: t('opsApp.shop.sale.cashNoCustomer') },
-      ...customers.map((customer) => ({
-        value: customer.id,
-        label:
-          customer.full_name ||
-          customer.display_name ||
-          [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
-          customer.email ||
-          customer.phone_number ||
-          customer.id,
-      })),
-    ],
-    [customers, t],
-  );
-
   function setLine(key: string, patch: Partial<SaleLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
-  }
-
-  function selectProductForLine(key: string, productId: string) {
-    const product = products.find((p) => p.id === productId);
-    const meta =
-      product?.metadata && typeof product.metadata === 'object' ? product.metadata : {};
-    const taxInclusive =
-      typeof product?.tax_inclusive === 'boolean'
-        ? product.tax_inclusive
-        : Boolean((meta as Record<string, unknown>).tax_inclusive);
-    setLine(key, {
-      productId,
-      name: product?.name ?? '',
-      rate: product ? String(product.price) : '0',
-      gst: product ? String(product.gst_rate ?? product.tax_rate ?? 0) : '0',
-      taxInclusive,
-    });
   }
 
   function addLine() {
@@ -817,15 +804,13 @@ export function ShopBooksSaleScreen() {
                           label: t('shop.vouchers.share'),
                           icon: 'share-2',
                           onPress: () => {
-                            const customer =
-                              item.customer && customers.find((c) => c.id === item.customer);
                             setDocActions({
                               kind: 'sale',
                               id: item.id,
                               number: item.voucher_number,
                               businessId,
-                              phone: item.customer_phone || customer?.phone_number || '',
-                              email: item.customer_email || customer?.email || '',
+                              phone: item.customer_phone || '',
+                              email: item.customer_email || '',
                             });
                           },
                         },
@@ -868,6 +853,14 @@ export function ShopBooksSaleScreen() {
                 }
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filteredVouchers.length}
+              label={t('shop.vouchers.invoicesPaginationLabel', { defaultValue: 'invoices' })}
+              disabled={loading}
+            />
           }
         />
 

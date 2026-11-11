@@ -6,9 +6,9 @@ import {
   useBookingList,
   type AvailabilitySlot,
 } from '../bookings/bookingsHooks';
-import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { CustomerTypeahead, ServiceTypeahead, StaffTypeahead } from '../management/EntityPickers';
+import type { Service } from '@ie-orbit/sdk';
 import { useBranchesQuery } from '../settings/branchesHooks';
-import { buildNameMap } from '../../lib/managementEntities';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -19,9 +19,9 @@ import { DayTimeline } from './DayTimeline';
 import { bookingStatusColor } from './timelineUtils';
 import { ServiceMultiPicker } from '../bookings/ServiceMultiPicker';
 import {
-  bookingMatchesServiceFilter,
   bookingServiceLabel,
   buildBookingCreateInput,
+  buildBookingNameMaps,
   servicesTotalDurationMinutes,
 } from '../bookings/bookingHelpers';
 
@@ -31,20 +31,16 @@ export function CalendarPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [staffId, setStaffId] = useState(() => searchParams.get('staff') ?? '');
   const [serviceId, setServiceId] = useState('');
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const selectedServiceIds = useMemo(() => selectedServices.map((service) => service.id), [selectedServices]);
 
-  const bookingsQuery = useBookingList(date);
-  const staffQuery = useStaffList();
-  const customersQuery = useCustomerList();
-  const servicesQuery = useServiceList();
-  const services = servicesQuery.data ?? [];
-  const selectedServices = useMemo(
-    () =>
-      selectedServiceIds
-        .map((id) => services.find((service) => service.id === id))
-        .filter((service): service is NonNullable<typeof service> => Boolean(service)),
-    [selectedServiceIds, services],
-  );
+  // One calendar day only: walk every cursor page for this date (server-filtered by staff/service).
+  const bookingsQuery = useBookingList({
+    date,
+    staffId: staffId || undefined,
+    serviceId: serviceId || undefined,
+    all: true,
+  });
   const durationMinutes = useMemo(
     () => (selectedServices.length ? servicesTotalDurationMinutes(selectedServices) : 30),
     [selectedServices],
@@ -87,20 +83,11 @@ export function CalendarPage() {
   }, [offices]);
 
   const availability = availabilityQuery.data ?? [];
-  const bookings = bookingsQuery.data ?? [];
+  const bookings = bookingsQuery.data?.items ?? [];
   const totalCapacity = availability.reduce((sum, slot) => sum + slot.capacity, 0);
 
-  const staffMap = useMemo(() => buildNameMap(staffQuery.data), [staffQuery.data]);
-  const customerMap = useMemo(() => buildNameMap(customersQuery.data), [customersQuery.data]);
-  const serviceMap = useMemo(() => buildNameMap(servicesQuery.data), [servicesQuery.data]);
-
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((booking) => {
-      if (staffId && String(booking.staff_id ?? '') !== staffId) return false;
-      if (!bookingMatchesServiceFilter(booking, serviceId)) return false;
-      return true;
-    });
-  }, [bookings, staffId, serviceId]);
+  const { staffMap, customerMap, serviceMap } = useMemo(() => buildBookingNameMaps(bookings), [bookings]);
+  const filteredBookings = bookings;
 
   const confirmedCount = filteredBookings.filter((booking) => booking.status === 'confirmed').length;
 
@@ -217,43 +204,29 @@ export function CalendarPage() {
 
             <label style={{ display: 'grid', gap: 8 }}>
               Staff member
-              <select
-                value={staffId}
-                onChange={(event) => setStaffId(event.target.value)}
-                style={controlStyle}
-              >
-                <option value="">Any available</option>
-                {staffQuery.data?.map((staff) => (
-                  <option key={staff.id} value={staff.id}>
-                    {staff.full_name ?? staff.id}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label style={{ display: 'grid', gap: 8 }}>
-              Services for availability
-              <ServiceMultiPicker
-                services={services}
-                selectedIds={selectedServiceIds}
-                onChange={setSelectedServiceIds}
+              <StaffTypeahead
+                value={staffId || null}
+                onChange={(id) => setStaffId(id ?? '')}
+                placeholder="Any available"
+                emptyOptionLabel="Any available"
+                ariaLabel="Staff member"
               />
             </label>
 
             <label style={{ display: 'grid', gap: 8 }}>
+              Services for availability
+              <ServiceMultiPicker selectedServices={selectedServices} onChange={setSelectedServices} />
+            </label>
+
+            <label style={{ display: 'grid', gap: 8 }}>
               Filter bookings by service
-              <select
-                value={serviceId}
-                onChange={(event) => setServiceId(event.target.value)}
-                style={controlStyle}
-              >
-                <option value="">All services</option>
-                {services.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name ?? service.id}
-                  </option>
-                ))}
-              </select>
+              <ServiceTypeahead
+                value={serviceId || null}
+                onChange={(id) => setServiceId(id ?? '')}
+                placeholder="All services"
+                emptyOptionLabel="All services"
+                ariaLabel="Filter bookings by service"
+              />
             </label>
 
             <div style={{ color: '#6b7280', fontSize: 13 }}>
@@ -412,6 +385,10 @@ export function CalendarPage() {
               setCreationError('Select an office for this booking.');
               return;
             }
+            if (!formState.customer_id) {
+              setCreationError('Select a customer.');
+              return;
+            }
             if (!selectedServices.length) {
               setCreationError('Select at least one service.');
               return;
@@ -452,26 +429,15 @@ export function CalendarPage() {
 
           <label style={{ display: 'grid', gap: 8 }}>
             Customer
-            <select
-              required
-              value={formState.customer_id}
-              onChange={(event) => setFormState({ ...formState, customer_id: event.target.value })}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            >
-              <option value="">Select customer</option>
-              {customersQuery.data?.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.full_name ?? customer.id}
-                </option>
-              ))}
-            </select>
+            <CustomerTypeahead
+              value={formState.customer_id || null}
+              onChange={(id) => setFormState({ ...formState, customer_id: id ?? '' })}
+              placeholder="Select customer"
+              ariaLabel="Customer"
+            />
           </label>
 
-          <ServiceMultiPicker
-            services={services}
-            selectedIds={selectedServiceIds}
-            onChange={setSelectedServiceIds}
-          />
+          <ServiceMultiPicker selectedServices={selectedServices} onChange={setSelectedServices} />
 
           {needsOfficePicker ? (
             <label style={{ display: 'grid', gap: 8 }}>

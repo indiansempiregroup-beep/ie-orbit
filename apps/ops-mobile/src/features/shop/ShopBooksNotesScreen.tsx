@@ -37,7 +37,9 @@ import { groupedListProps } from '../../components/ui/GroupedList';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksVoucher } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopBooksVoucher } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
   formatMoney,
   formatVoucherDateTime,
@@ -373,7 +375,9 @@ export function ShopBooksNotesScreen() {
   const [vouchers, setVouchers] = useState<ShopBooksVoucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [noteKind],
+  });
   const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
 
   useLayoutEffect(() => {
@@ -401,14 +405,24 @@ export function ShopBooksNotesScreen() {
     setLoading(true);
     setError(null);
     try {
-      const vouchersRes = await client.shop.listVouchers({ business_id: businessId, type: noteKind });
-      setVouchers(vouchersRes.data ?? []);
+      const vouchersRes = await client.shop.listVouchers({
+        business_id: businessId,
+        type: noteKind,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(vouchersRes, pageSize);
+      setVouchers(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.notes.loadFailed'));
+      setVouchers([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, noteKind, t]);
+  }, [businessId, client, noteKind, q, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -418,14 +432,7 @@ export function ShopBooksNotesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = vouchers.filter((item) => {
-    const term = search.trim().toLowerCase();
-    if (!term) return true;
-    return [item.voucher_number, voucherPartyLabel(item), String(item.total), item.voucher_date ?? '']
-      .join(' ')
-      .toLowerCase()
-      .includes(term);
-  });
+  const filtered = vouchers;
 
   const summaryMetrics = useMemo(() => {
     let total = 0;
@@ -562,6 +569,14 @@ export function ShopBooksNotesScreen() {
                 onAction={() => navigation.navigate('ShopPos', { mode: noteKind })}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('opsApp.shop.notes.paginationLabel', { defaultValue: 'notes' })}
+              disabled={loading}
+            />
           }
         />
       </View>

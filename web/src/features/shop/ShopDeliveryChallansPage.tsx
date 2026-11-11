@@ -16,6 +16,9 @@ import { useAuthContext } from '../../contexts/AuthContext';
 import { ShopBooksDocumentDialog } from './ShopBooksDocumentDialog';
 import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHooks';
 import type { ShopBooksDocument } from '@ie-orbit/sdk';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 export function ShopDeliveryChallansPage() {
   const { t } = useTranslation();
@@ -24,16 +27,23 @@ export function ShopDeliveryChallansPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const currency = workspace.activeBusiness?.currency;
-  const challans = useShopBooksDocuments('delivery_challan');
+  const client = useApiClient();
+  const [status, setStatus] = useState('');
+  const listState = useCursorListState({ resetKey: status });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const challans = useShopBooksDocuments('delivery_challan', {
+    state: status,
+    q: listState.debouncedSearch,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const { convert } = useShopBooksDocumentMutations();
   const snackbar = useSnackbar();
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const [selected, setSelected] = useState<ShopBooksDocument | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const rows = challans.data ?? [];
+  const rows = useMemo(() => challans.data?.items ?? [], [challans.data]);
   const statusLabel = (value: string) => {
     const key = value.toLowerCase();
     return ['draft', 'confirmed', 'dispatched', 'converted', 'cancelled', 'void'].includes(key)
@@ -41,31 +51,26 @@ export function ShopDeliveryChallansPage() {
       : value;
   };
 
+  // Deep link (?document=id): fetch that one challan instead of scanning a full list.
   useEffect(() => {
     const documentId = searchParams.get('document');
-    if (!documentId || !rows.length) return;
-    const match = rows.find((row) => row.id === documentId);
-    if (match) setSelected(match);
+    if (!documentId) return;
     const next = new URLSearchParams(searchParams);
     next.delete('document');
     setSearchParams(next, { replace: true });
-  }, [rows, searchParams, setSearchParams]);
+    const match = rows.find((row) => row.id === documentId);
+    if (match) {
+      setSelected(match);
+      return;
+    }
+    void client.shop
+      .getDocument(documentId)
+      .then((response) => setSelected(response.data))
+      .catch(() => undefined);
+  }, [client, rows, searchParams, setSearchParams]);
 
-  const filteredRows = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      const rowStatus = row.status.toLowerCase();
-      if (status === 'open' && !['draft', 'confirmed'].includes(rowStatus)) return false;
-      if (status === 'converted' && rowStatus !== 'converted' && !row.converted_voucher) return false;
-      if (status && status !== 'open' && status !== 'converted' && rowStatus !== status) return false;
-      if (!term) return true;
-      return [row.document_number, row.customer_name, row.notes]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [rows, search, status]);
+  // Server-filtered (state + q); the page is shown as returned.
+  const filteredRows = rows;
 
   const openCount = rows.filter((row) => ['draft', 'confirmed'].includes(row.status.toLowerCase())).length;
   const dispatchedCount = rows.filter((row) => row.status.toLowerCase() === 'dispatched').length;
@@ -306,6 +311,11 @@ export function ShopDeliveryChallansPage() {
             );
           })}
         </div>
+        <CursorPager
+          {...listState.pagerProps(challans.data, filteredRows.length)}
+          label={t('shop.deliveryChallans.title').toLowerCase()}
+          disabled={challans.isFetching}
+        />
       </Card>
       <ShopBooksDocumentDialog
         document={selected}

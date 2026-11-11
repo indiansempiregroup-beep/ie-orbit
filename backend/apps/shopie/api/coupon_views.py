@@ -21,6 +21,7 @@ from apps.shopie.api.serializers import (
 )
 from apps.shopie.models import ShopCoupon, ShopPet
 from apps.shopie.services.coupons import CouponService
+from apps.shopie.services.list_search import apply_text_search, request_search_term
 
 
 def _validation_error(exc: DjangoValidationError) -> ValidationError:
@@ -88,6 +89,16 @@ class ShopCouponListCreateView(APIView):
             tenant=request.current_tenant,
             business=business,
             active_only=active_only,
+        )
+        is_active = str(request.query_params.get("is_active") or "").strip().lower()
+        if is_active in {"1", "true", "yes"}:
+            qs = qs.filter(is_active=True)
+        elif is_active in {"0", "false", "no"}:
+            qs = qs.filter(is_active=False)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("code", "name", "description"),
         )
         return paginated_list_response(request, qs, ShopCouponSerializer)
 

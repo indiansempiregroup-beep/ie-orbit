@@ -20,7 +20,23 @@ const badges = [
     label: 'Download IE Orbit on Google Play',
     icon: PlayMark,
   },
-];
+].filter((badge) => Boolean(badge.href));
+
+export type OpsStoreAvailability = 'ios' | 'android' | 'both';
+
+/** Which store listings are configured (env). Null when none. */
+export function configuredOpsStoreAvailability(): OpsStoreAvailability | null {
+  const ios = Boolean(OPS_IOS_STORE_URL);
+  const android = Boolean(OPS_ANDROID_STORE_URL);
+  if (ios && android) return 'both';
+  if (ios) return 'ios';
+  if (android) return 'android';
+  return null;
+}
+
+export function hasOpsStoreBadges() {
+  return configuredOpsStoreAvailability() !== null;
+}
 
 function isExternal(href: string) {
   return /^https?:\/\//i.test(href);
@@ -55,11 +71,18 @@ export function OpsStoreBadges({
   className?: string;
   preferred?: PreferredOpsStore;
 }) {
+  const availability = configuredOpsStoreAvailability();
+  if (!availability) return null;
+
   const mode = preferred ?? detectPreferredOpsStore();
   const ordered =
     mode === 'android' ? [...badges].reverse() : badges;
   const label =
-    mode === 'ios' ? 'Download on iPhone' : mode === 'android' ? 'Download on Android' : 'Download on iOS and Android';
+    availability === 'ios'
+      ? 'Download on iPhone'
+      : availability === 'android'
+        ? 'Download on Android'
+        : 'Download on iOS and Android';
   return (
     <div className={`public-store-badges${className ? ` ${className}` : ''}`} aria-label={label}>
       {ordered.map((badge) => {
@@ -75,7 +98,8 @@ export function OpsStoreBadges({
             </span>
           </>
         );
-        const isAlt = mode !== 'both' && badge.platform !== mode;
+        const isAlt =
+          availability === 'both' && mode !== 'both' && badge.platform !== mode;
         const classNames = `public-store-badge${isAlt ? ' is-alt' : ''}`;
         if (isExternal(badge.href)) {
           return (

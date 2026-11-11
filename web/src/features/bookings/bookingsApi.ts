@@ -1,5 +1,13 @@
 import type { IEOrbitClient, BookingLineItemStaffInput, BookingReassignableStaffResponse } from '@ie-orbit/sdk';
-import { type AvailabilitySlot, type Booking, type BookingCreateInput } from '@ie-orbit/sdk';
+import {
+  clampPageSize,
+  MAX_PAGE_SIZE,
+  toPagedResult,
+  type AvailabilitySlot,
+  type Booking,
+  type BookingCreateInput,
+  type PagedResult,
+} from '@ie-orbit/sdk';
 import { normalizeQuery, type QueryParams } from '../../lib/apiQuery';
 import { businessQueryParam } from '../../lib/workspace';
 
@@ -22,6 +30,49 @@ function scopedQuery(businessId: string | null | undefined, query?: QueryParams)
 export async function listBookings(client: IEOrbitClient, businessId?: string | null, query?: QueryParams) {
   const response = await client.bookings.list(scopedQuery(businessId, query));
   return response.data;
+}
+
+/** One cursor page of bookings (server filters: date/date_from/date_to/status/booking_id/…). */
+export async function listBookingsPage(
+  client: IEOrbitClient,
+  businessId: string | null | undefined,
+  query?: QueryParams,
+  pageSize = 25,
+): Promise<PagedResult<Booking>> {
+  const response = await client.bookings.list(
+    scopedQuery(businessId, { ...query, page_size: clampPageSize(pageSize) }),
+  );
+  return toPagedResult(response, pageSize);
+}
+
+/**
+ * Walk every cursor page for a bounded filter (e.g. one calendar day).
+ * Never use without a date/range filter.
+ */
+export async function listAllBookings(
+  client: IEOrbitClient,
+  businessId: string | null | undefined,
+  query?: QueryParams,
+  maxPages = 20,
+): Promise<PagedResult<Booking>> {
+  const rows: Booking[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await client.bookings.list(
+      scopedQuery(businessId, { ...query, page_size: MAX_PAGE_SIZE, cursor }),
+    );
+    const batch = response.data ?? [];
+    for (const row of batch) {
+      if (!row?.id || seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
+    const next = response.meta?.pagination?.next_cursor || undefined;
+    if (!next || next === cursor || batch.length === 0) break;
+    cursor = next;
+  }
+  return { items: rows, nextCursor: null, previousCursor: null, pageSize: rows.length };
 }
 
 export async function createBooking(client: IEOrbitClient, booking: BookingCreateInput) {

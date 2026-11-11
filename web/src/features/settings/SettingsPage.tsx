@@ -16,9 +16,13 @@ export function SettingsPage() {
   const profile = useProfileDetails();
   const businessQuery = useBusinessProfileQuery();
   const businessListQuery = useBusinessListQuery();
-  const customersQuery = useCustomerList();
-  const servicesQuery = useServiceList();
-  const staffQuery = useStaffList();
+  // Overview previews only: first server page of each list (no full dumps).
+  const customersQuery = useCustomerList({ pageSize: 25 });
+  const servicesQuery = useServiceList({ pageSize: 25 });
+  const staffQuery = useStaffList({ pageSize: 25 });
+  const customerRows = customersQuery.data?.items;
+  const serviceRows = servicesQuery.data?.items;
+  const staffRows = staffQuery.data?.items;
 
   const businessData = businessQuery.data;
   const user = profile.user;
@@ -42,45 +46,45 @@ export function SettingsPage() {
     return {
       primaryRole: formatUserRole(roles),
       roleCount: roles.length || 0,
-      staffCount: staffQuery.data?.filter((member) => member.status === 'active').length ?? 0,
+      staffCount: staffRows?.filter((member) => member.status === 'active').length ?? 0,
     };
-  }, [staffQuery.data, user?.roles]);
+  }, [staffRows, user?.roles]);
 
   const mediaSummary = useMemo(() => ({
-    serviceCount: servicesQuery.data?.length ?? 0,
-    customerCount: customersQuery.data?.length ?? 0,
-  }), [customersQuery.data, servicesQuery.data]);
+    serviceCount: serviceRows?.length ?? 0,
+    customerCount: customerRows?.length ?? 0,
+  }), [customerRows, serviceRows]);
 
   const activitySummary = useMemo(() => ({
-    recentActivityCount: Math.max(1, (customersQuery.data?.length ?? 0) + (staffQuery.data?.length ?? 0) + (servicesQuery.data?.length ?? 0)),
-    latestEvent: staffQuery.data?.[0]?.status ?? t('settings.overviewPage.noRecentEvents'),
-  }), [customersQuery.data, servicesQuery.data, staffQuery.data, t]);
+    recentActivityCount: Math.max(1, (customerRows?.length ?? 0) + (staffRows?.length ?? 0) + (serviceRows?.length ?? 0)),
+    latestEvent: staffRows?.[0]?.status ?? t('settings.overviewPage.noRecentEvents'),
+  }), [customerRows, serviceRows, staffRows, t]);
 
-  const roleMembers = useMemo(() => (staffQuery.data ?? []).filter((member) => member.status === 'active').slice(0, 4), [staffQuery.data]);
-  const servicePreview = useMemo(() => (servicesQuery.data ?? []).slice(0, 4), [servicesQuery.data]);
-  const customerPreview = useMemo(() => (customersQuery.data ?? []).slice(0, 4), [customersQuery.data]);
+  const roleMembers = useMemo(() => (staffRows ?? []).filter((member) => member.status === 'active').slice(0, 4), [staffRows]);
+  const servicePreview = useMemo(() => (serviceRows ?? []).slice(0, 4), [serviceRows]);
+  const customerPreview = useMemo(() => (customerRows ?? []).slice(0, 4), [customerRows]);
   const activityItems = useMemo(() => {
     const items = [
-      ...(staffQuery.data ?? []).slice(0, 2).map((member) => ({
+      ...(staffRows ?? []).slice(0, 2).map((member) => ({
         id: `staff-${member.id}`,
         title: member.full_name ?? t('settings.overviewPage.staffMember'),
         detail: member.status ?? t('settings.overviewPage.statusUnavailable'),
       })),
-      ...(servicesQuery.data ?? []).slice(0, 2).map((service) => ({
+      ...(serviceRows ?? []).slice(0, 2).map((service) => ({
         id: `service-${service.id}`,
         title: service.name ?? t('settings.overviewPage.service'),
         detail: service.duration_minutes
           ? t('settings.overviewPage.minutesShort', { count: service.duration_minutes })
           : t('settings.overviewPage.serviceRecord'),
       })),
-      ...(customersQuery.data ?? []).slice(0, 2).map((customer) => ({
+      ...(customerRows ?? []).slice(0, 2).map((customer) => ({
         id: `customer-${customer.id}`,
         title: customer.full_name ?? t('settings.overviewPage.customer'),
         detail: customer.email ?? t('settings.overviewPage.customerRecord'),
       })),
     ];
     return items.slice(0, 6);
-  }, [customersQuery.data, servicesQuery.data, staffQuery.data, t]);
+  }, [customerRows, serviceRows, staffRows, t]);
 
   return (
     <div style={{ minHeight: '100vh', padding: 32, background: '#f5f7fb', color: '#111827' }}>

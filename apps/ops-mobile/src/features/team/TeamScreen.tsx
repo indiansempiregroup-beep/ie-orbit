@@ -28,7 +28,7 @@ export function TeamScreen() {
   const client = useOpsClient();
   const { businessId } = useWorkspace();
   const { members, loading: membersLoading, reload: reloadMembers } = useTeamMembers();
-  const { staff, loading: staffLoading, reload: reloadStaff } = useStaffMembers();
+  const { staff, loading: staffLoading, reload: reloadStaff } = useStaffMembers({ status: 'active', pageSize: 100 });
   const { roles } = useIamRoles();
   const iam = useIamMutations();
   const [invitations, setInvitations] = useState<StaffInvitation[]>([]);

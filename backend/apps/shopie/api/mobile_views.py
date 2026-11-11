@@ -17,7 +17,9 @@ from apps.billing.services.razorpay_client import RazorpayClient
 from apps.businesses.constants import FEATURE_SHOPIE_CUSTOMER_REFERRAL, FEATURE_SHOPIE_GROW_ADS, PRODUCT_SHOPIE
 from apps.businesses.models import Business
 from apps.businesses.services.entitlements import EntitlementService
-from apps.common.api.responses import success_response
+from apps.common.api.responses import pagination_meta, success_response
+from apps.common.pagination.cursor import StandardCursorPagination
+from apps.common.pagination.helpers import _cursor_from_link
 from apps.common.upi import build_upi_pay_url
 from apps.platform_media.models import MediaFolderType, MediaVisibility
 from apps.platform_media.services import MediaService
@@ -192,12 +194,21 @@ class MobileShopProductListView(APIView):
             brand=brand,
         )
         category_labels = self.masters.category_labels_map(tenant=tenant, business=business)
+        paginator = StandardCursorPagination()
+        page = paginator.paginate_queryset(products, request, view=None)
+        rows = page if page is not None else list(products[: paginator.get_page_size(request) or 50])
+        data = ShopProductPublicSerializer(
+            rows,
+            many=True,
+            context={"category_labels": category_labels},
+        ).data
         return success_response(
-            ShopProductPublicSerializer(
-                products[:100],
-                many=True,
-                context={"category_labels": category_labels},
-            ).data
+            data,
+            meta=pagination_meta(
+                next_cursor=_cursor_from_link(paginator.get_next_link()),
+                previous_cursor=_cursor_from_link(paginator.get_previous_link()),
+                page_size=paginator.get_page_size(request) or 50,
+            ),
         )
 
 

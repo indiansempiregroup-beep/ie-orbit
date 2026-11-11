@@ -13,7 +13,6 @@ export const CONTACT_EMAIL = 'support@indiansempire.com';
 export const CONTACT_PHONE_DISPLAY = '+91 9766855617';
 export const CONTACT_PHONE_TEL = '+919766855617';
 export const FALLBACK_SITE_URL = 'https://ie-orbit.com';
-export const OPS_ANDROID_PACKAGE_ID = 'com.ieorbit.ops';
 
 export const STARTER_MONTHLY_INR = 399;
 export const PRO_MONTHLY_INR = 799;
@@ -73,12 +72,11 @@ export const SOCIAL_LINKS = [
   },
 ].filter((link) => Boolean(link.href));
 
-export const OPS_ANDROID_STORE_URL =
-  trimOrigin(String(import.meta.env?.VITE_OPS_ANDROID_STORE_URL ?? '')) ||
-  `https://play.google.com/store/apps/details?id=${OPS_ANDROID_PACKAGE_ID}&hl=en_IN`;
-export const OPS_IOS_STORE_URL =
-  trimOrigin(String(import.meta.env?.VITE_OPS_IOS_STORE_URL ?? '')) ||
-  'https://apps.apple.com/in/search?term=IE%20Orbit';
+/** Empty when unset — store badges are hidden until a URL is configured. */
+export const OPS_ANDROID_STORE_URL = trimOrigin(
+  String(import.meta.env?.VITE_OPS_ANDROID_STORE_URL ?? ''),
+);
+export const OPS_IOS_STORE_URL = trimOrigin(String(import.meta.env?.VITE_OPS_IOS_STORE_URL ?? ''));
 
 export function configuredSiteUrl(): string {
   const fromEnv = trimOrigin(String(import.meta.env?.VITE_PUBLIC_SITE_URL ?? ''));

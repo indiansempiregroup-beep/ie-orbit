@@ -21,6 +21,8 @@ import { voucherLineGrossAmount } from './saleInvoiceSource';
 import { SaleInsightChips } from './SaleInsightChips';
 import { PurchasePayForm } from './PurchasePayForm';
 import { useAuthContext } from '../../contexts/AuthContext';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 import {
   useShopComplianceMutations,
   useShopEInvoice,
@@ -526,11 +528,14 @@ export function ShopVoucherList({
   const { voucherId: voucherIdParam } = useParams<{ voucherId?: string }>();
   const createdNumber = searchParams.get('created');
   const openVoucherId = (voucherIdParam && voucherIdParam !== 'new' ? voucherIdParam : null) || searchParams.get('voucher');
-  const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [payment, setPayment] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const listState = useCursorListState({
+    resetKey: `${voucherType}|${source ?? ''}|${status}|${payment}|${dateFrom}|${dateTo}`,
+  });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState<ShopBooksVoucher | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -545,28 +550,16 @@ export function ShopVoucherList({
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     source: source || undefined,
+    pay: payment || undefined,
+    q: listState.debouncedSearch,
+    page_size: listState.pageSize,
+    cursor: listState.cursor,
   });
   const deepLinkedVoucher = useShopVoucher(openVoucherId);
   const { voidVoucher } = useShopVoucherMutations();
 
-  const filtered = useMemo(() => {
-    const list = Array.isArray(vouchers.data) ? vouchers.data : [];
-    const term = search.trim().toLowerCase();
-    return list.filter((voucher) => {
-      const total = Number(voucher.total ?? 0);
-      const paidAmt = Number(voucher.amount_paid ?? 0);
-      const due = Math.max(0, total - paidAmt);
-      const isVoid = voucher.status === 'void';
-      if (payment === 'paid' && (isVoid || due > 0.009)) return false;
-      if (payment === 'unpaid' && (isVoid || due <= 0.009)) return false;
-      if (!term) return true;
-      const partyName = voucher.customer_name || voucher.supplier_name || '';
-      return [voucher.voucher_number, partyName, String(voucher.total), voucher.notes ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [vouchers.data, search, payment]);
+  // Server-filtered page (q / pay / status / dates); no client-side filtering of full lists.
+  const filtered = useMemo(() => vouchers.data?.items ?? [], [vouchers.data]);
 
   useEffect(() => {
     if (!openVoucherId) {
@@ -876,6 +869,11 @@ export function ShopVoucherList({
             </div>
           ) : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(vouchers.data, filtered.length)}
+          label={isSale ? tv('saleInvoices') : tv('purchases')}
+          disabled={vouchers.isFetching}
+        />
       </Card>
 
       <Dialog

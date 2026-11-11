@@ -27,7 +27,9 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopCashAccount, ShopCheque, ShopSupplier } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type Customer, type ShopCashAccount, type ShopCheque, type ShopSupplier } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
   customerLabel,
   formatMoney,
@@ -75,7 +77,9 @@ export function ShopBooksChequesScreen() {
   const [partyId, setPartyId] = useState('');
   const [cashAccountId, setCashAccountId] = useState('');
   const [notes, setNotes] = useState('');
-  const [search, setSearch] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [filter],
+  });
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -117,21 +121,31 @@ export function ShopBooksChequesScreen() {
     setError(null);
     try {
       const [chequesRes, customersRes, suppliersRes, accountsRes] = await Promise.all([
-        client.shop.listCheques({ business_id: businessId }),
+        client.shop.listCheques({
+          business_id: businessId,
+          direction: filter,
+          q,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.customers.list({ business: businessId }),
         client.shop.listSuppliers({ business_id: businessId }),
         client.shop.listCashAccounts({ business_id: businessId }),
       ]);
-      setCheques(chequesRes.data ?? []);
+      const page = toPagedResult(chequesRes, pageSize);
+      setCheques(page.items);
+      setPageMeta(page);
       setCustomers(customersRes.data ?? []);
       setSuppliers(suppliersRes.data ?? []);
       setAccounts(accountsRes.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.cheques.loadFailed'));
+      setCheques([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, filter, q, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,17 +155,7 @@ export function ShopBooksChequesScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return cheques.filter((cheque) => {
-      if ((cheque.direction || '').toLowerCase() !== filter) return false;
-      if (!term) return true;
-      return [cheque.cheque_number, cheque.customer_name ?? '', cheque.supplier_name ?? '', cheque.bank_name ?? '', String(cheque.amount)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [cheques, filter, search]);
+  const filtered = cheques;
 
   const chequeSummary = useMemo(() => {
     let total = 0;
@@ -377,6 +381,14 @@ export function ShopBooksChequesScreen() {
                 }}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('opsApp.shop.cheques.paginationLabel', { defaultValue: 'cheques' })}
+              disabled={loading}
+            />
           }
         />
       </View>

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useServiceCreate, useServiceList, useServiceSearch, useServiceUpdate } from '../management/managementHooks';
+import { useServiceCreate, useServiceList, useServiceUpdate } from '../management/managementHooks';
 import { BusinessWorkspaceSelect } from '../../components/BusinessWorkspaceSelect';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
@@ -16,6 +16,8 @@ import { canWriteServices } from '../../utils/roles';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 import { ProductImageCropModal, type ProductImageCropResult } from '../shop/ProductImageCropModal';
 import { useSnackbar } from '../../hooks/useSnackbar';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 import { uploadServiceImage } from './uploadServiceImage';
 
 export function ServicesPage() {
@@ -33,7 +35,8 @@ export function ServicesPage() {
     ];
   }, [billingQuery.data]);
   const canRemoveBackground = entitledFeatures.includes('appointie_service_bg_remove');
-  const [searchTerm, setSearchTerm] = useState('');
+  const listState = useCursorListState();
+  const { searchTerm, setSearchTerm } = listState;
   const createService = useServiceCreate();
   const updateService = useServiceUpdate();
   const currency = workspace.activeBusiness?.currency ?? 'USD';
@@ -57,8 +60,12 @@ export function ServicesPage() {
   const [imageRemoveBg, setImageRemoveBg] = useState(false);
   const [cropPending, setCropPending] = useState<{ file: File; previewUrl: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const { data: services, isLoading, error, refetch } = useServiceList();
-  const search = useServiceSearch(searchTerm);
+  const { data: page, isLoading, isFetching, error, refetch } = useServiceList({
+    q: listState.debouncedSearch,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
+  const services = page?.items;
   const dialog = useDialog();
   const handleBusinessFormChange = useBusinessFormChange((business) => {
     setFormState((current) => ({ ...current, business }));
@@ -67,7 +74,7 @@ export function ServicesPage() {
     setFormState((current) => ({ ...current, business }));
   });
 
-  const selectedData = searchTerm.trim() ? search.data ?? [] : services ?? [];
+  const selectedData = services ?? [];
 
   const serviceSummary = useMemo(() => {
     const total = services?.length ?? 0;
@@ -196,7 +203,7 @@ export function ServicesPage() {
 
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>Total services</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>Services on this page</p>
             <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{serviceSummary.total}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
@@ -228,10 +235,10 @@ export function ServicesPage() {
               {canManageServices ? <span>Actions</span> : null}
             </div>
             <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
-              {isLoading || search.isLoading ? (
+              {isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center' }}>Loading services…</div>
-              ) : error || search.error ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? search.error?.message ?? 'Unable to load services'}</div>
+              ) : error ? (
+                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? 'Unable to load services'}</div>
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>No services found.</div>
               ) : (
@@ -290,6 +297,13 @@ export function ServicesPage() {
                   );
                 })
               )}
+            </div>
+            <div style={{ padding: '0 20px 16px' }}>
+              <CursorPager
+                {...listState.pagerProps(page, selectedData.length)}
+                label="services"
+                disabled={isFetching}
+              />
             </div>
           </Card>
         </section>

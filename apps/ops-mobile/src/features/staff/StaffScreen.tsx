@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,7 +9,9 @@ import { SearchBar } from '../../components/SearchBar';
 import { Button } from '../../components/ui/Button';
 import { ListRow } from '../../components/ui/ListRow';
 import { GroupedList } from '../../components/ui/GroupedList';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { ScreenState } from '../../components/ScreenState';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useStaffMembers } from '../../hooks/useOpsData';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
@@ -18,35 +20,38 @@ import type { RootStackParamList } from '../../navigation/types';
 
 export function StaffScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { staff, loading, reload } = useStaffMembers();
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, pager } = useCursorPaging({
+    resetKeys: [statusFilter],
+  });
+  const { staff, loading, reload, nextCursor, previousCursor } = useStaffMembers({
+    q,
+    pageSize,
+    cursor: cursor ?? null,
+    status: statusFilter || undefined,
+  });
+
+  useEffect(() => {
+    setPageMeta({ nextCursor, previousCursor });
+  }, [nextCursor, previousCursor, setPageMeta]);
+
   const { refreshing, onRefresh } = usePullToRefresh(reload);
 
   useLayoutEffect(() => {
-    setStackSubtitle(navigation, `${staff.length} team members`);
+    setStackSubtitle(navigation, `${staff.length} on this page`);
   }, [navigation, staff.length]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = staff.filter((s) => {
-      const status = String(s.employment_status || s.status || '').toLowerCase();
-      if (statusFilter && status !== statusFilter) return false;
-      if (!q) return true;
-      return [s.display_name, s.full_name, s.email, s.phone_number, s.employment_status, s.status]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
-    });
-    return [...list].sort((a, b) => {
+    return [...staff].sort((a, b) => {
       const nameA = a.display_name || a.full_name || '';
       const nameB = b.display_name || b.full_name || '';
       if (sortBy === 'name_desc') return nameB.localeCompare(nameA);
       if (sortBy === 'newest') return String(b.created_at || '').localeCompare(String(a.created_at || ''));
       return nameA.localeCompare(nameB);
     });
-  }, [staff, search, statusFilter, sortBy]);
+  }, [staff, sortBy]);
 
   const activeFilterCount = Number(Boolean(statusFilter)) + Number(sortBy !== 'name_asc');
 
@@ -122,6 +127,7 @@ export function StaffScreen() {
             );
           })}
         </GroupedList>
+        <CursorPager count={filtered.length} {...pager} disabled={loading} label="staff" />
       </RefreshableScrollView>
     </DesktopPage>
   );
@@ -130,12 +136,12 @@ export function StaffScreen() {
 const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
     alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   search: { flex: 1 },
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { paddingBottom: spacing.xl, gap: spacing.md },
 });

@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useBookingCreation, useBookingList, useCancelBooking, useConfirmBooking } from './bookingsHooks';
-import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
+import { CustomerTypeahead, StaffTypeahead } from '../management/EntityPickers';
 import { useBranchesQuery } from '../settings/branchesHooks';
-import { buildNameMap } from '../../lib/managementEntities';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { Dialog } from '../../components/Dialog';
@@ -12,26 +11,40 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
+import type { Service } from '@ie-orbit/sdk';
 import { formatDateTime } from '../../lib/datetime';
 import { ServiceMultiPicker } from './ServiceMultiPicker';
 import { bookingServiceLabel, buildBookingCreateInput } from './bookingHelpers';
+
+const STATUS_FILTERS = ['pending', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'];
 
 export function BookingsPage() {
   const { t } = useTranslation();
   const snackbar = useSnackbar();
   const client = useApiClient();
   const workspace = useWorkspace();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const listState = useCursorListState({ resetKey: `${statusFilter}|${dateFrom}|${dateTo}` });
+  const { searchTerm, setSearchTerm } = listState;
   const createBooking = useBookingCreation();
   const confirmBooking = useConfirmBooking();
   const cancelBooking = useCancelBooking();
-  const bookingsQuery = useBookingList();
-  const customersQuery = useCustomerList();
-  const servicesQuery = useServiceList();
-  const staffQuery = useStaffList();
+  const bookingsQuery = useBookingList({
+    q: listState.debouncedSearch,
+    status: statusFilter,
+    dateFrom,
+    dateTo,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
+  const bookingsPage = bookingsQuery.data;
   const branchesQuery = useBranchesQuery();
   const dialog = useDialog();
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [formState, setFormState] = useState({
     customer_id: '',
     staff_id: null as string | null,
@@ -80,39 +93,16 @@ export function BookingsPage() {
     });
   }, [offices]);
 
-  const customerMap = useMemo(() => buildNameMap(customersQuery.data), [customersQuery.data]);
-  const serviceMap = useMemo(() => buildNameMap(servicesQuery.data), [servicesQuery.data]);
-  const staffMap = useMemo(() => buildNameMap(staffQuery.data), [staffQuery.data]);
-  const selectedServices = useMemo(
-    () =>
-      selectedServiceIds
-        .map((id) => servicesQuery.data?.find((service) => service.id === id))
-        .filter((service): service is NonNullable<typeof service> => Boolean(service)),
-    [selectedServiceIds, servicesQuery.data],
-  );
+  const bookings = bookingsPage?.items ?? [];
 
-  const filteredBookings = useMemo(() => {
-    const bookings = bookingsQuery.data ?? [];
-    const lower = searchTerm.trim().toLowerCase();
-    const filtered = !lower
-      ? [...bookings]
-      : bookings.filter((booking) => {
-          const customerName = customerMap.get(String(booking.customer_id)) ?? '';
-          const serviceName = bookingServiceLabel(booking, serviceMap);
-          const staffName = booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '' : '';
-          return [booking.booking_number, customerName, serviceName, staffName, booking.status]
-            .filter(Boolean)
-            .some((value) => String(value).toLowerCase().includes(lower));
-        });
-    return filtered.sort(
-      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
-    );
-  }, [bookingsQuery.data, searchTerm, customerMap, serviceMap, staffMap]);
-
-  const todayCount = useMemo(() => {
+  const pageStats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
-    return (bookingsQuery.data ?? []).filter((booking) => booking.start_at?.slice(0, 10) === today).length;
-  }, [bookingsQuery.data]);
+    return {
+      today: bookings.filter((booking) => booking.start_at?.slice(0, 10) === today).length,
+      confirmed: bookings.filter((booking) => booking.status === 'confirmed').length,
+      pending: bookings.filter((booking) => booking.status === 'pending').length,
+    };
+  }, [bookings]);
 
   const isSubmitting = createBooking.isPending || confirmBooking.isPending || cancelBooking.isPending;
   const tableColumns = 'minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(160px, 1.4fr)';
@@ -151,15 +141,15 @@ export function BookingsPage() {
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <Card style={{ minHeight: 120 }}>
             <p style={{ margin: 0, color: '#6b7280' }}>{t('dashboard.todayBookings')}</p>
-            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{todayCount}</p>
+            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{pageStats.today}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.availableServices')}</p>
-            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{servicesQuery.data?.length ?? 0}</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.statuses.confirmed', { defaultValue: 'Confirmed' })}</p>
+            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{pageStats.confirmed}</p>
           </Card>
           <Card style={{ minHeight: 120 }}>
-            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.teamMembers')}</p>
-            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{staffQuery.data?.length ?? 0}</p>
+            <p style={{ margin: 0, color: '#6b7280' }}>{t('bookings.statuses.pending', { defaultValue: 'Pending' })}</p>
+            <p style={{ margin: '12px 0 0', fontSize: 28, fontWeight: 700 }}>{pageStats.pending}</p>
           </Card>
         </div>
 
@@ -168,11 +158,54 @@ export function BookingsPage() {
             <input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder={t('bookings.searchPlaceholder')}
-              style={{ flex: 1, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
+              placeholder={t('bookings.searchByNumberPlaceholder', { defaultValue: 'Search by booking number' })}
+              style={{ flex: 1, minWidth: 200, borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
               aria-label={t('bookings.search')}
             />
-            <Button variant="ghost" onClick={() => setSearchTerm('')}>{t('common.clear')}</Button>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label={t('bookings.status')}
+              style={{ borderRadius: 14, border: '1px solid #e5e7eb', padding: '12px 16px', background: '#fff', color: '#111827' }}
+            >
+              <option value="">{t('common.all')}</option>
+              {STATUS_FILTERS.map((status) => (
+                <option key={status} value={status}>
+                  {t(`bookings.statuses.${status}`, { defaultValue: status.replace(/_/g, ' ') })}
+                </option>
+              ))}
+            </select>
+            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', color: '#6b7280', fontSize: 13 }}>
+              {t('common.from')}
+              <input
+                type="date"
+                value={dateFrom}
+                max={dateTo || undefined}
+                onChange={(event) => setDateFrom(event.target.value)}
+                style={{ borderRadius: 12, border: '1px solid #e5e7eb', padding: '10px 12px', background: '#fff', color: '#111827' }}
+              />
+            </label>
+            <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', color: '#6b7280', fontSize: 13 }}>
+              {t('common.to')}
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={(event) => setDateTo(event.target.value)}
+                style={{ borderRadius: 12, border: '1px solid #e5e7eb', padding: '10px 12px', background: '#fff', color: '#111827' }}
+              />
+            </label>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('');
+                setDateFrom('');
+                setDateTo('');
+              }}
+            >
+              {t('common.clear')}
+            </Button>
           </div>
 
           <Card style={{ padding: 0, overflowX: 'auto' }}>
@@ -202,10 +235,10 @@ export function BookingsPage() {
                   <div style={{ padding: 28, textAlign: 'center' }}>{t('bookings.loading')}</div>
                 ) : bookingsQuery.error ? (
                   <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{bookingsQuery.error.message}</div>
-                ) : filteredBookings.length === 0 ? (
+                ) : bookings.length === 0 ? (
                   <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>{t('bookings.noneFound')}</div>
                 ) : (
-                  filteredBookings.map((booking) => {
+                  bookings.map((booking) => {
                     const status = booking.status ?? 'unknown';
                     const canConfirm = status === 'pending' || status === 'draft';
                     const canCancel = status !== 'cancelled' && status !== 'completed';
@@ -224,17 +257,17 @@ export function BookingsPage() {
                         <span style={tableCellStyle} title={booking.booking_number ?? booking.id}>
                           {booking.booking_number ?? booking.id}
                         </span>
-                        <span style={tableCellStyle} title={customerMap.get(String(booking.customer_id)) ?? '—'}>
-                          {customerMap.get(String(booking.customer_id)) ?? '—'}
+                        <span style={tableCellStyle} title={booking.customer_name || '—'}>
+                          {booking.customer_name || '—'}
                         </span>
-                        <span style={tableCellStyle} title={bookingServiceLabel(booking, serviceMap)}>
-                          {bookingServiceLabel(booking, serviceMap)}
+                        <span style={tableCellStyle} title={bookingServiceLabel(booking)}>
+                          {bookingServiceLabel(booking)}
                         </span>
                         <span
                           style={tableCellStyle}
-                          title={booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : t('bookings.unassigned')}
+                          title={booking.staff_id ? booking.staff_name || '—' : t('bookings.unassigned')}
                         >
-                          {booking.staff_id ? staffMap.get(String(booking.staff_id)) ?? '—' : t('bookings.unassigned')}
+                          {booking.staff_id ? booking.staff_name || '—' : t('bookings.unassigned')}
                         </span>
                         <span style={tableCellStyle}>
                           {booking.start_at ? formatDateTime(booking.start_at) : '—'}
@@ -300,6 +333,13 @@ export function BookingsPage() {
                 )}
               </div>
             </div>
+            <div style={{ padding: '0 20px 16px' }}>
+              <CursorPager
+                {...listState.pagerProps(bookingsPage, bookings.length)}
+                label={t('bookings.title').toLowerCase()}
+                disabled={bookingsQuery.isFetching}
+              />
+            </div>
           </Card>
         </section>
       </div>
@@ -320,6 +360,10 @@ export function BookingsPage() {
               setCreationError(t('bookings.selectOfficeError'));
               return;
             }
+            if (!formState.customer_id) {
+              setCreationError(t('bookings.selectCustomer'));
+              return;
+            }
             if (!selectedServices.length) {
               setCreationError(t('bookings.selectServiceError'));
               return;
@@ -336,7 +380,7 @@ export function BookingsPage() {
               onSuccess: () => {
                 snackbar.push(t('bookings.bookingCreated'), 'success');
                 dialog.hide();
-                setSelectedServiceIds([]);
+                setSelectedServices([]);
                 setFormState({
                   customer_id: '',
                   staff_id: null,
@@ -351,17 +395,12 @@ export function BookingsPage() {
           }}
           style={{ display: 'grid', gap: 16, marginTop: 12 }}
         >
-          <select
-            required
-            value={formState.customer_id}
-            onChange={(event) => setFormState({ ...formState, customer_id: event.target.value })}
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          >
-            <option value="">{t('bookings.selectCustomer')}</option>
-            {customersQuery.data?.map((customer) => (
-              <option key={customer.id} value={customer.id}>{customer.full_name ?? customer.id}</option>
-            ))}
-          </select>
+          <CustomerTypeahead
+            value={formState.customer_id || null}
+            onChange={(id) => setFormState({ ...formState, customer_id: id ?? '' })}
+            placeholder={t('bookings.selectCustomer')}
+            ariaLabel={t('bookings.selectCustomer')}
+          />
 
           {staffHints.length > 0 ? (
             <div
@@ -389,11 +428,7 @@ export function BookingsPage() {
             </div>
           ) : null}
 
-          <ServiceMultiPicker
-            services={servicesQuery.data ?? []}
-            selectedIds={selectedServiceIds}
-            onChange={setSelectedServiceIds}
-          />
+          <ServiceMultiPicker selectedServices={selectedServices} onChange={setSelectedServices} />
 
           {needsOfficePicker ? (
             <select
@@ -414,16 +449,13 @@ export function BookingsPage() {
             </select>
           ) : null}
 
-          <select
-            value={formState.staff_id ?? ''}
-            onChange={(event) => setFormState({ ...formState, staff_id: event.target.value || null })}
-            style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-          >
-            <option value="">{t('bookings.selectStaffOptional')}</option>
-            {staffQuery.data?.map((member) => (
-              <option key={member.id} value={member.id}>{member.full_name ?? member.id}</option>
-            ))}
-          </select>
+          <StaffTypeahead
+            value={formState.staff_id}
+            onChange={(id) => setFormState({ ...formState, staff_id: id })}
+            placeholder={t('bookings.selectStaffOptional')}
+            ariaLabel={t('bookings.selectStaffOptional')}
+            emptyOptionLabel={t('bookings.unassigned')}
+          />
 
           <label style={{ display: 'grid', gap: 8 }}>
             {t('bookings.startDateTime')}

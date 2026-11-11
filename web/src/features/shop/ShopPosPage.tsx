@@ -6,7 +6,9 @@ import { Button } from '../../components/Button';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts, useShopSuppliers } from './shopHooks';
+import { useShopBooksDocumentMutations, useShopProductMutations, useShopProducts } from './shopHooks';
+import { ShopCustomerTypeahead, ShopSupplierTypeahead } from './ShopPickers';
+import { useCustomerDetail } from '../management/managementHooks';
 import { BarcodeCameraPanel } from './BarcodeCameraPanel';
 import { computePosTotals, type DiscountType } from './posPricing';
 import { formatMoney } from '../../lib/currency';
@@ -14,7 +16,7 @@ import { maxRedeemablePoints, readLoyaltyPrefs, redeemDiscountAmount } from '../
 import { normalizeGstin, validateGstin } from '../../lib/gstin';
 import { hasSubscribedProduct } from '../../config/products';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
-import type { Customer, MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-orbit/sdk';
+import type { MerchantCashfreeCheckout, MerchantRazorpayCheckout, ShopProduct } from '@ie-orbit/sdk';
 
 type BasketLine = {
   product: ShopProduct;
@@ -83,20 +85,23 @@ export function ShopPosPage() {
   const currency = workspace.activeBusiness?.currency;
   const money = (amount: number) => formatMoney(amount, currency);
   const showGstFields = hasSubscribedProduct(workspace.activeBusiness?.product_subscriptions, 'shopie');
-  const products = useShopProducts('', 'active');
+  const [productQuery, setProductQuery] = useState('');
+  const [debouncedProductQuery, setDebouncedProductQuery] = useState('');
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedProductQuery(productQuery), 250);
+    return () => window.clearTimeout(timer);
+  }, [productQuery]);
+  const products = useShopProducts(debouncedProductQuery, 'active', '', { pageSize: 50 });
   const { lookup, lookupBulk, createOrder } = useShopProductMutations();
   const { create: createDocument, update: updateDocument } = useShopBooksDocumentMutations();
   const editHydratedRef = useRef('');
   const [documentNotes, setDocumentNotes] = useState('');
-  const suppliers = useShopSuppliers();
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [supplierId, setSupplierId] = useState('');
   const [partyGstin, setPartyGstin] = useState('');
   const [scan, setScan] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [productQuery, setProductQuery] = useState('');
   const [basket, setBasket] = useState<BasketLine[]>([]);
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>('');
   const [billDiscountValue, setBillDiscountValue] = useState('0');
@@ -124,12 +129,6 @@ export function ShopPosPage() {
     const businessId = workspace.businessId;
     void (async () => {
       try {
-        const response = await client.customers.list({ business: businessId });
-        setCustomers(response.data ?? []);
-      } catch {
-        setCustomers([]);
-      }
-      try {
         const response = await client.shop.getMerchantPaymentSettings({ business_id: businessId });
         setRazorpayConnected(response.data.can_accept_payments);
         setCashfreeConnected(Boolean(response.data.cashfree?.can_accept_payments));
@@ -151,7 +150,7 @@ export function ShopPosPage() {
       setCustomerId(document.customer || '');
       setSupplierId(document.supplier || '');
       setDocumentNotes(document.notes || '');
-      const catalog = products.data ?? [];
+      const catalog = products.data?.items ?? [];
       const rows = Array.isArray(document.line_items) ? document.line_items : [];
       setBasket(
         rows.flatMap((raw) => {
@@ -255,19 +254,7 @@ export function ShopPosPage() {
     return verified.data;
   }
 
-  const filteredProducts = useMemo(() => {
-    const rows = products.data ?? [];
-    const term = productQuery.trim().toLowerCase();
-    if (!term) return rows.slice(0, 80);
-    return rows
-      .filter((product) =>
-        [product.name, product.brand ?? '', product.sku ?? '', ...(product.barcodes ?? []).map((b) => b.code)]
-          .join(' ')
-          .toLowerCase()
-          .includes(term),
-      )
-      .slice(0, 80);
-  }, [productQuery, products.data]);
+  const filteredProducts = products.data?.items ?? [];
 
   const posLineInputs = useMemo(
     () =>
@@ -300,10 +287,9 @@ export function ShopPosPage() {
     () => readLoyaltyPrefs((workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
     [workspace.activeBusiness?.settings],
   );
-  const selectedCustomer = useMemo(
-    () => customers.find((row) => row.id === customerId) ?? null,
-    [customers, customerId],
-  );
+  // Selected customer is resolved by id (no full customer dump for the picker).
+  const customerDetail = useCustomerDetail(customerId || undefined);
+  const selectedCustomer = customerId ? (customerDetail.data ?? null) : null;
 
   useEffect(() => {
     if (!workspace.businessId || !customerId || isChallan) {
@@ -809,43 +795,27 @@ export function ShopPosPage() {
           {isPurchaseOrder ? (
             <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('supplier')}</span>
-              <select
+              <ShopSupplierTypeahead
                 value={supplierId}
-                onChange={(event) => setSupplierId(event.target.value)}
-                style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-              >
-                <option value="">{tp('selectSupplier')}</option>
-                {(suppliers.data ?? []).map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => setSupplierId(id)}
+                placeholder={tp('selectSupplier')}
+                ariaLabel={tp('supplier')}
+              />
             </label>
           ) : (
           <>
           <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>{tp('customer')}</span>
-            <select
+            <ShopCustomerTypeahead
               value={customerId}
-              onChange={(event) => {
-                setCustomerId(event.target.value);
+              onChange={(id) => {
+                setCustomerId(id);
                 setPointsToRedeem(0);
               }}
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            >
-              <option value="">{tp('walkIn')}</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.full_name ||
-                    customer.display_name ||
-                    [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
-                    customer.email ||
-                    customer.phone_number ||
-                    customer.id}
-                </option>
-              ))}
-            </select>
+              placeholder={tp('walkIn')}
+              emptyOptionLabel={tp('walkIn')}
+              ariaLabel={tp('customer')}
+            />
           </label>
           {showGstFields ? (
             <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>

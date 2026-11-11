@@ -12,6 +12,7 @@ import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/nativ
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import type { ShopOrder, ShopReturn, ShopReturnPickupLive } from '@ie-orbit/sdk';
+import { findInCursorPages } from '../../utils/findInPages';
 import { FormScreen } from '../../components/FormScreen';
 import { Button } from '../../components/ui/Button';
 import { useOpsClient } from '../../hooks/useOpsClient';
@@ -115,8 +116,11 @@ export function ShopReturnDetailScreen() {
     setLoading(true);
     setError(null);
     try {
-      const list = await client.shop.listReturns({ business_id: businessId });
-      const found = (list.data || []).find((row) => row.id === returnId) || null;
+      // No single-return endpoint: walk cursor pages (newest first) until the id is found.
+      const found = await findInCursorPages(
+        (cursor) => client.shop.listReturns({ business_id: businessId, page_size: 100, cursor }),
+        (row) => row.id === returnId,
+      );
       if (!found) {
         setShopReturn(null);
         setOrder(null);

@@ -11,11 +11,10 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { DocumentActionsSheet, type ShopDocTarget } from './DocumentActionsSheet';
 import {
   useShopCashAccounts,
-  useShopCustomers,
   useShopProducts,
-  useShopSuppliers,
   useShopVoucherMutations,
 } from './shopHooks';
+import { ShopCustomerTypeahead, ShopSupplierTypeahead, type ShopPickedCustomer } from './ShopPickers';
 
 type LineState = {
   key: string;
@@ -62,9 +61,7 @@ export function ShopVoucherForm({
   const isSale = voucherType === 'sale';
   const partyLabel = isSale ? t('shop.voucherForm.customer') : t('shop.voucherForm.supplier');
 
-  const customers = useShopCustomers();
-  const suppliers = useShopSuppliers();
-  const products = useShopProducts();
+  const products = useShopProducts('', '', '', { pageSize: 50 });
   const accounts = useShopCashAccounts();
   const { createVoucher } = useShopVoucherMutations();
 
@@ -79,16 +76,6 @@ export function ShopVoucherForm({
   const [message, setMessage] = useState<string | null>(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
-
-  const partyOptions = useMemo(() => {
-    if (isSale) {
-      return (customers.data ?? []).map((customer) => ({
-        id: customer.id,
-        label: customer.full_name ?? customer.display_name ?? customer.email ?? customer.id,
-      }));
-    }
-    return (suppliers.data ?? []).map((supplier) => ({ id: supplier.id, label: supplier.name }));
-  }, [isSale, customers.data, suppliers.data]);
 
   const totals = useMemo(() => {
     return lines.reduce(
@@ -107,10 +94,7 @@ export function ShopVoucherForm({
     () => readLoyaltyPrefs((workspace.activeBusiness?.settings ?? undefined) as Record<string, unknown> | undefined),
     [workspace.activeBusiness?.settings],
   );
-  const selectedSaleCustomer = useMemo(
-    () => (customers.data ?? []).find((row) => row.id === partyId) ?? null,
-    [customers.data, partyId],
-  );
+  const [selectedSaleCustomer, setSelectedSaleCustomer] = useState<ShopPickedCustomer | null>(null);
   const loyaltyMaxPoints = useMemo(
     () =>
       isSale
@@ -125,7 +109,7 @@ export function ShopVoucherForm({
   }
 
   function selectProductForLine(key: string, productId: string) {
-    const product = (products.data ?? []).find((item) => item.id === productId);
+    const product = (products.data?.items ?? []).find((item) => item.id === productId);
     if (!product) {
       updateLine(key, { product_id: '' });
       return;
@@ -229,23 +213,30 @@ export function ShopVoucherForm({
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{partyLabel}</span>
-              <select
-                value={partyId}
-                onChange={(event) => {
-                  setPartyId(event.target.value);
-                  setPointsToRedeem(0);
-                }}
-                style={fieldStyle}
-              >
-                <option value="">
-                  {isSale ? t('shop.voucherForm.cashSaleNoParty') : t('shop.voucherForm.cashPurchaseNoParty')}
-                </option>
-                {partyOptions.map((party) => (
-                  <option key={party.id} value={party.id}>
-                    {party.label}
-                  </option>
-                ))}
-              </select>
+              {isSale ? (
+                <ShopCustomerTypeahead
+                  value={partyId}
+                  onChange={(id, customer) => {
+                    setPartyId(id);
+                    setSelectedSaleCustomer(customer);
+                    setPointsToRedeem(0);
+                  }}
+                  placeholder={t('shop.voucherForm.cashSaleNoParty')}
+                  emptyOptionLabel={t('shop.voucherForm.cashSaleNoParty')}
+                  ariaLabel={partyLabel}
+                />
+              ) : (
+                <ShopSupplierTypeahead
+                  value={partyId}
+                  onChange={(id) => {
+                    setPartyId(id);
+                    setPointsToRedeem(0);
+                  }}
+                  placeholder={t('shop.voucherForm.cashPurchaseNoParty')}
+                  emptyOptionLabel={t('shop.voucherForm.cashPurchaseNoParty')}
+                  ariaLabel={partyLabel}
+                />
+              )}
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{t('shop.voucherForm.date')}</span>
@@ -359,7 +350,7 @@ export function ShopVoucherForm({
                           ? t('shop.voucherForm.customLine', { name: line.name })
                           : t('shop.voucherForm.selectProduct')}
                       </option>
-                      {(products.data ?? []).map((product) => (
+                      {(products.data?.items ?? []).map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name} {product.sku ? `(${product.sku})` : ''}
                         </option>

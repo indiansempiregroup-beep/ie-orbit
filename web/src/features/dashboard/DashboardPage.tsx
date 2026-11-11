@@ -151,7 +151,7 @@ export function DashboardPage() {
     summary?.appointie?.unread_notifications ?? notifications.data?.filter((notification) => !notification.is_read).length ?? 0;
 
   const schedule = todayBookings.data?.slice(0, 5) ?? [];
-  const recentOrders = (shopOrders.data ?? []).slice(0, 5);
+  const recentOrders = (shopOrders.data?.items ?? []).slice(0, 5);
   const activity = [
     ...(showBookings
       ? todayBookings.data?.slice(0, 3).map((booking) => ({
@@ -261,7 +261,7 @@ export function DashboardPage() {
             </h1>
             <p style={{ margin: 0, color: '#6b7280' }}>{welcomeSubtitle}</p>
             {canFilter ? (
-              <StaffReportFilter staff={staff.data ?? []} staffId={staffId} onChange={setStaffId} />
+              <StaffReportFilter staffId={staffId} onChange={setStaffId} />
             ) : null}
           </div>
           <div className="dashboard-actions">

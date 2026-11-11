@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
@@ -52,6 +53,12 @@ from apps.shopie.models import (
 from apps.shopie.services.cheques import ChequesService
 from apps.shopie.services.documents import DocumentsService
 from apps.shopie.services.godowns import GodownsService
+from apps.shopie.services.list_search import (
+    CUSTOMER_SEARCH_FIELDS,
+    SUPPLIER_SEARCH_FIELDS,
+    apply_text_search,
+    request_search_term,
+)
 from apps.shopie.services.loans import LoansService
 
 
@@ -77,6 +84,24 @@ class ShopBooksDocumentListCreateView(APIView):
             tenant=request.current_tenant,
             business=business,
             doc_type=request.query_params.get("doc_type") or None,
+        )
+        state = str(request.query_params.get("state") or "").strip().lower()
+        if state == "open":
+            qs = qs.filter(status__in=["draft", "confirmed"], converted_voucher__isnull=True)
+        elif state == "dispatched":
+            qs = qs.filter(status="dispatched")
+        elif state in {"invoiced", "converted"}:
+            qs = qs.filter(Q(status="converted") | Q(converted_voucher__isnull=False))
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            (
+                "document_number",
+                "status",
+                "notes",
+                *CUSTOMER_SEARCH_FIELDS,
+                *SUPPLIER_SEARCH_FIELDS,
+            ),
         )
         return paginated_list_response(request, qs, ShopBooksDocumentSerializer)
 
@@ -315,6 +340,21 @@ class ShopChequeListCreateView(APIView):
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_CHEQUES)
         qs = self.cheques.list_cheques(tenant=request.current_tenant, business=business)
+        direction = str(request.query_params.get("direction") or "").strip().lower()
+        if direction in {"in", "out"}:
+            qs = qs.filter(direction=direction)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            (
+                "cheque_number",
+                "bank_name",
+                "status",
+                "notes",
+                *CUSTOMER_SEARCH_FIELDS,
+                *SUPPLIER_SEARCH_FIELDS,
+            ),
+        )
         return paginated_list_response(request, qs, ShopChequeSerializer)
 
     def post(self, request: Request) -> Response:
@@ -406,6 +446,11 @@ class ShopLoanListCreateView(APIView):
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, feature=FEATURE_SHOPIE_BOOKS_LOANS)
         qs = self.loans.list_loans(tenant=request.current_tenant, business=business)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("title", "status", "notes", *CUSTOMER_SEARCH_FIELDS, *SUPPLIER_SEARCH_FIELDS),
+        )
         return paginated_list_response(request, qs, ShopLoanSerializer)
 
     def post(self, request: Request) -> Response:

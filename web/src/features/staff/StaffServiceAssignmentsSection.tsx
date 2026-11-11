@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
-import { useServiceList } from '../management/managementHooks';
+import { useServiceDetails } from '../management/managementHooks';
+import { ServiceTypeahead } from '../management/EntityPickers';
 import { useStaffAssignmentMutations, useStaffAssignments } from './staffAvailabilityHooks';
 
 type StaffServiceAssignmentsSectionProps = {
@@ -10,7 +11,6 @@ type StaffServiceAssignmentsSectionProps = {
 
 export function StaffServiceAssignmentsSection({ staffId }: StaffServiceAssignmentsSectionProps) {
   const assignmentsQuery = useStaffAssignments(staffId);
-  const servicesQuery = useServiceList();
   const mutations = useStaffAssignmentMutations();
   const [serviceId, setServiceId] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -19,11 +19,11 @@ export function StaffServiceAssignmentsSection({ staffId }: StaffServiceAssignme
     () => new Set((assignmentsQuery.data ?? []).map((row) => row.service)),
     [assignmentsQuery.data],
   );
-  const availableServices = (servicesQuery.data ?? []).filter((service) => !assignedIds.has(service.id));
+  const assignedServices = useServiceDetails(Array.from(assignedIds));
   const serviceName = useMemo(() => {
-    const map = new Map((servicesQuery.data ?? []).map((service) => [service.id, service.name ?? service.id]));
+    const map = new Map(assignedServices.services.map((service) => [service.id, service.name ?? service.id]));
     return (id: string) => map.get(id) ?? id;
-  }, [servicesQuery.data]);
+  }, [assignedServices.services]);
 
   return (
     <Card style={{ display: 'grid', gap: 16 }}>
@@ -37,16 +37,20 @@ export function StaffServiceAssignmentsSection({ staffId }: StaffServiceAssignme
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end' }}>
         <label style={{ display: 'grid', gap: 6, flex: 1, minWidth: 220 }}>
           Service
-          <select
-            value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
-            style={{ padding: 10, borderRadius: 10, border: '1px solid #e5e7eb' }}
-          >
-            <option value="">Select service</option>
-            {availableServices.map((service) => (
-              <option key={service.id} value={service.id}>{service.name ?? service.id}</option>
-            ))}
-          </select>
+          <ServiceTypeahead
+            value={serviceId || null}
+            onChange={(id) => {
+              setError(null);
+              if (id && assignedIds.has(id)) {
+                setServiceId('');
+                setError('That service is already assigned.');
+                return;
+              }
+              setServiceId(id ?? '');
+            }}
+            placeholder="Search services"
+            ariaLabel="Service"
+          />
         </label>
         <Button
           type="button"

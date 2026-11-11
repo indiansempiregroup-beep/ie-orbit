@@ -11,6 +11,9 @@ import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopBooksDocumentDialog } from './ShopBooksDocumentDialog';
 import { useShopBooksDocumentMutations, useShopBooksDocuments } from './shopHooks';
+import { useApiClient } from '../../hooks/useApiClient';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 function isVoucher(value: unknown): value is ShopBooksVoucher {
   return Boolean(value && typeof value === 'object' && 'voucher_number' in value);
@@ -29,9 +32,15 @@ export function ShopBooksDocumentsPage({
   const workspace = useWorkspace();
   const navigate = useNavigate();
   const currency = workspace.activeBusiness?.currency;
-  const documents = useShopBooksDocuments(docType);
+  const client = useApiClient();
+  const listState = useCursorListState({ resetKey: docType });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const documents = useShopBooksDocuments(docType, {
+    q: listState.debouncedSearch,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const { convert } = useShopBooksDocumentMutations();
-  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ShopBooksDocument | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -43,28 +52,26 @@ export function ShopBooksDocumentsPage({
       ? t(`shop.booksDocuments.statuses.${key}`)
       : value;
   };
-  const rows = documents.data ?? [];
+  const rows = useMemo(() => documents.data?.items ?? [], [documents.data]);
 
+  // Deep link (?document=id): fetch that one document instead of scanning a full list.
   useEffect(() => {
     const documentId = searchParams.get('document');
-    if (!documentId || !rows.length) return;
-    const match = rows.find((row) => row.id === documentId);
-    if (match) setSelected(match);
+    if (!documentId) return;
     const next = new URLSearchParams(searchParams);
     next.delete('document');
     setSearchParams(next, { replace: true });
-  }, [rows, searchParams, setSearchParams]);
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (!term) return true;
-      return [row.document_number, row.customer_name, row.supplier_name, row.notes, row.status]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [rows, search]);
+    const match = rows.find((row) => row.id === documentId);
+    if (match) {
+      setSelected(match);
+      return;
+    }
+    void client.shop
+      .getDocument(documentId)
+      .then((response) => setSelected(response.data))
+      .catch(() => undefined);
+  }, [client, rows, searchParams, setSearchParams]);
+  const filtered = rows;
 
   async function convertRow(row: ShopBooksDocument) {
     if (!window.confirm(
@@ -160,6 +167,11 @@ export function ShopBooksDocumentsPage({
             );
           })}
         </div>
+        <CursorPager
+          {...listState.pagerProps(documents.data, filtered.length)}
+          label={title.toLowerCase()}
+          disabled={documents.isFetching}
+        />
       </Card>
       <ShopBooksDocumentDialog
         document={selected}

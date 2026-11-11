@@ -26,7 +26,9 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopLoan } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type Customer, type ShopLoan } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { customerLabel, formatMoney, formatVoucherDate, formatVoucherDateTime, statusText, todayIso } from './shopBooksHelpers';
 import { shopListRefreshControl } from './shopRefreshControl';
 import { VoucherSummaryCards } from './VoucherSummaryCards';
@@ -59,7 +61,7 @@ export function ShopBooksLoansScreen() {
   const [interestRate, setInterestRate] = useState('');
   const [startDate, setStartDate] = useState(todayIso());
   const [notes, setNotes] = useState('');
-  const [search, setSearch] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging();
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -93,17 +95,26 @@ export function ShopBooksLoansScreen() {
     setError(null);
     try {
       const [loansRes, customersRes] = await Promise.all([
-        client.shop.listLoans({ business_id: businessId }),
+        client.shop.listLoans({
+          business_id: businessId,
+          q,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.customers.list({ business: businessId }),
       ]);
-      setLoans(loansRes.data ?? []);
+      const page = toPagedResult(loansRes, pageSize);
+      setLoans(page.items);
+      setPageMeta(page);
       setCustomers(customersRes.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.loans.loadFailed'));
+      setLoans([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -113,16 +124,7 @@ export function ShopBooksLoansScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filteredLoans = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return loans;
-    return loans.filter((loan) =>
-      [loan.title, loan.customer_name ?? '', loan.status, String(loan.balance)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [loans, search]);
+  const filteredLoans = loans;
 
   const loanSummary = useMemo(() => {
     let outstanding = 0;
@@ -334,6 +336,14 @@ export function ShopBooksLoansScreen() {
                 onAction={() => setShowForm(true)}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filteredLoans.length}
+              label={t('opsApp.shop.loans.paginationLabel', { defaultValue: 'loans' })}
+              disabled={loading}
+            />
           }
         />
       </View>

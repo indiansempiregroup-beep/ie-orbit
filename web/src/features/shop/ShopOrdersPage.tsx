@@ -13,39 +13,25 @@ import {
   shopOrderStatusLabel,
 } from './shopOrderStatus';
 import { SaleInsightChips } from './SaleInsightChips';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 export function ShopOrdersPage() {
   const { t } = useTranslation();
-  const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [fulfillment, setFulfillment] = useState('');
-  const orders = useShopOrders(status);
+  const listState = useCursorListState({ resetKey: `${status}|${fulfillment}` });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const orders = useShopOrders(status, {
+    q: listState.debouncedSearch,
+    fulfillmentMode: fulfillment,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const { setStatus: setOrderStatus } = useShopProductMutations();
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (orders.data ?? [])
-      .filter((order) => {
-        if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
-        if (!term) return true;
-        const payment = formatShopOrderPayment(order).toLowerCase();
-        const haystack = [
-          order.order_number,
-          order.status,
-          order.fulfillment_mode,
-          String(order.total),
-          payment,
-          ...(order.lines ?? []).map((line) => line.product_name),
-        ]
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(term);
-      })
-      .sort(
-        (a, b) =>
-          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
-      );
-  }, [orders.data, search, fulfillment]);
+  // Server-filtered page (status / fulfillment_mode / q), already newest-first.
+  const filtered = useMemo(() => orders.data?.items ?? [], [orders.data]);
 
   return (
     <div className="page-stack">
@@ -207,6 +193,11 @@ export function ShopOrdersPage() {
           })}
           {!orders.isLoading && !filtered.length ? <p>{t('shop.orders.empty')}</p> : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(orders.data, filtered.length)}
+          label={t('nav.shopOrders', { defaultValue: 'orders' }).toLowerCase()}
+          disabled={orders.isFetching}
+        />
       </Card>
     </div>
   );

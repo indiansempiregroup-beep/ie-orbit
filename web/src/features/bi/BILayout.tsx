@@ -5,7 +5,6 @@ import { StaffReportFilter } from '../../components/StaffReportFilter';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useReportStaffFilter } from '../../hooks/useReportStaffFilter';
 import { getSubscribedProductIds } from '../../config/products';
-import { useStaffList } from '../management/managementHooks';
 import { productsWithBiFeature } from '../../config/planFeatures';
 import { useBusinessBillingSnapshotQuery } from '../settings/billingHooks';
 
@@ -32,7 +31,6 @@ export function BILayout() {
   const location = useLocation();
   const workspace = useWorkspace();
   const { staffId, setStaffId, canFilter } = useReportStaffFilter();
-  const staffQuery = useStaffList();
   const billingQuery = useBusinessBillingSnapshotQuery(workspace.businessId ?? undefined);
   const subscribedIds = useMemo(
     () => getSubscribedProductIds(workspace.activeBusiness?.product_subscriptions),
@@ -69,7 +67,7 @@ export function BILayout() {
         <strong style={{ display: 'block', marginBottom: 10 }}>{t('bi.title')}</strong>
         {canFilter ? (
           <div style={{ marginBottom: 12 }}>
-            <StaffReportFilter staff={staffQuery.data ?? []} staffId={staffId} onChange={setStaffId} />
+            <StaffReportFilter staffId={staffId} onChange={setStaffId} />
           </div>
         ) : null}
         <nav style={{ display: 'grid', gap: 6 }}>

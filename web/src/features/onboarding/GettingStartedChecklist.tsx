@@ -16,10 +16,11 @@ type GettingStartedChecklistProps = {
 export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistProps) {
   const { t } = useTranslation();
   const businessQuery = useBusinessProfileQuery();
-  const customersQuery = useCustomerList();
-  const servicesQuery = useServiceList();
-  const staffQuery = useStaffList();
-  const bookingsQuery = useBookingList();
+  // Existence checks only: tiny server pages instead of full list dumps.
+  const customersQuery = useCustomerList({ pageSize: 1 });
+  const servicesQuery = useServiceList({ pageSize: 1 });
+  const staffQuery = useStaffList({ pageSize: 2 });
+  const bookingsQuery = useBookingList({ pageSize: 1 });
 
   const completed = useMemo(() => {
     const business = businessQuery.data;
@@ -30,10 +31,10 @@ export function GettingStartedChecklist({ onDismiss }: GettingStartedChecklistPr
     );
     const hasLogo = Boolean(business?.logo);
     const hasHours = weeklyHoursConfigured(settings.business_hours);
-    const services = servicesQuery.data ?? [];
-    const staff = staffQuery.data ?? [];
-    const customers = customersQuery.data ?? [];
-    const bookings = bookingsQuery.data ?? [];
+    const services = servicesQuery.data?.items ?? [];
+    const staff = staffQuery.data?.items ?? [];
+    const customers = customersQuery.data?.items ?? [];
+    const bookings = bookingsQuery.data?.items ?? [];
 
     return {
       profile: hasProfile,

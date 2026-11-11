@@ -12,8 +12,11 @@ import { formatMoney } from '../../lib/currency';
 import { formatVoucherWhen } from '../../lib/datetime';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
-import { useShopCashAccounts, useShopSuppliers, useShopVoucherMutations, useShopVouchers } from './shopHooks';
+import { useShopCashAccounts, useShopVoucherMutations, useShopVouchers } from './shopHooks';
+import { ShopSupplierTypeahead } from './ShopPickers';
 import { useQuery } from '@tanstack/react-query';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 import { useApiClient } from '../../hooks/useApiClient';
 
 const FALLBACK_EXPENSE_CATEGORIES = [
@@ -63,13 +66,20 @@ export function ShopExpensePage() {
   };
   const dialog = useDialog();
 
-  const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const listState = useCursorListState({ resetKey: `${dateFrom}|${dateTo}` });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
 
-  const expenses = useShopVouchers({ type: 'expense', date_from: dateFrom || undefined, date_to: dateTo || undefined });
+  const expenses = useShopVouchers({
+    type: 'expense',
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    q: listState.debouncedSearch,
+    page_size: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const accounts = useShopCashAccounts();
-  const suppliers = useShopSuppliers();
   const { createVoucher, voidVoucher } = useShopVoucherMutations();
 
   const [voucherDate, setVoucherDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -90,16 +100,7 @@ export function ShopExpensePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (expenses.data ?? []).filter((voucher) => {
-      if (!term) return true;
-      return [voucher.voucher_number, voucher.supplier_name ?? '', voucher.notes ?? '', String(voucher.total)]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [expenses.data, search]);
+  const filtered = useMemo(() => expenses.data?.items ?? [], [expenses.data]);
 
   function openAddDialog() {
     setVoucherDate(new Date().toISOString().slice(0, 10));
@@ -235,6 +236,11 @@ export function ShopExpensePage() {
             </div>
           ) : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(expenses.data, filtered.length)}
+          label={t('shop.expense.entries').toLowerCase()}
+          disabled={expenses.isFetching}
+        />
       </Card>
 
       <Dialog open={dialog.open} onClose={dialog.hide} title={t('shop.expense.addExpense')} labelledBy="add-expense-dialog" busy={createVoucher.isPending}>
@@ -270,14 +276,13 @@ export function ShopExpensePage() {
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.expense.paidTo')}
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} style={fieldStyle}>
-              <option value="">{t('shop.expense.none')}</option>
-              {(suppliers.data ?? []).map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
+            <ShopSupplierTypeahead
+              value={supplierId}
+              onChange={(id) => setSupplierId(id)}
+              placeholder={t('shop.expense.none')}
+              emptyOptionLabel={t('shop.expense.none')}
+              ariaLabel={t('shop.expense.paidTo')}
+            />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.expense.notes')}

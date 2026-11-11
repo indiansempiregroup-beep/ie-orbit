@@ -36,9 +36,11 @@ import { openShopDocumentHtmlView } from '../../utils/shopDocumentShare';
 import { useAuth } from '../../contexts/AuthContext';
 import { confirmAction } from '../../utils/confirmAction';
 import { getApiErrorMessage } from '../../utils/format';
-import type { Customer, ShopProduct, ShopQuotation } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopProduct, type ShopQuotation } from '@ie-orbit/sdk';
+import { ShopCustomerPickerField, ShopProductPickerField } from './ShopPickers';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
-  customerLabel,
   formatMoney,
   formatVoucherDate,
   formatVoucherDateTime,
@@ -116,15 +118,15 @@ export function ShopBooksQuotationsScreen() {
   const { businessId, tenantId } = useWorkspace();
 
   const [quotations, setQuotations] = useState<ShopQuotation[]>([]);
-  const [products, setProducts] = useState<ShopProduct[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [convertingId, setConvertingId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [statusFilter],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailQuote, setDetailQuote] = useState<ShopQuotation | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -184,20 +186,24 @@ export function ShopBooksQuotationsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [quotationsRes, productsRes, customersRes] = await Promise.all([
-        client.shop.listQuotations({ business_id: businessId }),
-        client.shop.listProducts({ business_id: businessId, status: 'active' }),
-        client.customers.list({ business: businessId }),
-      ]);
-      setQuotations(quotationsRes.data ?? []);
-      setProducts(productsRes.data ?? []);
-      setCustomers(customersRes.data ?? []);
+      const quotationsRes = await client.shop.listQuotations({
+        business_id: businessId,
+        q,
+        state: statusFilter || undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(quotationsRes, pageSize);
+      setQuotations(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.quotations.loadFailed'));
+      setQuotations([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, statusFilter, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -225,25 +231,7 @@ export function ShopBooksQuotationsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return quotations.filter((item) => {
-      const status = (item.status || '').toLowerCase();
-      if (statusFilter === 'open' && !canConvert(item)) return false;
-      if (statusFilter === 'converted' && status !== 'converted' && !item.converted_order) return false;
-      if (!term) return true;
-      return [
-        item.quotation_number,
-        item.status,
-        String(item.total),
-        item.valid_until ?? '',
-        item.customer_name ?? '',
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [quotations, search, statusFilter]);
+  const filtered = quotations;
 
   const quoteSummary = useMemo(() => {
     let total = 0;
@@ -257,33 +245,13 @@ export function ShopBooksQuotationsScreen() {
     return { total, open, converted, count: filtered.length };
   }, [filtered]);
 
-  const customerById = useMemo(() => {
-    const map = new Map<string, Customer>();
-    for (const customer of customers) map.set(customer.id, customer);
-    return map;
-  }, [customers]);
-
-  const customerOptions = useMemo(
-    () => [
-      { value: '', label: t('opsApp.shop.common.noCustomer') },
-      ...customers.map((customer) => ({ value: customer.id, label: customerLabel(customer) })),
-    ],
-    [customers, t],
-  );
-
-  const productOptions = useMemo(
-    () => products.map((product) => ({ value: product.id, label: `${product.name} · ${formatMoney(product.price)}` })),
-    [products],
-  );
-
   function setLine(key: string, patch: Partial<QuoteLine>) {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
   }
 
-  function selectProductForLine(key: string, productId: string) {
-    const product = products.find((p) => p.id === productId);
+  function selectProductForLine(key: string, product: ShopProduct | null) {
     setLine(key, {
-      productId,
+      productId: product?.id ?? '',
       name: product?.name ?? '',
       rate: product ? String(product.price) : '0',
       gst: product ? String(product.gst_rate ?? product.tax_rate ?? 0) : '0',
@@ -366,8 +334,8 @@ export function ShopBooksQuotationsScreen() {
         id: response.data.id,
         number: response.data.quotation_number,
         businessId,
-        phone: response.data.customer_phone || customers.find((c) => c.id === customerId)?.phone_number || '',
-        email: response.data.customer_email || customers.find((c) => c.id === customerId)?.email || '',
+        phone: response.data.customer_phone || '',
+        email: response.data.customer_email || '',
       });
       await load();
     } catch (err) {
@@ -433,11 +401,10 @@ export function ShopBooksQuotationsScreen() {
               : t('opsApp.shop.quotations.heroCreate')
           }
         />
-        <SelectField
+        <ShopCustomerPickerField
           label={t('opsApp.shop.common.customer')}
           value={customerId}
-          options={customerOptions}
-          onChange={setCustomerId}
+          onChange={(id) => setCustomerId(id)}
           optional
         />
         {editingId ? (
@@ -453,11 +420,10 @@ export function ShopBooksQuotationsScreen() {
         <Text style={styles.section}>{t('opsApp.shop.documents.items')}</Text>
         {lines.map((line) => (
           <View key={line.key} style={styles.lineCard}>
-            <SelectField
+            <ShopProductPickerField
               label={t('opsApp.shop.documents.product')}
               value={line.productId}
-              options={productOptions}
-              onChange={(value) => selectProductForLine(line.key, value)}
+              onChange={(_id, product) => selectProductForLine(line.key, product)}
             />
             <View style={styles.lineRow}>
               <View style={styles.lineField}>
@@ -583,11 +549,7 @@ export function ShopBooksQuotationsScreen() {
             const converting = convertingId === item.id;
             const customer =
               item.customer_name?.trim() ||
-              (item.customer && customerById.get(item.customer)
-                ? customerLabel(customerById.get(item.customer)!)
-                : item.customer
-                  ? t('opsApp.shop.common.customer')
-                  : t('opsApp.shop.common.noCustomer'));
+              (item.customer ? t('opsApp.shop.common.customer') : t('opsApp.shop.common.noCustomer'));
             const open = canConvert(item);
             const converted = Boolean(item.converted_order || (item.status || '').toLowerCase() === 'converted');
             return (
@@ -637,17 +599,13 @@ export function ShopBooksQuotationsScreen() {
                           label: t('opsApp.shop.documents.share'),
                           icon: 'share-2',
                           onPress: () => {
-                            const customer =
-                              item.customer && customerById.get(item.customer)
-                                ? customerById.get(item.customer)!
-                                : null;
                             setDocActions({
                               kind: 'quotation',
                               id: item.id,
                               number: item.quotation_number,
                               businessId,
-                              phone: item.customer_phone || customer?.phone_number || '',
-                              email: item.customer_email || customer?.email || '',
+                              phone: item.customer_phone || '',
+                              email: item.customer_email || '',
                             });
                           },
                         },
@@ -671,6 +629,14 @@ export function ShopBooksQuotationsScreen() {
                 onAction={() => navigation.navigate('ShopPos', { mode: 'quotation' })}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('shop.billingPage.quotationsPaginationLabel', { defaultValue: 'quotations' })}
+              disabled={loading}
+            />
           }
         />
       </View>

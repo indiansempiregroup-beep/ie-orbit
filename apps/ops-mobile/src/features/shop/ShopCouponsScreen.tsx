@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -13,7 +13,9 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { ShopCoupon } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopCoupon } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -151,8 +153,10 @@ export function ShopCouponsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [statusFilter],
+  });
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -198,14 +202,24 @@ export function ShopCouponsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listCoupons({ business_id: businessId });
-      setCoupons(response.data ?? []);
+      const response = await client.shop.listCoupons({
+        business_id: businessId,
+        q,
+        is_active: statusFilter === 'active' ? 'true' : statusFilter === 'inactive' ? 'false' : undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      setCoupons(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.coupons.loadFailed'));
+      setCoupons([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, statusFilter, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -215,15 +229,8 @@ export function ShopCouponsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return coupons.filter((coupon) => {
-      if (statusFilter === 'active' && coupon.is_active === false) return false;
-      if (statusFilter === 'inactive' && coupon.is_active !== false) return false;
-      if (!term) return true;
-      return [coupon.code, coupon.name, coupon.description ?? ''].join(' ').toLowerCase().includes(term);
-    });
-  }, [coupons, search, statusFilter]);
+  const filtered = coupons;
+  const hasFilters = Boolean(search.trim()) || Boolean(statusFilter);
 
   async function save() {
     if (!client || !businessId) return;
@@ -514,19 +521,27 @@ export function ShopCouponsScreen() {
               <EmptyState
                 icon="tag"
                 title={
-                  coupons.length
+                  hasFilters
                     ? t('opsApp.shop.coupons.noMatching')
                     : t('opsApp.shop.coupons.noCoupons')
                 }
                 message={
-                  coupons.length
+                  hasFilters
                     ? t('opsApp.shop.coupons.tryAnother')
                     : t('opsApp.shop.coupons.emptyHint')
                 }
-                actionLabel={coupons.length ? undefined : t('shop.coupons.addCoupon')}
-                onAction={coupons.length ? undefined : openCreate}
+                actionLabel={hasFilters ? undefined : t('shop.coupons.addCoupon')}
+                onAction={hasFilters ? undefined : openCreate}
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('shop.coupons.paginationLabel', { defaultValue: 'coupons' })}
+              disabled={loading}
+            />
           }
         />
       </View>

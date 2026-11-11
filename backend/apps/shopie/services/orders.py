@@ -7,7 +7,7 @@ from uuid import UUID
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import QuerySet, Sum
+from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 
 from apps.businesses.models import Business
@@ -60,6 +60,7 @@ class OrderService:
         business: Business,
         status: str | None = None,
         customer_id: UUID | None = None,
+        q: str | None = None,
     ) -> QuerySet[ShopOrder]:
         qs = (
             ShopOrder.objects.filter(tenant=tenant, business=business)
@@ -72,6 +73,16 @@ class OrderService:
             qs = qs.filter(status=status)
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
+        term = str(q or "").strip()
+        if term:
+            qs = qs.filter(
+                Q(order_number__icontains=term)
+                | Q(customer__display_name__icontains=term)
+                | Q(customer__first_name__icontains=term)
+                | Q(customer__last_name__icontains=term)
+                | Q(customer__phone_number__icontains=term)
+                | Q(customer__email__icontains=term)
+            ).distinct()
         return qs
 
     def get_order(self, *, tenant: Tenant, business: Business, order_id: UUID) -> ShopOrder:

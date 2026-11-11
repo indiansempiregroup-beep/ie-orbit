@@ -1381,7 +1381,7 @@ class ReturnService:
         customer_id: UUID | None = None,
     ):
         qs = ShopReturn.objects.filter(tenant=tenant, business=business).select_related(
-            "order", "customer", "credit_invoice"
+            "order", "order__customer", "customer", "credit_invoice"
         )
         if order_id:
             qs = qs.filter(order_id=order_id)

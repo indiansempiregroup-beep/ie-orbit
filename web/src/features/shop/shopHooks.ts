@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiClientError } from '@ie-orbit/sdk';
+import { ApiClientError, clampPageSize, toPagedResult } from '@ie-orbit/sdk';
 import type {
   ShopBooksReportSlug,
   ShopBooksDocumentCreateInput,
@@ -25,64 +25,143 @@ import type {
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 
-export function useShopProducts(search = '', status = '', category = '') {
+/** Server-side cursor list options shared by shop list hooks. */
+export type ShopPageOptions = { q?: string; pageSize?: number; cursor?: string | null };
+
+export function useShopProducts(
+  search = '',
+  status = '',
+  category = '',
+  options?: {
+    stock?: string;
+    pageSize?: number;
+    cursor?: string | null;
+    /** When true, fetch every page (export/tools only). Prefer paged mode for UI. */
+    all?: boolean;
+  },
+) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const stock = options?.stock || undefined;
+  const fetchAll = Boolean(options?.all);
   return useQuery({
-    queryKey: ['shop-products', businessId, search, status, category],
+    queryKey: [
+      'shop-products',
+      businessId,
+      search,
+      status,
+      category,
+      stock || '',
+      fetchAll ? 'all' : pageSize,
+      fetchAll ? 'all' : cursor || '',
+    ],
     enabled: Boolean(businessId),
-    queryFn: () =>
-      client.shop.listAllProducts({
+    queryFn: async () => {
+      if (fetchAll) {
+        const rows = await client.shop.listAllProducts({
+          business_id: businessId,
+          search: search || undefined,
+          status: status || undefined,
+          category: category || undefined,
+        });
+        return toPagedResult({ data: rows, meta: { pagination: { page_size: rows.length } } });
+      }
+      const response = await client.shop.listProducts({
         business_id: businessId,
         search: search || undefined,
         status: status || undefined,
         category: category || undefined,
-      }),
+        stock: stock || undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
+    },
   });
 }
 
-export function useShopOrders(status = '') {
+export function useShopOrders(
+  status = '',
+  options?: ShopPageOptions & { fulfillmentMode?: string; customerId?: string; enabled?: boolean },
+) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const fulfillmentMode = options?.fulfillmentMode || undefined;
+  const customerId = options?.customerId || undefined;
   return useQuery({
-    queryKey: ['shop-orders', businessId, status],
-    enabled: Boolean(businessId),
+    queryKey: [
+      'shop-orders',
+      businessId,
+      status,
+      fulfillmentMode || '',
+      customerId || '',
+      q || '',
+      pageSize,
+      cursor || '',
+    ],
+    enabled: Boolean(businessId) && options?.enabled !== false,
     queryFn: async () => {
       const response = await client.shop.listOrders({
         business_id: businessId,
         status: status || undefined,
+        fulfillment_mode: fulfillmentMode,
+        customer_id: customerId,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
       });
-      return response.data;
+      return toPagedResult(response, pageSize);
     },
   });
 }
 
-export function useShopInvoices() {
+export function useShopInvoices(options?: { q?: string; pageSize?: number; cursor?: string | null }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-invoices', businessId],
+    queryKey: ['shop-invoices', businessId, q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listInvoices({ business_id: businessId });
-      return response.data;
+      const response = await client.shop.listInvoices({
+        business_id: businessId,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
 
-export function useShopQuotations() {
+export function useShopQuotations(options?: { q?: string; pageSize?: number; cursor?: string | null }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-quotations', businessId],
+    queryKey: ['shop-quotations', businessId, q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listQuotations({ business_id: businessId });
-      return response.data;
+      const response = await client.shop.listQuotations({
+        business_id: businessId,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -123,33 +202,53 @@ export function useShopQuotationMutations() {
   return { updateQuotation, convertQuotation };
 }
 
-export function useShopReturns(orderId?: string) {
+export function useShopReturns(
+  orderId?: string,
+  options?: ShopPageOptions & { status?: string; enabled?: boolean },
+) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const status = options?.status || undefined;
   return useQuery({
-    queryKey: ['shop-returns', businessId, orderId ?? ''],
-    enabled: Boolean(businessId),
+    queryKey: ['shop-returns', businessId, orderId ?? '', status || '', q || '', pageSize, cursor || ''],
+    enabled: Boolean(businessId) && options?.enabled !== false,
     queryFn: async () => {
       const response = await client.shop.listReturns({
         business_id: businessId,
         order_id: orderId,
+        status,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
       });
-      return response.data;
+      return toPagedResult(response, pageSize);
     },
   });
 }
 
-export function useShopDeliveryZones() {
+export function useShopDeliveryZones(options?: ShopPageOptions & { enabledFilter?: 'true' | 'false' | '' }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-delivery-zones', businessId],
+    queryKey: ['shop-delivery-zones', businessId, options?.enabledFilter || '', q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listDeliveryZones({ business_id: businessId });
-      return response.data;
+      const response = await client.shop.listDeliveryZones({
+        business_id: businessId,
+        enabled: options?.enabledFilter || undefined,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -168,20 +267,27 @@ export function useShopSettings() {
   });
 }
 
-export function useShopPets(customerId?: string) {
+export function useShopPets(customerId?: string, options?: ShopPageOptions & { species?: string }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
   const settings = useShopSettings();
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-pets', businessId, customerId ?? ''],
+    queryKey: ['shop-pets', businessId, customerId ?? '', options?.species || '', q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId) && Boolean(settings.data?.pets_enabled),
     queryFn: async () => {
       const response = await client.shop.listPets({
         business_id: businessId,
         customer_id: customerId,
+        species: options?.species || undefined,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
       });
-      return response.data;
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -554,16 +660,25 @@ export function useShopDeliveryZoneMutations() {
   return { createZone, patchZone };
 }
 
-export function useShopCoupons() {
+export function useShopCoupons(options?: ShopPageOptions & { isActive?: 'true' | 'false' | '' }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-coupons', businessId],
+    queryKey: ['shop-coupons', businessId, options?.isActive || '', q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listCoupons({ business_id: businessId });
-      return response.data;
+      const response = await client.shop.listCoupons({
+        business_id: businessId,
+        is_active: options?.isActive || undefined,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -695,19 +810,23 @@ export function useShopPetMutations() {
 }
 
 /** Customers usable as "sale" / party pickers across Books forms. */
-export function useShopCustomers(search = '') {
+export function useShopCustomers(search = '', options?: { pageSize?: number; cursor?: string | null }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
   return useQuery({
-    queryKey: ['customers', businessId, search],
+    queryKey: ['customers', businessId, search, pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
       const response = await client.customers.list({
         business: businessId,
-        search: search || undefined,
+        q: search || undefined,
+        page_size: clampPageSize(pageSize),
+        cursor,
       });
-      return response.data;
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -727,16 +846,30 @@ export function useShopBooksDashboard() {
   });
 }
 
-export function useShopBooksDocuments(docType: ShopBooksDocumentType) {
+export function useShopBooksDocuments(
+  docType: ShopBooksDocumentType,
+  options?: ShopPageOptions & { state?: string },
+) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const state = options?.state || undefined;
   return useQuery({
-    queryKey: ['shop-books-documents', businessId, docType],
+    queryKey: ['shop-books-documents', businessId, docType, state || '', q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listDocuments({ business_id: businessId, doc_type: docType });
-      return response.data;
+      const response = await client.shop.listDocuments({
+        business_id: businessId,
+        doc_type: docType,
+        state,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -831,18 +964,35 @@ export type ShopVoucherFilters = {
   customer_id?: string;
   supplier_id?: string;
   source?: string;
+  /** Server payment filter (`paid` | `unpaid`). */
+  pay?: string;
+  /** Server search (voucher number, party, notes). */
+  q?: string;
+  page_size?: number;
+  cursor?: string | null;
 };
 
 export function useShopVouchers(filters: ShopVoucherFilters = {}) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = filters.page_size ?? 25;
+  const cursor = filters.cursor || undefined;
+  const q = filters.q?.trim() || undefined;
+  const { page_size: _pageSize, cursor: _cursor, q: _q, ...rest } = filters;
   return useQuery({
-    queryKey: ['shop-books-vouchers', businessId, filters],
+    queryKey: ['shop-books-vouchers', businessId, rest, q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
-      const response = await client.shop.listVouchers({ business_id: businessId, ...filters });
-      return response.data;
+      const response = await client.shop.listVouchers({
+        business_id: businessId,
+        ...rest,
+        pay: rest.pay || undefined,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      return toPagedResult(response, pageSize);
     },
   });
 }
@@ -907,19 +1057,24 @@ export function useShopVoucherMutations() {
   return { createVoucher, voidVoucher, payVoucher, businessId };
 }
 
-export function useShopSuppliers(search = '') {
+export function useShopSuppliers(search = '', options?: { pageSize?: number; cursor?: string | null }) {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = search.trim() || undefined;
   return useQuery({
-    queryKey: ['shop-suppliers', businessId, search],
+    queryKey: ['shop-suppliers', businessId, q || '', pageSize, cursor || ''],
     enabled: Boolean(businessId),
     queryFn: async () => {
       const response = await client.shop.listSuppliers({
         business_id: businessId,
-        search: search || undefined,
+        q,
+        page_size: clampPageSize(pageSize),
+        cursor,
       });
-      return response.data;
+      return toPagedResult(response, pageSize);
     },
   });
 }

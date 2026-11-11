@@ -22,7 +22,9 @@ import { SearchBar } from '../../components/SearchBar';
 import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopBooksVoucher } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopBooksVoucher } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
   filterSaleVouchers,
   formatMoney,
@@ -31,6 +33,7 @@ import {
   isVoucherFullyPaid,
   summarizeVouchers,
   voucherBalanceDue,
+  voucherListFilters,
   voucherPartyLabel,
   type VoucherPayFilter,
   type VoucherPeriodFilter,
@@ -62,8 +65,10 @@ export function ShopBooksPurchaseScreen() {
   const [error, setError] = useState<string | null>(null);
   const [payFilter, setPayFilter] = useState<VoucherPayFilter>('all');
   const [periodFilter, setPeriodFilter] = useState<VoucherPeriodFilter>('all');
-  const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [payFilter, periodFilter],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailVoucher, setDetailVoucher] = useState<ShopBooksVoucher | null>(null);
 
@@ -101,14 +106,25 @@ export function ShopBooksPurchaseScreen() {
     setLoading(true);
     setError(null);
     try {
-      const vouchersRes = await client.shop.listVouchers({ business_id: businessId, type: 'purchase' });
-      setVouchers(vouchersRes.data ?? []);
+      const vouchersRes = await client.shop.listVouchers({
+        business_id: businessId,
+        type: 'purchase',
+        q,
+        ...voucherListFilters({ pay: payFilter, period: periodFilter }),
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(vouchersRes, pageSize);
+      setVouchers(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.purchase.loadFailed'));
+      setVouchers([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, payFilter, periodFilter, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -144,18 +160,16 @@ export function ShopBooksPurchaseScreen() {
   }
 
   const filteredVouchers = useMemo(() => {
-    const list = filterSaleVouchers(vouchers, {
-      pay: payFilter,
-      period: periodFilter,
-      search,
-    });
+    // Search, period and pay status are applied by the API; `pay` is re-checked here so rows
+    // with return adjustments match the badge shown on each row.
+    const list = filterSaleVouchers(vouchers, { pay: payFilter });
     return [...list].sort((a, b) => {
       if (sortBy === 'oldest') return String(a.voucher_date || '').localeCompare(String(b.voucher_date || ''));
       if (sortBy === 'amount_desc') return Number(b.total ?? 0) - Number(a.total ?? 0);
       if (sortBy === 'amount_asc') return Number(a.total ?? 0) - Number(b.total ?? 0);
       return String(b.voucher_date || '').localeCompare(String(a.voucher_date || ''));
     });
-  }, [vouchers, payFilter, periodFilter, search, sortBy]);
+  }, [vouchers, payFilter, sortBy]);
   const summary = useMemo(() => summarizeVouchers(filteredVouchers), [filteredVouchers]);
   const activeFilterCount =
     Number(payFilter !== 'all') + Number(periodFilter !== 'all') + Number(sortBy !== 'newest');
@@ -308,6 +322,14 @@ export function ShopBooksPurchaseScreen() {
                 }
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filteredVouchers.length}
+              label={t('shop.vouchers.paginationLabel', { defaultValue: 'bills' })}
+              disabled={loading}
+            />
           }
         />
 

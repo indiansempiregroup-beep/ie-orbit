@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiClientError,
+  clampPageSize,
   type Booking,
   type BookingReview,
   type Customer,
@@ -26,12 +27,35 @@ function asList<T>(data: unknown): T[] {
   return [];
 }
 
-export function useBookings(date?: string, staffId?: string | null) {
+export type UseBookingsOptions = {
+  date?: string;
+  staffId?: string | null;
+  status?: string;
+  /** Server booking-number filter (`booking_id` query param). */
+  q?: string;
+  pageSize?: number;
+  cursor?: string | null;
+};
+
+function resolveBookingsOptions(
+  dateOrOptions?: string | UseBookingsOptions,
+  legacyStaffId?: string | null,
+): UseBookingsOptions {
+  if (typeof dateOrOptions === 'string') {
+    return { date: dateOrOptions, staffId: legacyStaffId };
+  }
+  return dateOrOptions ?? {};
+}
+
+export function useBookings(dateOrOptions?: string | UseBookingsOptions, legacyStaffId?: string | null) {
   const client = useOpsClient();
-  const { ready } = useWorkspace();
+  const { ready, businessId } = useWorkspace();
+  const { date, staffId, status, q, pageSize = 25, cursor } = resolveBookingsOptions(dateOrOptions, legacyStaffId);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
   const bookingsRef = useRef(bookings);
   const requestIdRef = useRef(0);
   bookingsRef.current = bookings;
@@ -44,26 +68,37 @@ export function useBookings(date?: string, staffId?: string | null) {
     setError(null);
     try {
       const response = await client.bookings.list({
+        business: businessId || undefined,
         ...(date ? { date } : {}),
         ...(staffId ? { staff: staffId } : {}),
+        ...(status ? { status } : {}),
+        ...(q ? { booking_id: q } : {}),
+        page_size: clampPageSize(pageSize),
+        cursor: cursor || undefined,
       });
       if (requestId !== requestIdRef.current) return;
       setBookings(asList<Booking>(response.data));
+      setNextCursor(response.meta?.pagination?.next_cursor ? String(response.meta.pagination.next_cursor) : null);
+      setPreviousCursor(
+        response.meta?.pagination?.previous_cursor ? String(response.meta.pagination.previous_cursor) : null,
+      );
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load bookings');
       // Keep existing rows on refresh failure so returning to the tab isn't blank.
       if (!bookingsRef.current.length) setBookings([]);
+      setNextCursor(null);
+      setPreviousCursor(null);
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [client, ready, date, staffId]);
+  }, [client, ready, businessId, date, staffId, status, q, pageSize, cursor]);
 
   useEffect(() => {
     void reload({ silent: false });
   }, [reload]);
 
-  return { bookings, loading, error, reload };
+  return { bookings, loading, error, reload, nextCursor, previousCursor, pageSize };
 }
 
 export function useBooking(bookingId: string, initialBooking?: Booking | null) {
@@ -134,33 +169,49 @@ export function useBooking(bookingId: string, initialBooking?: Booking | null) {
   return { booking, loading: loading && !booking, error: booking ? null : error, reload };
 }
 
-export function useCustomers() {
+export function useCustomers(options?: { q?: string; pageSize?: number; cursor?: string | null }) {
   const client = useOpsClient();
-  const { ready } = useWorkspace();
+  const { ready, businessId } = useWorkspace();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await client.customers.list();
+      const response = await client.customers.list({
+        business: businessId || undefined,
+        q,
+        page_size: pageSize,
+        cursor,
+      });
       setCustomers(asList<Customer>(response.data));
+      setNextCursor(response.meta?.pagination?.next_cursor ? String(response.meta.pagination.next_cursor) : null);
+      setPreviousCursor(
+        response.meta?.pagination?.previous_cursor ? String(response.meta.pagination.previous_cursor) : null,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load customers');
       setCustomers([]);
+      setNextCursor(null);
+      setPreviousCursor(null);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, businessId, q, pageSize, cursor]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { customers, loading, error, reload };
+  return { customers, loading, error, reload, nextCursor, previousCursor, pageSize };
 }
 
 export function useCustomer(customerId: string) {
@@ -191,37 +242,64 @@ export function useCustomer(customerId: string) {
   return { customer, loading, reload };
 }
 
-export function useServices() {
+export function useServices(options?: { q?: string; pageSize?: number; cursor?: string | null }) {
   const client = useOpsClient();
-  const { ready } = useWorkspace();
+  const { ready, businessId } = useWorkspace();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
     setLoading(true);
     try {
-      const response = await client.services.list();
+      const response = await client.services.list({
+        business: businessId || undefined,
+        q,
+        page_size: pageSize,
+        cursor,
+      });
       setServices(asList<Service>(response.data));
+      setNextCursor(response.meta?.pagination?.next_cursor ? String(response.meta.pagination.next_cursor) : null);
+      setPreviousCursor(
+        response.meta?.pagination?.previous_cursor ? String(response.meta.pagination.previous_cursor) : null,
+      );
     } catch {
       setServices([]);
+      setNextCursor(null);
+      setPreviousCursor(null);
     } finally {
       setLoading(false);
     }
-  }, [client, ready]);
+  }, [client, ready, businessId, q, pageSize, cursor]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { services, loading, reload };
+  return { services, loading, reload, nextCursor, previousCursor, pageSize };
 }
 
-export function useStaffMembers() {
+export function useStaffMembers(options?: {
+  q?: string;
+  pageSize?: number;
+  cursor?: string | null;
+  status?: string;
+}) {
   const client = useOpsClient();
   const { ready, businessId } = useWorkspace();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const status = options?.status;
 
   const reload = useCallback(async () => {
     if (!client || !ready) return;
@@ -229,21 +307,30 @@ export function useStaffMembers() {
     try {
       const response = await client.staff.list({
         business: businessId ?? undefined,
-        status: 'active',
+        status: status || undefined,
+        q,
+        page_size: pageSize,
+        cursor,
       });
       setStaff(asList<StaffMember>(response.data));
+      setNextCursor(response.meta?.pagination?.next_cursor ? String(response.meta.pagination.next_cursor) : null);
+      setPreviousCursor(
+        response.meta?.pagination?.previous_cursor ? String(response.meta.pagination.previous_cursor) : null,
+      );
     } catch {
       setStaff([]);
+      setNextCursor(null);
+      setPreviousCursor(null);
     } finally {
       setLoading(false);
     }
-  }, [client, ready, businessId]);
+  }, [client, ready, businessId, status, q, pageSize, cursor]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { staff, loading, reload };
+  return { staff, loading, reload, nextCursor, previousCursor, pageSize };
 }
 
 export function useReviews(customerId?: string) {

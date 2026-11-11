@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Service } from '@ie-orbit/sdk';
+import { PICKER_PAGE_SIZE, type Service } from '@ie-orbit/sdk';
+import { useDebounce } from '../../hooks/useDebounce';
+import { useServiceList } from '../management/managementHooks';
 import {
   compactServiceSummary,
   serviceDurationMinutes,
@@ -8,9 +10,9 @@ import {
 } from './bookingHelpers';
 
 type Props = {
-  services: Service[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
+  /** Currently chosen services (kept by the parent so they survive new searches). */
+  selectedServices: Service[];
+  onChange: (services: Service[]) => void;
   nameFor?: (service: Service) => string;
 };
 
@@ -22,44 +24,31 @@ const controlStyle: React.CSSProperties = {
   color: '#111827',
 };
 
-export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }: Props) {
+export function ServiceMultiPicker({ selectedServices, onChange, nameFor }: Props) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 250);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const labelFor = nameFor ?? ((service) => service.name ?? service.id);
+  const listQuery = useServiceList({ q: debouncedSearch, pageSize: PICKER_PAGE_SIZE });
+  const services = listQuery.data?.items ?? [];
+  const selectedIds = useMemo(() => selectedServices.map((service) => service.id), [selectedServices]);
 
-  const selectedServices = useMemo(
-    () =>
-      selectedIds
-        .map((id) => services.find((service) => service.id === id))
-        .filter((service): service is Service => Boolean(service)),
-    [selectedIds, services],
+  const browseServices = useMemo(
+    () => services.filter((service) => !selectedIds.includes(service.id)),
+    [services, selectedIds],
   );
-
-  const browseServices = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const pool =
-      selectedIds.length > 0
-        ? services.filter((service) => !selectedIds.includes(service.id))
-        : services;
-    if (!query) return pool;
-    return pool.filter((service) => {
-      const label = labelFor(service).toLowerCase();
-      const description = (service.description ?? '').toLowerCase();
-      return label.includes(query) || description.includes(query);
-    });
-  }, [services, selectedIds, search, labelFor]);
 
   const totalDuration = servicesTotalDurationMinutes(selectedServices);
   const summaryLine = compactServiceSummary(selectedServices, labelFor, t);
 
-  function addService(serviceId: string) {
-    if (selectedIds.includes(serviceId)) return;
-    onChange([...selectedIds, serviceId]);
+  function addService(service: Service) {
+    if (selectedIds.includes(service.id)) return;
+    onChange([...selectedServices, service]);
   }
 
   function removeService(serviceId: string) {
-    const next = selectedIds.filter((id) => id !== serviceId);
+    const next = selectedServices.filter((service) => service.id !== serviceId);
     onChange(next);
     if (next.length === 0) setSummaryExpanded(false);
   }
@@ -201,7 +190,9 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
       />
 
       <div style={{ maxHeight: 280, overflowY: 'auto', display: 'grid', gap: 8 }}>
-        {browseServices.length === 0 ? (
+        {listQuery.isFetching && browseServices.length === 0 ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>…</div>
+        ) : browseServices.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center', color: '#6b7280' }}>
             {search
               ? t('bookings.servicePicker.noMatch')
@@ -214,7 +205,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor }:
             <button
               key={service.id}
               type="button"
-              onClick={() => addService(service.id)}
+              onClick={() => addService(service)}
               style={{
                 ...controlStyle,
                 display: 'flex',

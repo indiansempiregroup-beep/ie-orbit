@@ -51,7 +51,7 @@ export function ShopOrderDetailPage() {
   const { orderId = '' } = useParams();
   const client = useApiClient();
   const queryClient = useQueryClient();
-  const returns = useShopReturns(orderId);
+  const returns = useShopReturns(orderId, { pageSize: 50 }); // returns for ONE order: small bounded page
   const { createReturn, arrangePickup, receiveReturn, rejectReturn } = useShopReturnMutations();
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
   const [reason, setReason] = useState('');
@@ -657,7 +657,7 @@ export function ShopOrderDetailPage() {
 
       <Card>
         <h2>{td('returnsOnOrder')}</h2>
-        {(returns.data ?? []).map((item) => {
+        {(returns.data?.items ?? []).map((item) => {
           const open =
             item.status === 'pending' ||
             item.status === 'awaiting_customer' ||
@@ -742,7 +742,7 @@ export function ShopOrderDetailPage() {
             </div>
           );
         })}
-        {!returns.data?.length ? <p>{td('noReturnsYet')}</p> : null}
+        {!returns.data?.items.length ? <p>{td('noReturnsYet')}</p> : null}
       </Card>
 
       {shipOpen ? (

@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as dt
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import F, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ValidationError
@@ -255,6 +256,7 @@ class ShopBooksVoucherListCreateView(APIView):
             customer_id=request.query_params.get("customer_id") or None,
             supplier_id=request.query_params.get("supplier_id") or None,
             source=request.query_params.get("source") or None,
+            q=request.query_params.get("q") or request.query_params.get("search") or None,
         )
         qs = self.books.list_vouchers(**list_kwargs)
         if str(request.query_params.get("type") or "").lower() == "sale":
@@ -263,7 +265,37 @@ class ShopBooksVoucherListCreateView(APIView):
                 tenant=request.current_tenant, business=business
             )
             qs = self.books.list_vouchers(**list_kwargs)
+        qs = self._apply_list_filters(request, qs)
         return paginated_list_response(request, qs, ShopBooksVoucherSerializer)
+
+    @staticmethod
+    def _apply_list_filters(request: Request, qs):
+        """Optional list filters used by paged clients (pay status, GST invoice type, walk-in)."""
+        params = request.query_params
+        voucher_types = [
+            part.strip().lower()
+            for part in str(params.get("types") or "").split(",")
+            if part.strip()
+        ]
+        if voucher_types and not params.get("type"):
+            qs = qs.filter(voucher_type__in=voucher_types)
+        pay = str(params.get("pay") or "").strip().lower()
+        if pay == "paid":
+            qs = qs.exclude(status__in=["void", "voided", "cancelled"]).filter(
+                Q(status="paid") | Q(amount_paid__gte=F("total"))
+            )
+        elif pay == "unpaid":
+            qs = (
+                qs.exclude(status__in=["void", "voided", "cancelled", "paid"])
+                .filter(amount_paid__lt=F("total"))
+            )
+        invoice_type = str(params.get("invoice_type") or "").strip().lower()
+        if invoice_type in {"b2b", "b2c"}:
+            has_gstin = Q(metadata__customer_gstin__isnull=False) & ~Q(metadata__customer_gstin="")
+            qs = qs.filter(has_gstin) if invoice_type == "b2b" else qs.exclude(has_gstin)
+        if str(params.get("walk_in") or "").strip().lower() in {"1", "true", "yes"}:
+            qs = qs.filter(customer__isnull=True)
+        return qs
 
     def post(self, request: Request) -> Response:
         voucher_type = str(request.data.get("voucher_type") or "").strip().lower()

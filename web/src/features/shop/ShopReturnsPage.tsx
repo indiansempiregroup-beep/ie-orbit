@@ -19,6 +19,10 @@ import {
   useShopSettingsMutations,
 } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
+import { TypeaheadSelect } from '../../components/TypeaheadSelect';
+import { useDebounce } from '../../hooks/useDebounce';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 export function ShopReturnsPage() {
   const { t } = useTranslation();
@@ -29,19 +33,29 @@ export function ShopReturnsPage() {
   const client = useApiClient();
   const workspace = useWorkspace();
   const businessId = workspace.businessId ?? '';
-  const orders = useShopOrders();
-  const returns = useShopReturns();
+  const [status, setStatus] = useState('');
+  const listState = useCursorListState({ resetKey: status });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const [orderQuery, setOrderQuery] = useState('');
+  const debouncedOrderQuery = useDebounce(orderQuery, 250);
+  const dialog = useDialog();
+  // Order picker: server `q` search, one page of 25 (only while the dialog is open).
+  const orders = useShopOrders('', { q: debouncedOrderQuery, pageSize: 25, enabled: dialog.open });
+  const returns = useShopReturns(undefined, {
+    q: listState.debouncedSearch,
+    status,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const settings = useShopSettings();
   const { createReturn, arrangePickup, receiveReturn, rejectReturn } = useShopReturnMutations();
   const { patchSettings } = useShopSettingsMutations();
   const snackbar = useSnackbar();
-  const dialog = useDialog();
-  const [orderId, setOrderId] = useState('');
+  const [selected, setSelected] = useState<NonNullable<typeof orders.data>['items'][number] | null>(null);
+  const orderId = selected?.id ?? '';
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [qtyByLine, setQtyByLine] = useState<Record<string, string>>({});
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
   const [returnDays, setReturnDays] = useState('0');
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
@@ -166,33 +180,20 @@ export function ShopReturnsPage() {
     setReturnDays(String(settings.data.return_days));
   }, [settings.data?.return_days]);
 
-  const selected = useMemo(
-    () => (orders.data ?? []).find((order) => order.id === orderId) ?? null,
-    [orders.data, orderId],
-  );
-
   const returnableOrders = useMemo(
     () =>
-      (orders.data ?? []).filter((order) =>
+      (orders.data?.items ?? []).filter((order) =>
         ['confirmed', 'ready', 'completed'].includes(order.status),
       ),
     [orders.data],
   );
 
-  const filteredReturns = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (returns.data ?? []).filter((item) => {
-      if (status && item.status !== status) return false;
-      if (!term) return true;
-      return [item.return_number, item.status, String(item.refund_total), item.reason ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [returns.data, search, status]);
+  // Server-filtered page (q + status).
+  const filteredReturns = useMemo(() => returns.data?.items ?? [], [returns.data]);
 
   function openCreateDialog() {
-    setOrderId('');
+    setSelected(null);
+    setOrderQuery('');
     setReason('');
     setQtyByLine({});
     setMessage(null);
@@ -379,9 +380,15 @@ export function ShopReturnsPage() {
               </div>
             );
           })}
-          {!returns.data?.length ? <p>{tr('noReturns')}</p> : null}
-          {returns.data?.length && !filteredReturns.length ? <p>{tr('noMatch')}</p> : null}
+          {!returns.isLoading && !filteredReturns.length ? (
+            <p>{search || status ? tr('noMatch') : tr('noReturns')}</p>
+          ) : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(returns.data, filteredReturns.length)}
+          label={tr('title', { defaultValue: 'returns' }).toLowerCase()}
+          disabled={returns.isFetching}
+        />
       </Card>
 
       <Dialog
@@ -394,19 +401,26 @@ export function ShopReturnsPage() {
         <form onSubmit={submit} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
             {tr('orderLabel')}
-            <select
+            <TypeaheadSelect
               value={orderId}
-              onChange={(event) => setOrderId(event.target.value)}
-              required
-              style={{ padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' }}
-            >
-              <option value="">{tr('selectOrder')}</option>
-              {returnableOrders.map((order) => (
-                <option key={order.id} value={order.id}>
-                  {order.order_number} · {t(`shop.orders.statuses.${order.status}`, { defaultValue: order.status })} · {order.total}
-                </option>
-              ))}
-            </select>
+              selectedLabel={selected?.order_number}
+              items={returnableOrders}
+              loading={orders.isFetching}
+              hasMore={Boolean(orders.data?.nextCursor)}
+              query={orderQuery}
+              onQueryChange={setOrderQuery}
+              getId={(order) => order.id}
+              getLabel={(order) => order.order_number}
+              getDescription={(order) =>
+                `${t(`shop.orders.statuses.${order.status}`, { defaultValue: order.status })} · ${order.total}`
+              }
+              onSelect={(order) => {
+                setSelected(order);
+                setQtyByLine({});
+              }}
+              placeholder={tr('selectOrder')}
+              ariaLabel={tr('orderLabel')}
+            />
           </label>
           {selected ? (
             <div style={{ display: 'grid', gap: 8 }}>

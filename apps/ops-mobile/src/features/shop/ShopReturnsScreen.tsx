@@ -18,9 +18,11 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, spacing } from '../../theme/tokens';
-import type { ShopOrder, ShopReturn } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopReturn } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatDateTime, getApiErrorMessage } from '../../utils/format';
@@ -118,44 +120,48 @@ export function ShopReturnsScreen() {
   const customerMap = useMemo(() => buildNameMap(customers), [customers]);
 
   const [returns, setReturns] = useState<ShopReturn[]>([]);
-  const [orders, setOrders] = useState<ShopOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [restock, setRestock] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('newest');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [restock, statusFilter],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [returnDays, setReturnDays] = useState('0');
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [arrangeTarget, setArrangeTarget] = useState<ShopReturn | null>(null);
 
-  const orderMap = useMemo(() => {
-    const map = new Map<string, ShopOrder>();
-    for (const order of orders) map.set(order.id, order);
-    return map;
-  }, [orders]);
-
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
     setError(null);
     try {
-      const [returnsRes, ordersRes, settingsRes] = await Promise.all([
-        client.shop.listReturns({ business_id: businessId }),
-        client.shop.listOrders({ business_id: businessId }),
+      const [returnsRes, settingsRes] = await Promise.all([
+        client.shop.listReturns({
+          business_id: businessId,
+          q,
+          status: statusFilter || undefined,
+          restock: restock === 'yes' ? 'true' : restock === 'no' ? 'false' : undefined,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.shop.getSettings({ business_id: businessId }),
       ]);
-      setReturns(returnsRes.data ?? []);
-      setOrders(ordersRes.data ?? []);
+      const page = toPagedResult(returnsRes, pageSize);
+      setReturns(page.items);
+      setPageMeta(page);
       setReturnDays(String(settingsRes.data?.return_days ?? 0));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.returns.loadFailed'));
+      setReturns([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, q, statusFilter, restock, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -165,40 +171,15 @@ export function ShopReturnsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const list = returns.filter((item) => {
-      if (restock === 'yes' && !item.restock) return false;
-      if (restock === 'no' && item.restock) return false;
-      if (statusFilter && String(item.status || '') !== statusFilter) return false;
-
-      if (!term) return true;
-      const order = orderMap.get(String(item.order));
-      const customerId = item.customer ? String(item.customer) : order?.customer_id;
-      const customer = customerId ? entityLabel(customerMap, customerId, '') : t('shop.vouchers.walkIn').toLowerCase();
-      const products = returnLineSummary(item);
-      const haystack = [
-        item.return_number,
-        item.reason,
-        String(item.refund_total),
-        order?.order_number,
-        customer,
-        products,
-        item.restock ? t('opsApp.shop.returns.restocked') : t('opsApp.shop.returns.noRestock'),
-        returnMethodLabel(item.return_method, t),
-        returnStatusLabel(item, t),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(term);
-    });
-    return [...list].sort((a, b) => {
-      if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
-      if (sortBy === 'amount_desc') return Number(b.refund_total ?? 0) - Number(a.refund_total ?? 0);
-      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
-    });
-  }, [returns, search, restock, statusFilter, sortBy, orderMap, customerMap, t]);
+  const filtered = useMemo(
+    () =>
+      [...returns].sort((a, b) => {
+        if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        if (sortBy === 'amount_desc') return Number(b.refund_total ?? 0) - Number(a.refund_total ?? 0);
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      }),
+    [returns, sortBy],
+  );
 
   function clearFilters() {
     setSearch('');
@@ -347,11 +328,10 @@ export function ShopReturnsScreen() {
           refreshControl={shopListRefreshControl(refreshing, onRefresh)}
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
           renderItem={({ item }) => {
-            const order = orderMap.get(String(item.order));
-            const customerId = item.customer ? String(item.customer) : order?.customer_id;
+            const customerId = item.customer ? String(item.customer) : '';
             const customer = customerId
-              ? entityLabel(customerMap, customerId, t('opsApp.shop.common.customer'))
-              : t('shop.vouchers.walkIn');
+              ? entityLabel(customerMap, customerId, item.customer_name || t('opsApp.shop.common.customer'))
+              : item.customer_name || t('shop.vouchers.walkIn');
             const products = returnLineSummary(item);
             const open = returnIsOpen(item);
             const canArrange = canOpenArrangeSheet(item);
@@ -361,7 +341,7 @@ export function ShopReturnsScreen() {
                 title={item.return_number}
                 amount={formatMoney(item.refund_total, item.currency)}
                 meta={[
-                  order?.order_number,
+                  item.order_number,
                   customer,
                   item.created_at ? formatDateTime(item.created_at) : '',
                   returnMethodLabel(item.return_method, t),
@@ -419,17 +399,25 @@ export function ShopReturnsScreen() {
               <EmptyState
                 icon="rotate-ccw"
                 title={
-                  returns.length
+                  search || restock || statusFilter
                     ? t('opsApp.shop.returns.noMatching')
                     : t('opsApp.shop.returns.noReturnsTitle')
                 }
                 message={
-                  returns.length
+                  search || restock || statusFilter
                     ? t('opsApp.shop.returns.tryDifferent')
                     : t('opsApp.shop.returns.processHint')
                 }
               />
             ) : null
+          }
+          ListFooterComponent={
+            <CursorPager
+              {...pager}
+              count={filtered.length}
+              label={t('shop.returnsPage.paginationLabel', { defaultValue: 'returns' })}
+              disabled={loading}
+            />
           }
         />
       </View>

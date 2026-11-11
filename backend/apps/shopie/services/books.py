@@ -1220,6 +1220,7 @@ class BooksService:
         customer_id: UUID | None = None,
         supplier_id: UUID | None = None,
         source: str | None = None,
+        q: str | None = None,
     ) -> QuerySet[ShopBooksVoucher]:
         qs = (
             ShopBooksVoucher.objects.filter(tenant=tenant, business=business)
@@ -1246,6 +1247,20 @@ class BooksService:
                 | Q(metadata__channel="pos")
                 | Q(linked_order__fulfillment_mode=FulfillmentMode.POS)
             )
+        term = str(q or "").strip()
+        if term:
+            qs = qs.filter(
+                Q(voucher_number__icontains=term)
+                | Q(notes__icontains=term)
+                | Q(customer__display_name__icontains=term)
+                | Q(customer__first_name__icontains=term)
+                | Q(customer__last_name__icontains=term)
+                | Q(customer__phone_number__icontains=term)
+                | Q(supplier__name__icontains=term)
+                | Q(supplier__phone__icontains=term)
+                | Q(metadata__customer_gstin__icontains=term)
+                | Q(cash_account__name__icontains=term)
+            ).distinct()
         return qs
 
     def _apply_sale_loyalty(

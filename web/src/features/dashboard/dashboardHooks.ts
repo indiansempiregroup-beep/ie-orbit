@@ -207,21 +207,21 @@ export function useBusinessLists(staffId?: string | null) {
 
   const customers = useQuery<Customer[], Error>({
     queryKey: ['dashboard', 'customers', tenantId, businessId],
-    queryFn: () => listCustomers(auth.token, tenantId, businessId),
+    queryFn: () => listCustomers(auth.token, tenantId, businessId, { page_size: 25 }),
     enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
   const staff = useQuery<StaffMember[], Error>({
     queryKey: ['dashboard', 'staff', tenantId, businessId],
-    queryFn: () => listStaff(auth.token, tenantId, businessId),
+    queryFn: () => listStaff(auth.token, tenantId, businessId, { page_size: 25 }),
     enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });
 
   const services = useQuery<Service[], Error>({
     queryKey: ['dashboard', 'services', tenantId, businessId],
-    queryFn: () => listServices(auth.token, tenantId, businessId),
+    queryFn: () => listServices(auth.token, tenantId, businessId, { page_size: 25 }),
     enabled: Boolean(auth.token) && Boolean(businessId),
     staleTime: 1000 * 60 * 5,
   });

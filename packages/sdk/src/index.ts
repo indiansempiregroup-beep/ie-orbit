@@ -3590,7 +3590,9 @@ export type ShopReturn = {
   id: string;
   business: string;
   order: string;
+  order_number?: string;
   customer?: string | null;
+  customer_name?: string;
   return_number: string;
   status: string;
   return_method?: ShopReturnMethod | string;
@@ -5592,6 +5594,8 @@ class ApiClient {
       search?: string;
       status?: string;
       category?: string;
+      /** Server stock filter: in_stock | out | low */
+      stock?: 'in_stock' | 'out' | 'low' | string;
       page_size?: number;
       cursor?: string;
     }) => this.request<ShopProduct[]>('/shop/products', { method: 'GET', query }),
@@ -5715,8 +5719,17 @@ class ApiClient {
       this.request<ShopProductOfficeStock[]>(`/shop/products/${productId}/office-stock`, {
         method: 'GET',
       }),
-    listOrders: (query: { business_id: string; status?: string; customer_id?: string }) =>
-      this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
+    listOrders: (query: {
+      business_id: string;
+      status?: string;
+      /** Comma-separated fulfillment modes, e.g. `pickup,delivery`. */
+      fulfillment_mode?: string;
+      customer_id?: string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopOrder[]>('/shop/orders', { method: 'GET', query }),
     createOrder: (body: ShopOrderCreateInput) => this.request<ShopOrder>('/shop/orders', { method: 'POST', body }),
     getOrder: (orderId: string) => this.request<ShopOrder>(`/shop/orders/${orderId}`, { method: 'GET' }),
     getMerchantPaymentSettings: (query: { business_id: string }) =>
@@ -5820,8 +5833,17 @@ class ApiClient {
       this.request<ShopOrder>(`/shop/orders/${orderId}/settle-payment`, { method: 'POST', body: body ?? {} }),
     createInvoiceFromOrder: (orderId: string) =>
       this.request<ShopInvoice>(`/shop/orders/${orderId}/invoice`, { method: 'POST' }),
-    listReturns: (query: { business_id: string; order_id?: string }) =>
-      this.request<ShopReturn[]>('/shop/returns', { method: 'GET', query }),
+    listReturns: (query: {
+      business_id: string;
+      order_id?: string;
+      status?: string;
+      /** `true` / `false` to filter by restock flag. */
+      restock?: boolean | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopReturn[]>('/shop/returns', { method: 'GET', query }),
     createReturn: (body: ShopReturnCreateInput) =>
       this.request<ShopReturn>('/shop/returns', { method: 'POST', body }),
     arrangeReturnPickup: (
@@ -5870,14 +5892,29 @@ class ApiClient {
       this.request<ShopReturn>(`/shop/returns/${returnId}/receive`, { method: 'POST', body }),
     rejectReturn: (returnId: string, body: { business_id: string; reason?: string }) =>
       this.request<ShopReturn>(`/shop/returns/${returnId}/reject`, { method: 'POST', body }),
-    listDeliveryZones: (query: { business_id: string }) =>
-      this.request<ShopDeliveryZone[]>('/shop/delivery-zones', { method: 'GET', query }),
+    listDeliveryZones: (query: {
+      business_id: string;
+      /** Filter by availability flag. */
+      enabled?: boolean | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopDeliveryZone[]>('/shop/delivery-zones', { method: 'GET', query }),
     createDeliveryZone: (body: ShopDeliveryZoneWriteInput) =>
       this.request<ShopDeliveryZone>('/shop/delivery-zones', { method: 'POST', body }),
     patchDeliveryZone: (zoneId: string, body: Partial<ShopDeliveryZoneWriteInput>) =>
       this.request<ShopDeliveryZone>(`/shop/delivery-zones/${zoneId}`, { method: 'PATCH', body }),
-    listCoupons: (query: { business_id: string; active_only?: boolean }) =>
-      this.request<ShopCoupon[]>('/shop/coupons', { method: 'GET', query }),
+    listCoupons: (query: {
+      business_id: string;
+      active_only?: boolean;
+      /** Filter by the coupon's enabled flag (ignores validity dates). */
+      is_active?: boolean | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopCoupon[]>('/shop/coupons', { method: 'GET', query }),
     createCoupon: (body: ShopCouponWriteInput) =>
       this.request<ShopCoupon>('/shop/coupons', { method: 'POST', body }),
     getCoupon: (couponId: string) => this.request<ShopCoupon>(`/shop/coupons/${couponId}`, { method: 'GET' }),
@@ -5933,8 +5970,15 @@ class ApiClient {
       return_days?: number;
       metadata?: Record<string, unknown>;
     }) => this.request<ShopSettings>('/shop/settings', { method: 'PATCH', body }),
-    listPets: (query: { business_id: string; customer_id?: string }) =>
-      this.request<ShopPet[]>('/shop/pets', { method: 'GET', query }),
+    listPets: (query: {
+      business_id: string;
+      customer_id?: string;
+      species?: string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopPet[]>('/shop/pets', { method: 'GET', query }),
     createPet: (body: ShopPetWriteInput) => this.request<ShopPet>('/shop/pets', { method: 'POST', body }),
     getPet: (petId: string) => this.request<ShopPet>(`/shop/pets/${petId}`, { method: 'GET' }),
     patchPet: (petId: string, body: Partial<ShopPetWriteInput>) =>
@@ -5949,10 +5993,22 @@ class ApiClient {
         notification_ids: string[];
         user_id?: string | null;
       }>(`/shop/pets/${petId}/notify`, { method: 'POST', body }),
-    listInvoices: (query: { business_id: string }) =>
-      this.request<ShopInvoice[]>('/shop/invoices', { method: 'GET', query }),
-    listQuotations: (query: { business_id: string }) =>
-      this.request<ShopQuotation[]>('/shop/quotations', { method: 'GET', query }),
+    listInvoices: (query: {
+      business_id: string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopInvoice[]>('/shop/invoices', { method: 'GET', query }),
+    listQuotations: (query: {
+      business_id: string;
+      /** `open` (can still convert) or `converted`. */
+      state?: 'open' | 'converted' | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopQuotation[]>('/shop/quotations', { method: 'GET', query }),
     createQuotation: (body: ShopQuotationCreateInput) =>
       this.request<ShopQuotation>('/shop/quotations', { method: 'POST', body }),
     getQuotation: (quotationId: string) =>
@@ -5964,8 +6020,16 @@ class ApiClient {
         method: 'POST',
         body: body ?? {},
       }),
-    listDocuments: (query: { business_id: string; doc_type?: string }) =>
-      this.request<ShopBooksDocument[]>('/shop/books/documents', { method: 'GET', query }),
+    listDocuments: (query: {
+      business_id: string;
+      doc_type?: string;
+      /** Delivery challans: `open`, `dispatched`, or `invoiced`. */
+      state?: 'open' | 'dispatched' | 'invoiced' | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopBooksDocument[]>('/shop/books/documents', { method: 'GET', query }),
     createDocument: (body: ShopBooksDocumentCreateInput) =>
       this.request<ShopBooksDocument>('/shop/books/documents', { method: 'POST', body }),
     getDocument: (documentId: string) =>
@@ -6001,8 +6065,14 @@ class ApiClient {
       notes?: string;
       lines: Array<{ product_id: string; quantity?: string | number; qty?: string | number }>;
     }) => this.request<ShopStockTransfer>('/shop/stock-transfers', { method: 'POST', body }),
-    listCheques: (query: { business_id: string }) =>
-      this.request<ShopCheque[]>('/shop/cheques', { method: 'GET', query }),
+    listCheques: (query: {
+      business_id: string;
+      direction?: 'in' | 'out' | string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopCheque[]>('/shop/cheques', { method: 'GET', query }),
     createCheque: (body: {
       business_id: string;
       direction: 'in' | 'out' | string;
@@ -6019,8 +6089,13 @@ class ApiClient {
       this.request<ShopCheque>(`/shop/cheques/${chequeId}/clear`, { method: 'POST', body: body ?? {} }),
     bounceCheque: (chequeId: string) =>
       this.request<ShopCheque>(`/shop/cheques/${chequeId}/bounce`, { method: 'POST', body: {} }),
-    listLoans: (query: { business_id: string }) =>
-      this.request<ShopLoan[]>('/shop/loans', { method: 'GET', query }),
+    listLoans: (query: {
+      business_id: string;
+      q?: string;
+      search?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopLoan[]>('/shop/loans', { method: 'GET', query }),
     createLoan: (body: {
       business_id: string;
       title: string;
@@ -6036,8 +6111,13 @@ class ApiClient {
       this.request<ShopLoan>(`/shop/loans/${loanId}/repay`, { method: 'POST', body }),
     booksDashboard: (query: { business_id: string }) =>
       this.request<ShopBooksDashboard>('/shop/books/dashboard', { method: 'GET', query }),
-    listSuppliers: (query: { business_id: string; search?: string }) =>
-      this.request<ShopSupplier[]>('/shop/suppliers', { method: 'GET', query }),
+    listSuppliers: (query: {
+      business_id: string;
+      search?: string;
+      q?: string;
+      page_size?: number;
+      cursor?: string;
+    }) => this.request<ShopSupplier[]>('/shop/suppliers', { method: 'GET', query }),
     createSupplier: (body: ShopSupplierWriteInput) =>
       this.request<ShopSupplier>('/shop/suppliers', { method: 'POST', body }),
     updateSupplier: (supplierId: string, body: Partial<ShopSupplierWriteInput>) =>
@@ -6072,6 +6152,16 @@ class ApiClient {
       supplier_id?: string;
       /** When `pos`, only counter/POS sale invoices (excludes booking + online). */
       source?: 'pos' | string;
+      /** Comma-separated voucher types (e.g. `payment_in,payment_out`) when `type` is not set. */
+      types?: string;
+      /** Payment status filter applied server-side. */
+      pay?: 'paid' | 'unpaid' | string;
+      /** GST invoice kind: `b2b` (has customer GSTIN) or `b2c`. */
+      invoice_type?: 'b2b' | 'b2c' | string;
+      /** `true` to list only invoices without a customer. */
+      walk_in?: boolean | string;
+      q?: string;
+      search?: string;
       cursor?: string;
       page_size?: number;
     }) => this.request<ShopBooksVoucher[]>('/shop/books/vouchers', { method: 'GET', query }),
@@ -7412,6 +7502,8 @@ class ApiClient {
       search?: string;
       category?: string;
       brand?: string;
+      page_size?: number;
+      cursor?: string;
     }) => this.request<ShopProduct[]>('/mobile/shop/products', { method: 'GET', query, auth: false }),
     getShopProduct: (productId: string, query: { tenant_slug: string; business_code: string }) =>
       this.request<ShopProduct>(`/mobile/shop/products/${productId}`, { method: 'GET', query }),
@@ -7875,3 +7967,25 @@ export {
   type NotificationStreamEvent,
   type NotificationStreamSubscription,
 } from './notificationStream';
+
+export {
+  BULK_ENRICH_LIMIT,
+  buildEnrichmentPatch,
+  enrichmentLookupForProduct,
+  primaryShopBarcode,
+  runBulkProductEnrich,
+  type BulkEnrichMode,
+  type BulkEnrichProgress,
+  type BulkEnrichResult,
+} from './bulkProductEnrich';
+
+export {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  PICKER_PAGE_SIZE,
+  clampPageSize,
+  toPagedResult,
+  type CursorPageParams,
+  type PagedEnvelope,
+  type PagedResult,
+} from './pagedList';

@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,7 +9,9 @@ import { SearchBar } from '../../components/SearchBar';
 import { Button } from '../../components/ui/Button';
 import { ListRow } from '../../components/ui/ListRow';
 import { GroupedList } from '../../components/ui/GroupedList';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { ScreenState } from '../../components/ScreenState';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useCustomers } from '../../hooks/useOpsData';
 import { setStackSubtitle } from '../../navigation/OpsStackHeader';
@@ -31,25 +33,32 @@ const SORT_OPTIONS = [
 
 export function CustomersScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { customers, loading, reload } = useCustomers();
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, pager } = useCursorPaging({
+    resetKeys: [statusFilter],
+  });
+  const { customers, loading, reload, nextCursor, previousCursor } = useCustomers({
+    q,
+    pageSize,
+    cursor: cursor ?? null,
+  });
+
+  useEffect(() => {
+    setPageMeta({ nextCursor, previousCursor });
+  }, [nextCursor, previousCursor, setPageMeta]);
+
   const { refreshing, onRefresh } = usePullToRefresh(reload);
 
   useLayoutEffect(() => {
-    setStackSubtitle(navigation, `${customers.length} in this workspace`);
+    setStackSubtitle(navigation, `${customers.length} on this page`);
   }, [customers.length, navigation]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const list = customers.filter((c) => {
       if (statusFilter && String(c.status || '').toLowerCase() !== statusFilter) return false;
-      if (!q) return true;
-      return [c.full_name, c.display_name, c.email, c.phone_number, c.status]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
+      return true;
     });
     return [...list].sort((a, b) => {
       const nameA = a.display_name || a.full_name || '';
@@ -59,7 +68,7 @@ export function CustomersScreen() {
       if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
       return nameA.localeCompare(nameB);
     });
-  }, [customers, search, statusFilter, sortBy]);
+  }, [customers, statusFilter, sortBy]);
 
   const activeFilterCount = Number(Boolean(statusFilter)) + Number(sortBy !== 'name_asc');
 
@@ -117,6 +126,12 @@ export function CustomersScreen() {
             );
           })}
         </GroupedList>
+        <CursorPager
+          count={filtered.length}
+          {...pager}
+          disabled={loading}
+          label="customers"
+        />
       </RefreshableScrollView>
     </DesktopPage>
   );
@@ -125,12 +140,12 @@ export function CustomersScreen() {
 const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
     alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   search: { flex: 1 },
-  content: { padding: spacing.xl, gap: spacing.md, paddingBottom: spacing.xxxl },
+  content: { paddingBottom: spacing.xl, gap: spacing.md },
 });

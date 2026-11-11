@@ -20,7 +20,9 @@ import { DesktopPage } from '../../components/DesktopPage';
 import { SearchBar } from '../../components/SearchBar';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { Customer, ShopBooksVoucher, ShopCashAccount, ShopSupplier } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type Customer, type ShopBooksVoucher, type ShopCashAccount, type ShopSupplier } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import {
   customerLabel,
   formatMoney,
@@ -63,8 +65,10 @@ export function ShopBooksCashScreen() {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(todayIso());
   const [paymentNotes, setPaymentNotes] = useState('');
-  const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentType>('all');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [paymentFilter],
+  });
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -87,26 +91,32 @@ export function ShopBooksCashScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [accountsRes, paymentsInRes, paymentsOutRes, customersRes, suppliersRes] = await Promise.all([
+      const [accountsRes, paymentsRes, customersRes, suppliersRes] = await Promise.all([
         client.shop.listCashAccounts({ business_id: businessId }),
-        client.shop.listVouchers({ business_id: businessId, type: 'payment_in' }),
-        client.shop.listVouchers({ business_id: businessId, type: 'payment_out' }),
+        client.shop.listVouchers({
+          business_id: businessId,
+          ...(paymentFilter === 'all' ? { types: 'payment_in,payment_out' } : { type: paymentFilter }),
+          q,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        }),
         client.customers.list({ business: businessId }),
         client.shop.listSuppliers({ business_id: businessId }),
       ]);
       setAccounts(accountsRes.data ?? []);
-      const merged = [...(paymentsInRes.data ?? []), ...(paymentsOutRes.data ?? [])].sort((a, b) =>
-        (b.created_at ?? '').localeCompare(a.created_at ?? ''),
-      );
-      setPayments(merged);
+      const page = toPagedResult(paymentsRes, pageSize);
+      setPayments(page.items);
+      setPageMeta(page);
       setCustomers(customersRes.data ?? []);
       setSuppliers(suppliersRes.data ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('opsApp.shop.cash.loadFailed'));
+      setPayments([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, t]);
+  }, [businessId, client, paymentFilter, q, pageSize, cursor, setPageMeta, clearPageMeta, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -159,23 +169,7 @@ export function ShopBooksCashScreen() {
         .reduce((sum, p) => sum + voucherAmount(p.total), 0),
     [payments],
   );
-  const visiblePayments = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return payments.filter((item) => {
-      if (paymentFilter !== 'all' && item.voucher_type !== paymentFilter) return false;
-      if (!term) return true;
-      return [
-        item.voucher_number,
-        item.customer_name ?? '',
-        item.supplier_name ?? '',
-        item.cash_account_name ?? '',
-        String(item.total),
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [payments, paymentFilter, search]);
+  const visiblePayments = payments;
 
   async function saveAccount() {
     if (!client || !businessId || !accountName.trim()) {
@@ -401,7 +395,7 @@ export function ShopBooksCashScreen() {
           <Chip label={t('opsApp.shop.cash.out')} active={paymentFilter === 'payment_out'} onPress={() => setPaymentFilter('payment_out')} />
         </View>
         <GroupedList>
-          {visiblePayments.slice(0, 25).map((item) => {
+          {visiblePayments.map((item) => {
             const isIn = item.voucher_type === 'payment_in';
             const voided = isVoidedVoucher(item.status);
             return (
@@ -423,6 +417,12 @@ export function ShopBooksCashScreen() {
           })}
         </GroupedList>
         {!loading && !payments.length ? <Text style={styles.meta}>{t('opsApp.shop.cash.noPayments')}</Text> : null}
+        <CursorPager
+          {...pager}
+          count={visiblePayments.length}
+          label={t('opsApp.shop.cash.paginationLabel', { defaultValue: 'payments' })}
+          disabled={loading}
+        />
       </RefreshableScrollView>
     </DesktopPage>
   );

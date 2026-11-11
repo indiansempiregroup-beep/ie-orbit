@@ -13,10 +13,9 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import {
   useShopCashAccountMutations,
   useShopCashAccounts,
-  useShopCustomers,
-  useShopSuppliers,
   useShopVoucherMutations,
 } from './shopHooks';
+import { ShopCustomerTypeahead, ShopSupplierTypeahead } from './ShopPickers';
 
 const fieldStyle: React.CSSProperties = { padding: 12, borderRadius: 12, border: '1px solid #e5e7eb' };
 
@@ -26,8 +25,6 @@ export function ShopCashBankPage() {
   const currency = workspace.activeBusiness?.currency;
   const snackbar = useSnackbar();
   const accounts = useShopCashAccounts();
-  const customers = useShopCustomers();
-  const suppliers = useShopSuppliers();
   const { createAccount } = useShopCashAccountMutations();
   const { createVoucher } = useShopVoucherMutations();
 
@@ -292,14 +289,12 @@ export function ShopCashBankPage() {
         <form onSubmit={submitPaymentIn} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.cashBank.customer')}
-            <select value={inCustomerId} onChange={(event) => setInCustomerId(event.target.value)} required style={fieldStyle}>
-              <option value="">{t('shop.cashBank.selectCustomer')}</option>
-              {(customers.data ?? []).map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.full_name ?? customer.display_name ?? customer.email ?? customer.id}
-                </option>
-              ))}
-            </select>
+            <ShopCustomerTypeahead
+              value={inCustomerId}
+              onChange={(id) => setInCustomerId(id)}
+              placeholder={t('shop.cashBank.selectCustomer')}
+              ariaLabel={t('shop.cashBank.customer')}
+            />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.cashBank.receivedIn')}
@@ -336,14 +331,12 @@ export function ShopCashBankPage() {
         <form onSubmit={submitPaymentOut} style={{ display: 'grid', gap: 16, marginTop: 12 }}>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.cashBank.supplier')}
-            <select value={outSupplierId} onChange={(event) => setOutSupplierId(event.target.value)} required style={fieldStyle}>
-              <option value="">{t('shop.cashBank.selectSupplier')}</option>
-              {(suppliers.data ?? []).map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
+            <ShopSupplierTypeahead
+              value={outSupplierId}
+              onChange={(id) => setOutSupplierId(id)}
+              placeholder={t('shop.cashBank.selectSupplier')}
+              ariaLabel={t('shop.cashBank.supplier')}
+            />
           </label>
           <label style={{ display: 'grid', gap: 8 }}>
             {t('shop.cashBank.paidFrom')}

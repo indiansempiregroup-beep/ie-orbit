@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import type { CustomerLoyaltyBalance } from '@ie-orbit/sdk';
@@ -7,7 +7,6 @@ import {
   useCustomerCreate,
   useCustomerList,
   useCustomerRestore,
-  useCustomerSearch,
   useCustomerUpdate,
 } from '../management/managementHooks';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
@@ -24,6 +23,7 @@ import { useSnackbar } from '../../hooks/useSnackbar';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { normalizeGstin, validateGstin } from '../../lib/gstin';
 import { hasSubscribedProduct } from '../../config/products';
+import { CursorPager } from '../bi/components/CursorPager';
 
 export function CustomersPage() {
   const { t } = useTranslation();
@@ -33,6 +33,10 @@ export function CustomersPage() {
   const { activeBusiness } = useWorkspace();
   const showGstFields = hasSubscribedProduct(activeBusiness?.product_subscriptions, 'shopie');
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [pageSize, setPageSize] = useState(25);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<Array<string | null>>([null]);
   const [loyaltyCustomerId, setLoyaltyCustomerId] = useState<string | null>(null);
   const [loyaltyCustomerName, setLoyaltyCustomerName] = useState('');
   const [loyaltyBusy, setLoyaltyBusy] = useState(false);
@@ -63,8 +67,19 @@ export function CustomersPage() {
     gstin: '',
   });
   const [creationError, setCreationError] = useState<string | null>(null);
-  const { data: customers, isLoading, error, refetch } = useCustomerList();
-  const search = useCustomerSearch(searchTerm);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+  useEffect(() => {
+    setCursor(null);
+    setCursorStack([null]);
+  }, [debouncedSearch, pageSize]);
+  const { data: page, isLoading, isFetching, error, refetch } = useCustomerList({
+    q: debouncedSearch,
+    pageSize,
+    cursor,
+  });
   const dialog = useDialog();
   const handleBusinessFormChange = useBusinessFormChange((business) => {
     setFormState((current) => ({ ...current, business }));
@@ -73,14 +88,14 @@ export function CustomersPage() {
     setFormState((current) => ({ ...current, business }));
   });
 
-  const selectedData = searchTerm.trim() ? search.data ?? [] : customers ?? [];
+  const selectedData = page?.items ?? [];
 
   const customerSummary = useMemo(() => {
-    const total = customers?.length ?? 0;
-    const active = customers?.filter((customer) => customer.status === 'active').length ?? 0;
+    const total = selectedData.length;
+    const active = selectedData.filter((customer) => customer.status === 'active').length;
     const inactive = total - active;
     return { total, active, inactive };
-  }, [customers]);
+  }, [selectedData]);
 
   function resetForm() {
     setFormState({
@@ -169,10 +184,10 @@ export function CustomersPage() {
               <span>{t('customers.colActions')}</span>
             </div>
             <div style={{ display: 'grid', gap: 1, background: '#fff' }}>
-              {isLoading || search.isLoading ? (
+              {isLoading ? (
                 <div style={{ padding: 28, textAlign: 'center' }}>{t('customers.loading')}</div>
-              ) : error || search.error ? (
-                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? search.error?.message ?? t('customers.loadFailed')}</div>
+              ) : error ? (
+                <div style={{ padding: 28, textAlign: 'center', color: '#dc2626' }}>{error?.message ?? t('customers.loadFailed')}</div>
               ) : selectedData.length === 0 ? (
                 <div style={{ padding: 28, textAlign: 'center', color: '#6b7280' }}>{t('customers.noneFound')}</div>
               ) : (
@@ -318,6 +333,34 @@ export function CustomersPage() {
                   );
                 })
               )}
+            </div>
+            <div style={{ padding: '0 20px 16px' }}>
+              <CursorPager
+                count={selectedData.length}
+                pageSize={pageSize}
+                hasPrevious={cursorStack.length > 1 || Boolean(page?.previousCursor)}
+                hasNext={Boolean(page?.nextCursor)}
+                onPrevious={() => {
+                  setCursorStack((stack) => {
+                    if (stack.length <= 1) {
+                      setCursor(null);
+                      return [null];
+                    }
+                    const nextStack = stack.slice(0, -1);
+                    setCursor(nextStack[nextStack.length - 1] ?? null);
+                    return nextStack;
+                  });
+                }}
+                onNext={() => {
+                  if (!page?.nextCursor) return;
+                  setCursorStack((stack) => [...stack, cursor]);
+                  setCursor(page.nextCursor);
+                }}
+                onPageSizeChange={setPageSize}
+                pageSizeOptions={[10, 25, 50, 100]}
+                label={t('customers.title')}
+                disabled={isFetching}
+              />
             </div>
           </Card>
         </section>

@@ -11,8 +11,8 @@ import { getApiErrorMessage } from '../../lib/apiClient';
 import { resolveBillingProofUrl } from '../../lib/mediaUrl';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useBookingActions, useBookingDetail, useBookingReassignableStaff } from './bookingDetailHooks';
-import { useCustomerList, useServiceList, useStaffList } from '../management/managementHooks';
-import { buildNameMap } from '../../lib/managementEntities';
+import { useServiceDetails } from '../management/managementHooks';
+import { buildBookingNameMaps } from './bookingHelpers';
 import { RewardPointsBanner } from '../../components/RewardPointsBanner';
 import { readLoyaltyDocument } from '../../lib/loyalty';
 
@@ -51,12 +51,6 @@ export function BookingDetailPage() {
   const { activeBusiness, businessId, tenantId } = useWorkspace();
   const bookingQuery = useBookingDetail(bookingId);
   const reassignableStaffQuery = useBookingReassignableStaff(bookingId);
-  const servicesQuery = useServiceList();
-  const customersQuery = useCustomerList();
-  const staffQuery = useStaffList();
-  const serviceMap = useMemo(() => buildNameMap(servicesQuery.data), [servicesQuery.data]);
-  const customerMap = useMemo(() => buildNameMap(customersQuery.data), [customersQuery.data]);
-  const staffMap = useMemo(() => buildNameMap(staffQuery.data), [staffQuery.data]);
   const actions = useBookingActions(bookingId);
   const [rescheduleAt, setRescheduleAt] = useState('');
   const [staffId, setStaffId] = useState('');
@@ -82,6 +76,16 @@ export function BookingDetailPage() {
   }, [bookingQuery.data?.staff_id, bookingQuery.data?.line_items]);
 
   const booking = bookingQuery.data;
+  const { customerMap, staffMap, serviceMap } = useMemo(
+    () => buildBookingNameMaps(booking ? [booking] : []),
+    [booking],
+  );
+  const bookingServiceIds = booking?.line_items?.length
+    ? booking.line_items.map((item) => item.service_id)
+    : booking?.service_id
+      ? [booking.service_id]
+      : [];
+  const earnServices = useServiceDetails(bookingServiceIds);
   const billTotal = useMemo(() => {
     if (!booking?.line_items?.length) return 0;
     const gross = booking.line_items.reduce((sum, item) => sum + (Number(item.price_snapshot) || 0), 0);
@@ -158,13 +162,8 @@ export function BookingDetailPage() {
         metadata: booking.metadata,
       })
     : null;
-  const expectedEarn = (booking?.line_items?.length
-    ? booking.line_items.map((item) => item.service_id)
-    : booking?.service_id
-      ? [booking.service_id]
-      : []
-  ).reduce((sum, serviceId) => {
-    const service = servicesQuery.data?.find((row) => String(row.id) === String(serviceId));
+  const expectedEarn = bookingServiceIds.reduce((sum, serviceId) => {
+    const service = earnServices.services.find((row) => String(row.id) === String(serviceId));
     return sum + Math.max(0, Number(service?.loyalty_points_earn) || 0);
   }, 0);
   const isOpenBooking = !['cancelled', 'completed', 'rejected', 'no_show'].includes(status);

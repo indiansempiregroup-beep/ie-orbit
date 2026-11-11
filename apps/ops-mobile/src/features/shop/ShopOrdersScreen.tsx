@@ -12,9 +12,11 @@ import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useCustomers } from '../../hooks/useOpsData';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { colors, fonts, radius, shadows, spacing, typography } from '../../theme/tokens';
-import type { Customer, ShopOrder } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type Customer, type ShopOrder } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 import { buildNameMap, entityLabel } from '../../utils/entities';
 import { formatCustomerAddressLabel } from '../../utils/customerAddress';
@@ -24,7 +26,6 @@ import { IconBadge } from '../../components/ui/IconBadge';
 import {
   formatMoney,
   formatShopOrderFulfillment,
-  formatShopOrderPayment,
   getShopOrderPosMeta,
   isShopOrderBorrowDue,
   nextShopOrderAction,
@@ -83,11 +84,13 @@ export function ShopOrdersScreen() {
   const [items, setItems] = useState<ShopOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [fulfillment, setFulfillment] = useState('');
   const [payment, setPayment] = useState('');
   const [sortBy, setSortBy] = useState('newest');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [status, fulfillment],
+  });
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
@@ -97,14 +100,25 @@ export function ShopOrdersScreen() {
     setLoading(true);
     setError(null);
     try {
-      const response = await client.shop.listOrders({ business_id: businessId });
-      setItems(response.data);
+      const response = await client.shop.listOrders({
+        business_id: businessId,
+        q,
+        status: status || undefined,
+        fulfillment_mode: fulfillment || Array.from(ONLINE_MODES).join(','),
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      setItems(page.items);
+      setPageMeta(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load orders');
+      setItems([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client]);
+  }, [businessId, client, q, status, fulfillment, pageSize, cursor, setPageMeta, clearPageMeta]);
 
   useFocusEffect(
     useCallback(() => {
@@ -120,39 +134,11 @@ export function ShopOrdersScreen() {
   );
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
     const list = onlineOrders.filter((order) => {
-      if (status && String(order.status || '').toLowerCase() !== status) return false;
-      if (fulfillment && order.fulfillment_mode !== fulfillment) return false;
-      if (payment) {
-        const method = String(getShopOrderPosMeta(order).payment_method || order.payment_method || '').toLowerCase();
-        if (payment === 'due') {
-          if (!isShopOrderBorrowDue(order)) return false;
-        } else if (method !== payment) {
-          return false;
-        }
-      }
-      if (!term) return true;
-      const customer = order.customer_id
-        ? entityLabel(customerMap, order.customer_id, '')
-        : 'walk-in';
-      const address = orderDeliveryAddress(
-        order,
-        order.customer_id ? customersById.get(order.customer_id) : null,
-      );
-      const haystack = [
-        order.order_number,
-        order.status,
-        order.fulfillment_mode,
-        String(order.total),
-        formatShopOrderPayment(order),
-        customer,
-        address,
-        ...(order.lines ?? []).map((line) => line.product_name),
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(term);
+      if (!payment) return true;
+      const method = String(getShopOrderPosMeta(order).payment_method || order.payment_method || '').toLowerCase();
+      if (payment === 'due') return isShopOrderBorrowDue(order);
+      return method === payment;
     });
     return [...list].sort((a, b) => {
       if (sortBy === 'oldest') return String(a.created_at || '').localeCompare(String(b.created_at || ''));
@@ -160,7 +146,7 @@ export function ShopOrdersScreen() {
       if (sortBy === 'amount_asc') return Number(a.total ?? 0) - Number(b.total ?? 0);
       return String(b.created_at || '').localeCompare(String(a.created_at || ''));
     });
-  }, [onlineOrders, search, status, fulfillment, payment, sortBy, customerMap, customersById]);
+  }, [onlineOrders, payment, sortBy]);
 
   const activeFilterCount =
     Number(Boolean(status)) + Number(Boolean(fulfillment)) + Number(Boolean(payment)) + Number(sortBy !== 'newest');
@@ -205,7 +191,7 @@ export function ShopOrdersScreen() {
       </View>
       <View style={styles.actionRow}>
         <Text style={styles.count}>
-          {filtered.length} online order{filtered.length === 1 ? '' : 's'}
+          {filtered.length} online order{filtered.length === 1 ? '' : 's'} on this page
           {activeFilterCount ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'}` : ''}
         </Text>
         {search || activeFilterCount ? (
@@ -254,9 +240,9 @@ export function ShopOrdersScreen() {
         {!loading && filtered.length === 0 ? (
           <EmptyState
             icon="shopping-bag"
-            title={onlineOrders.length ? 'No matching orders' : `No ${t('nav.shopOrders').toLowerCase()} yet`}
+            title={search || status || fulfillment || payment ? 'No matching orders' : `No ${t('nav.shopOrders').toLowerCase()} yet`}
             message={
-              onlineOrders.length
+              search || status || fulfillment || payment
                 ? 'Try a different search or filter.'
                 : 'Online pickup and delivery orders will show up here.'
             }
@@ -404,6 +390,12 @@ export function ShopOrdersScreen() {
             })}
           </View>
         ) : null}
+        <CursorPager
+          {...pager}
+          count={filtered.length}
+          label={t('shop.orders.paginationLabel', { defaultValue: 'orders' })}
+          disabled={loading}
+        />
       </RefreshableScrollView>
       <DocumentActionsSheet
         visible={Boolean(docActions)}

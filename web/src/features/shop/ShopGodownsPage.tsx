@@ -80,7 +80,7 @@ function stockedCount(godown: ShopGodown) {
 export function ShopGodownsPage() {
   const { t } = useTranslation();
   const godowns = useShopGodowns();
-  const products = useShopProducts('', 'active');
+  const products = useShopProducts('', 'active', '', { pageSize: 50 });
   const transfers = useShopStockTransfers();
   const { createGodown, patchGodown } = useShopGodownMutations();
   const { createTransfer } = useShopStockTransferMutations();
@@ -589,7 +589,7 @@ export function ShopGodownsPage() {
               style={fieldInput}
             >
               <option value="">{t('shop.godowns.chooseProduct')}</option>
-              {(products.data ?? []).map((product) => (
+              {(products.data?.items ?? []).map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>

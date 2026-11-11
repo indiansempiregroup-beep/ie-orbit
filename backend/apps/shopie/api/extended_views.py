@@ -3,6 +3,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import TextField
+from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -45,6 +47,11 @@ from apps.shopie.api.serializers import (
 )
 from apps.shopie.models import ShopDeliveryZone, ShopOrder, ShopPet, ShopReturn, VerticalPack
 from apps.shopie.services import CatalogService
+from apps.shopie.services.list_search import (
+    CUSTOMER_SEARCH_FIELDS,
+    apply_text_search,
+    request_search_term,
+)
 from apps.shopie.services.pets import PetsService
 from apps.shopie.services.returns import ReturnService
 from apps.shopie.services.zones import DeliveryZoneService
@@ -93,6 +100,25 @@ class ShopReturnListCreateView(APIView):
         order_id = UUID(order_id_raw) if order_id_raw else None
         qs = self.returns.list_returns(
             tenant=request.current_tenant, business=business, order_id=order_id
+        )
+        status_filter = str(request.query_params.get("status") or "").strip()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        restock_filter = str(request.query_params.get("restock") or "").strip().lower()
+        if restock_filter in {"1", "true", "yes"}:
+            qs = qs.filter(restock=True)
+        elif restock_filter in {"0", "false", "no"}:
+            qs = qs.filter(restock=False)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            (
+                "return_number",
+                "status",
+                "reason",
+                "order__order_number",
+                *CUSTOMER_SEARCH_FIELDS,
+            ),
         )
         return paginated_list_response(request, qs, ShopReturnSerializer)
 
@@ -262,6 +288,20 @@ class ShopDeliveryZoneListCreateView(APIView):
             raise ValidationError({"business_id": "This field is required."})
         business = _business(request, business_id, feature=FEATURE_SHOPIE_DELIVERY_ZONES)
         qs = self.zones.list_zones(tenant=request.current_tenant, business=business)
+        enabled = str(request.query_params.get("enabled") or "").strip().lower()
+        if enabled in {"1", "true", "yes"}:
+            qs = qs.filter(enabled=True)
+        elif enabled in {"0", "false", "no"}:
+            qs = qs.filter(enabled=False)
+        qs = qs.annotate(
+            cities_text=Cast("cities", output_field=TextField()),
+            postal_prefixes_text=Cast("postal_prefixes", output_field=TextField()),
+        )
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("name", "notes", "cities_text", "postal_prefixes_text"),
+        )
         return paginated_list_response(request, qs, ShopDeliveryZoneSerializer)
 
     def post(self, request: Request) -> Response:
@@ -394,6 +434,14 @@ class ShopPetListCreateView(APIView):
             )
         except DjangoValidationError as exc:
             raise _validation_error(exc) from exc
+        species = str(request.query_params.get("species") or "").strip()
+        if species:
+            qs = qs.filter(species__iexact=species)
+        qs = apply_text_search(
+            qs,
+            request_search_term(request.query_params),
+            ("name", "species", "breed", "medical_notes", *CUSTOMER_SEARCH_FIELDS),
+        )
         return paginated_list_response(request, qs, ShopPetSerializer)
 
     def post(self, request: Request) -> Response:

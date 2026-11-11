@@ -212,6 +212,25 @@ export function periodDateRange(period: VoucherPeriodFilter): { dateFrom?: strin
   return { dateFrom: toIso(monthStart), dateTo: end };
 }
 
+/** Maps list-screen filters to `shop.listVouchers` query params (server-side filtering). */
+export function voucherListFilters(opts: {
+  pay?: VoucherPayFilter;
+  period?: VoucherPeriodFilter;
+  invoiceType?: VoucherInvoiceTypeFilter;
+  customerId?: string;
+}) {
+  const { dateFrom, dateTo } = periodDateRange(opts.period ?? 'all');
+  const customerId = opts.customerId ?? '';
+  return {
+    date_from: dateFrom,
+    date_to: dateTo,
+    pay: opts.pay && opts.pay !== 'all' ? opts.pay : undefined,
+    invoice_type: opts.invoiceType && opts.invoiceType !== 'all' ? opts.invoiceType : undefined,
+    customer_id: customerId && customerId !== '__walkin__' ? customerId : undefined,
+    walk_in: customerId === '__walkin__' ? true : undefined,
+  };
+}
+
 export function voucherHasGstin(voucher: ShopBooksVoucher): boolean {
   const meta = voucher.metadata && typeof voucher.metadata === 'object' ? voucher.metadata : {};
   return Boolean(String((meta as { customer_gstin?: string }).customer_gstin || '').trim());

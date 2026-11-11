@@ -14,6 +14,8 @@ import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { ShopFilterBar } from './ShopFilterBar';
 import { usePartyStatement, useShopSupplierMutations, useShopSuppliers } from './shopHooks';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 const emptySupplierForm = {
   name: '',
@@ -93,9 +95,13 @@ export function ShopPartiesPage() {
   const snackbar = useSnackbar();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState<'customers' | 'suppliers'>('suppliers');
-  const [search, setSearch] = useState('');
+  const listState = useCursorListState();
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
 
-  const suppliers = useShopSuppliers(search);
+  const suppliers = useShopSuppliers(listState.debouncedSearch, {
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const { create, update, remove } = useShopSupplierMutations();
 
   const dialog = useDialog();
@@ -132,7 +138,7 @@ export function ShopPartiesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  const filtered = useMemo(() => suppliers.data ?? [], [suppliers.data]);
+  const filtered = useMemo(() => suppliers.data?.items ?? [], [suppliers.data]);
 
   function openAddDialog() {
     setEditingId(null);
@@ -405,6 +411,11 @@ export function ShopPartiesPage() {
               </div>
             ) : null}
           </div>
+          <CursorPager
+            {...listState.pagerProps(suppliers.data, filtered.length)}
+            label={tp('suppliers', { defaultValue: 'suppliers' }).toLowerCase()}
+            disabled={suppliers.isFetching}
+          />
         </Card>
       )}
 

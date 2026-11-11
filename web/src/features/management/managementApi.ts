@@ -57,14 +57,17 @@ export async function restoreCustomer(client: IEOrbitClient, customerId: string)
   return normalizeCustomer(response.data as Record<string, unknown>);
 }
 
-export async function searchCustomers(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
-  const customers = await listCustomers(client, businessId);
-  const lower = term.trim().toLowerCase();
-  if (!lower) return customers;
-  return customers.filter((customer) => {
-    return [customer.full_name, customer.email, customer.phone_number, customer.status]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(lower));
+export async function searchCustomers(
+  client: IEOrbitClient,
+  businessId: string | null | undefined,
+  term: string,
+  query?: QueryParams,
+) {
+  const lower = term.trim();
+  return listCustomers(client, businessId, {
+    ...query,
+    q: lower || undefined,
+    page_size: query?.page_size ?? 50,
   });
 }
 
@@ -88,14 +91,17 @@ export async function updateService(client: IEOrbitClient, serviceId: string, se
   return normalizeService(response.data as Record<string, unknown>);
 }
 
-export async function searchServices(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
-  const services = await listServices(client, businessId);
-  const lower = term.trim().toLowerCase();
-  if (!lower) return services;
-  return services.filter((service) => {
-    return [service.name, service.description, service.status]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(lower));
+export async function searchServices(
+  client: IEOrbitClient,
+  businessId: string | null | undefined,
+  term: string,
+  query?: QueryParams,
+) {
+  const lower = term.trim();
+  return listServices(client, businessId, {
+    ...query,
+    q: lower || undefined,
+    page_size: query?.page_size ?? 50,
   });
 }
 
@@ -119,14 +125,17 @@ export async function updateStaff(client: IEOrbitClient, staffId: string, staff:
   return normalizeStaff(response.data as Record<string, unknown>);
 }
 
-export async function searchStaff(client: IEOrbitClient, businessId: string | null | undefined, term: string) {
-  const staff = await listStaff(client, businessId);
-  const lower = term.trim().toLowerCase();
-  if (!lower) return staff;
-  return staff.filter((member) => {
-    return [member.full_name, member.email, member.status]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(lower));
+export async function searchStaff(
+  client: IEOrbitClient,
+  businessId: string | null | undefined,
+  term: string,
+  query?: QueryParams,
+) {
+  const lower = term.trim();
+  return listStaff(client, businessId, {
+    ...query,
+    q: lower || undefined,
+    page_size: query?.page_size ?? 50,
   });
 }
 

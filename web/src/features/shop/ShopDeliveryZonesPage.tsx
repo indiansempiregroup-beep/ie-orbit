@@ -9,6 +9,8 @@ import { useDialog } from '../../hooks/useDialog';
 import { useSnackbar } from '../../hooks/useSnackbar';
 import { useShopDeliveryZones, useShopDeliveryZoneMutations } from './shopHooks';
 import { ShopFilterBar } from './ShopFilterBar';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
 
 const emptyForm = {
   name: '',
@@ -50,33 +52,24 @@ function formFromZone(zone: ShopDeliveryZone): FormState {
 
 export function ShopDeliveryZonesPage() {
   const { t } = useTranslation();
-  const zones = useShopDeliveryZones();
   const { createZone, patchZone } = useShopDeliveryZoneMutations();
   const dialog = useDialog();
   const snackbar = useSnackbar();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [enabledFilter, setEnabledFilter] = useState('');
+  const listState = useCursorListState({ resetKey: enabledFilter });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const zones = useShopDeliveryZones({
+    q: listState.debouncedSearch,
+    enabledFilter: enabledFilter === 'enabled' ? 'true' : enabledFilter === 'disabled' ? 'false' : '',
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (zones.data ?? []).filter((zone) => {
-      if (enabledFilter === 'enabled' && !zone.enabled) return false;
-      if (enabledFilter === 'disabled' && zone.enabled) return false;
-      if (!term) return true;
-      return [
-        zone.name,
-        ...(zone.cities ?? []),
-        ...(zone.postal_prefixes ?? []),
-        zone.notes ?? '',
-      ]
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [zones.data, search, enabledFilter]);
+  // Server-filtered page (q + enabled).
+  const filtered = useMemo(() => zones.data?.items ?? [], [zones.data]);
 
   const saving = createZone.isPending || patchZone.isPending;
 
@@ -244,16 +237,16 @@ export function ShopDeliveryZonesPage() {
           {!zones.isLoading && !filtered.length ? (
             <div style={{ display: 'grid', gap: 8 }}>
               <p>
-                {zones.data?.length
+                {search || enabledFilter
                   ? t('shop.deliveryZones.emptyFiltered')
                   : t('shop.deliveryZones.emptyNone')}
               </p>
-              {!zones.data?.length ? (
+              {!search && !enabledFilter ? (
                 <Button type="button" variant="neutral" onClick={createEverywhereZone}>
                   {t('shop.deliveryZones.presetButton')}
                 </Button>
               ) : null}
-              {!zones.data?.length ? (
+              {!search && !enabledFilter ? (
                 <Button type="button" variant="primary" onClick={openAddDialog}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <Plus size={16} aria-hidden="true" />
@@ -264,6 +257,11 @@ export function ShopDeliveryZonesPage() {
             </div>
           ) : null}
         </div>
+        <CursorPager
+          {...listState.pagerProps(zones.data, filtered.length)}
+          label={t('shop.deliveryZones.addDeliveryZone').split(' ').pop()?.toLowerCase() ?? 'zones'}
+          disabled={zones.isFetching}
+        />
       </Card>
 
       <Dialog

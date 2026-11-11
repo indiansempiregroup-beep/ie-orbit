@@ -32,6 +32,7 @@ export function ShopProductProfitScreen() {
     try {
       const response = await client.shop.productProfitInsights({
         business_id: businessId,
+        include_catalog: false,
         ...(dateFrom.trim() ? { date_from: dateFrom.trim() } : {}),
         ...(dateTo.trim() ? { date_to: dateTo.trim() } : {}),
       });

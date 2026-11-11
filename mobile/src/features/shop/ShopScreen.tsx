@@ -36,7 +36,7 @@ import {
   stockLabel,
   type ShopSortKey,
 } from './shopHelpers';
-import type { ShopCustomerFilterOption, ShopProduct } from '@ie-orbit/sdk';
+import { toPagedResult, type ShopCustomerFilterOption, type ShopProduct } from '@ie-orbit/sdk';
 import type { RootStackParamList } from '../../navigation/types';
 
 type FilterSection = 'category' | 'brand' | 'availability' | 'sort';
@@ -47,15 +47,6 @@ type FilterDraft = {
   inStockOnly: boolean;
   sort: ShopSortKey;
 };
-
-function brandMatches(productBrand: string | null | undefined, option: ShopCustomerFilterOption): boolean {
-  const value = String(productBrand || '').trim().toLowerCase();
-  if (!value) return false;
-  const aliases = [option.label, option.slug, option.slug.replace(/_/g, ' ')].map((item) =>
-    item.trim().toLowerCase(),
-  );
-  return aliases.includes(value);
-}
 
 function countActiveFilters(filters: FilterDraft): number {
   let count = 0;
@@ -75,6 +66,8 @@ export function ShopScreen() {
   const { tenantSlug, businessCode } = useBusinessContext();
   const { addItem, setQuantity, quantityFor, itemCount } = useCart();
   const [items, setItems] = useState<ShopProduct[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filterOptions, setFilterOptions] = useState<{
     categories: ShopCustomerFilterOption[];
     brands: ShopCustomerFilterOption[];
@@ -113,12 +106,24 @@ export function ShopScreen() {
       else if (!hasLoadedRef.current) setLoading(true);
       setError(null);
       try {
-        const scope = { tenant_slug: tenantSlug, business_code: businessCode };
+        const scope = {
+          tenant_slug: tenantSlug,
+          business_code: businessCode,
+          search: query || undefined,
+          category: category || undefined,
+          brand: brand || undefined,
+          page_size: 50,
+        };
         const [productsResponse, filtersResponse] = await Promise.all([
           mobileClient.mobile.listShopProducts(scope),
-          mobileClient.mobile.listShopFilters(scope).catch(() => null),
+          mobileClient.mobile.listShopFilters({
+            tenant_slug: tenantSlug,
+            business_code: businessCode,
+          }).catch(() => null),
         ]);
-        setItems(productsResponse.data);
+        const page = toPagedResult(productsResponse, 50);
+        setItems(page.items);
+        setNextCursor(page.nextCursor);
         if (filtersResponse?.data) {
           setFilterOptions({
             categories: filtersResponse.data.categories ?? [],
@@ -133,8 +138,34 @@ export function ShopScreen() {
         setRefreshing(false);
       }
     },
-    [businessCode, tenantSlug],
+    [businessCode, tenantSlug, query, category, brand],
   );
+
+  const loadMore = useCallback(async () => {
+    if (!tenantSlug || !businessCode || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const response = await mobileClient.mobile.listShopProducts({
+        tenant_slug: tenantSlug,
+        business_code: businessCode,
+        search: query || undefined,
+        category: category || undefined,
+        brand: brand || undefined,
+        page_size: 50,
+        cursor: nextCursor,
+      });
+      const page = toPagedResult(response, 50);
+      setItems((current) => {
+        const seen = new Set(current.map((row) => row.id));
+        return [...current, ...page.items.filter((row) => !seen.has(row.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch {
+      // Keep existing items on load-more failure.
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [tenantSlug, businessCode, nextCursor, loadingMore, query, category, brand]);
 
   useFocusEffect(
     useCallback(() => {
@@ -176,38 +207,9 @@ export function ShopScreen() {
       .map(([id, label]) => ({ id, label }));
   }, [filterOptions.brands, items]);
 
-  const selectedBrandOption = useMemo(() => {
-    if (!brand) return null;
-    return (
-      filterOptions.brands.find((item) => item.slug === brand) ??
-      ({
-        slug: brand,
-        label: brands.find((item) => item.id === brand)?.label ?? brand,
-      } as ShopCustomerFilterOption)
-    );
-  }, [brand, brands, filterOptions.brands]);
-
   const visibleItems = useMemo(() => {
-    const needle = query.toLowerCase();
-    const filtered = items.filter((item) => {
-      if (inStockOnly && isOutOfStock(item)) return false;
-      if (category === UNCATEGORIZED_ID && shopCategoryKey(item.category)) return false;
-      if (category && category !== UNCATEGORIZED_ID && shopCategoryKey(item.category) !== category) {
-        return false;
-      }
-      if (selectedBrandOption && !brandMatches(item.brand, selectedBrandOption)) return false;
-      if (!needle) return true;
-      const haystack = [
-        item.name,
-        item.brand,
-        item.sku,
-        shopCategoryLabel(item.category, item.category_label),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
+    // Search/category/brand are applied server-side; keep local stock + sort on the loaded page.
+    const filtered = items.filter((item) => !(inStockOnly && isOutOfStock(item)));
     const sorted = [...filtered];
     sorted.sort((a, b) => {
       if (sort === 'price_asc') return Number(a.price) - Number(b.price);
@@ -217,7 +219,7 @@ export function ShopScreen() {
       return a.name.localeCompare(b.name);
     });
     return sorted;
-  }, [category, inStockOnly, items, query, selectedBrandOption, sort]);
+  }, [inStockOnly, items, sort]);
 
   const appliedFilters: FilterDraft = useMemo(
     () => ({ category, brand, inStockOnly, sort }),
@@ -595,6 +597,11 @@ export function ShopScreen() {
           contentContainerStyle={{ paddingHorizontal: spacing.md, paddingBottom: contentInset, flexGrow: 1 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => void load('refresh')} tintColor={primary} colors={[primary]} />
+          }
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? <ActivityIndicator color={primary} style={{ marginVertical: spacing.md }} /> : null
           }
           renderItem={renderProduct}
           ListEmptyComponent={

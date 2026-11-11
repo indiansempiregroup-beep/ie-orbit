@@ -26,8 +26,16 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { DesktopPage } from '../../components/DesktopPage';
 import { colors, fonts, iconTones, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopProduct } from '@ie-orbit/sdk';
-import { SHOP_PRODUCT_CATEGORIES } from '@ie-orbit/sdk';
+import type { BulkEnrichMode, ShopProduct } from '@ie-orbit/sdk';
+import {
+  BULK_ENRICH_LIMIT,
+  clampPageSize,
+  primaryShopBarcode,
+  runBulkProductEnrich,
+  SHOP_PRODUCT_CATEGORIES,
+  toPagedResult,
+} from '@ie-orbit/sdk';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { hasBiFeature, PlanFeature } from '../../utils/planFeatures';
 import { canWriteShopCatalog } from '../../utils/roles';
 import { useBusinessBillingSnapshot, usePlanFeatures } from '../../hooks/useOpsExtended';
@@ -65,6 +73,7 @@ export function ShopProductsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [category, setCategory] = useState('');
   const [sortBy, setSortBy] = useState('name_asc');
@@ -76,11 +85,15 @@ export function ShopProductsScreen() {
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkPercent, setBulkPercent] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkEnrichBusy, setBulkEnrichBusy] = useState<BulkEnrichMode | null>(null);
+  const [bulkEnrichProgress, setBulkEnrichProgress] = useState({ done: 0, total: 0 });
   const [bulkOpen, setBulkOpen] = useState(false);
   const [showBulkHint, setShowBulkHint] = useState(false);
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<number>(10);
-  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<Array<string | null>>([null]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [previousCursor, setPreviousCursor] = useState<string | null>(null);
 
   const statusOptions = useMemo(
     () => [
@@ -194,23 +207,46 @@ export function ShopProductsScreen() {
     });
   }, [canScanInvoice, canSeeProfit, canWrite, isDesktop, navigation, t]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const load = useCallback(async () => {
     if (!businessId || !client) return;
     setLoading(true);
     setError(null);
     try {
-      const rows = await client.shop.listAllProducts({
+      const response = await client.shop.listProducts({
         business_id: businessId,
+        search: debouncedSearch || undefined,
         status: status || undefined,
         category: category || undefined,
+        page_size: clampPageSize(pageSize),
+        cursor: cursor || undefined,
       });
-      setItems(rows);
+      const page = toPagedResult(response, pageSize);
+      const list = [...page.items];
+      list.sort((a, b) => {
+        if (sortBy === 'name_desc') return String(a.name).localeCompare(String(b.name)) * -1;
+        if (sortBy === 'price_desc') return Number(b.price ?? 0) - Number(a.price ?? 0);
+        if (sortBy === 'price_asc') return Number(a.price ?? 0) - Number(b.price ?? 0);
+        if (sortBy === 'stock_desc') return Number(b.stock_on_hand ?? 0) - Number(a.stock_on_hand ?? 0);
+        if (sortBy === 'stock_asc') return Number(a.stock_on_hand ?? 0) - Number(b.stock_on_hand ?? 0);
+        return String(a.name).localeCompare(String(b.name));
+      });
+      setItems(list);
+      setNextCursor(page.nextCursor);
+      setPreviousCursor(page.previousCursor);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('shop.products.loadFailed'));
+      setItems([]);
+      setNextCursor(null);
+      setPreviousCursor(null);
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, status, category]);
+  }, [businessId, client, debouncedSearch, status, category, pageSize, cursor, sortBy, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -220,40 +256,13 @@ export function ShopProductsScreen() {
 
   const { refreshing, onRefresh } = usePullToRefresh(load);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const list = !term
-      ? [...items]
-      : items.filter((item) =>
-          [item.name, item.brand ?? '', item.sku ?? '', ...(item.barcodes ?? []).map((b) => b.code)]
-            .join(' ')
-            .toLowerCase()
-            .includes(term),
-        );
-    list.sort((a, b) => {
-      if (sortBy === 'name_desc') return String(a.name).localeCompare(String(b.name)) * -1;
-      if (sortBy === 'price_desc') return Number(b.price ?? 0) - Number(a.price ?? 0);
-      if (sortBy === 'price_asc') return Number(a.price ?? 0) - Number(b.price ?? 0);
-      if (sortBy === 'stock_desc') return Number(b.stock_on_hand ?? 0) - Number(a.stock_on_hand ?? 0);
-      if (sortBy === 'stock_asc') return Number(a.stock_on_hand ?? 0) - Number(b.stock_on_hand ?? 0);
-      return String(a.name).localeCompare(String(b.name));
-    });
-    return list;
-  }, [items, search, sortBy]);
-
   useEffect(() => {
-    setPage(0);
-  }, [search, status, category, sortBy, pageSize]);
+    setCursor(null);
+    setCursorStack([null]);
+    setSelectedIds([]);
+  }, [debouncedSearch, status, category, pageSize]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = useMemo(
-    () => filtered.slice(safePage * pageSize, safePage * pageSize + pageSize),
-    [filtered, pageSize, safePage],
-  );
-  const pageStart = filtered.length === 0 ? 0 : safePage * pageSize + 1;
-  const pageEnd = Math.min(filtered.length, safePage * pageSize + pageRows.length);
-
+  const pageRows = items;
   const pageIds = useMemo(() => pageRows.map((item) => item.id), [pageRows]);
   const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
 
@@ -268,8 +277,26 @@ export function ShopProductsScreen() {
     });
   }
 
+  function goNextPage() {
+    if (!nextCursor) return;
+    setCursorStack((stack) => [...stack, cursor]);
+    setCursor(nextCursor);
+  }
+
+  function goPreviousPage() {
+    setCursorStack((stack) => {
+      if (stack.length <= 1) {
+        setCursor(null);
+        return [null];
+      }
+      const nextStack = stack.slice(0, -1);
+      setCursor(nextStack[nextStack.length - 1] ?? null);
+      return nextStack;
+    });
+  }
+
   async function applyBulkEdit() {
-    if (!client || !businessId || !selectedIds.length) return;
+    if (!client || !businessId || !selectedIds.length || bulkEnrichBusy) return;
     const updates: {
       status?: string;
       category?: string;
@@ -315,6 +342,68 @@ export function ShopProductsScreen() {
       toast.push(err instanceof Error ? err.message : t('shop.products.bulkFailed'), 'error');
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function applyBulkEnrich(mode: BulkEnrichMode) {
+    if (!client || !businessId || !selectedIds.length || bulkBusy || bulkEnrichBusy) return;
+    const productsById = new Map(items.map((product) => [product.id, product]));
+    const ids = selectedIds.slice(0, BULK_ENRICH_LIMIT);
+    const eligible = ids.filter((id) => {
+      const product = productsById.get(id);
+      if (!product) return false;
+      return mode === 'barcode' ? Boolean(primaryShopBarcode(product)) : Boolean(product.name?.trim());
+    });
+    if (!eligible.length) {
+      toast.push(
+        t(mode === 'barcode' ? 'shop.products.bulkEnrichNeedBarcode' : 'shop.products.bulkEnrichNeedName'),
+        'error',
+      );
+      return;
+    }
+    setBulkEnrichBusy(mode);
+    setBulkEnrichProgress({ done: 0, total: eligible.length });
+    try {
+      const result = await runBulkProductEnrich({
+        productsById,
+        ids: eligible,
+        mode,
+        businessId,
+        enrich: async (payload) => {
+          const response = await client.shop.enrichBarcode({
+            business_id: businessId,
+            ...payload,
+          });
+          return response.data;
+        },
+        patch: async (productId, body) => {
+          await client.shop.patchProduct(productId, body);
+        },
+        onProgress: setBulkEnrichProgress,
+      });
+      if (result.updated && !result.failed && !result.skipped) {
+        toast.push(t('shop.products.bulkEnrichDone', { updated: result.updated }), 'success');
+        setSelectedIds([]);
+      } else if (result.updated) {
+        toast.push(
+          t('shop.products.bulkEnrichPartial', {
+            updated: result.updated,
+            skipped: result.skipped,
+            failed: result.failed,
+          }),
+          'info',
+        );
+      } else if (result.failed) {
+        toast.push(result.errors[0]?.message || t('shop.products.bulkFailed'), 'error');
+      } else {
+        toast.push(t('shop.products.bulkEnrichNone'), 'info');
+      }
+      await load();
+    } catch (err) {
+      toast.push(err instanceof Error ? err.message : t('shop.products.bulkFailed'), 'error');
+    } finally {
+      setBulkEnrichBusy(null);
+      setBulkEnrichProgress({ done: 0, total: 0 });
     }
   }
 
@@ -412,7 +501,7 @@ export function ShopProductsScreen() {
 
         {loading && !refreshing ? <ActivityIndicator color={colors.primary} /> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {canWrite && filtered.length ? (
+        {canWrite && pageRows.length ? (
           <View style={styles.selectRow}>
             <Pressable onPress={toggleSelectPage} style={styles.selectAll}>
               <Feather
@@ -425,17 +514,48 @@ export function ShopProductsScreen() {
               </Text>
             </Pressable>
             {selectedIds.length ? (
-              <Pressable
-                onPress={() => setBulkOpen(true)}
-                style={styles.bulkChip}
-                accessibilityRole="button"
-                accessibilityLabel={t('shop.products.a11yEditSelected', { n: selectedIds.length })}
-              >
-                <Feather name="edit-3" size={14} color={colors.primary} />
-                <Text style={styles.bulkChipText}>
-                  {t('shop.products.selectedEdit', { count: selectedIds.length })}
-                </Text>
-              </Pressable>
+              <View style={styles.bulkChipRow}>
+                <Pressable
+                  onPress={() => setBulkOpen(true)}
+                  style={[styles.bulkChip, Boolean(bulkEnrichBusy) && styles.bulkChipDisabled]}
+                  disabled={Boolean(bulkEnrichBusy)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shop.products.a11yEditSelected', { n: selectedIds.length })}
+                >
+                  <Feather name="edit-3" size={14} color={colors.primary} />
+                  <Text style={styles.bulkChipText}>
+                    {t('shop.products.selectedEdit', { count: selectedIds.length })}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void applyBulkEnrich('barcode')}
+                  style={[styles.bulkChip, Boolean(bulkEnrichBusy) && styles.bulkChipDisabled]}
+                  disabled={Boolean(bulkEnrichBusy)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shop.products.a11yFetchBarcode', { n: selectedIds.length })}
+                >
+                  <Feather name="hash" size={14} color={colors.primary} />
+                  <Text style={styles.bulkChipText}>
+                    {bulkEnrichBusy === 'barcode'
+                      ? t('shop.products.bulkEnrichBusy', bulkEnrichProgress)
+                      : t('shop.products.fetchFromBarcode')}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => void applyBulkEnrich('name')}
+                  style={[styles.bulkChip, Boolean(bulkEnrichBusy) && styles.bulkChipDisabled]}
+                  disabled={Boolean(bulkEnrichBusy)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shop.products.a11yFetchName', { n: selectedIds.length })}
+                >
+                  <Feather name="type" size={14} color={colors.primary} />
+                  <Text style={styles.bulkChipText}>
+                    {bulkEnrichBusy === 'name'
+                      ? t('shop.products.bulkEnrichBusy', bulkEnrichProgress)
+                      : t('shop.products.fetchFromName')}
+                  </Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         ) : null}
@@ -497,66 +617,20 @@ export function ShopProductsScreen() {
             ) : null
           }
         />
-        {filtered.length ? (
+        {pageRows.length || nextCursor || cursorStack.length > 1 ? (
           <View style={[styles.pager, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-            <Text style={styles.pagerMeta} numberOfLines={1}>
-              {t('shop.products.pagerRange', { start: pageStart, end: pageEnd, total: filtered.length })}
-            </Text>
-            <View style={styles.pagerSelectWrap}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shop.products.rowsPerPage')}
-                onPress={() => setSizeMenuOpen((open) => !open)}
-                style={styles.pagerSelect}
-              >
-                <Text style={styles.pagerBtnText}>{pageSize}</Text>
-                <Feather name="chevron-down" size={14} color={colors.mutedForeground} />
-              </Pressable>
-              {sizeMenuOpen ? (
-                <View style={styles.pagerMenu}>
-                  {PAGE_SIZE_OPTIONS.map((size) => {
-                    const selected = pageSize === size;
-                    return (
-                      <Pressable
-                        key={size}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected }}
-                        onPress={() => {
-                          setPageSize(size);
-                          setSizeMenuOpen(false);
-                        }}
-                        style={[styles.pagerMenuItem, selected && styles.pagerMenuItemOn]}
-                      >
-                        <Text style={[styles.pagerBtnText, selected && styles.pagerMenuItemTextOn]}>{size}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.pagerNav}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shop.products.previousPage')}
-                disabled={safePage <= 0}
-                onPress={() => setPage(safePage - 1)}
-                style={[styles.pagerBtn, safePage <= 0 && styles.pagerBtnDisabled]}
-              >
-                <Feather name="chevron-left" size={16} color={colors.foreground} />
-              </Pressable>
-              <Text style={styles.pagerMeta}>
-                {safePage + 1}/{pageCount}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shop.products.nextPage')}
-                disabled={safePage >= pageCount - 1}
-                onPress={() => setPage(safePage + 1)}
-                style={[styles.pagerBtn, safePage >= pageCount - 1 && styles.pagerBtnDisabled]}
-              >
-                <Feather name="chevron-right" size={16} color={colors.foreground} />
-              </Pressable>
-            </View>
+            <CursorPager
+              count={pageRows.length}
+              pageSize={pageSize}
+              hasPrevious={cursorStack.length > 1 || Boolean(previousCursor)}
+              hasNext={Boolean(nextCursor)}
+              onPrevious={goPreviousPage}
+              onNext={goNextPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+              label={t('shop.products.paginationLabel')}
+              disabled={loading}
+            />
           </View>
         ) : null}
         <Modal
@@ -693,8 +767,9 @@ const styles = StyleSheet.create({
   },
   selectRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: spacing.sm,
   },
@@ -704,8 +779,16 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     flexShrink: 1,
     paddingLeft: spacing.md,
+    paddingTop: 8,
   },
   selectAllText: { color: colors.foreground, fontSize: 13, fontFamily: fonts.bodySemi },
+  bulkChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 8,
+    flex: 1,
+  },
   bulkChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -715,6 +798,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.tint,
   },
+  bulkChipDisabled: { opacity: 0.55 },
   bulkChipText: { color: colors.primary, fontFamily: fonts.bodySemi, fontSize: 13 },
   backdrop: {
     flex: 1,

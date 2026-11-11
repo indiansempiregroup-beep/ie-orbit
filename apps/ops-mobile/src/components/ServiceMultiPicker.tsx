@@ -1,8 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import type { Service } from '@ie-orbit/sdk';
+import { PICKER_PAGE_SIZE, type Service } from '@ie-orbit/sdk';
 import { SearchBar } from './SearchBar';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useServices } from '../hooks/useOpsData';
 import { Avatar } from './ui/Avatar';
 import { Card } from './ui/Card';
 import { FieldLabel } from './ui/FieldLabel';
@@ -17,10 +19,9 @@ import {
 } from '../utils/services';
 
 type Props = {
-  services: Service[];
-  selectedIds: string[];
-  onChange: (ids: string[]) => void;
-  nameFor: (service: Service) => string;
+  selectedServices: Service[];
+  onChange: (services: Service[]) => void;
+  nameFor?: (service: Service) => string;
   required?: boolean;
   error?: string;
 };
@@ -32,43 +33,33 @@ function compactSummaryLabel(services: Service[], nameFor: (service: Service) =>
   return `${nameFor(services[0])}, ${nameFor(services[1])} + ${services.length - 2} more`;
 }
 
-export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, required, error }: Props) {
+export function ServiceMultiPicker({ selectedServices, onChange, nameFor, required, error }: Props) {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim());
   const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const labelFor = nameFor ?? ((service: Service) => service.name ?? service.id);
+  const { services, loading: servicesLoading, nextCursor } = useServices({
+    q: debouncedSearch || undefined,
+    pageSize: PICKER_PAGE_SIZE,
+  });
+  const selectedIds = useMemo(() => selectedServices.map((service) => service.id), [selectedServices]);
 
-  const selectedServices = useMemo(
-    () =>
-      selectedIds
-        .map((id) => services.find((service) => service.id === id))
-        .filter((service): service is Service => Boolean(service)),
-    [selectedIds, services],
+  const browseServices = useMemo(
+    () => services.filter((service) => !selectedIds.includes(service.id)),
+    [services, selectedIds],
   );
-
-  const browseServices = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const pool =
-      selectedIds.length > 0
-        ? services.filter((service) => !selectedIds.includes(service.id))
-        : services;
-    if (!q) return pool;
-    return pool.filter((service) => {
-      const label = nameFor(service).toLowerCase();
-      const description = (service.description ?? '').toLowerCase();
-      return label.includes(q) || description.includes(q);
-    });
-  }, [services, selectedIds, search, nameFor]);
 
   const totalDuration = servicesTotalDurationMinutes(selectedServices);
   const totalPrice = servicesTotalPriceLabel(selectedServices);
-  const summaryLine = compactSummaryLabel(selectedServices, nameFor);
+  const summaryLine = compactSummaryLabel(selectedServices, labelFor);
 
-  function addService(serviceId: string) {
-    if (selectedIds.includes(serviceId)) return;
-    onChange([...selectedIds, serviceId]);
+  function addService(service: Service) {
+    if (selectedIds.includes(service.id)) return;
+    onChange([...selectedServices, service]);
   }
 
   function removeService(serviceId: string) {
-    const next = selectedIds.filter((id) => id !== serviceId);
+    const next = selectedServices.filter((service) => service.id !== serviceId);
     onChange(next);
     if (next.length === 0) setSummaryExpanded(false);
   }
@@ -125,7 +116,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, r
                   </View>
                   <View style={styles.summaryRowBody}>
                     <Text style={styles.summaryRowTitle} numberOfLines={1}>
-                      {nameFor(service)}
+                      {labelFor(service)}
                     </Text>
                     <Text style={styles.summaryRowMeta}>
                       {serviceDurationMinutes(service)} min
@@ -133,7 +124,7 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, r
                     </Text>
                   </View>
                   <Pressable
-                    accessibilityLabel={`Remove ${nameFor(service)}`}
+                    accessibilityLabel={`Remove ${labelFor(service)}`}
                     onPress={() => removeService(service.id)}
                     hitSlop={8}
                     style={styles.removeBtn}
@@ -180,7 +171,9 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, r
         showsVerticalScrollIndicator
         keyboardShouldPersistTaps="handled"
       >
-        {browseServices.length === 0 ? (
+        {servicesLoading && browseServices.length === 0 ? (
+          <Text style={styles.emptyListMeta}>Loading services…</Text>
+        ) : browseServices.length === 0 ? (
           <View style={styles.emptyList}>
             <Text style={styles.emptyListTitle}>
               {search
@@ -201,17 +194,17 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, r
           browseServices.map((service) => (
             <Pressable
               key={service.id}
-              onPress={() => addService(service.id)}
+              onPress={() => addService(service)}
               style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
             >
               <Avatar
-                name={nameFor(service)}
+                name={labelFor(service)}
                 size="md"
                 src={serviceImageUrl(service) ?? undefined}
               />
               <View style={styles.optionBody}>
                 <Text style={styles.optionTitle} numberOfLines={1}>
-                  {nameFor(service)}
+                  {labelFor(service)}
                 </Text>
                 <Text style={styles.optionMeta}>{formatServiceMeta(service)}</Text>
               </View>
@@ -232,6 +225,9 @@ export function ServiceMultiPicker({ services, selectedIds, onChange, nameFor, r
         <Text style={styles.sequenceHint}>
           Services run in the order you add them ({totalDuration} min combined).
         </Text>
+      ) : null}
+      {nextCursor ? (
+        <Text style={styles.sequenceHint}>More services available — keep typing to narrow.</Text>
       ) : null}
     </View>
   );

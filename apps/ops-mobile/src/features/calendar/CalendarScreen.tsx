@@ -57,7 +57,7 @@ export function CalendarScreen() {
     showStaffFilter ? staffFilter || undefined : undefined,
   );
   const { customerMap, serviceMap, staffMap } = useEntityMaps();
-  const { staff } = useStaffMembers();
+  const { staff } = useStaffMembers({ status: 'active', pageSize: 100 });
   const { refreshing, onRefresh } = usePullToRefresh(async () => {
     await Promise.all([reload(), reloadSlots()]);
   });

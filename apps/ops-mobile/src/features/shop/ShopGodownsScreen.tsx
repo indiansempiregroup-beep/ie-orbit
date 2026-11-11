@@ -19,6 +19,7 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useToast } from '../../contexts/ToastContext';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { SelectField } from '../../components/SelectField';
+import { ShopProductPickerField } from './ShopPickers';
 import { FormScreen } from '../../components/FormScreen';
 import { AddressLocationPicker } from '../../components/AddressLocationPicker';
 import { Button } from '../../components/ui/Button';
@@ -316,11 +317,6 @@ export function ShopGodownsScreen() {
     [godowns],
   );
 
-  const productOptions = useMemo(
-    () => products.map((p) => ({ value: p.id, label: p.name })),
-    [products],
-  );
-
   async function submitGodown() {
     if (!client || !businessId) return;
     if (!name.trim()) {
@@ -553,13 +549,11 @@ export function ShopGodownsScreen() {
           onChange={setToGodownId}
           placeholder={t('shop.godowns.selectGodown')}
         />
-        <SelectField
+        <ShopProductPickerField
           label={t('shop.godowns.product')}
           required
           value={productId}
-          options={productOptions}
-          onChange={setProductId}
-          searchable
+          onChange={(id) => setProductId(id)}
           placeholder={t('shop.godowns.chooseProduct')}
         />
         <Input

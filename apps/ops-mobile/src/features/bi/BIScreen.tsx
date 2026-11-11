@@ -148,7 +148,7 @@ export function BIScreen() {
     [activeBusiness?.product_subscriptions],
   );
   const { staffId, setStaffId, canFilter } = useReportStaffFilter();
-  const { staff } = useStaffMembers();
+  const { staff } = useStaffMembers({ status: 'active', pageSize: 100 });
   const allowed = useMemo(
     () =>
       new Set(
@@ -793,7 +793,7 @@ function BIProfitTab({
               sort: 'gross_profit',
               order: 'desc',
               limit: 20,
-              include_catalog: !staffId,
+              include_catalog: false,
               staff_id: staffId || undefined,
             }),
             client.customers.loyaltyReport({

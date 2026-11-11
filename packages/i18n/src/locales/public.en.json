@@ -43,6 +43,8 @@
       "martTitle": "A storefront that feels like yours",
       "bothTitle": "One brand for book and shop",
       "onDevices": "On iOS and Android",
+      "onDevicesIos": "On iOS",
+      "onDevicesAndroid": "On Android",
       "onDevicesBody": "Owners and staff run the workspace from their phone.",
       "product": "Product",
       "explore": "Explore",

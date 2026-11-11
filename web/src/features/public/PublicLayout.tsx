@@ -5,7 +5,7 @@ import { ArrowRight, CalendarDays, ChevronDown, Layers, Mail, Menu, Phone, Shopp
 import { BrandLockup } from '../../components/BrandLockup';
 import { Button } from '../../components/Button';
 import { LanguageSwitcher } from '../../components/LanguageSwitcher';
-import { OpsStoreBadges } from './OpsStoreBadges';
+import { configuredOpsStoreAvailability, OpsStoreBadges } from './OpsStoreBadges';
 import { PublicContactFab } from './PublicContactFab';
 import { PublicSocialIcon } from './PublicSocialIcons';
 import { REGISTER_FRESH_START_STATE } from '../onboarding/registerNavigation';
@@ -27,6 +27,13 @@ export function PublicLayout() {
   const [productsOpen, setProductsOpen] = useState(false);
   const productsRef = useRef<HTMLDivElement>(null);
   const productsActive = location.pathname === '/features';
+  const opsStoreAvailability = configuredOpsStoreAvailability();
+  const onDevicesKey =
+    opsStoreAvailability === 'ios'
+      ? 'public.footer.onDevicesIos'
+      : opsStoreAvailability === 'android'
+        ? 'public.footer.onDevicesAndroid'
+        : 'public.footer.onDevices';
 
   const primaryNavLinks = useMemo(
     () => [
@@ -284,13 +291,15 @@ export function PublicLayout() {
                 </Link>
               );
             })}
-            <div className="public-footer-download">
-              <div className="public-footer-download-copy">
-                <b>{t('public.footer.onDevices')}</b>
-                <span>{t('public.footer.onDevicesBody')}</span>
+            {opsStoreAvailability ? (
+              <div className="public-footer-download">
+                <div className="public-footer-download-copy">
+                  <b>{t(onDevicesKey)}</b>
+                  <span>{t('public.footer.onDevicesBody')}</span>
+                </div>
+                <OpsStoreBadges />
               </div>
-              <OpsStoreBadges />
-            </div>
+            ) : null}
           </div>
           <div className="public-footer-links">
             {footerColumns.map((column) => (

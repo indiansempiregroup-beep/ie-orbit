@@ -451,7 +451,7 @@ export function BIProfitPage() {
         order: sort === 'name' ? 'asc' : 'desc',
         limit,
         offset,
-        include_catalog: !staffId,
+        include_catalog: false,
         staff_id: staffId || undefined,
       });
       return response.data;

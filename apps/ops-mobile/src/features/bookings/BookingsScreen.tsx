@@ -20,6 +20,8 @@ import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { useTabBarLayout } from '../../hooks/useTabBarLayout';
+import { CursorPager } from '../../components/ui/CursorPager';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
 import { useBookings, useStaffMembers } from '../../hooks/useOpsData';
 import { useEntityMaps } from '../../hooks/useOpsExtended';
 import { DocumentActionsSheet, type ShopDocTarget } from '../shop/DocumentActionsSheet';
@@ -78,7 +80,6 @@ export function BookingsScreen() {
   const currency = activeBusiness?.currency;
   const showStaffFilter = canAccessStaffDirectory(user);
   const [range, setRange] = useState<'today' | 'all'>('today');
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
   const [staffFilter, setStaffFilter] = useState('');
   const [sortBy, setSortBy] = useState<SortKey>('created_desc');
@@ -86,9 +87,24 @@ export function BookingsScreen() {
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const [invoiceBusyId, setInvoiceBusyId] = useState<string | null>(null);
   const date = range === 'today' ? formatDateKey(new Date()) : undefined;
-  const { bookings, loading, error, reload } = useBookings(date);
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, pager } = useCursorPaging({
+    resetKeys: [range, statusFilter, staffFilter],
+  });
+  const serverQ = q;
+  const { bookings, loading, error, reload, nextCursor, previousCursor } = useBookings({
+    date,
+    staffId: showStaffFilter && staffFilter ? staffFilter : undefined,
+    status: statusFilter || undefined,
+    q: serverQ,
+    pageSize,
+    cursor: cursor ?? null,
+  });
+
+  useEffect(() => {
+    setPageMeta({ nextCursor, previousCursor });
+  }, [nextCursor, previousCursor, setPageMeta]);
   const { customers, customerMap, serviceMap, staffMap, services } = useEntityMaps();
-  const { staff } = useStaffMembers();
+  const { staff } = useStaffMembers({ status: 'active', pageSize: 100 });
   const { refreshing, onRefresh } = usePullToRefresh(reload);
   const { contentInset } = useTabBarLayout();
 
@@ -127,31 +143,7 @@ export function BookingsScreen() {
     Number(sortBy !== 'created_desc');
 
   const sorted = useMemo(() => {
-    const q = search.trim().toLowerCase();
     let list = [...bookings];
-
-    if (statusFilter) {
-      list = list.filter((booking) => booking.status === statusFilter);
-    }
-    if (showStaffFilter && staffFilter) {
-      list = list.filter((booking) => booking.staff_id === staffFilter);
-    }
-    if (q) {
-      list = list.filter((booking) => {
-        const haystack = [
-          booking.booking_number,
-          entityLabel(customerMap, booking.customer_id),
-          entityLabel(serviceMap, booking.service_id),
-          entityLabel(staffMap, booking.staff_id, ''),
-          booking.status,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(q);
-      });
-    }
-
     list.sort((a, b) => {
       if (sortBy === 'created_asc') {
         return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
@@ -173,7 +165,7 @@ export function BookingsScreen() {
     });
 
     return list;
-  }, [bookings, search, statusFilter, staffFilter, showStaffFilter, sortBy, customerMap, serviceMap, staffMap]);
+  }, [bookings, sortBy, customerMap, serviceMap, staffMap]);
 
   function priceLabelFor(booking: Booking): string | undefined {
     const total = bookingPriceTotal(booking);
@@ -268,7 +260,12 @@ export function BookingsScreen() {
     <DesktopPage>
       <OpsHeader compact title={t('nav.bookings')} />
       <View style={styles.toolbar}>
-        <SearchBar style={styles.search} value={search} onChangeText={setSearch} placeholder={t('bookings.search')} />
+        <SearchBar
+          style={styles.search}
+          value={search}
+          onChangeText={setSearch}
+          placeholder={t('bookings.search', { defaultValue: 'Booking #' })}
+        />
         <FilterButton count={activeFilterCount} onPress={() => setFiltersOpen(true)} />
         <Button label={t('common.new')} onPress={() => navigation.navigate('CreateBooking', {})} />
       </View>
@@ -342,6 +339,7 @@ export function BookingsScreen() {
             );
           })}
         </GroupedList>
+        <CursorPager count={sorted.length} {...pager} disabled={loading} label="bookings" />
       </RefreshableScrollView>
 
       <DocumentActionsSheet

@@ -962,6 +962,8 @@ class BarcodeBulkLookupSerializer(serializers.Serializer):
 class ShopReturnSerializer(serializers.ModelSerializer):
     refund_mode = serializers.SerializerMethodField()
     refund_instruction = serializers.SerializerMethodField()
+    order_number = serializers.CharField(source="order.order_number", read_only=True, default="")
+    customer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ShopReturn
@@ -969,7 +971,9 @@ class ShopReturnSerializer(serializers.ModelSerializer):
             "id",
             "business",
             "order",
+            "order_number",
             "customer",
+            "customer_name",
             "return_number",
             "status",
             "return_method",
@@ -992,6 +996,12 @@ class ShopReturnSerializer(serializers.ModelSerializer):
 
     def _meta(self, obj: ShopReturn) -> dict:
         return obj.metadata if isinstance(obj.metadata, dict) else {}
+
+    def get_customer_name(self, obj: ShopReturn) -> str:
+        customer = obj.customer or getattr(obj.order, "customer", None)
+        if not customer:
+            return ""
+        return str(getattr(customer, "display_name", "") or str(customer)).strip()
 
     def get_refund_mode(self, obj: ShopReturn) -> str:
         return str(self._meta(obj).get("refund_mode") or "")

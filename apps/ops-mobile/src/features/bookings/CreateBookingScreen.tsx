@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import type { StaffServiceAssignment } from '@ie-orbit/sdk';
+import type { Service, StaffServiceAssignment } from '@ie-orbit/sdk';
 import { CalendarPicker } from '../../components/CalendarPicker';
 import { FormScreen } from '../../components/FormScreen';
 import { FormHero } from '../../components/FormHero';
@@ -20,7 +20,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { useOpsClient } from '../../hooks/useOpsClient';
-import { useAvailability, useBookingMutations, useBranches, useEntityMaps } from '../../hooks/useOpsExtended';
+import { useAvailability, useBookingMutations, useBranches } from '../../hooks/useOpsExtended';
+import { useCustomer, useStaffMembers } from '../../hooks/useOpsData';
+import { CustomerPickerField, StaffPickerField } from '../management/EntityPickers';
 import { canAccessStaffDirectory } from '../../utils/roles';
 import { colors, fonts, radius, spacing, typography } from '../../theme/tokens';
 import { formatDateKey, formatDateTime, getApiErrorMessage } from '../../utils/format';
@@ -86,14 +88,14 @@ export function CreateBookingScreen() {
   const { businessId } = useWorkspace();
   const client = useOpsClient();
   const toast = useToast();
-  const { customers, services, staff, customerMap, serviceMap, staffMap } = useEntityMaps();
   const { branches } = useBranches();
   const mutations = useBookingMutations();
 
   const [customerId, setCustomerId] = useState(route.params?.customerId ?? '');
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(
-    route.params?.serviceId ? [route.params.serviceId] : [],
-  );
+  const { staff } = useStaffMembers({ status: 'active', pageSize: 100 });
+  const { customer } = useCustomer(customerId);
+  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const selectedServiceIds = useMemo(() => selectedServices.map((service) => service.id), [selectedServices]);
   const [staffId, setStaffId] = useState(showStaffPicker ? route.params?.staffId ?? '' : '');
   const [branchId, setBranchId] = useState('');
   const [date, setDate] = useState(() => dateFromIso(route.params?.startAt));
@@ -127,6 +129,21 @@ export function CreateBookingScreen() {
       return { key, label };
     });
   }, [t]);
+
+  useEffect(() => {
+    const serviceId = route.params?.serviceId;
+    if (!client || !serviceId || selectedServices.some((row) => row.id === serviceId)) return;
+    let cancelled = false;
+    void client.services
+      .get(serviceId)
+      .then((response) => {
+        if (!cancelled) setSelectedServices([response.data]);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client, route.params?.serviceId, selectedServices]);
 
   useEffect(() => {
     if (!branches.length) return;
@@ -179,20 +196,21 @@ export function CreateBookingScreen() {
     };
   }, [businessId, client, customerId]);
 
-  const selectedServices = useMemo(
-    () => services.filter((service) => selectedServiceIds.includes(service.id)),
-    [services, selectedServiceIds],
-  );
   const durationMinutes = servicesTotalDurationMinutes(
     selectedServices,
     route.params?.durationMinutes ?? 30,
   );
   const servicePriceLabel = servicesTotalPriceLabel(selectedServices);
-  const serviceSummaryLabel = servicesSummaryLabel(selectedServices, (service) =>
-    serviceMap.get(service.id) ?? service.name ?? service.id,
-  );
-  const customerName = customerId ? customerMap.get(customerId) ?? t('bookings.customer') : '';
-  const staffName = staffId ? staffMap.get(staffId) ?? t('bookings.staff') : t('bookings.createMobile.anyAvailable');
+  const serviceSummaryLabel = servicesSummaryLabel(selectedServices, (service) => service.name ?? service.id);
+  const customerName = customer
+    ? customer.display_name || customer.full_name || customer.email || t('bookings.customer')
+    : customerId
+      ? t('bookings.customer')
+      : '';
+  const staffMember = staffId ? staff.find((member) => member.id === staffId) : undefined;
+  const staffName = staffMember
+    ? staffMember.display_name || staffMember.full_name || staffMember.email || t('bookings.staff')
+    : t('bookings.createMobile.anyAvailable');
 
   const eligibleStaff = useMemo(() => {
     const activeStaff = staff.filter(
@@ -250,8 +268,8 @@ export function CreateBookingScreen() {
     if (dateFromIso(selectedSlot) !== date) setSelectedSlot('');
   }, [date, selectedSlot]);
 
-  function updateSelectedServices(next: string[]) {
-    setSelectedServiceIds(next);
+  function updateSelectedServices(next: Service[]) {
+    setSelectedServices(next);
     setStaffId('');
     setSelectedSlot('');
   }
@@ -262,22 +280,7 @@ export function CreateBookingScreen() {
     setFieldErrors((current) => ({ ...current, slot: '' }));
   }
 
-  const customerOptions = useMemo(
-    () => customers.map((c) => ({ value: c.id, label: customerMap.get(c.id) ?? c.id })),
-    [customers, customerMap],
-  );
-  const staffOptions = useMemo(
-    () => [
-      {
-        value: '',
-        label: selectedServiceIds.length
-          ? t('bookings.createMobile.anyAvailableEligible', { n: eligibleStaff.length })
-          : t('bookings.createMobile.anyAvailable'),
-      },
-      ...eligibleStaff.map((s) => ({ value: s.id, label: staffMap.get(s.id) ?? s.id })),
-    ],
-    [eligibleStaff, selectedServiceIds.length, staffMap, t],
-  );
+  const eligibleStaffIds = useMemo(() => new Set(eligibleStaff.map((member) => member.id)), [eligibleStaff]);
   const branchOptions = useMemo(
     () =>
       branches.map((branch) => ({
@@ -430,11 +433,10 @@ export function CreateBookingScreen() {
             : t('bookings.createMobile.whoWhatNoStaff')
         }
       >
-        <SelectField
+        <CustomerPickerField
           label={t('bookings.customer')}
           required
           value={customerId}
-          options={customerOptions}
           placeholder={t('bookings.createMobile.searchCustomers')}
           onChange={(value) => {
             setCustomerId(value);
@@ -447,14 +449,12 @@ export function CreateBookingScreen() {
         <ServiceMultiPicker
           required
           error={fieldErrors.services}
-          services={services}
-          selectedIds={selectedServiceIds}
-          onChange={(ids) => {
-            updateSelectedServices(ids);
+          selectedServices={selectedServices}
+          onChange={(services) => {
+            updateSelectedServices(services);
             setFieldErrors((current) => ({ ...current, services: '' }));
             setError(null);
           }}
-          nameFor={(service) => serviceMap.get(service.id) ?? service.name ?? service.id}
         />
 
         {needsOfficePicker ? (
@@ -484,11 +484,10 @@ export function CreateBookingScreen() {
               </View>
             </View>
           ) : (
-            <SelectField
+            <StaffPickerField
               label={t('bookings.staff')}
               optional
               value={staffId}
-              options={staffOptions}
               onChange={(value) => {
                 setStaffId(value);
                 setSelectedSlot('');
@@ -503,6 +502,20 @@ export function CreateBookingScreen() {
                 selectedServiceIds.length && !staffId && eligibleStaff.length > 0
                   ? t('bookings.createMobile.anyAvailableHint')
                   : undefined
+              }
+              emptyOption={{
+                value: '',
+                label: selectedServiceIds.length
+                  ? t('bookings.createMobile.anyAvailableEligible', { n: eligibleStaff.length })
+                  : t('bookings.createMobile.anyAvailable'),
+              }}
+              filterItem={
+                selectedServiceIds.length
+                  ? (member) => eligibleStaffIds.has(member.id)
+                  : (member) =>
+                      Boolean(member.is_bookable) &&
+                      member.employment_status === 'active' &&
+                      (member.is_active === undefined || member.is_active)
               }
             />
           )

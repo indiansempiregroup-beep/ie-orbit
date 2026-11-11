@@ -27,16 +27,42 @@ export function compactServiceSummary(
 
 export function bookingServiceLabel(
   booking: Booking,
-  serviceMap: Map<string, string>,
+  serviceMap?: Map<string, string>,
 ): string {
   if (booking.line_items?.length) {
     const names = booking.line_items.map(
-      (item) => serviceMap.get(String(item.service_id)) ?? 'Service',
+      (item) => item.service_name || serviceMap?.get(String(item.service_id)) || 'Service',
     );
     if (names.length === 1) return names[0];
     return `${names[0]} + ${names.length - 1} more`;
   }
-  return serviceMap.get(String(booking.service_id)) ?? '—';
+  return booking.service_label || serviceMap?.get(String(booking.service_id)) || '—';
+}
+
+/**
+ * Name lookups derived from the (paged) bookings themselves — the booking payload already
+ * carries customer_name / staff_name / service labels, so no full customer/staff/service dumps.
+ */
+export function buildBookingNameMaps(bookings: Booking[] | undefined) {
+  const customerMap = new Map<string, string>();
+  const staffMap = new Map<string, string>();
+  const serviceMap = new Map<string, string>();
+  for (const booking of bookings ?? []) {
+    if (booking.customer_id && booking.customer_name) {
+      customerMap.set(String(booking.customer_id), booking.customer_name);
+    }
+    if (booking.staff_id && booking.staff_name) {
+      staffMap.set(String(booking.staff_id), booking.staff_name);
+    }
+    if (booking.service_id && booking.service_label && !booking.line_items?.length) {
+      serviceMap.set(String(booking.service_id), booking.service_label);
+    }
+    for (const item of booking.line_items ?? []) {
+      if (item.service_id && item.service_name) serviceMap.set(String(item.service_id), item.service_name);
+      if (item.staff_id && item.staff_name) staffMap.set(String(item.staff_id), item.staff_name);
+    }
+  }
+  return { customerMap, staffMap, serviceMap };
 }
 
 export function bookingMatchesServiceFilter(booking: Booking, serviceId: string): boolean {

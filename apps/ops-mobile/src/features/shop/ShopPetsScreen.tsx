@@ -14,7 +14,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useOpsClient } from '../../hooks/useOpsClient';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { useCustomers } from '../../hooks/useOpsData';
 import { RefreshableScrollView } from '../../components/RefreshableScrollView';
 import { SearchBar } from '../../components/SearchBar';
 import { FilterButton, FilterChoiceGroup, FilterSheet } from '../../components/FilterSheet';
@@ -28,7 +27,9 @@ import { useUpdateBusinessAddons, useBusinessBillingSnapshot } from '../../hooks
 import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { colors, fonts, radius, spacing } from '../../theme/tokens';
 import type { RootStackParamList } from '../../navigation/types';
-import type { ShopPet } from '@ie-orbit/sdk';
+import { clampPageSize, toPagedResult, type ShopPet } from '@ie-orbit/sdk';
+import { useCursorPaging } from '../../hooks/useCursorPaging';
+import { CursorPager } from '../../components/ui/CursorPager';
 import { hasPetsPack, PETS_PACK_PRICE_INR } from '../../utils/products';
 import { shopListRefreshControl } from './shopRefreshControl';
 
@@ -38,7 +39,6 @@ export function ShopPetsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const client = useOpsClient();
   const { businessId, activeBusiness, refreshWorkspace } = useWorkspace();
-  const { customers } = useCustomers();
   const addons = useUpdateBusinessAddons();
   const { billing } = useBusinessBillingSnapshot();
   const petsPriceInr = Math.round(
@@ -49,9 +49,11 @@ export function ShopPetsScreen() {
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
   const [customerFilter, setCustomerFilter] = useState('');
+  const { search, setSearch, q, pageSize, cursor, setPageMeta, clearPageMeta, pager } = useCursorPaging({
+    resetKeys: [speciesFilter, customerFilter],
+  });
   const [sortBy, setSortBy] = useState('name_asc');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -60,17 +62,41 @@ export function ShopPetsScreen() {
     setLoading(true);
     try {
       if (petsSubscribed) {
-        const petsRes = await client.shop.listPets({ business_id: businessId });
-        setPets(petsRes.data);
+        const petsRes = await client.shop.listPets({
+          business_id: businessId,
+          q,
+          species: speciesFilter || undefined,
+          customer_id: customerFilter || undefined,
+          page_size: clampPageSize(pageSize),
+          cursor,
+        });
+        const page = toPagedResult(petsRes, pageSize);
+        setPets(page.items);
+        setPageMeta(page);
       } else {
         setPets([]);
+        clearPageMeta();
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : t('opsApp.shop.pets.loadFailed'));
+      setPets([]);
+      clearPageMeta();
     } finally {
       setLoading(false);
     }
-  }, [businessId, client, petsSubscribed, t]);
+  }, [
+    businessId,
+    client,
+    petsSubscribed,
+    q,
+    speciesFilter,
+    customerFilter,
+    pageSize,
+    cursor,
+    setPageMeta,
+    clearPageMeta,
+    t,
+  ]);
 
   const subscribePets = useCallback(async () => {
     const shopie = activeBusiness?.product_subscriptions?.find(
@@ -128,11 +154,12 @@ export function ShopPetsScreen() {
   });
 
   const speciesOptions = useMemo(() => {
+    // Options come from the loaded page; keep the active filter selectable when it isn't on this page.
     const values = Array.from(
-      new Set(pets.map((pet) => (pet.species || '').trim()).filter(Boolean)),
+      new Set([...pets.map((pet) => (pet.species || '').trim()), speciesFilter].filter(Boolean)),
     ).sort((a, b) => a.localeCompare(b));
     return [{ value: '', label: t('shop.pets.allSpecies') }, ...values.map((value) => ({ value, label: value }))];
-  }, [pets, t]);
+  }, [pets, speciesFilter, t]);
 
   const customerOptions = useMemo(() => {
     const fromPets = pets
@@ -141,18 +168,8 @@ export function ShopPetsScreen() {
         label: pet.customer_name || pet.customer,
       }))
       .filter((item) => item.value);
-    const fromCustomers = (customers ?? []).map((customer) => ({
-      value: customer.id,
-      label:
-        customer.full_name ||
-        customer.display_name ||
-        [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
-        customer.email ||
-        customer.phone_number ||
-        customer.id,
-    }));
     const map = new Map<string, string>();
-    for (const option of [...fromPets, ...fromCustomers]) {
+    for (const option of fromPets) {
       if (!map.has(option.value)) map.set(option.value, option.label);
     }
     return [
@@ -161,27 +178,18 @@ export function ShopPetsScreen() {
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label)),
     ];
-  }, [pets, customers, t]);
+  }, [pets, t]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    const list = pets.filter((pet) => {
-      if (speciesFilter && (pet.species || '').toLowerCase() !== speciesFilter.toLowerCase()) {
-        return false;
-      }
-      if (customerFilter && pet.customer !== customerFilter) return false;
-      if (!term) return true;
-      return [pet.name, pet.species ?? '', pet.breed ?? '', pet.customer_name ?? '', pet.medical_notes ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-    return [...list].sort((a, b) => {
-      if (sortBy === 'name_desc') return String(b.name).localeCompare(String(a.name));
-      if (sortBy === 'species') return String(a.species || '').localeCompare(String(b.species || ''));
-      return String(a.name).localeCompare(String(b.name));
-    });
-  }, [pets, search, speciesFilter, customerFilter, sortBy]);
+  const filtered = useMemo(
+    () =>
+      [...pets].sort((a, b) => {
+        if (sortBy === 'name_desc') return String(b.name).localeCompare(String(a.name));
+        if (sortBy === 'species') return String(a.species || '').localeCompare(String(b.species || ''));
+        return String(a.name).localeCompare(String(b.name));
+      }),
+    [pets, sortBy],
+  );
+  const hasFilters = Boolean(search.trim()) || Boolean(speciesFilter) || Boolean(customerFilter);
 
   const activeFilterCount =
     Number(Boolean(speciesFilter)) + Number(Boolean(customerFilter)) + Number(sortBy !== 'name_asc');
@@ -304,16 +312,24 @@ export function ShopPetsScreen() {
                 !loading ? (
                   <EmptyState
                     icon="heart"
-                    title={pets.length ? t('opsApp.shop.pets.emptyNoMatch') : t('opsApp.shop.pets.emptyNoneTitle')}
+                    title={hasFilters ? t('opsApp.shop.pets.emptyNoMatch') : t('opsApp.shop.pets.emptyNoneTitle')}
                     message={
-                      pets.length
+                      hasFilters
                         ? t('opsApp.shop.pets.emptyTryAnother')
                         : t('opsApp.shop.pets.emptyNoneMessage')
                     }
-                    actionLabel={pets.length ? undefined : t('shop.pets.addPet')}
-                    onAction={pets.length ? undefined : () => navigation.navigate('ShopPetForm')}
+                    actionLabel={hasFilters ? undefined : t('shop.pets.addPet')}
+                    onAction={hasFilters ? undefined : () => navigation.navigate('ShopPetForm')}
                   />
                 ) : null
+              }
+              ListFooterComponent={
+                <CursorPager
+                  {...pager}
+                  count={filtered.length}
+                  label={t('shop.pets.paginationLabel', { defaultValue: 'pets' })}
+                  disabled={loading}
+                />
               }
             />
           </>

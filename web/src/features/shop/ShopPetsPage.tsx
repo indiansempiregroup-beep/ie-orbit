@@ -20,6 +20,9 @@ import { useBusinessBillingSnapshotQuery, useUpdateBusinessAddonsMutation } from
 import { getApiErrorMessage } from '../../lib/apiClient';
 import { resolveMediaAssetUrl, toStoredMediaAssetUrl } from '../../lib/mediaUrl';
 import { uploadPetImage } from './uploadProductImage';
+import { useCursorListState } from '../../hooks/useCursorListState';
+import { CursorPager } from '../bi/components/CursorPager';
+import { CustomerTypeahead } from '../management/EntityPickers';
 
 const FALLBACK_SPECIES = ['Dog', 'Cat', 'Bird', 'Rabbit'];
 const SEX_OPTIONS = ['Male', 'Female', 'Unknown'];
@@ -62,7 +65,16 @@ const SEX_KEYS = ['male', 'female', 'unknown'];
 
 export function ShopPetsPage() {
   const { t } = useTranslation();
-  const pets = useShopPets();
+  const [speciesFilter, setSpeciesFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const listState = useCursorListState({ resetKey: `${speciesFilter}|${customerFilter}` });
+  const { searchTerm: search, setSearchTerm: setSearch } = listState;
+  const pets = useShopPets(customerFilter || undefined, {
+    species: speciesFilter,
+    q: listState.debouncedSearch,
+    pageSize: listState.pageSize,
+    cursor: listState.cursor,
+  });
   const speciesLabel = (value: string) => {
     const key = value.trim().toLowerCase();
     return SPECIES_KEYS.includes(key) ? t(`shop.pets.speciesList.${key}`) : value;
@@ -88,24 +100,10 @@ export function ShopPetsPage() {
     formatSaasFromMinor(petsPriceMinor, 'INR') ??
     formatMoney(petsPriceMinor / 100, 'INR');
   const petsSubscribed = hasPetsPack(workspace.activeBusiness?.product_subscriptions);
-  const customers = useQuery({
-    queryKey: ['customers', workspace.businessId],
-    enabled: Boolean(workspace.businessId),
-    queryFn: async () => {
-      const response = await client.customers.list({
-        business: workspace.businessId ?? undefined,
-      });
-      return response.data;
-    },
-  });
-
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [speciesFilter, setSpeciesFilter] = useState('');
-  const [customerFilter, setCustomerFilter] = useState('');
   const [selectedPet, setSelectedPet] = useState<ShopPet | null>(null);
   const [notifySubject, setNotifySubject] = useState('');
   const [notifyBody, setNotifyBody] = useState('');
@@ -126,52 +124,40 @@ export function ShopPetsPage() {
   });
   const masterSpeciesLabels = masterSpecies.data?.length ? masterSpecies.data : FALLBACK_SPECIES;
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (pets.data ?? []).filter((pet) => {
-      if (speciesFilter && (pet.species || '').toLowerCase() !== speciesFilter.toLowerCase()) {
-        return false;
-      }
-      if (customerFilter && pet.customer !== customerFilter) return false;
-      if (!term) return true;
-      return [pet.name, pet.species ?? '', pet.breed ?? '', pet.customer_name ?? '', pet.medical_notes ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [pets.data, search, speciesFilter, customerFilter]);
+  // Server-filtered page (q + species + customer_id).
+  const filtered = useMemo(() => pets.data?.items ?? [], [pets.data]);
 
-  const speciesOptions = useMemo(() => {
-    const set = new Set(
-      (pets.data ?? [])
-        .map((pet) => (pet.species || '').trim())
-        .filter(Boolean),
-    );
-    return Array.from(set).sort();
-  }, [pets.data]);
-
-  const customerNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const customer of customers.data ?? []) {
-      map.set(customer.id, customer.full_name ?? customer.email ?? customer.id);
-    }
-    return map;
-  }, [customers.data]);
+  const speciesOptions = useMemo(
+    () => Array.from(new Set(masterSpeciesLabels.map((value) => value.trim()).filter(Boolean))).sort(),
+    [masterSpeciesLabels],
+  );
 
   const saving = createPet.isPending || patchPet.isPending || deletePet.isPending || uploading;
 
   useEffect(() => {
     const petId = searchParams.get('petId');
-    if (!petId || !pets.data?.length) return;
-    const pet = pets.data.find((item) => item.id === petId);
-    if (!pet) return;
-    setSelectedPet(pet);
-    if (searchParams.get('notify') === '1') {
-      setNotifySubject(t('shop.pets.birthdayReminderSubject', { name: pet.name }));
-      setNotifyBody('');
-      setNotifyMessage(null);
-      notifyDialog.show();
-    }
+    if (!petId || !pets.data) return;
+    let cancelled = false;
+    // Deep link: use the loaded page when possible, otherwise fetch just that pet.
+    const loaded = pets.data.items.find((item) => item.id === petId);
+    const resolvePet = loaded
+      ? Promise.resolve(loaded)
+      : client.shop.getPet(petId).then((response) => response.data);
+    void resolvePet
+      .then((pet) => {
+        if (cancelled || !pet) return;
+        setSelectedPet(pet);
+        if (searchParams.get('notify') === '1') {
+          setNotifySubject(t('shop.pets.birthdayReminderSubject', { name: pet.name }));
+          setNotifyBody('');
+          setNotifyMessage(null);
+          notifyDialog.show();
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
     // Intentionally depend on show callback + query params/data only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pets.data, searchParams, notifyDialog.show]);
@@ -259,7 +245,11 @@ export function ShopPetsPage() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!form.customerId || !form.name.trim()) return;
+    if (!form.customerId) {
+      setMessage(t('shop.pets.selectCustomer'));
+      return;
+    }
+    if (!form.name.trim()) return;
     const speciesValue =
       form.speciesChoice === 'Other' ? form.speciesOther.trim() : form.speciesChoice.trim();
     if (form.speciesChoice === 'Other' && !speciesValue) {
@@ -370,12 +360,23 @@ export function ShopPetsPage() {
               setCustomerFilter('');
             }}
             action={
-              <Button type="button" variant="primary" onClick={openAddDialog}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Plus size={16} aria-hidden="true" />
-                  {t('shop.pets.addPet')}
-                </span>
-              </Button>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 220 }}>
+                  <CustomerTypeahead
+                    value={customerFilter || null}
+                    onChange={(id) => setCustomerFilter(id ?? '')}
+                    placeholder={t('shop.pets.allCustomers')}
+                    emptyOptionLabel={t('shop.pets.allCustomers')}
+                    ariaLabel={t('shop.pets.customer')}
+                  />
+                </div>
+                <Button type="button" variant="primary" onClick={openAddDialog}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Plus size={16} aria-hidden="true" />
+                    {t('shop.pets.addPet')}
+                  </span>
+                </Button>
+              </div>
             }
             filters={[
               {
@@ -388,19 +389,6 @@ export function ShopPetsPage() {
                   ...speciesOptions.map((value) => ({ value, label: speciesLabel(value) })),
                 ],
               },
-              {
-                id: 'customer',
-                label: t('shop.pets.customer'),
-                value: customerFilter,
-                onChange: setCustomerFilter,
-                options: [
-                  { value: '', label: t('shop.pets.allCustomers') },
-                  ...(customers.data ?? []).map((customer) => ({
-                    value: customer.id,
-                    label: customer.full_name ?? customer.email ?? customer.id,
-                  })),
-                ],
-              },
             ]}
           />
           {pets.isLoading ? <p>{t('common.loading')}</p> : null}
@@ -408,7 +396,7 @@ export function ShopPetsPage() {
           <div style={{ display: 'grid', gap: 8 }}>
             {filtered.map((pet) => {
               const src = resolveMediaAssetUrl(pet.photo_url);
-              const owner = pet.customer_name || customerNameById.get(pet.customer) || '';
+              const owner = pet.customer_name || '';
               return (
                 <div
                   key={pet.id}
@@ -482,8 +470,8 @@ export function ShopPetsPage() {
             })}
             {!pets.isLoading && !filtered.length ? (
               <div style={{ display: 'grid', gap: 8 }}>
-                <p>{pets.data?.length ? t('shop.pets.emptyFiltered') : t('shop.pets.emptyNone')}</p>
-                {!pets.data?.length ? (
+                <p>{search || speciesFilter || customerFilter ? t('shop.pets.emptyFiltered') : t('shop.pets.emptyNone')}</p>
+                {!search && !speciesFilter && !customerFilter ? (
                   <Button type="button" variant="primary" onClick={openAddDialog}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <Plus size={16} aria-hidden="true" />
@@ -494,6 +482,11 @@ export function ShopPetsPage() {
               </div>
             ) : null}
           </div>
+          <CursorPager
+            {...listState.pagerProps(pets.data, filtered.length)}
+            label={t('shop.pets.addPet').split(' ').pop()?.toLowerCase() ?? 'pets'}
+            disabled={pets.isFetching}
+          />
         </Card>
       )}
 
@@ -534,19 +527,12 @@ export function ShopPetsPage() {
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))' }}>
             <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
               <span style={fieldLabel}>{t('shop.pets.customer')}</span>
-              <select
-                value={form.customerId}
-                onChange={(event) => setForm({ ...form, customerId: event.target.value })}
-                required
-                style={fieldInput}
-              >
-                <option value="">{t('shop.pets.selectCustomer')}</option>
-                {(customers.data ?? []).map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.full_name ?? customer.email ?? customer.id}
-                  </option>
-                ))}
-              </select>
+              <CustomerTypeahead
+                value={form.customerId || null}
+                onChange={(id) => setForm({ ...form, customerId: id ?? '' })}
+                placeholder={t('shop.pets.selectCustomer')}
+                ariaLabel={t('shop.pets.customer')}
+              />
             </label>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={fieldLabel}>{t('shop.pets.petName')}</span>

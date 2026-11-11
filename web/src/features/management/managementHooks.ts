@@ -1,7 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { clampPageSize, toPagedResult, type PagedResult } from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { useWorkspaceScope } from '../../hooks/useWorkspaceScope';
 import { invalidateWorkspaceData } from '../../lib/workspace';
+import { normalizeCustomer, normalizeService, normalizeStaff } from '../../lib/managementEntities';
 import {
   archiveCustomer,
   createCustomer,
@@ -24,37 +26,98 @@ import {
   type Service,
   type StaffMember,
 } from './managementApi';
+import { businessQueryParam } from '../../lib/workspace';
 
-export function useCustomerList() {
+type ListOptions = {
+  q?: string;
+  status?: string;
+  pageSize?: number;
+  cursor?: string | null;
+  /** Set false to skip fetching (e.g. closed pickers). */
+  enabled?: boolean;
+};
+
+export function useCustomerList(options?: ListOptions) {
   const client = useApiClient();
   const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
-  return useQuery<Customer[], Error>({
-    queryKey: ['management', 'customers', ...scopeKey],
-    queryFn: () => listCustomers(client, businessId),
-    enabled: workspaceReady,
-    staleTime: 1000 * 60 * 5,
+  const pageSize = options?.pageSize ?? 50;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const status = options?.status || undefined;
+  return useQuery<PagedResult<Customer>, Error>({
+    queryKey: ['management', 'customers', ...scopeKey, q || '', status || '', pageSize, cursor || ''],
+    queryFn: async () => {
+      const response = await client.customers.list({
+        ...businessQueryParam(businessId),
+        q,
+        status,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      return {
+        ...page,
+        items: page.items.map((row) => normalizeCustomer(row as unknown as Record<string, unknown>)),
+      };
+    },
+    enabled: workspaceReady && options?.enabled !== false,
+    staleTime: 1000 * 30,
   });
 }
 
-export function useServiceList() {
+export function useServiceList(options?: ListOptions) {
   const client = useApiClient();
   const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
-  return useQuery<Service[], Error>({
-    queryKey: ['management', 'services', ...scopeKey],
-    queryFn: () => listServices(client, businessId),
-    enabled: workspaceReady,
-    staleTime: 1000 * 60 * 5,
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const status = options?.status || undefined;
+  return useQuery<PagedResult<Service>, Error>({
+    queryKey: ['management', 'services', ...scopeKey, q || '', status || '', pageSize, cursor || ''],
+    queryFn: async () => {
+      const response = await client.services.list({
+        ...businessQueryParam(businessId),
+        q,
+        status,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      return {
+        ...page,
+        items: page.items.map((row) => normalizeService(row as unknown as Record<string, unknown>)),
+      };
+    },
+    enabled: workspaceReady && options?.enabled !== false,
+    staleTime: 1000 * 30,
   });
 }
 
-export function useStaffList() {
+export function useStaffList(options?: ListOptions) {
   const client = useApiClient();
   const { businessId, scopeKey, workspaceReady } = useWorkspaceScope();
-  return useQuery<StaffMember[], Error>({
-    queryKey: ['management', 'staff', ...scopeKey],
-    queryFn: () => listStaff(client, businessId),
-    enabled: workspaceReady,
-    staleTime: 1000 * 60 * 5,
+  const pageSize = options?.pageSize ?? 25;
+  const cursor = options?.cursor || undefined;
+  const q = options?.q?.trim() || undefined;
+  const status = options?.status || undefined;
+  return useQuery<PagedResult<StaffMember>, Error>({
+    queryKey: ['management', 'staff', ...scopeKey, q || '', status || '', pageSize, cursor || ''],
+    queryFn: async () => {
+      const response = await client.staff.list({
+        ...businessQueryParam(businessId),
+        q,
+        status,
+        page_size: clampPageSize(pageSize),
+        cursor,
+      });
+      const page = toPagedResult(response, pageSize);
+      return {
+        ...page,
+        items: page.items.map((row) => normalizeStaff(row as unknown as Record<string, unknown>)),
+      };
+    },
+    enabled: workspaceReady && options?.enabled !== false,
+    staleTime: 1000 * 30,
   });
 }
 
@@ -203,4 +266,20 @@ export function useStaffDetail(staffId?: string) {
     enabled: workspaceReady && Boolean(staffId),
     staleTime: 1000 * 60 * 5,
   });
+}
+
+/** Fetch just the services referenced by a document (no full catalog dump). */
+export function useServiceDetails(serviceIds: string[]) {
+  const client = useApiClient();
+  const { scopeKey, workspaceReady } = useWorkspaceScope();
+  const ids = Array.from(new Set(serviceIds.filter(Boolean)));
+  const results = useQueries({
+    queries: ids.map((serviceId) => ({
+      queryKey: ['management', 'service', serviceId, ...scopeKey],
+      queryFn: () => getService(client, serviceId),
+      enabled: workspaceReady,
+      staleTime: 1000 * 60 * 5,
+    })),
+  });
+  return { ids, services: results.map((result) => result.data).filter(Boolean) as Service[] };
 }

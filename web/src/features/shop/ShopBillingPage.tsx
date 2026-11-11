@@ -45,20 +45,36 @@ export function ShopBillingPage() {
   };
   const workspace = useWorkspace();
   const navigate = useNavigate();
-  const invoices = useShopInvoices();
-  const quotations = useShopQuotations();
-  const orders = useShopOrders('completed');
-  const { updateQuotation, convertQuotation } = useShopQuotationMutations();
-  const client = useApiClient();
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
+  const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null);
+  const [quoteCursor, setQuoteCursor] = useState<string | null>(null);
+  const [orderCursor, setOrderCursor] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [docActions, setDocActions] = useState<ShopDocTarget | null>(null);
   const [selectedQuote, setSelectedQuote] = useState<ShopQuotation | null>(null);
   const [quoteStatus, setQuoteStatus] = useState('draft');
   const [quoteValidUntil, setQuoteValidUntil] = useState('');
   const [quoteNotes, setQuoteNotes] = useState('');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setInvoiceCursor(null);
+    setQuoteCursor(null);
+    setOrderCursor(null);
+  }, [debouncedSearch, status]);
+
+  const invoices = useShopInvoices({ q: debouncedSearch || undefined, cursor: invoiceCursor });
+  const quotations = useShopQuotations({ q: debouncedSearch || undefined, cursor: quoteCursor });
+  const orders = useShopOrders('completed', { q: debouncedSearch || undefined, cursor: orderCursor });
+  const { updateQuotation, convertQuotation } = useShopQuotationMutations();
+  const client = useApiClient();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!selectedQuote) return;
@@ -78,16 +94,11 @@ export function ShopBillingPage() {
   });
 
   const filteredInvoices = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return (invoices.data ?? []).filter((invoice) => {
+    return (invoices.data?.items ?? []).filter((invoice) => {
       if (status && invoice.status !== status) return false;
-      if (!term) return true;
-      return [invoice.invoice_number, invoice.status, String(invoice.total), invoice.notes ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(term);
+      return true;
     });
-  }, [invoices.data, search, status]);
+  }, [invoices.data, status]);
 
   async function issueInvoice(orderId: string) {
     setMessage(null);
@@ -219,8 +230,8 @@ export function ShopBillingPage() {
               {invoice.order ? <Link to={`/shop/orders/${invoice.order}`}>{tb('orderLink')}</Link> : null}
             </div>
           ))}
-          {!invoices.data?.length ? <p>{tb('noInvoices')}</p> : null}
-          {invoices.data?.length && !filteredInvoices.length ? (
+          {!invoices.data?.items.length ? <p>{tb('noInvoices')}</p> : null}
+          {invoices.data?.items.length && !filteredInvoices.length ? (
             <p>{tb('noMatch')}</p>
           ) : null}
         </div>
@@ -229,7 +240,7 @@ export function ShopBillingPage() {
       <Card>
         <h2>{tb('issueFromOrder')}</h2>
         <div style={{ display: 'grid', gap: 8 }}>
-          {(orders.data ?? []).slice(0, 20).map((order) => (
+          {(orders.data?.items ?? []).slice(0, 20).map((order) => (
             <div key={order.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
               <span>
                 {order.order_number} · {formatMoney(Number(order.total ?? 0), order.currency)}
@@ -244,14 +255,14 @@ export function ShopBillingPage() {
               </Button>
             </div>
           ))}
-          {!orders.data?.length ? <p>{tb('noCompletedOrders')}</p> : null}
+          {!orders.data?.items.length ? <p>{tb('noCompletedOrders')}</p> : null}
         </div>
       </Card>
 
       <Card>
         <h2>{tb('quotations')}</h2>
         <div style={{ display: 'grid', gap: 8 }}>
-          {(quotations.data ?? []).map((quote) => (
+          {(quotations.data?.items ?? []).map((quote) => (
             <button
               key={quote.id}
               type="button"
@@ -277,7 +288,7 @@ export function ShopBillingPage() {
               <span style={{ color: 'var(--primary)', fontSize: 13 }}>{tb('open')}</span>
             </button>
           ))}
-          {!quotations.data?.length ? <p>{tb('noQuotations')}</p> : null}
+          {!quotations.data?.items.length ? <p>{tb('noQuotations')}</p> : null}
         </div>
       </Card>
       <Dialog
