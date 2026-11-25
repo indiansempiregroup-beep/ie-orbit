@@ -187,6 +187,14 @@ class AuthOtpService:
         else:
             raise exceptions.ValidationError({"channel": "Unsupported channel."})
 
+        if purpose == "signup" and client == "customer":
+            self._assert_customer_signup_allowed(
+                channel=channel,
+                identifier=identifier,
+                tenant_slug=tenant_slug,
+                business_code=business_code,
+            )
+
         if purpose == "login":
             user = self._resolve_user(channel=channel, identifier=identifier)
             if user is None:
@@ -321,6 +329,14 @@ class AuthOtpService:
             )
 
         user = self._resolve_user(channel=channel, identifier=identifier)
+        if create_if_missing and client == "customer" and tenant is not None and business is not None:
+            self._assert_customer_signup_allowed(
+                channel=channel,
+                identifier=identifier,
+                tenant_slug=tenant_slug,
+                business_code=business_code,
+                user=user,
+            )
         if user is None:
             pending_message = self._pending_invite_login_message(
                 client=client, channel=channel, identifier=identifier
@@ -435,6 +451,47 @@ class AuthOtpService:
             raise exceptions.ValidationError(
                 {"identifier": customer_login_missing_message(channel=channel)}
             )
+
+    def _assert_customer_signup_allowed(
+        self,
+        *,
+        channel: str,
+        identifier: str,
+        tenant_slug: str | None,
+        business_code: str | None,
+        user: User | None = None,
+    ) -> None:
+        if not tenant_slug or not business_code:
+            raise exceptions.ValidationError(
+                {"tenant_slug": "tenant_slug and business_code are required."}
+            )
+        from apps.api.mobile_helpers import assert_customer_signup_identity_allowed, resolve_tenant_business
+
+        try:
+            tenant, business = resolve_tenant_business(
+                tenant_slug=tenant_slug,
+                business_code=business_code,
+            )
+        except ValueError as exc:
+            raise exceptions.ValidationError(str(exc)) from exc
+        try:
+            assert_customer_signup_identity_allowed(
+                tenant=tenant,
+                business=business,
+                channel=channel,
+                identifier=identifier,
+                user=user,
+            )
+        except exceptions.ValidationError as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                for key in ("email", "phone_number", "identifier", "non_field_errors"):
+                    value = detail.get(key)
+                    if value is None:
+                        continue
+                    message = value[0] if isinstance(value, (list, tuple)) else value
+                    raise exceptions.ValidationError({"identifier": str(message)}) from exc
+            raise
 
     def _pending_invite_login_message(
         self, *, client: str, channel: str, identifier: str

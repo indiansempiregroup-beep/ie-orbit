@@ -206,6 +206,32 @@ class AuthenticationService:
             pending = pending_invitation_for_login(channel="email", identifier=identity.email)
             if pending and (user is None or not self._user_has_ops_workspace(user)):
                 raise exceptions.ValidationError({"id_token": PENDING_INVITE_LOGIN_MESSAGE})
+        if (
+            create_if_missing
+            and client == "customer"
+            and tenant is not None
+            and business is not None
+        ):
+            from apps.api.mobile_helpers import assert_customer_signup_identity_allowed
+
+            try:
+                assert_customer_signup_identity_allowed(
+                    tenant=tenant,
+                    business=business,
+                    channel="email",
+                    identifier=identity.email,
+                    user=user,
+                )
+            except exceptions.ValidationError as exc:
+                detail = exc.detail
+                if isinstance(detail, dict):
+                    for key in ("email", "phone_number", "identifier", "non_field_errors"):
+                        value = detail.get(key)
+                        if value is None:
+                            continue
+                        message = value[0] if isinstance(value, (list, tuple)) else value
+                        raise exceptions.ValidationError({"id_token": str(message)}) from exc
+                raise
         if user is None:
             if client != "customer" or not create_if_missing:
                 if client == "customer":

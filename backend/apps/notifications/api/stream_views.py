@@ -40,6 +40,9 @@ class EventStreamRenderer(BaseRenderer):
 
 class EventStreamAPIView(APIView):
     renderer_classes = [EventStreamRenderer]
+    # SSE reconnects often (stream caps ~45s). Counting them against the global
+    # user throttle blocks impersonation /auth/me after a busy mobile session.
+    throttle_classes: list = []
 
 
 def _matches_business_filter(payload: dict[str, Any], business_id: str | None) -> bool:

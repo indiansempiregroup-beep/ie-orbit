@@ -206,6 +206,42 @@ def test_ensure_customer_for_user_rejects_linked_staff(
 
 
 @pytest.mark.django_db
+def test_ensure_customer_for_user_rejects_tenant_owner(
+    owner: User,
+    tenant: Tenant,
+    business: Business,
+) -> None:
+    with pytest.raises(ValidationError) as exc:
+        ensure_customer_for_user(tenant=tenant, business=business, user=owner)
+    assert "owner" in str(exc.value).lower()
+
+
+@pytest.mark.django_db
+def test_otp_signup_rejects_tenant_owner_email(
+    api_client: APIClient,
+    owner: User,
+    tenant: Tenant,
+    business: Business,
+) -> None:
+    response = api_client.post(
+        reverse("auth-otp-send"),
+        {
+            "client": "customer",
+            "channel": "email",
+            "identifier": owner.email,
+            "purpose": "signup",
+            "tenant_slug": tenant.slug,
+            "business_code": business.business_code,
+        },
+        format="json",
+    )
+    assert response.status_code == 422
+    body = str(response.json()).lower()
+    assert "owner" in body
+    assert Customer.objects.filter(tenant=tenant, business=business, email__iexact=owner.email).count() == 0
+
+
+@pytest.mark.django_db
 def test_update_customer_rejects_staff_email(
     api_client: APIClient,
     owner: User,

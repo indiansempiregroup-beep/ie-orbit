@@ -7866,6 +7866,37 @@ h6 {
   gap: 16px;
 }
 
+.tenant-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+}
+
+.tenant-detail-grid--compact {
+  padding-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.tenant-detail-fact {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tenant-detail-fact__label {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tenant-detail-fact__value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .tenant-business-card {
   display: grid;
   gap: 14px;

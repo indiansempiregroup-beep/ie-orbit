@@ -45,9 +45,82 @@ from apps.businesses.services.white_label import (
     serialize_white_label_profile,
 )
 from apps.common.api.responses import error_response, success_response
-from apps.tenancy.models import Tenant
+from apps.tenancy.models import Organization, Tenant
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_platform_owner(tenant: Tenant) -> dict | None:
+    owner = tenant.owner
+    if owner is None:
+        return None
+    return {
+        "id": str(owner.id),
+        "email": owner.email,
+        "full_name": owner.full_name,
+        "first_name": owner.first_name,
+        "last_name": owner.last_name,
+        "phone_number": owner.phone_number or "",
+        "status": owner.status,
+        "email_verified_at": owner.email_verified_at.isoformat() if owner.email_verified_at else None,
+        "last_login": owner.last_login.isoformat() if owner.last_login else None,
+        "created_at": owner.created_at.isoformat() if owner.created_at else None,
+    }
+
+
+def _serialize_platform_organization(tenant: Tenant) -> dict | None:
+    organization = Organization.objects.filter(tenant=tenant).first()
+    if organization is None:
+        return None
+    return {
+        "id": str(organization.id),
+        "name": organization.name,
+        "legal_name": organization.legal_name or "",
+        "business_category": organization.business_category or "",
+        "contact_email": organization.contact_email or "",
+        "contact_phone": organization.contact_phone or "",
+        "alternate_phone": organization.alternate_phone or "",
+        "address_line1": organization.address_line1 or "",
+        "address_line2": organization.address_line2 or "",
+        "city": organization.city or "",
+        "state": organization.state or "",
+        "postal_code": organization.postal_code or "",
+        "country": organization.country or "",
+        "website": organization.website or "",
+        "tax_identifier": organization.tax_identifier or "",
+    }
+
+
+def _serialize_platform_business_row(business: Business, entitlements: EntitlementService) -> dict:
+    profile = getattr(business, "white_label_profile", None)
+    billing, billings = _business_admin_billing(business, entitlements)
+    return {
+        "id": str(business.id),
+        "business_code": business.business_code,
+        "business_name": business.business_name,
+        "display_name": business.display_name,
+        "status": business.status,
+        "selected_product": business.selected_product,
+        "industry_category": business.industry_category or "",
+        "email": business.email or "",
+        "website": business.website or "",
+        "primary_contact": business.primary_contact or "",
+        "secondary_contact": business.secondary_contact or "",
+        "address_line1": business.address_line1 or "",
+        "address_line2": business.address_line2 or "",
+        "city": business.city or "",
+        "state": business.state or "",
+        "country": business.country or "",
+        "postal_code": business.postal_code or "",
+        "timezone": business.timezone or "",
+        "currency": business.currency or "",
+        "has_white_label_profile": profile is not None,
+        "flavor_key": profile.flavor_key if profile else None,
+        "bundle_id_android": profile.bundle_id_android if profile else None,
+        "app_name": profile.app_name if profile else None,
+        "billing": billing,
+        "billings": billings,
+    }
 
 
 def _summarize_tenant_billing(
@@ -220,7 +293,7 @@ class PlatformTenantAdminDetailView(APIView):
 
     @extend_schema(tags=["Platform Admin"])
     def get(self, request: Request, tenant_id: str) -> Response:
-        tenant = get_object_or_404(Tenant.objects.all(), id=tenant_id)
+        tenant = get_object_or_404(Tenant.objects.select_related("owner"), id=tenant_id)
         businesses = (
             Business.objects.filter(tenant=tenant)
             .select_related("white_label_profile")
@@ -228,31 +301,27 @@ class PlatformTenantAdminDetailView(APIView):
             .order_by("display_name")
         )
         entitlements = EntitlementService()
-        business_rows = []
-        for business in businesses:
-            profile = getattr(business, "white_label_profile", None)
-            billing, billings = _business_admin_billing(business, entitlements)
-            business_rows.append(
-                {
-                    "id": str(business.id),
-                    "business_code": business.business_code,
-                    "display_name": business.display_name,
-                    "status": business.status,
-                    "selected_product": business.selected_product,
-                    "has_white_label_profile": profile is not None,
-                    "flavor_key": profile.flavor_key if profile else None,
-                    "bundle_id_android": profile.bundle_id_android if profile else None,
-                    "app_name": profile.app_name if profile else None,
-                    "billing": billing,
-                    "billings": billings,
-                }
-            )
+        business_rows = [
+            _serialize_platform_business_row(business, entitlements) for business in businesses
+        ]
         return success_response(
             {
                 "id": str(tenant.id),
                 "slug": tenant.slug,
                 "display_name": tenant.display_name,
+                "legal_name": tenant.legal_name or "",
                 "status": tenant.status,
+                "timezone": tenant.timezone or "",
+                "currency": tenant.currency or "",
+                "language": tenant.language or "",
+                "country": tenant.country or "",
+                "state": tenant.state or "",
+                "city": tenant.city or "",
+                "primary_color": tenant.primary_color or "",
+                "created_at": tenant.created_at.isoformat() if tenant.created_at else None,
+                "owner_email": tenant.owner.email if tenant.owner_id else None,
+                "owner": _serialize_platform_owner(tenant),
+                "organization": _serialize_platform_organization(tenant),
                 "businesses": business_rows,
             },
             request_id=getattr(request, "request_id", None),

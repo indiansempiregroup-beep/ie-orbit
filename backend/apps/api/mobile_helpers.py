@@ -74,17 +74,42 @@ def customer_login_missing_message(*, channel: str = "email") -> str:
     return "No account found for this shop. Create an account or use a different email."
 
 
+def assert_customer_signup_identity_allowed(
+    *,
+    tenant: Tenant,
+    business: Business,
+    channel: str = "email",
+    identifier: str = "",
+    user: User | None = None,
+) -> None:
+    """Block shop owner/staff from creating a customer account on their own shop."""
+    email = ""
+    phone = ""
+    if user is not None:
+        email = user.email or ""
+        phone = user.phone_number or ""
+    elif channel == "email":
+        email = identifier.strip().lower()
+    else:
+        phone = identifier.strip()
+    assert_no_staff_customer_conflict(
+        tenant=tenant,
+        business=business,
+        email=email,
+        phone=phone,
+        user=user,
+        creating="customer",
+    )
+
+
 def ensure_customer_for_user(*, tenant: Tenant, business: Business, user: User) -> Customer:
     existing = find_customer_for_user(tenant=tenant, business=business, user=user)
     if existing is not None:
         return existing
-    assert_no_staff_customer_conflict(
+    assert_customer_signup_identity_allowed(
         tenant=tenant,
         business=business,
-        email=user.email or "",
-        phone=user.phone_number or "",
         user=user,
-        creating="customer",
     )
     display_name = user.full_name or f"{user.first_name} {user.last_name}".strip() or user.email
     first_name, _, last_name = display_name.partition(" ")

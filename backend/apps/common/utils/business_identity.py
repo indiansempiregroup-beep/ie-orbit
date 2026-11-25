@@ -125,6 +125,39 @@ def find_conflicting_staff(
     return qs.select_related("user").first()
 
 
+def find_conflicting_owner(
+    *,
+    tenant: Any,
+    email: str = "",
+    phone: str = "",
+    user: Any | None = None,
+) -> Any | None:
+    """Return the tenant owner when identity matches the owner account."""
+    owner = getattr(tenant, "owner", None)
+    if owner is None:
+        owner_id = getattr(tenant, "owner_id", None)
+        if not owner_id:
+            return None
+        from apps.authentication.models import User
+
+        owner = User.objects.filter(pk=owner_id, deleted_at__isnull=True).first()
+        if owner is None:
+            return None
+
+    user_id = getattr(user, "id", None) or getattr(user, "pk", None)
+    if user_id and str(user_id) == str(owner.id):
+        return owner
+
+    primary_email, phones = collect_identity(email=email, phone=phone, user=user)
+    owner_email = _normalize_email(getattr(owner, "email", ""))
+    owner_phones = _phone_variants(getattr(owner, "phone_number", ""))
+    if primary_email and owner_email and primary_email == owner_email:
+        return owner
+    if phones & owner_phones:
+        return owner
+    return None
+
+
 def assert_no_staff_customer_conflict(
     *,
     tenant: Any,
@@ -137,7 +170,7 @@ def assert_no_staff_customer_conflict(
     creating: Literal["staff", "customer"],
 ) -> None:
     """
-    Reject writes that would make the same email/phone both staff and customer
+    Reject writes that would make the same email/phone both staff/owner and customer
     in one business.
     """
     if creating == "staff":
@@ -164,6 +197,38 @@ def assert_no_staff_customer_conflict(
             {"non_field_errors": ["This person is already a customer in this business."]}
         )
 
+    owner = find_conflicting_owner(tenant=tenant, email=email, phone=phone, user=user)
+    if owner is not None:
+        primary_email, phones = collect_identity(email=email, phone=phone, user=user)
+        owner_email = _normalize_email(getattr(owner, "email", ""))
+        owner_phones = _phone_variants(getattr(owner, "phone_number", ""))
+        if primary_email and owner_email and primary_email == owner_email:
+            raise ValidationError(
+                {
+                    "email": (
+                        "This email belongs to the shop owner. "
+                        "Use a different email for the customer app."
+                    )
+                }
+            )
+        if phones & owner_phones:
+            raise ValidationError(
+                {
+                    "phone_number": (
+                        "This phone number belongs to the shop owner. "
+                        "Use a different number for the customer app."
+                    )
+                }
+            )
+        raise ValidationError(
+            {
+                "non_field_errors": [
+                    "The shop owner cannot create a customer account for this shop. "
+                    "Use a different email or phone."
+                ]
+            }
+        )
+
     conflict = find_conflicting_staff(
         tenant=tenant,
         business=business,
@@ -183,10 +248,22 @@ def assert_no_staff_customer_conflict(
         conflict_phones |= _phone_variants(linked.phone_number)
     conflict_emails.discard("")
     if primary_email and primary_email in conflict_emails:
-        raise ValidationError({"email": "This email is already used by a staff member in this business."})
+        raise ValidationError(
+            {
+                "email": (
+                    "This email is already used by a staff member in this business. "
+                    "Use a different email for the customer app."
+                )
+            }
+        )
     if phones & conflict_phones:
         raise ValidationError(
-            {"phone_number": "This phone number is already used by a staff member in this business."}
+            {
+                "phone_number": (
+                    "This phone number is already used by a staff member in this business. "
+                    "Use a different number for the customer app."
+                )
+            }
         )
     raise ValidationError(
         {"non_field_errors": ["This person is already a staff member in this business."]}

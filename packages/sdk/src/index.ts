@@ -1179,12 +1179,57 @@ export type PlatformTenantSummary = {
   pending_claims?: number;
 };
 
+export type PlatformTenantOwner = {
+  id: string;
+  email: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone_number?: string;
+  status?: string;
+  email_verified_at?: string | null;
+  last_login?: string | null;
+  created_at?: string | null;
+};
+
+export type PlatformTenantOrganization = {
+  id: string;
+  name: string;
+  legal_name?: string;
+  business_category?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  alternate_phone?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+  website?: string;
+  tax_identifier?: string;
+};
+
 export type PlatformTenantBusiness = {
   id: string;
   business_code: string;
+  business_name?: string;
   display_name: string;
   status: string;
   selected_product?: string;
+  industry_category?: string;
+  email?: string;
+  website?: string;
+  primary_contact?: string;
+  secondary_contact?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  postal_code?: string;
+  timezone?: string;
+  currency?: string;
   has_white_label_profile: boolean;
   flavor_key?: string | null;
   bundle_id_android?: string | null;
@@ -1255,7 +1300,19 @@ export type PlatformTenantDetail = {
   id: string;
   slug: string;
   display_name: string;
+  legal_name?: string;
   status: string;
+  timezone?: string;
+  currency?: string;
+  language?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  primary_color?: string;
+  created_at?: string | null;
+  owner_email?: string | null;
+  owner?: PlatformTenantOwner | null;
+  organization?: PlatformTenantOrganization | null;
   businesses: PlatformTenantBusiness[];
 };
 

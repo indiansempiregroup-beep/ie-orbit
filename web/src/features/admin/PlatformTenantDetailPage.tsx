@@ -14,7 +14,13 @@ import {
   CircleAlert,
   Banknote,
 } from 'lucide-react';
-import type { BusinessBillingSnapshot, PlatformPaymentRow, PlatformTenantBusiness } from '@ie-orbit/sdk';
+import type {
+  BusinessBillingSnapshot,
+  PlatformPaymentRow,
+  PlatformTenantBusiness,
+  PlatformTenantDetail,
+  PlatformTenantOrganization,
+} from '@ie-orbit/sdk';
 import { useApiClient } from '../../hooks/useApiClient';
 import { usePageMeta } from '../../hooks/usePageMeta';
 import { buildOpsMobileImpersonationUrl } from '../../lib/impersonation';
@@ -199,6 +205,72 @@ function ProductChip({ code }: { code?: string | null }) {
   return <span className={`tenant-product-chip tenant-product-chip--${code}`}>{productLabel(code)}</span>;
 }
 
+function joinParts(...parts: Array<string | null | undefined>) {
+  return parts.map((part) => String(part || '').trim()).filter(Boolean).join(', ');
+}
+
+function formatAddress(source?: {
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+} | null) {
+  if (!source) return '';
+  return joinParts(
+    source.address_line1,
+    source.address_line2,
+    source.city,
+    source.state,
+    source.postal_code,
+    source.country,
+  );
+}
+
+function DetailFact({ label, value }: { label: string; value?: string | null }) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return (
+    <div className="tenant-detail-fact">
+      <span className="tenant-detail-fact__label">{label}</span>
+      <strong className="tenant-detail-fact__value">{text}</strong>
+    </div>
+  );
+}
+
+function organizationFacts(organization?: PlatformTenantOrganization | null) {
+  if (!organization) return [];
+  return [
+    ['Organization', organization.name],
+    ['Legal name', organization.legal_name],
+    ['Category', organization.business_category],
+    ['Org email', organization.contact_email],
+    ['Org phone', organization.contact_phone],
+    ['Website', organization.website],
+    ['GST / tax ID', organization.tax_identifier],
+    ['Address', formatAddress(organization)],
+  ] as const;
+}
+
+function workspaceFacts(tenant?: PlatformTenantDetail | null) {
+  if (!tenant) return [];
+  const owner = tenant.owner;
+  return [
+    ['Owner', owner?.full_name || owner?.email || tenant.owner_email],
+    ['Owner email', owner?.email || tenant.owner_email],
+    ['Owner phone', owner?.phone_number],
+    ['Owner status', owner?.status],
+    ['Created', tenant.created_at ? formatTimestamp(tenant.created_at) : ''],
+    ['Last login', owner?.last_login ? formatTimestamp(owner.last_login) : ''],
+    ['Timezone', tenant.timezone],
+    ['Currency', tenant.currency],
+    ['Language', tenant.language],
+    ['Location', joinParts(tenant.city, tenant.state, tenant.country)],
+    ...organizationFacts(tenant.organization),
+  ] as const;
+}
+
 function businessBillings(business: PlatformTenantBusiness): BusinessBillingSnapshot[] {
   if (business.billings?.length) return business.billings;
   if (business.billing) {
@@ -363,6 +435,8 @@ export function PlatformTenantDetailPage() {
 
   const tenant = detailQuery.data;
   const businesses = tenant?.businesses ?? [];
+  const workspaceDetailFacts = useMemo(() => workspaceFacts(tenant), [tenant]);
+  const hasWorkspaceDetails = workspaceDetailFacts.some(([, value]) => Boolean(String(value || '').trim()));
   const productCodes = Array.from(
     new Set(
       businesses.flatMap((business) =>
@@ -389,6 +463,18 @@ export function PlatformTenantDetailPage() {
               <span>
                 {businesses.length} business{businesses.length === 1 ? '' : 'es'}
               </span>
+              {tenant?.owner_email || tenant?.owner?.email ? (
+                <>
+                  <span>·</span>
+                  <span>{tenant.owner?.email || tenant.owner_email}</span>
+                </>
+              ) : null}
+              {tenant?.owner?.phone_number ? (
+                <>
+                  <span>·</span>
+                  <span>{tenant.owner.phone_number}</span>
+                </>
+              ) : null}
             </p>
             <div className="tenant-hero__chips">
               {productCodes.length ? (
@@ -523,6 +609,26 @@ export function PlatformTenantDetailPage() {
       {tab === 'overview' ? (
         <div className="tenant-overview">
           <AdminSection
+            title="Workspace details"
+            description="Owner, organization, and contact information captured for this tenant."
+          >
+            {detailQuery.isLoading ? (
+              <AdminEmpty>Loading workspace details…</AdminEmpty>
+            ) : detailQuery.isError ? (
+              <AdminEmpty>Could not load workspace details. Refresh or sign in again as platform admin.</AdminEmpty>
+            ) : (
+              <div className="tenant-detail-grid">
+                {workspaceDetailFacts.map(([label, value]) => (
+                  <DetailFact key={label} label={label} value={value} />
+                ))}
+                {!hasWorkspaceDetails ? (
+                  <AdminEmpty>No owner or organization details saved for this tenant.</AdminEmpty>
+                ) : null}
+              </div>
+            )}
+          </AdminSection>
+
+          <AdminSection
             title="Businesses"
             description="Open Billing to change plans, or Brand & app to design the customer APK."
           >
@@ -535,7 +641,7 @@ export function PlatformTenantDetailPage() {
                         {initials(business.display_name)}
                       </div>
                       <div>
-                        <strong>{business.display_name}</strong>
+                        <strong>{business.business_name || business.display_name}</strong>
                         <div className="admin-list-row__meta">
                           {business.business_code} · {productListLabel(business)}
                         </div>
@@ -547,6 +653,15 @@ export function PlatformTenantDetailPage() {
                         Brand & app
                       </button>
                     </div>
+                  </div>
+                  <div className="tenant-detail-grid tenant-detail-grid--compact">
+                    <DetailFact label="Display name" value={business.display_name} />
+                    <DetailFact label="Email" value={business.email} />
+                    <DetailFact label="Phone" value={business.primary_contact} />
+                    <DetailFact label="Alt phone" value={business.secondary_contact} />
+                    <DetailFact label="Website" value={business.website} />
+                    <DetailFact label="Category" value={business.industry_category} />
+                    <DetailFact label="Address" value={formatAddress(business)} />
                   </div>
                   {businessBillings(business).length ? (
                     <div className="admin-product-billing-list">

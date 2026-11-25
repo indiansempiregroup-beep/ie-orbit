@@ -91,7 +91,15 @@ def test_tenant_detail_returns_all_product_billings(
 
     detail = api_client.get(reverse("platform-tenant-admin-detail", kwargs={"tenant_id": tenant.id}))
     assert detail.status_code == 200
-    payload = detail.json()["data"]["businesses"][0]
+    detail_data = detail.json()["data"]
+    assert detail_data["owner_email"] == tenant.owner.email
+    assert detail_data["owner"]["email"] == tenant.owner.email
+    assert detail_data["organization"]["name"]
+    assert detail_data["created_at"]
+    payload = detail_data["businesses"][0]
+    assert "email" in payload
+    assert "primary_contact" in payload
+    assert "address_line1" in payload
     codes = [item["product_code"] for item in payload["billings"]]
     assert codes == ["appointie", "shopie"]
     assert payload["billing"]["product_code"] == "appointie"
